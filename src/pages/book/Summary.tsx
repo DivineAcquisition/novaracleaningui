@@ -43,7 +43,7 @@ export default function BookingSummary() {
   };
 
   const handleConfirm = () => {
-    // Navigate to payment/checkout
+    // Navigate to checkout page
     navigate("/book/checkout");
   };
 
@@ -194,10 +194,10 @@ export default function BookingSummary() {
               </Button>
               <Button
                 size="lg"
-                className="flex-1 h-14 text-base font-semibold"
+                className="flex-1 h-14 text-base font-semibold bg-gradient-primary hover:opacity-90 shadow-neon"
                 onClick={handleConfirm}
               >
-                Confirm & Pay ${price}
+                Continue to Payment
               </Button>
             </div>
           </CardContent>
