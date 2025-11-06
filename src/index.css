@@ -9,46 +9,49 @@ All colors MUST be HSL.
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 210 20% 15%;
+    --foreground: 270 15% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 20% 15%;
+    --card-foreground: 270 15% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 20% 15%;
+    --popover-foreground: 270 15% 15%;
 
-    --primary: 217 91% 60%;
+    --primary: 280 85% 65%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 217 91% 55%;
+    --primary-hover: 280 85% 60%;
+    --primary-glow: 280 85% 75%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 210 20% 15%;
+    --secondary: 280 40% 96%;
+    --secondary-foreground: 270 15% 15%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 210 15% 50%;
+    --muted: 280 30% 96%;
+    --muted-foreground: 270 15% 50%;
 
-    --accent: 142 76% 36%;
+    --accent: 320 85% 65%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    --border: 280 30% 91%;
+    --input: 280 30% 91%;
+    --ring: 280 85% 65%;
 
     --radius: 0.75rem;
     
     --success: 142 76% 36%;
     --warning: 38 92% 50%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(217 91% 70%));
-    --gradient-hero: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 40% 98%));
+    --gradient-primary: linear-gradient(135deg, hsl(280 85% 65%), hsl(320 85% 65%));
+    --gradient-hero: linear-gradient(180deg, hsl(0 0% 100%), hsl(280 40% 98%));
+    --gradient-glow: radial-gradient(circle at 50% 50%, hsl(280 85% 65% / 0.2), transparent);
     
-    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.1);
+    --shadow-sm: 0 1px 2px 0 hsl(280 20% 20% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(280 20% 20% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(280 20% 20% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(280 20% 20% / 0.1);
+    --shadow-neon: 0 0 20px hsl(280 85% 65% / 0.3), 0 0 40px hsl(280 85% 65% / 0.2);
     
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -70,40 +73,43 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 270 30% 8%;
+    --foreground: 280 20% 95%;
 
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
+    --card: 270 30% 10%;
+    --card-foreground: 280 20% 95%;
 
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 270 30% 10%;
+    --popover-foreground: 280 20% 95%;
 
-    --primary: 217 91% 60%;
+    --primary: 280 85% 65%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 217 91% 65%;
+    --primary-hover: 280 85% 70%;
+    --primary-glow: 280 85% 75%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 270 30% 15%;
+    --secondary-foreground: 280 20% 95%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 270 30% 15%;
+    --muted-foreground: 280 20% 70%;
 
-    --accent: 142 76% 36%;
+    --accent: 320 85% 65%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 280 20% 95%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
+    --border: 270 30% 20%;
+    --input: 270 30% 15%;
+    --ring: 280 85% 65%;
     
     --success: 142 76% 36%;
     --warning: 38 92% 50%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(217 91% 70%));
-    --gradient-hero: linear-gradient(180deg, hsl(222 47% 11%), hsl(217 33% 17%));
+    --gradient-primary: linear-gradient(135deg, hsl(280 85% 65%), hsl(320 85% 65%));
+    --gradient-hero: linear-gradient(180deg, hsl(270 30% 8%), hsl(270 30% 12%));
+    --gradient-glow: radial-gradient(circle at 50% 50%, hsl(280 85% 65% / 0.3), transparent);
+    --shadow-neon: 0 0 20px hsl(280 85% 65% / 0.4), 0 0 40px hsl(280 85% 65% / 0.2);
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
