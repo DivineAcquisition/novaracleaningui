@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Clock, Shield, Star } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Sparkles, Clock, Shield, Star, User, LogOut } from "lucide-react";
 
 const FEATURES = [
   {
@@ -28,9 +29,51 @@ const FEATURES = [
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      {/* Header */}
+      <header className="container mx-auto px-4 py-6">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-xl font-bold">HomeGlow</span>
+          </div>
+          
+          {user ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigate("/account")}
+              >
+                <User className="mr-2 w-4 h-4" />
+                Account
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleSignOut}
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => navigate("/auth")}
+            >
+              Sign In
+            </Button>
+          )}
+        </div>
+      </header>
+
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 text-center">
         <div className="max-w-4xl mx-auto space-y-8">

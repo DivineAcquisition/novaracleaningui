@@ -82,8 +82,8 @@ export default function BookingCheckout() {
       <div className="container max-w-4xl mx-auto px-4 py-8">
         <Card className="shadow-xl border-primary/20">
           <CardHeader className="text-center space-y-2 pb-8">
-            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-neon">
-              <CreditCard className="w-8 h-8 text-white" />
+              <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
+                <CreditCard className="w-8 h-8 text-white" />
             </div>
             <CardTitle className="text-3xl font-bold">Secure Checkout</CardTitle>
             <CardDescription className="text-base">
@@ -215,7 +215,7 @@ export default function BookingCheckout() {
               </Button>
               <Button
                 size="lg"
-                className="flex-1 h-14 text-base font-semibold bg-gradient-primary hover:opacity-90 shadow-neon"
+                className="flex-1 h-14 text-base font-semibold bg-gradient-primary hover:opacity-90 shadow-lavender"
                 onClick={handlePayment}
                 disabled={isProcessing}
               >
