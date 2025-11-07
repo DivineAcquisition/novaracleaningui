@@ -4,7 +4,9 @@ export interface BookingData {
   zipCode: string;
   homeSizeId: string;
   serviceType: string;
-  frequency: string;
+  addOns: string[];
+  membershipPlan: string;
+  useCredit: boolean;
   serviceDate: string;
   timeSlot: string;
   firstName: string;
@@ -31,7 +33,9 @@ const initialBookingData: BookingData = {
   zipCode: '',
   homeSizeId: '',
   serviceType: '',
-  frequency: '',
+  addOns: [],
+  membershipPlan: 'none',
+  useCredit: false,
   serviceDate: '',
   timeSlot: '',
   firstName: '',

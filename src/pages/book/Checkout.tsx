@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Calendar, Clock, Home, Sparkles, Loader2, CreditCard } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
-import { calculatePrice, HOME_SIZE_RANGES, FREQUENCY_DISCOUNTS } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,12 +20,6 @@ const BOOKING_STEPS = [
   { number: 6, label: "Payment" },
 ];
 
-const SERVICE_NAMES = {
-  regular: "Standard Cleaning",
-  deep: "Deep Cleaning",
-  move_in_out: "Move In/Out Cleaning",
-};
-
 const TIME_SLOT_LABELS: Record<string, string> = {
   "8-12": "8:00 AM - 12:00 PM",
   "12-16": "12:00 PM - 4:00 PM",
@@ -38,8 +32,15 @@ export default function BookingCheckout() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
-  const frequencyData = FREQUENCY_DISCOUNTS[bookingData.frequency as keyof typeof FREQUENCY_DISCOUNTS];
-  const price = calculatePrice(bookingData.homeSizeId, bookingData.serviceType, bookingData.frequency);
+  const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
+  const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
+  const pricing = calculatePrice(
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+    bookingData.useCredit
+  );
 
   const handleBack = () => {
     navigate("/book/summary");
@@ -105,16 +106,16 @@ export default function BookingCheckout() {
                     </div>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Service Type</span>
-                        <span className="font-medium">{SERVICE_NAMES[bookingData.serviceType as keyof typeof SERVICE_NAMES]}</span>
+                        <span className="text-muted-foreground">Service</span>
+                        <span className="font-medium">{serviceTier?.label}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Home Size</span>
                         <span className="font-medium">{homeSize?.label}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Frequency</span>
-                        <span className="font-medium">{frequencyData?.label}</span>
+                        <span className="text-muted-foreground">Membership</span>
+                        <span className="font-medium">{membership?.label}</span>
                       </div>
                     </div>
                   </CardContent>
@@ -155,29 +156,30 @@ export default function BookingCheckout() {
                   </h4>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Base Price</span>
-                      <span className="font-medium">
-                        ${Math.round(price / (1 - (frequencyData?.discount || 0)))}
-                      </span>
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium">${pricing.subtotal.toFixed(2)}</span>
                     </div>
-                    {frequencyData?.discount > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-success">{frequencyData.label} Discount ({frequencyData.discount * 100}%)</span>
-                        <span className="text-success font-medium">
-                          -${Math.round(price / (1 - frequencyData.discount) * frequencyData.discount)}
-                        </span>
+                    {pricing.membershipDiscount > 0 && (
+                      <div className="flex justify-between text-sm text-success">
+                        <span>Membership Discount</span>
+                        <span>-${pricing.membershipDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {bookingData.useCredit && (
+                      <div className="flex justify-between text-sm text-success">
+                        <span>Credit Applied</span>
+                        <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
                       </div>
                     )}
                     <Separator />
-                    <div className="flex justify-between text-xl font-bold">
-                      <span>Total</span>
-                      <span className="text-primary">${price}</span>
+                    <div className="flex justify-between text-base font-semibold">
+                      <span>Deposit Today</span>
+                      <span className="text-primary">${pricing.deposit.toFixed(2)}</span>
                     </div>
-                    {bookingData.frequency !== "one_time" && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        Recurring {frequencyData?.label.toLowerCase()} charge
-                      </p>
-                    )}
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Balance After</span>
+                      <span>${pricing.balanceDue.toFixed(2)}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -227,7 +229,7 @@ export default function BookingCheckout() {
                 ) : (
                   <>
                     <CreditCard className="mr-2 w-5 h-5" />
-                    Pay ${price} with Stripe
+                    Pay ${pricing.deposit.toFixed(2)} Deposit
                   </>
                 )}
               </Button>

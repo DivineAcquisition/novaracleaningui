@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Zap, Package, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
@@ -18,39 +20,57 @@ const BOOKING_STEPS = [
 
 const SERVICES = [
   {
-    id: 'regular',
+    id: 'standard',
     icon: Sparkles,
-    name: 'Standard Cleaning',
-    description: 'Regular maintenance cleaning for your home',
+    name: 'Standard',
+    description: 'Base hourly cleaning service',
     features: ['All rooms cleaned', 'Dusting & vacuuming', 'Bathroom & kitchen cleaning', 'Trash removal'],
     badge: 'Most Popular',
   },
   {
     id: 'deep',
     icon: Zap,
-    name: 'Deep Cleaning',
-    description: 'Thorough top-to-bottom deep clean',
-    features: ['Everything in Standard', 'Inside appliances', 'Baseboards & trim', 'Window sills'],
-    badge: 'Recommended',
-  },
-  {
-    id: 'move_in_out',
-    icon: Package,
-    name: 'Move In/Out',
-    description: 'Complete cleaning for moving',
-    features: ['Everything in Deep', 'Inside cabinets', 'Deep appliance clean', 'Extra attention to detail'],
+    name: 'Deep Clean',
+    description: '+$50 on Standard',
+    features: ['Everything in Standard', 'Baseboards & trim', 'Window sills', 'Extra attention to detail'],
     badge: null,
   },
+  {
+    id: 'premium',
+    icon: Package,
+    name: 'Premium Bundle',
+    description: '+$120 (includes all add-ons)',
+    features: ['Everything in Deep', 'Inside Fridge', 'Inside Oven', 'Interior Windows'],
+    badge: 'Best Value',
+  },
+];
+
+const ADD_ONS = [
+  { id: 'fridge', label: 'Inside Fridge', price: 30 },
+  { id: 'oven', label: 'Inside Oven', price: 30 },
+  { id: 'windows', label: 'Interior Windows', price: 40 },
 ];
 
 export default function BookingService() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
+  const [selectedAddOns, setSelectedAddOns] = useState<string[]>(bookingData.addOns || []);
 
   const handleSelect = (serviceType: string) => {
-    updateBookingData({ serviceType });
+    updateBookingData({ 
+      serviceType,
+      addOns: serviceType === 'premium' ? [] : selectedAddOns 
+    });
     setCurrentStep(4);
     navigate("/book/schedule");
+  };
+
+  const handleAddOnToggle = (addonId: string) => {
+    setSelectedAddOns(prev => 
+      prev.includes(addonId) 
+        ? prev.filter(id => id !== addonId)
+        : [...prev, addonId]
+    );
   };
 
   const handleBack = () => {
@@ -67,11 +87,11 @@ export default function BookingService() {
           <CardHeader className="text-center space-y-2 pb-8">
             <CardTitle className="text-3xl font-bold">Choose your service</CardTitle>
             <CardDescription className="text-base">
-              Select the cleaning service that fits your needs
+              Select the cleaning tier that fits your needs
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-8">
             <div className="grid gap-6 md:grid-cols-3">
               {SERVICES.map((service) => (
                 <Card
@@ -109,6 +129,35 @@ export default function BookingService() {
                 </Card>
               ))}
             </div>
+
+            {bookingData.serviceType !== 'premium' && (
+              <Card className="bg-muted/50">
+                <CardHeader>
+                  <CardTitle className="text-lg">À La Carte Add-ons</CardTitle>
+                  <CardDescription>Optional extras (not needed with Premium Bundle)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {ADD_ONS.map((addon) => (
+                      <div
+                        key={addon.id}
+                        className="flex items-center space-x-3 p-4 rounded-lg border bg-background cursor-pointer hover:border-primary transition-colors"
+                        onClick={() => handleAddOnToggle(addon.id)}
+                      >
+                        <Checkbox 
+                          checked={selectedAddOns.includes(addon.id)}
+                          onCheckedChange={() => handleAddOnToggle(addon.id)}
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{addon.label}</p>
+                          <p className="text-sm text-muted-foreground">+${addon.price}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="flex gap-4 pt-6">
               <Button

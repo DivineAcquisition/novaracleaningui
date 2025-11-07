@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Calendar, Clock, Home, MapPin, User, Mail, Phone, Sparkles } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
-import { calculatePrice, HOME_SIZE_RANGES, FREQUENCY_DISCOUNTS } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { format } from "date-fns";
 
 const BOOKING_STEPS = [
@@ -16,12 +16,6 @@ const BOOKING_STEPS = [
   { number: 5, label: "Details" },
   { number: 6, label: "Payment" },
 ];
-
-const SERVICE_NAMES = {
-  regular: "Standard Cleaning",
-  deep: "Deep Cleaning",
-  move_in_out: "Move In/Out Cleaning",
-};
 
 const TIME_SLOT_LABELS: Record<string, string> = {
   "8-12": "8:00 AM - 12:00 PM",
@@ -34,8 +28,15 @@ export default function BookingSummary() {
   const { bookingData, currentStep, setCurrentStep } = useBooking();
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
-  const frequencyData = FREQUENCY_DISCOUNTS[bookingData.frequency as keyof typeof FREQUENCY_DISCOUNTS];
-  const price = calculatePrice(bookingData.homeSizeId, bookingData.serviceType, bookingData.frequency);
+  const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
+  const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
+  const pricing = calculatePrice(
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+    bookingData.useCredit
+  );
 
   const handleBack = () => {
     setCurrentStep(5);
@@ -43,7 +44,6 @@ export default function BookingSummary() {
   };
 
   const handleConfirm = () => {
-    // Navigate to checkout page
     navigate("/book/checkout");
   };
 
@@ -80,11 +80,24 @@ export default function BookingSummary() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Service Type</p>
-                    <p className="font-medium">{SERVICE_NAMES[bookingData.serviceType as keyof typeof SERVICE_NAMES]}</p>
+                    <p className="font-medium">{serviceTier?.label}</p>
                   </div>
+                  {bookingData.addOns.length > 0 && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Add-ons</p>
+                      {bookingData.addOns.map(addon => (
+                        <p key={addon} className="font-medium text-sm">
+                          • {ADD_ONS[addon as keyof typeof ADD_ONS]?.label}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                   <div>
-                    <p className="text-sm text-muted-foreground">Frequency</p>
-                    <p className="font-medium">{frequencyData?.label}</p>
+                    <p className="text-sm text-muted-foreground">Membership</p>
+                    <p className="font-medium">{membership?.label}</p>
+                    {bookingData.useCredit && (
+                      <p className="text-xs text-success">Using 1 credit</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -149,33 +162,66 @@ export default function BookingSummary() {
               </Card>
 
               {/* Pricing */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Pricing</CardTitle>
+              <Card className="border-2 border-primary/20">
+                <CardHeader className="bg-primary/5">
+                  <CardTitle className="text-lg">Pricing Breakdown</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-6">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Base Price</span>
-                      <span className="font-medium">${Math.round(price / (1 - (frequencyData?.discount || 0)))}</span>
+                      <span className="font-medium">${pricing.basePrice.toFixed(2)}</span>
                     </div>
-                    {frequencyData?.discount > 0 && (
+                    {pricing.serviceAddition > 0 && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-success">{frequencyData.label} Discount ({frequencyData.discount * 100}%)</span>
-                        <span className="text-success font-medium">
-                          -${Math.round(price / (1 - frequencyData.discount) * frequencyData.discount)}
-                        </span>
+                        <span className="text-muted-foreground">{serviceTier?.label} Addition</span>
+                        <span className="font-medium">+${pricing.serviceAddition.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {pricing.addOnsTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Add-ons</span>
+                        <span className="font-medium">+${pricing.addOnsTotal.toFixed(2)}</span>
                       </div>
                     )}
                   </div>
                   <Separator />
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span className="text-primary">${price}</span>
+                  <div className="flex justify-between text-base font-semibold">
+                    <span>Subtotal</span>
+                    <span>${pricing.subtotal.toFixed(2)}</span>
                   </div>
-                  {bookingData.frequency !== "one_time" && (
+                  {pricing.membershipDiscount > 0 && (
+                    <div className="flex justify-between text-success text-sm">
+                      <span>Membership Discount</span>
+                      <span>-${pricing.membershipDiscount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {bookingData.useCredit && (
+                    <div className="flex justify-between text-success text-sm">
+                      <span>Credit Applied</span>
+                      <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <Separator className="border-primary/30" />
+                  <div className="space-y-3 bg-primary/5 p-4 rounded-lg -mx-2">
+                    <div className="flex justify-between text-xl font-bold text-primary">
+                      <span>Total</span>
+                      <span>${pricing.total.toFixed(2)}</span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Deposit (today)</span>
+                        <span className="font-semibold">${pricing.deposit.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Balance (after clean)</span>
+                        <span className="font-semibold">${pricing.balanceDue.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {bookingData.membershipPlan !== 'none' && (
                     <p className="text-xs text-muted-foreground">
-                      Recurring {frequencyData?.label.toLowerCase()} charge
+                      + ${membership?.monthlyPrice}/mo membership fee
                     </p>
                   )}
                 </CardContent>

@@ -64,8 +64,10 @@ export default function BookingHome() {
                       <p className="text-sm text-muted-foreground mt-1">{size.bedroomRange}</p>
                     </div>
                     <div className="pt-3 border-t">
-                      <p className="text-xs text-muted-foreground">Starting at</p>
-                      <p className="text-2xl font-bold text-primary">${size.regularPrice}</p>
+                      <p className="text-xs text-muted-foreground">{size.baseHours > 0 ? `${size.baseHours} hours` : 'Custom quote'}</p>
+                      {size.baseHours > 0 && (
+                        <p className="text-sm text-muted-foreground mt-1">${size.standardPrice} standard</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
