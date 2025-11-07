@@ -30,9 +30,15 @@ export default function BookingSuccess() {
           <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
             <CheckCircle2 className="w-12 h-12 text-success" />
           </div>
-          <CardTitle className="text-4xl font-bold">Booking Confirmed!</CardTitle>
+          <CardTitle className="text-4xl font-bold">
+            {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
+          </CardTitle>
           <CardDescription className="text-lg">
-            Thank you for choosing our cleaning service
+            {bookingData.membershipPlan !== 'none' 
+              ? 'Your membership is active and your first credit is ready to use'
+              : bookingData.useCredit
+              ? 'Your booking is confirmed with your membership credit'
+              : 'Thank you for choosing Novara Cleaning Service'}
           </CardDescription>
         </CardHeader>
         

@@ -36,12 +36,12 @@ const SERVICES = [
     badge: null,
   },
   {
-    id: 'premium',
+    id: 'moveInOut',
     icon: Package,
-    name: 'Premium Bundle',
-    description: '+$120 (includes all add-ons)',
-    features: ['Everything in Deep', 'Inside Fridge', 'Inside Oven', 'Interior Windows'],
-    badge: 'Best Value',
+    name: 'Move-In/Out Cleaning',
+    description: '+$120 (includes fridge & oven)',
+    features: ['Everything in Deep', 'Inside Fridge ✓ Included', 'Inside Oven ✓ Included', 'Cabinet interiors', 'Interior Windows (optional)'],
+    badge: 'Moving Special',
   },
 ];
 
@@ -57,9 +57,14 @@ export default function BookingService() {
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>(bookingData.addOns || []);
 
   const handleSelect = (serviceType: string) => {
+    // For moveInOut, filter out fridge & oven from add-ons (they're included)
+    const filteredAddOns = serviceType === 'moveInOut' 
+      ? selectedAddOns.filter(addon => addon === 'windows')
+      : selectedAddOns;
+    
     updateBookingData({ 
       serviceType,
-      addOns: serviceType === 'premium' ? [] : selectedAddOns 
+      addOns: filteredAddOns 
     });
     setCurrentStep(4);
     navigate("/book/schedule");
@@ -130,30 +135,51 @@ export default function BookingService() {
               ))}
             </div>
 
-            {bookingData.serviceType !== 'premium' && (
+            {bookingData.serviceType && (
               <Card className="bg-muted/50">
                 <CardHeader>
                   <CardTitle className="text-lg">À La Carte Add-ons</CardTitle>
-                  <CardDescription>Optional extras (not needed with Premium Bundle)</CardDescription>
+                  <CardDescription>
+                    {bookingData.serviceType === 'moveInOut' 
+                      ? 'Fridge & Oven included. Only Windows available as add-on.'
+                      : 'Optional extras for your cleaning service'}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 sm:grid-cols-3">
-                    {ADD_ONS.map((addon) => (
-                      <div
-                        key={addon.id}
-                        className="flex items-center space-x-3 p-4 rounded-lg border bg-background cursor-pointer hover:border-primary transition-colors"
-                        onClick={() => handleAddOnToggle(addon.id)}
-                      >
-                        <Checkbox 
-                          checked={selectedAddOns.includes(addon.id)}
-                          onCheckedChange={() => handleAddOnToggle(addon.id)}
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium">{addon.label}</p>
-                          <p className="text-sm text-muted-foreground">+${addon.price}</p>
+                    {ADD_ONS.map((addon) => {
+                      // Disable fridge & oven for Move-In/Out (they're included)
+                      const isIncluded = bookingData.serviceType === 'moveInOut' && 
+                        (addon.id === 'fridge' || addon.id === 'oven');
+                      
+                      return (
+                        <div
+                          key={addon.id}
+                          className={cn(
+                            "flex items-center space-x-3 p-4 rounded-lg border bg-background transition-colors",
+                            isIncluded 
+                              ? "opacity-50 cursor-not-allowed" 
+                              : "cursor-pointer hover:border-primary"
+                          )}
+                          onClick={() => !isIncluded && handleAddOnToggle(addon.id)}
+                        >
+                          <Checkbox 
+                            checked={isIncluded || selectedAddOns.includes(addon.id)}
+                            disabled={isIncluded}
+                            onCheckedChange={() => !isIncluded && handleAddOnToggle(addon.id)}
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">
+                              {addon.label}
+                              {isIncluded && <span className="ml-2 text-xs text-success">✓ Included</span>}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {isIncluded ? 'Included' : `+$${addon.price}`}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

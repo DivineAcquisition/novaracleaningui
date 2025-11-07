@@ -21,6 +21,12 @@ export default function BookingHome() {
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
 
   const handleSelect = (sizeId: string) => {
+    // If >5,000 sqft, redirect to custom quote page
+    if (sizeId === '5000_plus') {
+      navigate("/book/custom-quote");
+      return;
+    }
+    
     updateBookingData({ homeSizeId: sizeId });
     setCurrentStep(3);
     navigate("/book/service");

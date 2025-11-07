@@ -16,6 +16,7 @@ import BookingDetails from "./pages/book/Details";
 import BookingSummary from "./pages/book/Summary";
 import BookingCheckout from "./pages/book/Checkout";
 import BookingSuccess from "./pages/book/Success";
+import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/book/summary" element={<BookingSummary />} />
               <Route path="/book/checkout" element={<BookingCheckout />} />
               <Route path="/book/success" element={<BookingSuccess />} />
+              <Route path="/book/custom-quote" element={<CustomQuote />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

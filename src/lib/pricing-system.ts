@@ -109,7 +109,7 @@ export const HOME_SIZE_RANGES: HomeSizeRange[] = [
 export const SERVICE_TIER_PRICING = {
   standard: { label: 'Standard', addition: 0 },
   deep: { label: 'Deep Clean', addition: 50 },
-  premium: { label: 'Premium Bundle', addition: 120 },
+  moveInOut: { label: 'Move-In/Out Cleaning', addition: 120 },
 };
 
 export const ADD_ONS = {
@@ -189,9 +189,15 @@ export function calculatePrice(
   // Service tier addition
   const serviceAddition = SERVICE_TIER_PRICING[serviceType as keyof typeof SERVICE_TIER_PRICING]?.addition || 0;
   
-  // Add-ons (excluding premium which includes them)
+  // Add-ons (smart filtering for Move-In/Out which includes fridge & oven)
   let addOnsTotal = 0;
-  if (serviceType !== 'premium') {
+  if (serviceType === 'moveInOut') {
+    // Move-In/Out includes fridge & oven, only count windows
+    addOnsTotal = addOns
+      .filter(addon => addon === 'windows')
+      .reduce((total, addon) => total + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0), 0);
+  } else {
+    // Standard & Deep count all add-ons
     addOnsTotal = addOns.reduce((total, addon) => {
       return total + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0);
     }, 0);
@@ -208,9 +214,12 @@ export function calculatePrice(
   // If using credit, base price is covered (up to 2 hours worth = $150)
   const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;
   
+  // Deposit: $0 for members using credit, $39 otherwise
+  const deposit = useCredit ? 0 : DEPOSIT_AMOUNT;
+  
   // Total calculation
   const total = subtotal - membershipDiscount - creditCoverage;
-  const balanceDue = Math.max(0, total - DEPOSIT_AMOUNT);
+  const balanceDue = Math.max(0, total - deposit);
   
   return {
     basePrice,
@@ -219,7 +228,7 @@ export function calculatePrice(
     subtotal,
     membershipDiscount,
     total,
-    deposit: DEPOSIT_AMOUNT,
+    deposit: useCredit ? 0 : DEPOSIT_AMOUNT,
     balanceDue,
     hours: homeSize.baseHours,
   };

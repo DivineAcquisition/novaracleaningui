@@ -96,90 +96,129 @@ export type Database = {
       }
       bookings: {
         Row: {
-          add_ons: Json | null
-          address_id: string
-          arrival_window: string
-          created_at: string
-          customer_id: string
-          frequency: Database["public"]["Enums"]["booking_frequency"] | null
+          add_ons: string[] | null
+          address: string
+          base_price_cents: number
+          checkout_session_id: string | null
+          city: string
+          created_at: string | null
+          customer_id: string | null
+          deposit_cents: number
+          email: string
+          final_charge_cents: number | null
+          first_name: string
+          home_size_id: string
           id: string
-          per_clean_cents: number
-          promo_code: string | null
-          referral_code: string | null
+          last_name: string
+          membership_plan: string | null
+          payment_intent_id: string | null
+          phone: string
           service_date: string
-          sqft_tier: string
-          status: Database["public"]["Enums"]["booking_status"]
-          stripe_payment_intent_id: string | null
-          stripe_subscription_id: string | null
-          total_amount_cents: number
-          type: Database["public"]["Enums"]["booking_type"]
-          updated_at: string
-          utm_campaign: string | null
-          utm_medium: string | null
-          utm_source: string | null
+          service_type: string
+          state: string
+          status: string | null
+          stripe_invoice_id: string | null
+          time_slot: string
+          total_estimate_cents: number
+          updated_at: string | null
+          uses_credit: boolean | null
+          zip_code: string
         }
         Insert: {
-          add_ons?: Json | null
-          address_id: string
-          arrival_window: string
-          created_at?: string
-          customer_id: string
-          frequency?: Database["public"]["Enums"]["booking_frequency"] | null
+          add_ons?: string[] | null
+          address: string
+          base_price_cents: number
+          checkout_session_id?: string | null
+          city: string
+          created_at?: string | null
+          customer_id?: string | null
+          deposit_cents: number
+          email: string
+          final_charge_cents?: number | null
+          first_name: string
+          home_size_id: string
           id?: string
-          per_clean_cents: number
-          promo_code?: string | null
-          referral_code?: string | null
+          last_name: string
+          membership_plan?: string | null
+          payment_intent_id?: string | null
+          phone: string
           service_date: string
-          sqft_tier: string
-          status?: Database["public"]["Enums"]["booking_status"]
-          stripe_payment_intent_id?: string | null
-          stripe_subscription_id?: string | null
-          total_amount_cents: number
-          type: Database["public"]["Enums"]["booking_type"]
-          updated_at?: string
-          utm_campaign?: string | null
-          utm_medium?: string | null
-          utm_source?: string | null
+          service_type: string
+          state: string
+          status?: string | null
+          stripe_invoice_id?: string | null
+          time_slot: string
+          total_estimate_cents: number
+          updated_at?: string | null
+          uses_credit?: boolean | null
+          zip_code: string
         }
         Update: {
-          add_ons?: Json | null
-          address_id?: string
-          arrival_window?: string
-          created_at?: string
-          customer_id?: string
-          frequency?: Database["public"]["Enums"]["booking_frequency"] | null
+          add_ons?: string[] | null
+          address?: string
+          base_price_cents?: number
+          checkout_session_id?: string | null
+          city?: string
+          created_at?: string | null
+          customer_id?: string | null
+          deposit_cents?: number
+          email?: string
+          final_charge_cents?: number | null
+          first_name?: string
+          home_size_id?: string
           id?: string
-          per_clean_cents?: number
-          promo_code?: string | null
-          referral_code?: string | null
+          last_name?: string
+          membership_plan?: string | null
+          payment_intent_id?: string | null
+          phone?: string
           service_date?: string
-          sqft_tier?: string
-          status?: Database["public"]["Enums"]["booking_status"]
-          stripe_payment_intent_id?: string | null
-          stripe_subscription_id?: string | null
-          total_amount_cents?: number
-          type?: Database["public"]["Enums"]["booking_type"]
-          updated_at?: string
-          utm_campaign?: string | null
-          utm_medium?: string | null
-          utm_source?: string | null
+          service_type?: string
+          state?: string
+          status?: string | null
+          stripe_invoice_id?: string | null
+          time_slot?: string
+          total_estimate_cents?: number
+          updated_at?: string | null
+          uses_credit?: boolean | null
+          zip_code?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "bookings_address_id_fkey"
-            columns: ["address_id"]
-            isOneToOne: false
-            referencedRelation: "addresses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bookings_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      custom_quotes: {
+        Row: {
+          address: string
+          created_at: string | null
+          email: string
+          full_name: string
+          id: string
+          notes: string | null
+          phone: string
+          sqft: number
+          status: string | null
+        }
+        Insert: {
+          address: string
+          created_at?: string | null
+          email: string
+          full_name: string
+          id?: string
+          notes?: string | null
+          phone: string
+          sqft: number
+          status?: string | null
+        }
+        Update: {
+          address?: string
+          created_at?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          notes?: string | null
+          phone?: string
+          sqft?: number
+          status?: string | null
+        }
+        Relationships: []
       }
       customers: {
         Row: {
@@ -211,6 +250,48 @@ export type Database = {
           phone?: string | null
           referral_code?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      membership_credits: {
+        Row: {
+          created_at: string | null
+          credits_per_month: number
+          credits_remaining: number
+          credits_used: number | null
+          current_period_end: string
+          current_period_start: string
+          customer_id: string
+          email: string
+          id: string
+          membership_plan: string
+          subscription_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          credits_per_month: number
+          credits_remaining: number
+          credits_used?: number | null
+          current_period_end: string
+          current_period_start: string
+          customer_id: string
+          email: string
+          id?: string
+          membership_plan: string
+          subscription_id: string
+        }
+        Update: {
+          created_at?: string | null
+          credits_per_month?: number
+          credits_remaining?: number
+          credits_used?: number | null
+          current_period_end?: string
+          current_period_start?: string
+          customer_id?: string
+          email?: string
+          id?: string
+          membership_plan?: string
+          subscription_id?: string
         }
         Relationships: []
       }

@@ -10,6 +10,7 @@ import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLAN
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -155,31 +156,52 @@ export default function BookingCheckout() {
                     Payment Details
                   </h4>
                   <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Subtotal</span>
-                      <span className="font-medium">${pricing.subtotal.toFixed(2)}</span>
-                    </div>
-                    {pricing.membershipDiscount > 0 && (
-                      <div className="flex justify-between text-sm text-success">
-                        <span>Membership Discount</span>
-                        <span>-${pricing.membershipDiscount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {bookingData.useCredit && (
-                      <div className="flex justify-between text-sm text-success">
-                        <span>Credit Applied</span>
-                        <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
-                      </div>
-                    )}
-                    <Separator />
-                    <div className="flex justify-between text-base font-semibold">
-                      <span>Deposit Today</span>
-                      <span className="text-primary">${pricing.deposit.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>Balance After</span>
-                      <span>${pricing.balanceDue.toFixed(2)}</span>
-                    </div>
+                     {bookingData.useCredit && (
+                       <div className="flex items-center gap-2 p-3 bg-success/10 rounded-lg border border-success/20">
+                         <span className="text-success font-semibold text-sm">✓ Using 1 Membership Credit</span>
+                       </div>
+                     )}
+                     <div className="flex justify-between text-sm">
+                       <span className="text-muted-foreground">Base Service</span>
+                       <span className={cn("font-medium", bookingData.useCredit && "line-through text-muted-foreground")}>
+                         ${pricing.basePrice.toFixed(2)}
+                       </span>
+                     </div>
+                     {pricing.serviceAddition > 0 && (
+                       <div className="flex justify-between text-sm">
+                         <span className="text-muted-foreground">Service Upgrade</span>
+                         <span className="font-medium">+${pricing.serviceAddition.toFixed(2)}</span>
+                       </div>
+                     )}
+                     {pricing.addOnsTotal > 0 && (
+                       <div className="flex justify-between text-sm">
+                         <span className="text-muted-foreground">Add-ons</span>
+                         <span className="font-medium">+${pricing.addOnsTotal.toFixed(2)}</span>
+                       </div>
+                     )}
+                     {pricing.membershipDiscount > 0 && (
+                       <div className="flex justify-between text-sm text-success">
+                         <span>Membership Discount</span>
+                         <span>-${pricing.membershipDiscount.toFixed(2)}</span>
+                       </div>
+                     )}
+                     {bookingData.useCredit && (
+                       <div className="flex justify-between text-sm text-success">
+                         <span>Credit Coverage</span>
+                         <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
+                       </div>
+                     )}
+                     <Separator />
+                     <div className="flex justify-between text-base font-semibold">
+                       <span>{bookingData.useCredit ? 'Due Today' : 'Deposit Today'}</span>
+                       <span className="text-primary">${pricing.deposit.toFixed(2)}</span>
+                     </div>
+                     {!bookingData.useCredit && (
+                       <div className="flex justify-between text-sm text-muted-foreground">
+                         <span>Balance After Cleaning</span>
+                         <span>${pricing.balanceDue.toFixed(2)}</span>
+                       </div>
+                     )}
                   </div>
                 </CardContent>
               </Card>
@@ -226,12 +248,29 @@ export default function BookingCheckout() {
                     <Loader2 className="mr-2 w-5 h-5 animate-spin" />
                     Processing...
                   </>
-                ) : (
-                  <>
-                    <CreditCard className="mr-2 w-5 h-5" />
-                    Pay ${pricing.deposit.toFixed(2)} Deposit
-                  </>
-                )}
+                 ) : bookingData.membershipPlan !== 'none' ? (
+                   <>
+                     <CreditCard className="mr-2 w-5 h-5" />
+                     Subscribe & Book First Clean
+                   </>
+                 ) : bookingData.useCredit ? (
+                   pricing.deposit === 0 ? (
+                     <>
+                       <CreditCard className="mr-2 w-5 h-5" />
+                       Confirm Booking (Free)
+                     </>
+                   ) : (
+                     <>
+                       <CreditCard className="mr-2 w-5 h-5" />
+                       Pay ${pricing.deposit.toFixed(2)} & Book
+                     </>
+                   )
+                 ) : (
+                   <>
+                     <CreditCard className="mr-2 w-5 h-5" />
+                     Pay ${pricing.deposit.toFixed(2)} Deposit
+                   </>
+                 )}
               </Button>
             </div>
 
