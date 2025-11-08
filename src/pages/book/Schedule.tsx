@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, ArrowLeft, Calendar as CalendarIcon, Clock, CreditCard } from "lucide-react";
+import { ArrowRight, ArrowLeft, Calendar as CalendarIcon, Clock, CreditCard, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { format, addDays, isAfter } from "date-fns";
 import { MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -29,6 +33,7 @@ const TIME_SLOTS = [
 
 export default function BookingSchedule() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate) : undefined
@@ -36,9 +41,53 @@ export default function BookingSchedule() {
   const [selectedTime, setSelectedTime] = useState(bookingData.timeSlot || "");
   const [membershipPlan, setMembershipPlan] = useState(bookingData.membershipPlan || "none");
   const [useCredit, setUseCredit] = useState(bookingData.useCredit || false);
+  const [creditAvailable, setCreditAvailable] = useState(false);
+  const [creditAvailableDate, setCreditAvailableDate] = useState<string | null>(null);
+  const [checkingCredit, setCheckingCredit] = useState(false);
+
+  // Check credit availability when user wants to use credit
+  useEffect(() => {
+    const checkCreditAvailability = async () => {
+      if (!useCredit || !user || !selectedDate) {
+        return;
+      }
+
+      setCheckingCredit(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('check-credit-availability', {
+          body: { requestedDate: format(selectedDate, "yyyy-MM-dd") }
+        });
+
+        if (error) throw error;
+
+        setCreditAvailable(data.available);
+        setCreditAvailableDate(data.credit_available_date);
+
+        if (!data.available) {
+          toast.error(
+            `Credit not available yet. Available from ${format(new Date(data.credit_available_date), "MMM dd, yyyy")}`
+          );
+        }
+      } catch (error: any) {
+        console.error('Error checking credit:', error);
+        toast.error('Failed to check credit availability');
+        setUseCredit(false);
+      } finally {
+        setCheckingCredit(false);
+      }
+    };
+
+    checkCreditAvailability();
+  }, [useCredit, user, selectedDate]);
 
   const handleContinue = () => {
     if (!selectedDate || !selectedTime) {
+      return;
+    }
+
+    // Prevent continue if user wants to use credit but it's not available
+    if (useCredit && !creditAvailable) {
+      toast.error('Please wait until credit is available or uncheck "Use membership credit"');
       return;
     }
     
@@ -106,18 +155,30 @@ export default function BookingSchedule() {
               </div>
               
               {membershipPlan !== 'none' && (
-                <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
-                  <Checkbox 
-                    id="use-credit"
-                    checked={useCredit}
-                    onCheckedChange={(checked) => setUseCredit(checked as boolean)}
-                  />
-                  <label
-                    htmlFor="use-credit"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                  >
-                    Use membership credit for this booking
-                  </label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
+                    <Checkbox 
+                      id="use-credit"
+                      checked={useCredit}
+                      onCheckedChange={(checked) => setUseCredit(checked as boolean)}
+                      disabled={checkingCredit}
+                    />
+                    <label
+                      htmlFor="use-credit"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      Use membership credit for this booking
+                    </label>
+                  </div>
+                  
+                  {useCredit && !creditAvailable && creditAvailableDate && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Credit available from {format(new Date(creditAvailableDate), "MMMM dd, yyyy")}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               )}
             </div>
@@ -177,7 +238,7 @@ export default function BookingSchedule() {
                 size="lg"
                 className="flex-1 h-14 text-base font-semibold"
                 onClick={handleContinue}
-                disabled={!selectedDate || !selectedTime}
+                disabled={!selectedDate || !selectedTime || checkingCredit || (useCredit && !creditAvailable)}
               >
                 Continue
                 <ArrowRight className="ml-2 w-5 h-5" />
