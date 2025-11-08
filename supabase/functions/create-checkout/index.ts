@@ -12,52 +12,36 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
 };
 
-// PRICE_MAPPING - Actual Stripe price IDs
-const PRICE_MAPPING = {
-  standard: {
-    '0_999': 'price_1Qzp7VBwZHxMSNWj6Ea9RDrV',
-    '1000_1500': 'price_1Qzp7bBwZHxMSNWjlPwxHzGU',
-    '1501_2000': 'price_1Qzp7hBwZHxMSNWjaYCjQaJb',
-    '2001_2500': 'price_1Qzp7nBwZHxMSNWj4zZvWPvY',
-    '2501_3000': 'price_1Qzp7sBwZHxMSNWj6JxGYVfg',
-    '3001_3500': 'price_1Qzp7yBwZHxMSNWj2BCMlxuY',
-    '3501_4000': 'price_1Qzp83BwZHxMSNWj5i7J6ueS',
-    '4001_4500': 'price_1Qzp8ABwZHxMSNWjfNb5dCQA',
-    '4501_5000': 'price_1Qzp8FBwZHxMSNWjOMHVYPAW',
-  },
-  deep: {
-    '0_999': 'price_1Qzp8MBwZHxMSNWjl7WYu0z5',
-    '1000_1500': 'price_1Qzp8SBwZHxMSNWjSxRHhPHD',
-    '1501_2000': 'price_1Qzp8XBwZHxMSNWjOKzqQ2GG',
-    '2001_2500': 'price_1Qzp8cBwZHxMSNWjKXyNdDV9',
-    '2501_3000': 'price_1Qzp8iBwZHxMSNWj9iFIYzh6',
-    '3001_3500': 'price_1Qzp8oBwZHxMSNWjkgXmxVIZ',
-    '3501_4000': 'price_1Qzp8uBwZHxMSNWjk9hQ1w1b',
-    '4001_4500': 'price_1Qzp90BwZHxMSNWj6XmRd1bw',
-    '4501_5000': 'price_1Qzp96BwZHxMSNWjjq8nJ5hv',
-  },
-  moveInOut: {
-    '0_999': 'price_1Qzp9CBwZHxMSNWjQkdBHwA5',
-    '1000_1500': 'price_1Qzp9IBwZHxMSNWjO8TZY1wz',
-    '1501_2000': 'price_1Qzp9PBwZHxMSNWjf1p1WrWB',
-    '2001_2500': 'price_1Qzp9WBwZHxMSNWj3Q53cF4Y',
-    '2501_3000': 'price_1Qzp9bBwZHxMSNWj3oc8s4Nq',
-    '3001_3500': 'price_1Qzp9gBwZHxMSNWjAQQ6h4rF',
-    '3501_4000': 'price_1Qzp9mBwZHxMSNWjPLu7yYGd',
-    '4001_4500': 'price_1Qzp9rBwZHxMSNWjzQJQ4uCX',
-    '4501_5000': 'price_1Qzp9wBwZHxMSNWjkScSq2Vu',
-  },
-  deposit: 'price_1Qzp9yBwZHxMSNWjwJpKSB8x',
-  addOns: {
-    fridge: 'price_1QzpA1BwZHxMSNWj2HVFsxAg',
-    oven: 'price_1QzpA4BwZHxMSNWjAg0bGGLc',
-    windows: 'price_1QzpA7BwZHxMSNWjMuVUcTQ6',
-  },
-  memberships: {
-    monthly: 'price_1QzpA9BwZHxMSNWjITmfHwYe',
-    biweekly: 'price_1QzpACBwZHxMSNWjp9x2vFou',
-    weekly: 'price_1QzpAFBwZHxMSNWjJi4UjkL4',
-  },
+// Service pricing configuration
+const SERVICE_PRICING = {
+  standard: { label: 'Standard Cleaning', addition: 0 },
+  deep: { label: 'Deep Cleaning', addition: 50 },
+  moveInOut: { label: 'Move-In/Out Cleaning', addition: 120 },
+};
+
+const ADD_ON_PRICING = {
+  fridge: { label: 'Inside Fridge', price: 30 },
+  oven: { label: 'Inside Oven', price: 30 },
+  windows: { label: 'Interior Windows', price: 40 },
+};
+
+const HOME_SIZE_PRICING = [
+  { id: '0_999', basePrice: 150 },
+  { id: '1000_1500', basePrice: 187.5 },
+  { id: '1501_2000', basePrice: 225 },
+  { id: '2001_2500', basePrice: 262.5 },
+  { id: '2501_3000', basePrice: 300 },
+  { id: '3001_3500', basePrice: 337.5 },
+  { id: '3501_4000', basePrice: 375 },
+  { id: '4001_4500', basePrice: 412.5 },
+  { id: '4501_5000', basePrice: 450 },
+];
+
+// Membership price IDs (these are real Stripe recurring prices)
+const MEMBERSHIP_PRICE_IDS = {
+  monthly: 'price_1SR2UhGc7k6gIVcMiKbuq1mo',  // $189/month
+  biweekly: 'price_1SR2VNGc7k6gIVcMMI6Fuxga', // $289/month
+  weekly: 'price_1SR2VYGc7k6gIVcML2W0jVKS',  // $389/month
 };
 
 serve(async (req) => {
@@ -121,8 +105,13 @@ serve(async (req) => {
     if (isNewMember) {
       logStep("Building membership subscription checkout");
       
+      const membershipPriceId = MEMBERSHIP_PRICE_IDS[membershipPlan as keyof typeof MEMBERSHIP_PRICE_IDS];
+      if (!membershipPriceId) {
+        throw new Error(`Invalid membership plan: ${membershipPlan}`);
+      }
+      
       lineItems.push({
-        price: PRICE_MAPPING.memberships[membershipPlan as keyof typeof PRICE_MAPPING.memberships],
+        price: membershipPriceId,
         quantity: 1,
       });
       
@@ -133,19 +122,50 @@ serve(async (req) => {
     else {
       logStep("Building one-time payment checkout");
       
-      // Main cleaning service price
-      const tierMapping = PRICE_MAPPING[serviceType as 'standard' | 'deep' | 'moveInOut'];
-      const servicePriceId = tierMapping[homeSizeId as keyof typeof tierMapping];
+      // Get base price for home size
+      const homePricing = HOME_SIZE_PRICING.find(h => h.id === homeSizeId);
+      if (!homePricing) {
+        throw new Error(`Invalid home size: ${homeSizeId}`);
+      }
+      
+      const basePrice = homePricing.basePrice;
+      const servicePricing = SERVICE_PRICING[serviceType as keyof typeof SERVICE_PRICING];
+      if (!servicePricing) {
+        throw new Error(`Invalid service type: ${serviceType}`);
+      }
+      
+      const serviceAddition = servicePricing.addition;
+      const totalServicePrice = basePrice + serviceAddition;
+      
+      // Main cleaning service using price_data
       lineItems.push({
-        price: servicePriceId,
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `${servicePricing.label} (${homeSizeId})`,
+            description: `Cleaning service for ${homeSizeId.replace('_', '-')} sq ft home`,
+          },
+          unit_amount: Math.round(totalServicePrice * 100), // Convert to cents
+        },
         quantity: 1,
       });
-      logStep("Added service to line items", { priceId: servicePriceId });
+      logStep("Added service to line items", { 
+        basePrice, 
+        serviceAddition, 
+        totalServicePrice 
+      });
       
       // Deposit (only if NOT using credit)
       if (!isMemberUsingCredit) {
         lineItems.push({
-          price: PRICE_MAPPING.deposit,
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'Booking Deposit',
+              description: 'Refundable deposit applied to final balance',
+            },
+            unit_amount: 3900, // $39
+          },
           quantity: 1,
         });
         logStep("Added deposit to line items");
@@ -162,11 +182,24 @@ serve(async (req) => {
             return;
           }
           
+          const addonPricing = ADD_ON_PRICING[addon as keyof typeof ADD_ON_PRICING];
+          if (!addonPricing) {
+            logStep(`Unknown add-on: ${addon}`);
+            return;
+          }
+          
           lineItems.push({
-            price: PRICE_MAPPING.addOns[addon as keyof typeof PRICE_MAPPING.addOns],
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: addonPricing.label,
+                description: `Add-on service: ${addonPricing.label}`,
+              },
+              unit_amount: addonPricing.price * 100, // Convert to cents
+            },
             quantity: 1,
           });
-          logStep(`Added ${addon} add-on`);
+          logStep(`Added ${addon} add-on`, { price: addonPricing.price });
         });
       }
       
@@ -199,13 +232,11 @@ serve(async (req) => {
 
     logStep("Checkout session created", { sessionId: session.id, url: session.url });
 
-    // Store provisional booking in database (calculate pricing for storage)
-    const homeSizeIndex = ['0_999', '1000_1500', '1501_2000', '2001_2500', '2501_3000', '3001_3500', '3501_4000', '4001_4500', '4501_5000'].indexOf(homeSizeId);
-    const basePrices = [150, 187.5, 225, 262.5, 300, 337.5, 375, 412.5, 450];
-    const basePrice = basePrices[homeSizeIndex] || 150;
-    
-    const serviceAdditions: Record<string, number> = { standard: 0, deep: 50, moveInOut: 120 };
-    const serviceAddition = serviceAdditions[serviceType] || 0;
+    // Store provisional booking in database
+    const homePricing = HOME_SIZE_PRICING.find(h => h.id === homeSizeId);
+    const basePrice = homePricing?.basePrice || 150;
+    const servicePricing = SERVICE_PRICING[serviceType as keyof typeof SERVICE_PRICING];
+    const serviceAddition = servicePricing?.addition || 0;
     
     const depositCents = useCredit ? 0 : 3900;
     const totalEstimateCents = Math.round((basePrice + serviceAddition) * 100);

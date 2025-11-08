@@ -47,15 +47,15 @@ export function calculateServiceDuration(
   serviceType: string,
   baseHours: number
 ): number {
-  // Standard: use base hours from home size
+  // Standard: use 2 hours fixed
   if (serviceType === 'standard') {
-    return baseHours;
+    return 2;
   }
   
-  // Deep Cleaning & Move In/Out: base hours + 2
+  // Deep Cleaning & Move In/Out: use 4 hours fixed
   if (serviceType === 'deep' || serviceType === 'moveInOut') {
-    return baseHours + 2;
+    return 4;
   }
   
-  return baseHours;
+  return 2;
 }
