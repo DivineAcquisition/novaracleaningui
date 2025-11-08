@@ -9,7 +9,6 @@ export interface BookingData {
   useCredit: boolean;
   serviceDate: string;
   timeSlot: string;
-  serviceDuration: number;
   firstName: string;
   lastName: string;
   email: string;
@@ -39,7 +38,6 @@ const initialBookingData: BookingData = {
   useCredit: false,
   serviceDate: '',
   timeSlot: '',
-  serviceDuration: 0,
   firstName: '',
   lastName: '',
   email: '',
