@@ -75,7 +75,7 @@ export default function BookingDetails() {
       <div className="container max-w-5xl mx-auto px-4 py-8">
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Contact Form */}
-          <Card className="shadow-xl">
+          <Card className="shadow-xl animate-fade-in">
             <CardHeader className="space-y-2">
               <CardTitle className="text-2xl font-bold">Your details</CardTitle>
               <CardDescription>
@@ -219,7 +219,7 @@ export default function BookingDetails() {
           </Card>
 
           {/* Pricing Summary - FIRST TIME SHOWING PRICES */}
-          <Card className="shadow-xl border-2 border-primary/20 lg:sticky lg:top-8 h-fit">
+          <Card className="shadow-xl border-2 border-primary/20 lg:sticky lg:top-8 h-fit animate-fade-in" style={{ animationDelay: "0.1s" }}>
             <CardHeader className="bg-gradient-primary text-primary-foreground">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-6 h-6" />

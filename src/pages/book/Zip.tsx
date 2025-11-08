@@ -48,7 +48,7 @@ export default function BookingZip() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-2xl mx-auto px-4 py-8">
-        <Card className="shadow-xl">
+        <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <MapPin className="w-8 h-8 text-primary" />

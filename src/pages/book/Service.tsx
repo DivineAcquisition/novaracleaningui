@@ -88,7 +88,7 @@ export default function BookingService() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-4 py-8">
-        <Card className="shadow-xl">
+        <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <CardTitle className="text-3xl font-bold">Choose your service</CardTitle>
             <CardDescription className="text-base">

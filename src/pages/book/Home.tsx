@@ -42,7 +42,7 @@ export default function BookingHome() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-4 py-8">
-        <Card className="shadow-xl">
+        <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <HomeIcon className="w-8 h-8 text-primary" />
@@ -55,13 +55,14 @@ export default function BookingHome() {
           
           <CardContent className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {HOME_SIZE_RANGES.map((size) => (
+              {HOME_SIZE_RANGES.map((size, index) => (
                 <Card
                   key={size.id}
                   className={cn(
-                    "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105",
-                    bookingData.homeSizeId === size.id && "ring-2 ring-primary shadow-lg"
+                    "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 animate-fade-in",
+                    bookingData.homeSizeId === size.id && "ring-2 ring-primary shadow-lavender"
                   )}
+                  style={{ animationDelay: `${index * 0.1}s` }}
                   onClick={() => handleSelect(size.id)}
                 >
                   <CardContent className="p-6 space-y-3">

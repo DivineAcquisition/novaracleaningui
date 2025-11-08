@@ -112,9 +112,12 @@ export default function BookingSchedule() {
     <div className="min-h-screen bg-gradient-hero">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 py-8">
-        <Card className="shadow-xl">
-          <CardHeader className="text-center space-y-2 pb-8">
+      <div className="container max-w-6xl mx-auto px-4 py-8">
+        <Card className="shadow-xl animate-fade-in">
+          <CardHeader className="text-center space-y-2 pb-8 bg-gradient-to-br from-primary/5 to-transparent">
+            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
+              <CalendarIcon className="w-8 h-8 text-white" />
+            </div>
             <CardTitle className="text-3xl font-bold">Schedule your cleaning</CardTitle>
             <CardDescription className="text-base">
               Choose your membership plan, date, and time
@@ -125,7 +128,7 @@ export default function BookingSchedule() {
             {/* Membership Selection */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
+                <CreditCard className="w-6 h-6 text-primary" />
                 <h3 className="text-xl font-semibold">Choose membership plan</h3>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -133,22 +136,24 @@ export default function BookingSchedule() {
                   <Card
                     key={key}
                     className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-md relative",
-                      membershipPlan === key && "ring-2 ring-primary shadow-md"
+                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 relative group",
+                      membershipPlan === key && "ring-2 ring-primary shadow-lavender scale-105"
                     )}
                     onClick={() => setMembershipPlan(key)}
                   >
                     {plan.credits > 0 && (
-                      <Badge className="absolute -top-2 -right-2 bg-success">
+                      <Badge className="absolute -top-2 -right-2 bg-success shadow-md">
                         {plan.credits} credit{plan.credits > 1 ? 's' : ''}
                       </Badge>
                     )}
-                    <CardContent className="p-4 space-y-2">
-                      <h4 className="font-bold">{plan.label}</h4>
-                      {plan.monthlyPrice > 0 && (
-                        <p className="text-lg font-semibold text-primary">${plan.monthlyPrice}/mo</p>
+                    <CardContent className="p-5 space-y-2">
+                      <h4 className="font-bold text-base">{plan.label}</h4>
+                      {plan.monthlyPrice > 0 ? (
+                        <p className="text-xl font-semibold text-primary">${plan.monthlyPrice}/mo</p>
+                      ) : (
+                        <p className="text-xl font-semibold text-muted-foreground">One-time</p>
                       )}
-                      <p className="text-xs text-muted-foreground">{plan.description}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{plan.description}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -186,38 +191,53 @@ export default function BookingSchedule() {
             {/* Date Selection */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-primary" />
+                <CalendarIcon className="w-6 h-6 text-primary" />
                 <h3 className="text-xl font-semibold">Select a date</h3>
               </div>
-              <div className="flex justify-center">
+              <div className="flex justify-center p-4 bg-gradient-to-br from-primary/5 to-transparent rounded-lg">
                 <Calendar
                   mode="single"
                   selected={selectedDate}
                   onSelect={setSelectedDate}
                   disabled={(date) => !isAfter(date, minDate)}
-                  className="rounded-md border"
+                  className="rounded-lg border-2 border-primary/20 shadow-md bg-background pointer-events-auto"
                 />
               </div>
+              {selectedDate && (
+                <p className="text-center text-sm text-muted-foreground animate-fade-in">
+                  Selected: {format(selectedDate, "EEEE, MMMM d, yyyy")}
+                </p>
+              )}
             </div>
 
             {/* Time Slot Selection */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-primary" />
+                <Clock className="w-6 h-6 text-primary" />
                 <h3 className="text-xl font-semibold">Preferred time window</h3>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
-                {TIME_SLOTS.map((slot) => (
+                {TIME_SLOTS.map((slot, index) => (
                   <Card
                     key={slot.id}
                     className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-md",
-                      selectedTime === slot.id && "ring-2 ring-primary shadow-md"
+                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 group",
+                      selectedTime === slot.id && "ring-2 ring-primary shadow-lavender scale-105"
                     )}
                     onClick={() => setSelectedTime(slot.id)}
+                    style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    <CardContent className="p-4 text-center">
-                      <p className="font-semibold">{slot.label}</p>
+                    <CardContent className="p-6 text-center space-y-3">
+                      <div className={cn(
+                        "mx-auto w-12 h-12 rounded-full flex items-center justify-center transition-all",
+                        selectedTime === slot.id ? "bg-gradient-primary shadow-lavender" : "bg-primary/10 group-hover:bg-primary/20"
+                      )}>
+                        <Clock className={cn(
+                          "w-6 h-6 transition-colors",
+                          selectedTime === slot.id ? "text-white" : "text-primary"
+                        )} />
+                      </div>
+                      <p className="font-semibold text-sm">{slot.label}</p>
                     </CardContent>
                   </Card>
                 ))}

@@ -82,7 +82,7 @@ export default function BookingCheckout() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-4 py-8">
-        <Card className="shadow-xl border-primary/20">
+        <Card className="shadow-xl border-primary/20 animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
               <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
                 <CreditCard className="w-8 h-8 text-white" />
