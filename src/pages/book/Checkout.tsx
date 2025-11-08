@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Calendar, Clock, Home, Sparkles, Loader2, CreditCard } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -78,17 +79,17 @@ export default function BookingCheckout() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-4xl mx-auto px-4 py-8">
+      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl border-primary/20 animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
               <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
                 <CreditCard className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-3xl font-bold">Secure Checkout</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-2xl md:text-3xl font-bold">Secure Checkout</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               Review your order and complete your booking
             </CardDescription>
           </CardHeader>
@@ -225,8 +226,8 @@ export default function BookingCheckout() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-4 pt-6">
+            {/* Action Buttons - Desktop Only */}
+            <div className="hidden md:flex gap-4 pt-6">
               <Button
                 variant="outline"
                 size="lg"
@@ -280,6 +281,27 @@ export default function BookingCheckout() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        steps={BOOKING_STEPS}
+        onBack={handleBack}
+        onContinue={handlePayment}
+        showPrice={true}
+        price={pricing.deposit}
+        continueDisabled={isProcessing}
+        continueText={
+          isProcessing
+            ? "Processing..."
+            : bookingData.membershipPlan !== 'none'
+            ? "Subscribe & Book"
+            : bookingData.useCredit && pricing.deposit === 0
+            ? "Confirm (Free)"
+            : `Pay $${pricing.deposit.toFixed(2)}`
+        }
+      />
     </div>
   );
 }

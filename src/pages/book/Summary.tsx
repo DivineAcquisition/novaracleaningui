@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Calendar, Clock, Home, MapPin, User, Mail, Phone, Sparkles } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { format } from "date-fns";
 
@@ -48,14 +49,14 @@ export default function BookingSummary() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-4xl mx-auto px-4 py-8">
+      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
-            <CardTitle className="text-3xl font-bold">Review your booking</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-2xl md:text-3xl font-bold">Review your booking</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               Please review your booking details before confirming
             </CardDescription>
           </CardHeader>
@@ -228,7 +229,8 @@ export default function BookingSummary() {
               </Card>
             </div>
 
-            <div className="flex gap-4 pt-6">
+            {/* Desktop Navigation - Hidden on Mobile */}
+            <div className="hidden md:flex gap-4 pt-6">
               <Button
                 variant="outline"
                 size="lg"
@@ -249,6 +251,18 @@ export default function BookingSummary() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        steps={BOOKING_STEPS}
+        onBack={handleBack}
+        onContinue={handleConfirm}
+        showPrice={true}
+        price={pricing.total}
+        continueText="Continue to Payment"
+      />
     </div>
   );
 }

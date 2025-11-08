@@ -9,7 +9,7 @@ interface ProgressBarProps {
 
 export function ProgressBar({ currentStep, totalSteps, steps }: ProgressBarProps) {
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8">
+    <div className="hidden md:block w-full max-w-4xl mx-auto px-4 py-8">
       <div className="relative">
         {/* Progress Line */}
         <div className="absolute top-5 left-0 right-0 h-0.5 bg-border">

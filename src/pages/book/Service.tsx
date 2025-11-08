@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Zap, Package, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -84,20 +85,20 @@ export default function BookingService() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 py-8">
+      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
-            <CardTitle className="text-3xl font-bold">Choose your service</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-2xl md:text-3xl font-bold">Choose your service</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               Select the cleaning tier that fits your needs
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-8">
-            <div className="grid gap-6 md:grid-cols-3">
+          <CardContent className="space-y-6 md:space-y-8">
+            <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
               {SERVICES.map((service) => (
                 <Card
                   key={service.id}
@@ -112,7 +113,7 @@ export default function BookingService() {
                       {service.badge}
                     </Badge>
                   )}
-                  <CardContent className="p-6 space-y-4">
+                  <CardContent className="p-4 md:p-6 space-y-4">
                     <div className="text-center space-y-3">
                       <div className="mx-auto w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center">
                         <service.icon className="w-7 h-7 text-primary" />
@@ -185,7 +186,8 @@ export default function BookingService() {
               </Card>
             )}
 
-            <div className="flex gap-4 pt-6">
+            {/* Desktop Navigation - Hidden on Mobile */}
+            <div className="hidden md:flex gap-4 pt-6">
               <Button
                 variant="outline"
                 size="lg"

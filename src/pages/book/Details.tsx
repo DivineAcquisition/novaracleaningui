@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ArrowRight, ArrowLeft, User, Mail, Phone, MapPin, DollarSign } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { toast } from "sonner";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 
@@ -69,16 +70,16 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 py-8">
-        <div className="grid gap-6 lg:grid-cols-2">
+      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Contact Form */}
           <Card className="shadow-xl animate-fade-in">
             <CardHeader className="space-y-2">
-              <CardTitle className="text-2xl font-bold">Your details</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl md:text-2xl font-bold">Your details</CardTitle>
+              <CardDescription className="text-sm md:text-base">
                 Please provide your contact information
               </CardDescription>
             </CardHeader>
@@ -194,7 +195,8 @@ export default function BookingDetails() {
                   </div>
                 </div>
 
-                <div className="flex gap-4 pt-6">
+                {/* Desktop Navigation - Hidden on Mobile */}
+                <div className="hidden md:flex gap-4 pt-6">
                   <Button
                     type="button"
                     variant="outline"
@@ -323,6 +325,18 @@ export default function BookingDetails() {
           </Card>
         </div>
       </div>
+
+      {/* Mobile Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        steps={BOOKING_STEPS}
+        onBack={handleBack}
+        onContinue={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+        showPrice={true}
+        price={pricing.total}
+        continueText="Continue to Summary"
+      />
     </div>
   );
 }

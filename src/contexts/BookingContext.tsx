@@ -16,6 +16,7 @@ export interface BookingData {
   address: string;
   city: string;
   state: string;
+  serviceDuration: number;
   customerId?: string;
   addressId?: string;
 }
@@ -45,6 +46,7 @@ const initialBookingData: BookingData = {
   address: '',
   city: '',
   state: '',
+  serviceDuration: 0,
 };
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);

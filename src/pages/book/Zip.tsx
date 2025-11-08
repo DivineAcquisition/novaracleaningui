@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MapPin, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -44,17 +45,17 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-2xl mx-auto px-4 py-8">
+      <div className="container max-w-2xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <MapPin className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="text-3xl font-bold">Where do you need cleaning?</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-2xl md:text-3xl font-bold">Where do you need cleaning?</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               Enter your ZIP code to check availability in your area
             </CardDescription>
           </CardHeader>
@@ -77,10 +78,11 @@ export default function BookingZip() {
                 />
               </div>
 
+              {/* Desktop Submit Button */}
               <Button
                 type="submit"
                 size="lg"
-                className="w-full h-14 text-base font-semibold"
+                className="hidden md:flex w-full h-14 text-base font-semibold"
                 disabled={zipCode.length !== 5 || isValidating}
               >
                 {isValidating ? "Checking availability..." : "Continue"}
@@ -94,6 +96,16 @@ export default function BookingZip() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        steps={BOOKING_STEPS}
+        onContinue={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+        continueDisabled={zipCode.length !== 5 || isValidating}
+        continueText={isValidating ? "Checking..." : "Continue"}
+      />
     </div>
   );
 }

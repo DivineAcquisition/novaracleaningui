@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Home as HomeIcon, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 
 const BOOKING_STEPS = [
@@ -38,23 +39,23 @@ export default function BookingHome() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 py-8">
+      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <HomeIcon className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="text-3xl font-bold">How big is your home?</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-2xl md:text-3xl font-bold">How big is your home?</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               Select the size that best matches your space
             </CardDescription>
           </CardHeader>
           
           <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {HOME_SIZE_RANGES.map((size, index) => (
                 <Card
                   key={size.id}
@@ -65,7 +66,7 @@ export default function BookingHome() {
                   style={{ animationDelay: `${index * 0.1}s` }}
                   onClick={() => handleSelect(size.id)}
                 >
-                  <CardContent className="p-6 space-y-3">
+                  <CardContent className="p-4 md:p-6 space-y-3">
                     <div className="text-center">
                       <h3 className="text-lg font-bold text-foreground">{size.label}</h3>
                       <p className="text-sm text-muted-foreground mt-1">{size.bedroomRange}</p>
@@ -75,7 +76,8 @@ export default function BookingHome() {
               ))}
             </div>
 
-            <div className="flex gap-4 pt-6">
+            {/* Desktop Navigation - Hidden on Mobile */}
+            <div className="hidden md:flex gap-4 pt-6">
               <Button
                 variant="outline"
                 size="lg"
@@ -89,6 +91,14 @@ export default function BookingHome() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        steps={BOOKING_STEPS}
+        onBack={handleBack}
+      />
     </div>
   );
 }
