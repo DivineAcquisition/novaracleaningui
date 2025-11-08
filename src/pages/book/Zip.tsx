@@ -9,6 +9,7 @@ import { MapPin, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -24,6 +25,12 @@ export default function BookingZip() {
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
   const [zipCode, setZipCode] = useState(bookingData.zipCode || "");
   const [isValidating, setIsValidating] = useState(false);
+
+  // Swipe gesture handlers
+  const swipeHandlers = useBookingSwipe({
+    canSwipeRight: false, // First step, can't go back
+    step: 1,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +52,7 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-2xl mx-auto px-3 md:px-4 py-4 md:py-8">

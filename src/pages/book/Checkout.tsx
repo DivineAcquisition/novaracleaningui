@@ -8,6 +8,7 @@ import { ArrowLeft, Calendar, Clock, Home, Sparkles, Loader2, CreditCard } from 
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -32,6 +33,15 @@ export default function BookingCheckout() {
   const navigate = useNavigate();
   const { bookingData, currentStep } = useBooking();
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Swipe gesture handlers
+  const swipeHandlers = useBookingSwipe({
+    onSwipeRight: () => {
+      navigate("/book/summary");
+    },
+    canSwipeLeft: false, // Last step before payment
+    step: 7,
+  });
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -79,7 +89,7 @@ export default function BookingCheckout() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">

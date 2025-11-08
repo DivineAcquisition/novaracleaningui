@@ -9,6 +9,7 @@ import { Sparkles, Zap, Package, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -57,6 +58,15 @@ export default function BookingService() {
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>(bookingData.addOns || []);
 
+  // Swipe gesture handlers
+  const swipeHandlers = useBookingSwipe({
+    onSwipeRight: () => {
+      setCurrentStep(2);
+      navigate("/book/home");
+    },
+    step: 3,
+  });
+
   const handleSelect = (serviceType: string) => {
     // For moveInOut, filter out fridge & oven from add-ons (they're included)
     const filteredAddOns = serviceType === 'moveInOut' 
@@ -85,7 +95,7 @@ export default function BookingService() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">

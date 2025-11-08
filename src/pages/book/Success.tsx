@@ -1,18 +1,53 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, Calendar, Mail, Home } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { CheckCircle2, Calendar, Mail, Home, Share2, Download, Clock, MapPin, CreditCard } from "lucide-react";
+import { format, parse, addHours } from "date-fns";
+import { toast } from "sonner";
+import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/lib/calendar";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+
+const TIME_SLOT_MAP: Record<string, { start: number; end: number }> = {
+  "8-12": { start: 8, end: 12 },
+  "12-16": { start: 12, end: 16 },
+  "16-20": { start: 16, end: 20 },
+};
 
 export default function BookingSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { bookingData, resetBookingData } = useBooking();
   const sessionId = searchParams.get("session_id");
+  const [canShare, setCanShare] = useState(false);
+
+  const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
+  const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
+  const pricing = calculatePrice(
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+    bookingData.useCredit
+  );
+
+  // Check if Web Share API is available
+  useEffect(() => {
+    if (navigator.share) {
+      setCanShare(true);
+    }
+  }, []);
 
   useEffect(() => {
-    // Clear booking data after successful payment
     if (sessionId) {
       console.log("Payment successful, session ID:", sessionId);
     }
@@ -23,89 +58,272 @@ export default function BookingSuccess() {
     navigate("/");
   };
 
+  const handleShare = async () => {
+    const shareData = {
+      title: 'Novara Cleaning Booking',
+      text: `My cleaning is scheduled for ${format(new Date(bookingData.serviceDate), "EEEE, MMMM d, yyyy")} at ${getTimeSlotLabel(bookingData.timeSlot)}`,
+      url: window.location.origin,
+    };
+
+    try {
+      if (navigator.share && canShare) {
+        await navigator.share(shareData);
+        toast.success('Shared successfully!');
+      } else {
+        // Fallback: copy to clipboard
+        await navigator.clipboard.writeText(
+          `${shareData.text}\n${shareData.url}`
+        );
+        toast.success('Booking details copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  const getTimeSlotLabel = (slotId: string) => {
+    const slot = slotId.split('-');
+    if (slot.length === 2) {
+      const startHour = parseInt(slot[0]);
+      const endHour = parseInt(slot[1]);
+      const formatHour = (h: number) => {
+        const period = h >= 12 ? 'PM' : 'AM';
+        const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+        return `${hour}:00 ${period}`;
+      };
+      return `${formatHour(startHour)} - ${formatHour(endHour)}`;
+    }
+    return slotId;
+  };
+
+  const handleAddToCalendar = (type: 'ical' | 'google' | 'outlook') => {
+    if (!bookingData.serviceDate || !bookingData.timeSlot) {
+      toast.error('Missing booking date or time');
+      return;
+    }
+
+    const timeSlot = TIME_SLOT_MAP[bookingData.timeSlot];
+    if (!timeSlot) {
+      toast.error('Invalid time slot');
+      return;
+    }
+
+    const serviceDate = new Date(bookingData.serviceDate);
+    const startDate = new Date(serviceDate);
+    startDate.setHours(timeSlot.start, 0, 0, 0);
+    
+    const endDate = new Date(serviceDate);
+    endDate.setHours(timeSlot.end, 0, 0, 0);
+
+    const event = {
+      title: `Novara Cleaning - ${serviceTier?.label}`,
+      description: `${serviceTier?.label} cleaning service for ${homeSize?.label} home.\n\nService includes: ${serviceTier?.label} cleaning\nEstimated duration: ${bookingData.serviceDuration || 2} hours\n\nAddress: ${bookingData.address}, ${bookingData.city}, ${bookingData.state} ${bookingData.zipCode}\n\nContact: ${bookingData.phone}`,
+      location: `${bookingData.address}, ${bookingData.city}, ${bookingData.state} ${bookingData.zipCode}`,
+      startDate,
+      endDate,
+    };
+
+    if (type === 'ical') {
+      downloadICalFile(event, `novara-cleaning-${format(serviceDate, 'yyyy-MM-dd')}.ics`);
+      toast.success('Calendar file downloaded!');
+    } else if (type === 'google') {
+      window.open(addToGoogleCalendar(event), '_blank');
+    } else if (type === 'outlook') {
+      window.open(addToOutlookCalendar(event), '_blank');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
-      <Card className="max-w-2xl w-full shadow-xl border-success/20">
-        <CardHeader className="text-center space-y-4 pb-8">
-          <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
-            <CheckCircle2 className="w-12 h-12 text-success" />
-          </div>
-          <CardTitle className="text-4xl font-bold">
-            {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
-          </CardTitle>
-          <CardDescription className="text-lg">
-            {bookingData.membershipPlan !== 'none' 
-              ? 'Your membership is active and your first credit is ready to use'
-              : bookingData.useCredit
-              ? 'Your booking is confirmed with your membership credit'
-              : 'Thank you for choosing Novara Cleaning Service'}
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent className="space-y-8">
-          <div className="bg-gradient-to-br from-success/5 to-primary/5 rounded-lg p-6 space-y-4">
-            <h3 className="text-xl font-semibold text-center">What happens next?</h3>
-            
-            <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h4 className="font-semibold mb-1">Confirmation Email</h4>
-                  <p className="text-sm text-muted-foreground">
-                    We've sent a confirmation email to {bookingData.email} with all your booking details.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+    <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 pb-32 md:pb-12">
+      <div className="container max-w-3xl mx-auto">
+        <Card className="shadow-xl border-success/20 animate-fade-in">
+          <CardHeader className="text-center space-y-4 pb-6 md:pb-8">
+            <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
+              <CheckCircle2 className="w-10 h-10 md:w-12 md:h-12 text-success" />
+            </div>
+            <CardTitle className="text-2xl md:text-4xl font-bold">
+              {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
+            </CardTitle>
+            <CardDescription className="text-sm md:text-lg">
+              {bookingData.membershipPlan !== 'none' 
+                ? 'Your membership is active and your first credit is ready to use'
+                : bookingData.useCredit
+                ? 'Your booking is confirmed with your membership credit'
+                : 'Thank you for choosing Novara Cleaning Service'}
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent className="space-y-6 md:space-y-8">
+            {/* Booking Details Card */}
+            <Card className="bg-primary/5 border-primary/20">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg md:text-xl flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h4 className="font-semibold mb-1">Reminder</h4>
-                  <p className="text-sm text-muted-foreground">
-                    You'll receive a reminder 24 hours before your scheduled cleaning.
-                  </p>
-                </div>
-              </div>
+                  Your Booking Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:gap-4">
+                  <div className="flex items-start gap-3">
+                    <Calendar className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs md:text-sm text-muted-foreground">Date</p>
+                      <p className="font-semibold text-sm md:text-base">
+                        {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "EEEE, MMMM d, yyyy")}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Home className="w-5 h-5 text-primary" />
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs md:text-sm text-muted-foreground">Time Window</p>
+                      <p className="font-semibold text-sm md:text-base">{getTimeSlotLabel(bookingData.timeSlot)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Home className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs md:text-sm text-muted-foreground">Service</p>
+                      <p className="font-semibold text-sm md:text-base">{serviceTier?.label} • {homeSize?.label}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <MapPin className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs md:text-sm text-muted-foreground">Location</p>
+                      <p className="font-semibold text-sm md:text-base">
+                        {bookingData.address}, {bookingData.city}, {bookingData.state} {bookingData.zipCode}
+                      </p>
+                    </div>
+                  </div>
+
+                  {sessionId && (
+                    <div className="flex items-start gap-3">
+                      <CreditCard className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-xs md:text-sm text-muted-foreground">Order ID</p>
+                        <p className="font-semibold text-sm md:text-base font-mono">{sessionId.slice(-12)}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <h4 className="font-semibold mb-1">Cleaning Day</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Our professional team will arrive during your selected time window.
-                  </p>
+
+                <Separator />
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-3">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="w-full h-12 text-sm md:text-base">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Add to Calendar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuItem onClick={() => handleAddToCalendar('google')}>
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Google Calendar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleAddToCalendar('outlook')}>
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Outlook Calendar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => handleAddToCalendar('ical')}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download .ics file
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-12 text-sm md:text-base"
+                    onClick={handleShare}
+                  >
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Share
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* What Happens Next */}
+            <div className="bg-gradient-to-br from-success/5 to-primary/5 rounded-lg p-4 md:p-6 space-y-4">
+              <h3 className="text-lg md:text-xl font-semibold text-center">What happens next?</h3>
+              
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1 text-sm md:text-base">Confirmation Email</h4>
+                    <p className="text-xs md:text-sm text-muted-foreground">
+                      We've sent a confirmation email to {bookingData.email} with all your booking details.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Calendar className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1 text-sm md:text-base">Reminder</h4>
+                    <p className="text-xs md:text-sm text-muted-foreground">
+                      You'll receive a reminder 24 hours before your scheduled cleaning.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Home className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1 text-sm md:text-base">Cleaning Day</h4>
+                    <p className="text-xs md:text-sm text-muted-foreground">
+                      Our professional team will arrive during your selected time window.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="text-center space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Need to make changes? Contact us at support@homeglow.com
-            </p>
-            
-            <Button
-              size="lg"
-              className="h-14 px-8 text-base font-semibold bg-gradient-primary shadow-neon"
-              onClick={handleReturnHome}
-            >
-              Return to Home
-            </Button>
-          </div>
+            <div className="text-center space-y-4">
+              <p className="text-xs md:text-sm text-muted-foreground">
+                Need to make changes? Contact us at support@novaracleaning.com
+              </p>
+              
+              {/* Desktop Button */}
+              <Button
+                size="lg"
+                className="hidden md:flex mx-auto h-14 px-8 text-base font-semibold bg-gradient-primary shadow-neon"
+                onClick={handleReturnHome}
+              >
+                <Home className="mr-2 w-5 h-5" />
+                Return to Home
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          {sessionId && (
-            <p className="text-center text-xs text-muted-foreground">
-              Order ID: {sessionId.slice(-12)}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Mobile Bottom Button */}
+      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-xl z-50 p-4 animate-slide-up">
+        <Button
+          size="lg"
+          className="w-full h-14 text-base font-semibold bg-gradient-primary shadow-neon"
+          onClick={handleReturnHome}
+        >
+          <Home className="mr-2 w-5 h-5" />
+          Return to Home
+        </Button>
+      </div>
     </div>
   );
 }

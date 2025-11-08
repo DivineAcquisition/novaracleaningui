@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { generateTimeSlots, calculateServiceDuration } from "@/lib/time-slots";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { HOME_SIZE_RANGES, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -41,6 +42,21 @@ export default function BookingSchedule() {
   const [creditAvailableDate, setCreditAvailableDate] = useState<string>("");
   const [checkingCredit, setCheckingCredit] = useState(false);
   const [serviceDuration, setServiceDuration] = useState(2);
+
+  // Swipe gesture handlers
+  const swipeHandlers = useBookingSwipe({
+    onSwipeRight: () => {
+      setCurrentStep(3);
+      navigate("/book/service");
+    },
+    onSwipeLeft: () => {
+      if (selectedDate && selectedTime && !checkingCredit && (!useCredit || creditAvailable)) {
+        handleContinue();
+      }
+    },
+    canSwipeLeft: !!(selectedDate && selectedTime && !checkingCredit && (!useCredit || creditAvailable)),
+    step: 4,
+  });
 
   // Calculate service duration based on home size and service type
   useEffect(() => {
@@ -127,7 +143,7 @@ export default function BookingSchedule() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">

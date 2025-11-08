@@ -10,6 +10,7 @@ import { ArrowRight, ArrowLeft, User, Mail, Phone, MapPin, DollarSign } from "lu
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { toast } from "sonner";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 
 const BOOKING_STEPS = [
@@ -47,6 +48,23 @@ export default function BookingDetails() {
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
   const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
 
+  // Swipe gesture handlers
+  const swipeHandlers = useBookingSwipe({
+    onSwipeRight: () => {
+      setCurrentStep(4);
+      navigate("/book/schedule");
+    },
+    onSwipeLeft: () => {
+      if (formData.firstName && formData.lastName && formData.email && formData.phone && formData.address) {
+        updateBookingData(formData);
+        setCurrentStep(6);
+        navigate("/book/summary");
+      }
+    },
+    canSwipeLeft: !!(formData.firstName && formData.lastName && formData.email && formData.phone && formData.address),
+    step: 5,
+  });
+
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -70,7 +88,7 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">

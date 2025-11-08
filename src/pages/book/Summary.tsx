@@ -7,6 +7,7 @@ import { ArrowLeft, Calendar, Clock, Home, MapPin, User, Mail, Phone, Sparkles }
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 
 const BOOKING_STEPS = [
@@ -27,6 +28,18 @@ const TIME_SLOT_LABELS: Record<string, string> = {
 export default function BookingSummary() {
   const navigate = useNavigate();
   const { bookingData, currentStep, setCurrentStep } = useBooking();
+
+  // Swipe gesture handlers
+  const swipeHandlers = useBookingSwipe({
+    onSwipeRight: () => {
+      setCurrentStep(5);
+      navigate("/book/details");
+    },
+    onSwipeLeft: () => {
+      navigate("/book/checkout");
+    },
+    step: 6,
+  });
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -49,7 +62,7 @@ export default function BookingSummary() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
