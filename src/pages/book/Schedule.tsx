@@ -1,20 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, ArrowLeft, Calendar as CalendarIcon, Clock, CreditCard, AlertCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
-import { format, addDays, isAfter } from "date-fns";
-import { MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Clock, CalendarDays, Crown, Sparkles, CreditCard } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { format, addDays } from "date-fns";
+import { MEMBERSHIP_PLANS, HOME_SIZE_RANGES } from "@/lib/pricing-system";
+import { generateTimeSlots, calculateServiceDuration } from "@/lib/time-slots";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -25,16 +26,12 @@ const BOOKING_STEPS = [
   { number: 6, label: "Payment" },
 ];
 
-const TIME_SLOTS = [
-  { id: "8-12", label: "8:00 AM - 12:00 PM" },
-  { id: "12-16", label: "12:00 PM - 4:00 PM" },
-  { id: "16-20", label: "4:00 PM - 8:00 PM" },
-];
-
-export default function BookingSchedule() {
+const BookingSchedule = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
+  const { user } = useAuth();
+  const isMobile = useIsMobile();
+  
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate) : undefined
   );
@@ -42,231 +39,274 @@ export default function BookingSchedule() {
   const [membershipPlan, setMembershipPlan] = useState(bookingData.membershipPlan || "none");
   const [useCredit, setUseCredit] = useState(bookingData.useCredit || false);
   const [creditAvailable, setCreditAvailable] = useState(false);
-  const [creditAvailableDate, setCreditAvailableDate] = useState<string | null>(null);
-  const [checkingCredit, setCheckingCredit] = useState(false);
+  const [creditAvailableDate, setCreditAvailableDate] = useState<string>("");
 
-  // Check credit availability when user wants to use credit
+  // Calculate service duration
+  const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
+  const serviceDuration = homeSize ? calculateServiceDuration(homeSize.baseHours, bookingData.serviceType) : 2;
+  const timeSlots = generateTimeSlots(serviceDuration, bookingData.serviceType);
+
+  // Generate next 30 days for date selection
+  const minDate = addDays(new Date(), 2);
+  const availableDates = Array.from({ length: 30 }, (_, i) => addDays(minDate, i));
+
   useEffect(() => {
-    const checkCreditAvailability = async () => {
-      if (!useCredit || !user || !selectedDate) {
-        return;
-      }
+    const checkCredit = async () => {
+      if (!useCredit || !user) return;
 
-      setCheckingCredit(true);
       try {
         const { data, error } = await supabase.functions.invoke('check-credit-availability', {
-          body: { requestedDate: format(selectedDate, "yyyy-MM-dd") }
+          body: { 
+            userId: user.id,
+            requestedDate: selectedDate?.toISOString(),
+          },
         });
 
         if (error) throw error;
 
         setCreditAvailable(data.available);
-        setCreditAvailableDate(data.credit_available_date);
+        setCreditAvailableDate(data.availableDate);
 
         if (!data.available) {
-          toast.error(
-            `Credit not available yet. Available from ${format(new Date(data.credit_available_date), "MMM dd, yyyy")}`
-          );
+          toast.error(`Credit not available until ${format(new Date(data.availableDate), 'MMM d, yyyy')}`);
         }
-      } catch (error: any) {
+      } catch (error) {
         console.error('Error checking credit:', error);
-        toast.error('Failed to check credit availability');
-        setUseCredit(false);
-      } finally {
-        setCheckingCredit(false);
+        setCreditAvailable(false);
       }
     };
 
-    checkCreditAvailability();
+    checkCredit();
   }, [useCredit, user, selectedDate]);
 
   const handleContinue = () => {
     if (!selectedDate || !selectedTime) {
+      toast.error("Please select both a date and time");
       return;
     }
 
-    // Prevent continue if user wants to use credit but it's not available
     if (useCredit && !creditAvailable) {
-      toast.error('Please wait until credit is available or uncheck "Use membership credit"');
+      toast.error("Credit not yet available for selected date");
       return;
     }
-    
+
     updateBookingData({
-      serviceDate: format(selectedDate, "yyyy-MM-dd"),
+      serviceDate: selectedDate.toISOString(),
       timeSlot: selectedTime,
       membershipPlan,
       useCredit,
+      serviceDuration,
     });
     setCurrentStep(5);
     navigate("/book/details");
   };
 
   const handleBack = () => {
-    setCurrentStep(3);
     navigate("/book/service");
   };
 
-  const minDate = addDays(new Date(), 2);
-
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-6xl mx-auto px-4 py-8">
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8 bg-gradient-to-br from-primary/5 to-transparent">
-            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
-              <CalendarIcon className="w-8 h-8 text-white" />
-            </div>
-            <CardTitle className="text-3xl font-bold">Schedule your cleaning</CardTitle>
-            <CardDescription className="text-base">
-              Choose your membership plan, date, and time
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-8">
-            {/* Membership Selection */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-6 h-6 text-primary" />
-                <h3 className="text-xl font-semibold">Choose membership plan</h3>
+      <div className="container max-w-4xl mx-auto px-3 py-4 lg:px-4 lg:py-8 pb-32 lg:pb-8">
+        <Card className="animate-fade-in border-border/50 shadow-lg">
+          <CardHeader className="space-y-1 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-gradient-to-br from-primary to-primary/60">
+                <CalendarDays className="w-5 h-5 lg:w-6 lg:h-6 text-primary-foreground" />
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <CardTitle className="text-xl lg:text-3xl">Schedule Your Service</CardTitle>
+                <CardDescription className="text-sm lg:text-base">Choose a date, time, and membership plan</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {/* Membership Plans */}
+            <div className="space-y-3">
+              <h3 className="text-base lg:text-lg font-semibold flex items-center gap-2">
+                <Crown className="w-4 h-4 lg:w-5 lg:h-5 text-primary" />
+                Choose Your Plan
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {Object.entries(MEMBERSHIP_PLANS).map(([key, plan]) => (
                   <Card
                     key={key}
                     className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 relative group",
-                      membershipPlan === key && "ring-2 ring-primary shadow-lavender scale-105"
+                      "cursor-pointer transition-all duration-300 hover:shadow-md hover:border-primary/50 active:scale-95",
+                      membershipPlan === key && "border-primary bg-primary/5 shadow-md"
                     )}
                     onClick={() => setMembershipPlan(key)}
                   >
-                    {plan.credits > 0 && (
-                      <Badge className="absolute -top-2 -right-2 bg-success shadow-md">
-                        {plan.credits} credit{plan.credits > 1 ? 's' : ''}
-                      </Badge>
-                    )}
-                    <CardContent className="p-5 space-y-2">
-                      <h4 className="font-bold text-base">{plan.label}</h4>
-                      {plan.monthlyPrice > 0 ? (
-                        <p className="text-xl font-semibold text-primary">${plan.monthlyPrice}/mo</p>
-                      ) : (
-                        <p className="text-xl font-semibold text-muted-foreground">One-time</p>
-                      )}
-                      <p className="text-xs text-muted-foreground leading-relaxed">{plan.description}</p>
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold text-sm lg:text-base">{plan.label}</h4>
+                          <p className="text-xs lg:text-sm text-muted-foreground">{plan.description}</p>
+                        </div>
+                        {plan.credits > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {plan.credits} credit{plan.credits > 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-lg lg:text-xl font-bold text-primary">
+                        {plan.monthlyPrice === 0 ? 'Pay as you go' : `$${plan.monthlyPrice}/mo`}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
-              
-              {membershipPlan !== 'none' && (
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
-                    <Checkbox 
-                      id="use-credit"
-                      checked={useCredit}
-                      onCheckedChange={(checked) => setUseCredit(checked as boolean)}
-                      disabled={checkingCredit}
-                    />
+
+              {/* Use Credit Checkbox */}
+              {membershipPlan !== 'none' && user && (
+                <div className="flex items-start space-x-3 p-4 bg-secondary/30 rounded-lg border border-secondary">
+                  <Checkbox
+                    id="useCredit"
+                    checked={useCredit}
+                    onCheckedChange={(checked) => setUseCredit(checked as boolean)}
+                  />
+                  <div className="space-y-1">
                     <label
-                      htmlFor="use-credit"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      htmlFor="useCredit"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2 cursor-pointer"
                     >
-                      Use membership credit for this booking
+                      <CreditCard className="w-4 h-4" />
+                      Use monthly credit for this service
                     </label>
+                    <p className="text-xs text-muted-foreground">
+                      Cover the base cleaning cost with your membership credit
+                    </p>
                   </div>
-                  
-                  {useCredit && !creditAvailable && creditAvailableDate && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Credit available from {format(new Date(creditAvailableDate), "MMMM dd, yyyy")}
-                      </AlertDescription>
-                    </Alert>
-                  )}
                 </div>
               )}
             </div>
 
             {/* Date Selection */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="w-6 h-6 text-primary" />
-                <h3 className="text-xl font-semibold">Select a date</h3>
+            <div className="space-y-3">
+              <h3 className="text-base lg:text-lg font-semibold flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 lg:w-5 lg:h-5 text-primary" />
+                Select Date
+              </h3>
+              <div className="overflow-x-auto pb-2 -mx-3 px-3 lg:mx-0 lg:px-0">
+                <div className="flex gap-2 lg:gap-3 min-w-max lg:grid lg:grid-cols-7 lg:min-w-0">
+                  {availableDates.slice(0, isMobile ? 14 : 21).map((date, index) => {
+                    const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+                    return (
+                      <Card
+                        key={index}
+                        className={cn(
+                          "cursor-pointer transition-all duration-300 hover:border-primary/50 hover:shadow-md flex-shrink-0 w-20 lg:w-auto active:scale-95",
+                          isSelected && "border-primary bg-primary/10 shadow-md"
+                        )}
+                        onClick={() => setSelectedDate(date)}
+                      >
+                        <CardContent className="p-3 text-center space-y-1">
+                          <div className={cn(
+                            "text-xs font-medium uppercase",
+                            isSelected ? "text-primary" : "text-muted-foreground"
+                          )}>
+                            {format(date, 'EEE')}
+                          </div>
+                          <div className={cn(
+                            "text-xl lg:text-2xl font-bold",
+                            isSelected && "text-primary"
+                          )}>
+                            {format(date, 'd')}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {format(date, 'MMM')}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="flex justify-center p-4 bg-gradient-to-br from-primary/5 to-transparent rounded-lg">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={(date) => !isAfter(date, minDate)}
-                  className="rounded-lg border-2 border-primary/20 shadow-md bg-background pointer-events-auto"
-                />
-              </div>
-              {selectedDate && (
-                <p className="text-center text-sm text-muted-foreground animate-fade-in">
-                  Selected: {format(selectedDate, "EEEE, MMMM d, yyyy")}
+            </div>
+
+            {/* Time Selection */}
+            {selectedDate && (
+              <div className="space-y-3 animate-fade-in">
+                <h3 className="text-base lg:text-lg font-semibold flex items-center gap-2">
+                  <Clock className="w-4 h-4 lg:w-5 lg:h-5 text-primary" />
+                  Select Time Window
+                </h3>
+                <p className="text-xs lg:text-sm text-muted-foreground flex items-center gap-2">
+                  <Sparkles className="w-3 h-3 lg:w-4 lg:h-4" />
+                  Estimated service time: {serviceDuration} hours
                 </p>
-              )}
-            </div>
-
-            {/* Time Slot Selection */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Clock className="w-6 h-6 text-primary" />
-                <h3 className="text-xl font-semibold">Preferred time window</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {timeSlots.map((slot, index) => {
+                    const isSelected = selectedTime === slot.id;
+                    return (
+                      <Card
+                        key={slot.id}
+                        className={cn(
+                          "cursor-pointer transition-all duration-300 hover:border-primary/50 hover:shadow-md animate-fade-in active:scale-95",
+                          isSelected && "border-primary bg-primary/10 shadow-md"
+                        )}
+                        style={{ animationDelay: `${index * 50}ms` }}
+                        onClick={() => setSelectedTime(slot.id)}
+                      >
+                        <CardContent className="p-4 text-center space-y-2">
+                          <Clock className={cn(
+                            "w-5 h-5 lg:w-6 lg:h-6 mx-auto",
+                            isSelected ? "text-primary" : "text-muted-foreground"
+                          )} />
+                          <div className={cn(
+                            "font-semibold text-sm lg:text-base",
+                            isSelected && "text-primary"
+                          )}>
+                            {slot.label}
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {slot.duration}hr service
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {TIME_SLOTS.map((slot, index) => (
-                  <Card
-                    key={slot.id}
-                    className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 group",
-                      selectedTime === slot.id && "ring-2 ring-primary shadow-lavender scale-105"
-                    )}
-                    onClick={() => setSelectedTime(slot.id)}
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <CardContent className="p-6 text-center space-y-3">
-                      <div className={cn(
-                        "mx-auto w-12 h-12 rounded-full flex items-center justify-center transition-all",
-                        selectedTime === slot.id ? "bg-gradient-primary shadow-lavender" : "bg-primary/10 group-hover:bg-primary/20"
-                      )}>
-                        <Clock className={cn(
-                          "w-6 h-6 transition-colors",
-                          selectedTime === slot.id ? "text-white" : "text-primary"
-                        )} />
-                      </div>
-                      <p className="font-semibold text-sm">{slot.label}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
+            )}
 
-            <div className="flex gap-4 pt-6">
+            {/* Desktop Buttons */}
+            <div className="hidden lg:flex gap-4 pt-4">
               <Button
                 variant="outline"
                 size="lg"
                 onClick={handleBack}
-                className="h-14"
+                className="flex-1"
               >
-                <ArrowLeft className="mr-2 w-5 h-5" />
                 Back
               </Button>
               <Button
                 size="lg"
-                className="flex-1 h-14 text-base font-semibold"
                 onClick={handleContinue}
-                disabled={!selectedDate || !selectedTime || checkingCredit || (useCredit && !creditAvailable)}
+                disabled={!selectedDate || !selectedTime || (useCredit && !creditAvailable)}
+                className="flex-1"
               >
                 Continue
-                <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        onBack={handleBack}
+        onContinue={handleContinue}
+        continueDisabled={!selectedDate || !selectedTime || (useCredit && !creditAvailable)}
+        showBack={true}
+      />
     </div>
   );
-}
+};
+
+export default BookingSchedule;

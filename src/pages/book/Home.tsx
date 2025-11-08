@@ -1,11 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Home as HomeIcon, ArrowRight, ArrowLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
+import { ArrowLeft, Home as HomeIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -38,57 +39,68 @@ export default function BookingHome() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 py-8">
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <HomeIcon className="w-8 h-8 text-primary" />
+      <div className="container max-w-6xl mx-auto px-3 py-4 lg:px-4 lg:py-8 pb-32 lg:pb-8">
+        <Card className="animate-fade-in border-border/50 shadow-lg">
+          <CardHeader className="space-y-1 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-gradient-to-br from-primary to-primary/60">
+                <HomeIcon className="w-5 h-5 lg:w-6 lg:h-6 text-primary-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-xl lg:text-3xl">How big is your home?</CardTitle>
+                <CardDescription className="text-sm lg:text-base">Select the size that best matches your space</CardDescription>
+              </div>
             </div>
-            <CardTitle className="text-3xl font-bold">How big is your home?</CardTitle>
-            <CardDescription className="text-base">
-              Select the size that best matches your space
-            </CardDescription>
           </CardHeader>
-          
-          <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 mb-6">
               {HOME_SIZE_RANGES.map((size, index) => (
                 <Card
                   key={size.id}
                   className={cn(
-                    "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 animate-fade-in",
-                    bookingData.homeSizeId === size.id && "ring-2 ring-primary shadow-lavender"
+                    "cursor-pointer hover:border-primary transition-all hover:shadow-md group active:scale-95 animate-fade-in",
+                    bookingData.homeSizeId === size.id && "border-primary bg-primary/5"
                   )}
-                  style={{ animationDelay: `${index * 0.1}s` }}
+                  style={{ animationDelay: `${index * 50}ms` }}
                   onClick={() => handleSelect(size.id)}
                 >
-                  <CardContent className="p-6 space-y-3">
-                    <div className="text-center">
-                      <h3 className="text-lg font-bold text-foreground">{size.label}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">{size.bedroomRange}</p>
+                  <CardContent className="p-4 lg:p-6 space-y-2">
+                    <div className="text-lg lg:text-xl font-bold group-hover:text-primary transition-colors">
+                      {size.label}
+                    </div>
+                    <div className="text-xs lg:text-sm text-muted-foreground">
+                      {size.bedroomRange}
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
 
-            <div className="flex gap-4 pt-6">
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={handleBack}
-                className="h-14"
-              >
-                <ArrowLeft className="mr-2 w-5 h-5" />
-                Back
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleBack}
+              className="w-full h-12 hidden lg:flex"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        onBack={handleBack}
+        onContinue={() => {}}
+        continueDisabled={true}
+        showBack={true}
+      />
     </div>
   );
 }

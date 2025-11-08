@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, ArrowRight } from "lucide-react";
-import { toast } from "sonner";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
+import { MapPin, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -24,8 +25,8 @@ export default function BookingZip() {
   const [zipCode, setZipCode] = useState(bookingData.zipCode || "");
   const [isValidating, setIsValidating] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     
     if (zipCode.length !== 5 || !/^\d+$/.test(zipCode)) {
       toast.error("Please enter a valid 5-digit ZIP code");
@@ -44,56 +45,68 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-2xl mx-auto px-4 py-8">
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <MapPin className="w-8 h-8 text-primary" />
+      <div className="container max-w-md mx-auto px-3 py-4 lg:px-4 lg:py-8 pb-32 lg:pb-8">
+        <Card className="animate-fade-in border-border/50 shadow-lg">
+          <CardHeader className="space-y-1 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-gradient-to-br from-primary to-primary/60">
+                <MapPin className="w-5 h-5 lg:w-6 lg:h-6 text-primary-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-xl lg:text-3xl">Where do you need cleaning?</CardTitle>
+                <CardDescription className="text-sm lg:text-base">Enter your ZIP code to check availability</CardDescription>
+              </div>
             </div>
-            <CardTitle className="text-3xl font-bold">Where do you need cleaning?</CardTitle>
-            <CardDescription className="text-base">
-              Enter your ZIP code to check availability in your area
-            </CardDescription>
           </CardHeader>
-          
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="zipCode" className="text-base font-medium">
-                  ZIP Code
-                </Label>
+                <Label htmlFor="zipCode" className="text-sm lg:text-base">ZIP Code</Label>
                 <Input
                   id="zipCode"
                   type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={5}
                   placeholder="Enter 5-digit ZIP code"
                   value={zipCode}
-                  onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                  className="h-14 text-lg"
-                  maxLength={5}
+                  onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  className="text-lg h-12"
                   autoFocus
                 />
               </div>
-
               <Button
                 type="submit"
                 size="lg"
-                className="w-full h-14 text-base font-semibold"
+                className="w-full h-12 hidden lg:flex"
                 disabled={zipCode.length !== 5 || isValidating}
               >
-                {isValidating ? "Checking availability..." : "Continue"}
-                <ArrowRight className="ml-2 w-5 h-5" />
+                {isValidating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  'Continue'
+                )}
               </Button>
-
-              <p className="text-center text-sm text-muted-foreground">
-                We currently service the San Francisco Bay Area
-              </p>
             </form>
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        onContinue={() => handleSubmit()}
+        continueDisabled={zipCode.length !== 5 || isValidating}
+        continueLabel={isValidating ? "Checking..." : "Continue"}
+        showBack={false}
+      />
     </div>
   );
 }

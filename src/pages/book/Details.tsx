@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, ArrowLeft, User, Mail, Phone, MapPin, DollarSign } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, MapPin, DollarSign } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
+import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { toast } from "sonner";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 
@@ -50,8 +51,8 @@ export default function BookingDetails() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone || !formData.address) {
       toast.error("Please fill in all required fields");
@@ -69,29 +70,29 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 py-8">
+      <div className="container max-w-6xl mx-auto px-3 py-4 lg:px-4 lg:py-8 pb-32 lg:pb-8">
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Contact Form */}
-          <Card className="shadow-xl animate-fade-in">
-            <CardHeader className="space-y-2">
-              <CardTitle className="text-2xl font-bold">Your details</CardTitle>
-              <CardDescription>
+          <Card className="shadow-lg animate-fade-in border-border/50">
+            <CardHeader className="space-y-1 pb-4">
+              <CardTitle className="text-xl lg:text-2xl">Your details</CardTitle>
+              <CardDescription className="text-sm lg:text-base">
                 Please provide your contact information
               </CardDescription>
             </CardHeader>
             
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid gap-6 sm:grid-cols-2">
+              <form onSubmit={handleSubmit} className="space-y-4 lg:space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">
+                    <Label htmlFor="firstName" className="text-sm">
                       First Name <span className="text-destructive">*</span>
                     </Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 lg:w-5 lg:h-5 text-muted-foreground" />
                       <Input
                         id="firstName"
                         value={formData.firstName}
@@ -103,11 +104,11 @@ export default function BookingDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">
+                    <Label htmlFor="lastName" className="text-sm">
                       Last Name <span className="text-destructive">*</span>
                     </Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 lg:w-5 lg:h-5 text-muted-foreground" />
                       <Input
                         id="lastName"
                         value={formData.lastName}
@@ -120,11 +121,11 @@ export default function BookingDetails() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">
+                  <Label htmlFor="email" className="text-sm">
                     Email <span className="text-destructive">*</span>
                   </Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 lg:w-5 lg:h-5 text-muted-foreground" />
                     <Input
                       id="email"
                       type="email"
@@ -137,11 +138,11 @@ export default function BookingDetails() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone">
+                  <Label htmlFor="phone" className="text-sm">
                     Phone Number <span className="text-destructive">*</span>
                   </Label>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 lg:w-5 lg:h-5 text-muted-foreground" />
                     <Input
                       id="phone"
                       type="tel"
@@ -154,11 +155,11 @@ export default function BookingDetails() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address">
+                  <Label htmlFor="address" className="text-sm">
                     Street Address <span className="text-destructive">*</span>
                   </Label>
                   <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 lg:w-5 lg:h-5 text-muted-foreground" />
                     <Input
                       id="address"
                       value={formData.address}
@@ -169,9 +170,9 @@ export default function BookingDetails() {
                   </div>
                 </div>
 
-                <div className="grid gap-6 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="city" className="text-sm">City</Label>
                     <Input
                       id="city"
                       value={formData.city}
@@ -182,7 +183,7 @@ export default function BookingDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
+                    <Label htmlFor="state" className="text-sm">State</Label>
                     <Input
                       id="state"
                       value={formData.state}
@@ -194,99 +195,85 @@ export default function BookingDetails() {
                   </div>
                 </div>
 
-                <div className="flex gap-4 pt-6">
+                <div className="hidden lg:flex gap-4 pt-4">
                   <Button
                     type="button"
                     variant="outline"
                     size="lg"
                     onClick={handleBack}
-                    className="h-14"
+                    className="h-12"
                   >
-                    <ArrowLeft className="mr-2 w-5 h-5" />
+                    <ArrowLeft className="mr-2 w-4 h-4" />
                     Back
                   </Button>
                   <Button
                     type="submit"
                     size="lg"
-                    className="flex-1 h-14 text-base font-semibold"
+                    className="flex-1 h-12"
                   >
                     Continue to Summary
-                    <ArrowRight className="ml-2 w-5 h-5" />
                   </Button>
                 </div>
               </form>
             </CardContent>
           </Card>
 
-          {/* Pricing Summary - FIRST TIME SHOWING PRICES */}
-          <Card className="shadow-xl border-2 border-primary/20 lg:sticky lg:top-8 h-fit animate-fade-in" style={{ animationDelay: "0.1s" }}>
-            <CardHeader className="bg-gradient-primary text-primary-foreground">
+          {/* Pricing Summary */}
+          <Card className="shadow-lg border-2 border-primary/20 lg:sticky lg:top-8 h-fit animate-fade-in" style={{ animationDelay: "0.1s" }}>
+            <CardHeader className="bg-gradient-to-br from-primary to-primary/60 text-primary-foreground pb-4">
               <div className="flex items-center gap-2">
-                <DollarSign className="w-6 h-6" />
-                <CardTitle className="text-2xl font-bold">Pricing Summary</CardTitle>
+                <DollarSign className="w-5 h-5 lg:w-6 lg:h-6" />
+                <CardTitle className="text-lg lg:text-2xl">Pricing Summary</CardTitle>
               </div>
-              <CardDescription className="text-primary-foreground/90">
-                See your total costs
-              </CardDescription>
             </CardHeader>
             
-            <CardContent className="space-y-6 pt-6">
-              <div className="space-y-4">
+            <CardContent className="space-y-4 lg:space-y-6 pt-4 lg:pt-6">
+              <div className="space-y-3 lg:space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Service</p>
-                  <p className="font-medium">{serviceTier?.label} • {homeSize?.label}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{pricing.hours} hours @ $75/hr</p>
+                  <p className="text-xs lg:text-sm text-muted-foreground">Service</p>
+                  <p className="font-medium text-sm lg:text-base">{serviceTier?.label} • {homeSize?.label}</p>
+                  <p className="text-xs lg:text-sm text-muted-foreground mt-1">{pricing.hours} hours @ $75/hr</p>
                 </div>
 
                 <Separator />
 
-                <div className="space-y-3">
-                  <div className="flex justify-between">
+                <div className="space-y-2 lg:space-y-3">
+                  <div className="flex justify-between text-sm lg:text-base">
                     <span className="text-muted-foreground">Base Price</span>
                     <span className="font-medium">${pricing.basePrice.toFixed(2)}</span>
                   </div>
                   
                   {pricing.serviceAddition > 0 && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-sm lg:text-base">
                       <span className="text-muted-foreground">{serviceTier?.label} Addition</span>
                       <span className="font-medium">+${pricing.serviceAddition.toFixed(2)}</span>
                     </div>
                   )}
                   
                   {pricing.addOnsTotal > 0 && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-sm lg:text-base">
                       <span className="text-muted-foreground">Add-ons</span>
                       <span className="font-medium">+${pricing.addOnsTotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  {bookingData.addOns.length > 0 && (
-                    <div className="pl-4 space-y-1">
-                      {bookingData.addOns.map(addon => (
-                        <p key={addon} className="text-xs text-muted-foreground">
-                          • {ADD_ONS[addon as keyof typeof ADD_ONS]?.label}
-                        </p>
-                      ))}
                     </div>
                   )}
                 </div>
 
                 <Separator />
 
-                <div className="flex justify-between text-lg font-semibold">
+                <div className="flex justify-between font-semibold text-base lg:text-lg">
                   <span>Subtotal</span>
                   <span>${pricing.subtotal.toFixed(2)}</span>
                 </div>
 
                 {pricing.membershipDiscount > 0 && (
-                  <div className="flex justify-between text-success">
+                  <div className="flex justify-between text-success text-sm lg:text-base">
                     <span>{membership?.label} Discount</span>
                     <span>-${pricing.membershipDiscount.toFixed(2)}</span>
                   </div>
                 )}
 
                 {bookingData.useCredit && (
-                  <div className="flex justify-between text-success">
+                  <div className="flex justify-between text-success text-sm lg:text-base">
                     <span>Credit Applied</span>
                     <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
                   </div>
@@ -294,13 +281,13 @@ export default function BookingDetails() {
 
                 <Separator className="border-primary/30" />
 
-                <div className="space-y-3 bg-primary/5 p-4 rounded-lg">
-                  <div className="flex justify-between text-2xl font-bold text-primary">
+                <div className="space-y-3 bg-primary/5 p-3 lg:p-4 rounded-lg">
+                  <div className="flex justify-between text-xl lg:text-2xl font-bold text-primary">
                     <span>Total</span>
                     <span>${pricing.total.toFixed(2)}</span>
                   </div>
                   
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2 text-xs lg:text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Deposit (today)</span>
                       <span className="font-semibold">${pricing.deposit.toFixed(2)}</span>
@@ -311,18 +298,23 @@ export default function BookingDetails() {
                     </div>
                   </div>
                 </div>
-
-                {bookingData.membershipPlan !== 'none' && (
-                  <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
-                    <p className="font-medium mb-1">Membership: {membership?.label}</p>
-                    <p>${membership?.monthlyPrice}/mo recurring charge</p>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        onBack={handleBack}
+        onContinue={() => handleSubmit()}
+        continueDisabled={!formData.firstName || !formData.lastName || !formData.email || !formData.phone || !formData.address}
+        continueLabel="Continue"
+        totalPrice={pricing.total}
+        showBack={true}
+      />
     </div>
   );
 }
