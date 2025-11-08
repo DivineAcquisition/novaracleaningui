@@ -12,38 +12,40 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PAYMENT-INTENT] ${step}${detailsStr}`);
 };
 
-// Service pricing configuration
-const SERVICE_PRICING = {
+// Service pricing configuration (cents)
+const SERVICE_TIER_PRICING = {
   standard: 0,
-  deep: 5000,
-  moveInOut: 8000,
+  deep: 5000, // $50
+  moveInOut: 12000, // $120
 };
 
 const ADD_ON_PRICING = {
-  fridge: 4000,
-  oven: 4000,
-  windows: 5000,
-  laundry: 4000,
-  dishes: 2000,
+  fridge: 3000, // $30
+  oven: 3000, // $30
+  windows: 4000, // $40
 };
 
-const HOME_SIZE_PRICING = [
-  { id: "0-999", minSqft: 0, maxSqft: 999, price: 15000 },
-  { id: "1000-1499", minSqft: 1000, maxSqft: 1499, price: 20000 },
-  { id: "1500-1999", minSqft: 1500, maxSqft: 1999, price: 25000 },
-  { id: "2000-2499", minSqft: 2000, maxSqft: 2499, price: 30000 },
-  { id: "2500-2999", minSqft: 2500, maxSqft: 2999, price: 35000 },
-  { id: "3000-3999", minSqft: 3000, maxSqft: 3999, price: 42000 },
-  { id: "4000-4999", minSqft: 4000, maxSqft: 4999, price: 50000 },
-  { id: "5000+", minSqft: 5000, maxSqft: 999999, price: 60000 },
-];
+// Match frontend HOME_SIZE_RANGES IDs and prices (standardPrice * 100)
+const HOME_SIZE_PRICING: Record<string, number> = {
+  "0_999": 15000,
+  "1000_1500": 18750,
+  "1501_2000": 22500,
+  "2001_2500": 26250,
+  "2501_3000": 30000,
+  "3001_3500": 33750,
+  "3501_4000": 37500,
+  "4001_4500": 41250,
+  "4501_5000": 45000,
+  "5000_plus": 0,
+};
 
-const DEPOSIT_AMOUNT = 3900;
+const DEPOSIT_AMOUNT = 3900; // $39
 
-const MEMBERSHIP_DISCOUNTS = {
-  basic: 0.05,
-  premium: 0.10,
-  elite: 0.15,
+// Membership discount on extras only
+const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
+  monthly: 0.20,
+  biweekly: 0.25,
+  weekly: 0.30,
 };
 
 serve(async (req) => {
@@ -70,56 +72,45 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Calculate pricing
-    const homeSizePrice = HOME_SIZE_PRICING.find(h => h.id === bookingData.homeSizeId)?.price || 0;
-    const serviceTierPrice = SERVICE_PRICING[bookingData.serviceType as keyof typeof SERVICE_PRICING] || 0;
-    
-    let addOnsTotal = 0;
-    const serviceAddOns = bookingData.addOns || [];
-    
-    // Filter add-ons for moveInOut service
-    const relevantAddOns = bookingData.serviceType === 'moveInOut' 
-      ? serviceAddOns.filter((addon: string) => addon !== 'fridge' && addon !== 'oven')
-      : serviceAddOns;
-    
-    relevantAddOns.forEach((addon: string) => {
-      addOnsTotal += ADD_ON_PRICING[addon as keyof typeof ADD_ON_PRICING] || 0;
-    });
+    // Calculate pricing to match frontend logic (values in cents)
+    const basePrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string] ?? 0;
+    const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING] ?? 0;
 
-    let totalAmount = homeSizePrice + serviceTierPrice + addOnsTotal;
-    logStep("Base calculation", { totalAmount });
+    // Prepare add-ons (Move-In/Out includes fridge & oven already)
+    const incomingAddOns: string[] = Array.isArray(bookingData.addOns) ? bookingData.addOns : [];
+    const relevantAddOns = bookingData.serviceType === 'moveInOut'
+      ? incomingAddOns.filter((a) => a !== 'fridge' && a !== 'oven')
+      : incomingAddOns;
 
-    // Apply membership discount
-    const membershipPlan = bookingData.membershipPlan || 'none';
-    let membershipDiscount = 0;
-    if (membershipPlan !== 'none' && MEMBERSHIP_DISCOUNTS[membershipPlan as keyof typeof MEMBERSHIP_DISCOUNTS]) {
-      membershipDiscount = Math.round(totalAmount * MEMBERSHIP_DISCOUNTS[membershipPlan as keyof typeof MEMBERSHIP_DISCOUNTS]);
-      totalAmount -= membershipDiscount;
-      logStep("Applied membership discount", { membershipDiscount, newTotal: totalAmount });
-    }
+    const addOnsTotal = relevantAddOns.reduce((sum, a) => sum + (ADD_ON_PRICING[a as keyof typeof ADD_ON_PRICING] ?? 0), 0);
+
+    const subtotal = basePrice + serviceTierPrice + addOnsTotal;
+
+    // Membership discount applies only to extras (service addition + add-ons) and only if not using credit
+    const membershipPlan: string = bookingData.membershipPlan || 'none';
+    const extras = serviceTierPrice + addOnsTotal;
+    const membershipPct = (!bookingData.useCredit && MEMBERSHIP_DISCOUNTS[membershipPlan]) ? MEMBERSHIP_DISCOUNTS[membershipPlan] : 0;
+    const membershipDiscount = Math.round(extras * membershipPct);
+
+    // Credit coverage covers up to $150 of base price
+    const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
+
+    let totalAmount = subtotal - membershipDiscount - creditCoverage;
+    if (totalAmount < 0) totalAmount = 0;
+    logStep("Base calculation", { subtotal, membershipDiscount, creditCoverage, totalAmount });
 
     // Determine amount to charge based on payment option
     let amountToCharge = 0;
     let fullPaymentDiscount = 0;
 
     if (bookingData.paymentOption === 'full') {
-      // Apply 10% discount for full payment
-      fullPaymentDiscount = Math.round(totalAmount * 0.10);
+      fullPaymentDiscount = Math.round(totalAmount * 0.10); // 10% off
       amountToCharge = totalAmount - fullPaymentDiscount;
-      logStep("Full payment selected", { 
-        originalAmount: totalAmount, 
-        discount: fullPaymentDiscount, 
-        finalAmount: amountToCharge 
-      });
+      logStep("Full payment selected", { originalAmount: totalAmount, discount: fullPaymentDiscount, finalAmount: amountToCharge });
     } else {
       // Deposit payment
-      if (bookingData.useCredit && membershipPlan !== 'none') {
-        amountToCharge = 0; // Member using credit pays no deposit
-        logStep("Member using credit - no deposit required");
-      } else {
-        amountToCharge = DEPOSIT_AMOUNT;
-        logStep("Deposit payment", { depositAmount: amountToCharge });
-      }
+      amountToCharge = bookingData.useCredit ? 0 : DEPOSIT_AMOUNT;
+      logStep(bookingData.useCredit ? "Member using credit - no deposit required" : "Deposit payment", { depositAmount: amountToCharge });
     }
 
     // Check if customer exists in Stripe
@@ -189,7 +180,7 @@ serve(async (req) => {
         time_slot: bookingData.timeSlot,
         membership_plan: membershipPlan,
         uses_credit: bookingData.useCredit || false,
-        base_price_cents: homeSizePrice + serviceTierPrice,
+        base_price_cents: basePrice,
         deposit_cents: bookingData.paymentOption === 'deposit' ? DEPOSIT_AMOUNT : 0,
         total_estimate_cents: totalAmount,
         payment_intent_id: paymentIntentId,

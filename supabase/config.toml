@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.create-payment-intent]
+verify_jwt = true
+
+[functions.get-stripe-publishable-key]
+verify_jwt = false

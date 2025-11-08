@@ -19,9 +19,7 @@ import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 
-const stripePromise = loadStripe(
-  "pk_test_51QhPtXLHxmZGcWcjL2sZhxIZvAZvdx2GxlBdMdAGWyglXFT6X6VzRD3JEJPTQRMJtb3Rq59K0sCHGxT5vKfCt9Xr00NHFxKq4I"
-);
+// Stripe publishable key will be loaded from an Edge Function at runtime
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -44,6 +42,27 @@ export default function BookingCheckout() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [stripePromise, setStripePromise] = useState<any>(null);
+  const effectivePaymentOption = bookingData.paymentOption || 'deposit';
+
+  useEffect(() => {
+    // Ensure default payment option for old localStorage payloads
+    if (!bookingData.paymentOption) {
+      updateBookingData({ paymentOption: 'deposit' });
+    }
+
+    // Fetch publishable key from Edge Function (public)
+    const init = async () => {
+      const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
+      if (error || !data?.key) {
+        console.error('Stripe key missing or error', error || data);
+        toast.error('Payments are temporarily unavailable. Please contact support.');
+        return;
+      }
+      setStripePromise(loadStripe(data.key));
+    };
+    init();
+  }, []);
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
@@ -217,7 +236,7 @@ export default function BookingCheckout() {
                       Choose Your Payment Option
                     </h4>
                     <RadioGroup 
-                      value={bookingData.paymentOption} 
+                      value={effectivePaymentOption} 
                       onValueChange={handlePaymentOptionChange}
                       className="space-y-4"
                     >
@@ -303,7 +322,7 @@ export default function BookingCheckout() {
               )}
 
               {/* Stripe Payment Form */}
-              {clientSecret && paymentAmount > 0 && (
+              {stripePromise && clientSecret && paymentAmount > 0 && (
                 <Card className="border-primary/20">
                   <CardContent className="p-6">
                     <h4 className="font-semibold mb-4 flex items-center gap-2">
