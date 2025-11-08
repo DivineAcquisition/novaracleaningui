@@ -107,11 +107,13 @@ export type Database = {
           email: string
           final_charge_cents: number | null
           first_name: string
+          full_payment_discount: number | null
           home_size_id: string
           id: string
           last_name: string
           membership_plan: string | null
           payment_intent_id: string | null
+          payment_option: string | null
           phone: string
           service_date: string
           service_type: string
@@ -136,11 +138,13 @@ export type Database = {
           email: string
           final_charge_cents?: number | null
           first_name: string
+          full_payment_discount?: number | null
           home_size_id: string
           id?: string
           last_name: string
           membership_plan?: string | null
           payment_intent_id?: string | null
+          payment_option?: string | null
           phone: string
           service_date: string
           service_type: string
@@ -165,11 +169,13 @@ export type Database = {
           email?: string
           final_charge_cents?: number | null
           first_name?: string
+          full_payment_discount?: number | null
           home_size_id?: string
           id?: string
           last_name?: string
           membership_plan?: string | null
           payment_intent_id?: string | null
+          payment_option?: string | null
           phone?: string
           service_date?: string
           service_type?: string
@@ -256,6 +262,7 @@ export type Database = {
       membership_credits: {
         Row: {
           created_at: string | null
+          credit_available_date: string | null
           credits_per_month: number
           credits_remaining: number
           credits_used: number | null
@@ -269,6 +276,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          credit_available_date?: string | null
           credits_per_month: number
           credits_remaining: number
           credits_used?: number | null
@@ -282,6 +290,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          credit_available_date?: string | null
           credits_per_month?: number
           credits_remaining?: number
           credits_used?: number | null
