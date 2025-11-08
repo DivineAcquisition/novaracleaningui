@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Calendar, Clock, Home, Sparkles, Loader2, CreditCard } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Elements } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
+
+const stripePromise = loadStripe(
+  "pk_test_51QhPtXLHxmZGcWcjL2sZhxIZvAZvdx2GxlBdMdAGWyglXFT6X6VzRD3JEJPTQRMJtb3Rq59K0sCHGxT5vKfCt9Xr00NHFxKq4I"
+);
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -31,22 +40,33 @@ const TIME_SLOT_LABELS: Record<string, string> = {
 
 export default function BookingCheckout() {
   const navigate = useNavigate();
-  const { bookingData, currentStep } = useBooking();
+  const { bookingData, currentStep, updateBookingData } = useBooking();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState(0);
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
     onSwipeRight: () => {
       navigate("/book/summary");
     },
-    canSwipeLeft: false, // Last step before payment
+    canSwipeLeft: false,
     step: 7,
   });
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
   const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
-  const pricing = calculatePrice(
+  
+  const depositPricing = calculatePrice(
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+    bookingData.useCredit
+  );
+
+  const fullPaymentPricing = calculateFullPaymentWithDiscount(
     bookingData.homeSizeId,
     bookingData.serviceType,
     bookingData.addOns,
@@ -58,35 +78,64 @@ export default function BookingCheckout() {
     navigate("/book/summary");
   };
 
-  const handlePayment = async () => {
+  const handlePaymentOptionChange = (value: 'deposit' | 'full') => {
+    updateBookingData({ paymentOption: value });
+    setClientSecret(null); // Reset payment intent when option changes
+  };
+
+  const handleInitializePayment = async () => {
     setIsProcessing(true);
     
     try {
-      console.log("Creating checkout session with booking data:", bookingData);
+      console.log("Creating payment intent with booking data:", bookingData);
       
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { bookingData },
+      const { data, error } = await supabase.functions.invoke("create-payment-intent", {
+        body: bookingData,
       });
 
       if (error) {
-        console.error("Checkout error:", error);
+        console.error("Payment intent error:", error);
         throw error;
       }
 
-      if (!data?.url) {
-        throw new Error("No checkout URL received");
+      if (!data) {
+        throw new Error("No payment intent data received");
       }
 
-      console.log("Checkout session created, redirecting to:", data.url);
-      
-      // Redirect to Stripe Checkout
-      window.location.href = data.url;
+      console.log("Payment intent created:", data);
+
+      // If no payment required (member using credit), go directly to success
+      if (!data.requiresPayment) {
+        toast.success("Booking confirmed!");
+        navigate("/book/success");
+        return;
+      }
+
+      setClientSecret(data.clientSecret);
+      setPaymentAmount(data.amount);
     } catch (error: any) {
-      console.error("Payment error:", error);
-      toast.error(error.message || "Failed to process payment. Please try again.");
+      console.error("Payment initialization error:", error);
+      toast.error(error.message || "Failed to initialize payment. Please try again.");
+    } finally {
       setIsProcessing(false);
     }
   };
+
+  const handlePaymentSuccess = () => {
+    toast.success("Payment successful!");
+    navigate("/book/success");
+  };
+
+  // Auto-initialize payment when component mounts
+  useEffect(() => {
+    if (!clientSecret && !isProcessing) {
+      handleInitializePayment();
+    }
+  }, [bookingData.paymentOption]);
+
+  const currentAmount = bookingData.paymentOption === 'full' 
+    ? fullPaymentPricing.finalAmount 
+    : depositPricing.deposit;
 
   return (
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
@@ -95,8 +144,8 @@ export default function BookingCheckout() {
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl border-primary/20 animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
-              <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
-                <CreditCard className="w-8 h-8 text-white" />
+            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
+              <CreditCard className="w-8 h-8 text-white" />
             </div>
             <CardTitle className="text-2xl md:text-3xl font-bold">Secure Checkout</CardTitle>
             <CardDescription className="text-sm md:text-base">
@@ -159,63 +208,129 @@ export default function BookingCheckout() {
                 </Card>
               </div>
 
-              {/* Pricing Breakdown */}
-              <Card className="border-primary/20 bg-gradient-to-br from-background to-primary/5">
-                <CardContent className="p-6 space-y-4">
-                  <h4 className="font-semibold flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-primary" />
-                    Payment Details
-                  </h4>
-                  <div className="space-y-3">
-                     {bookingData.useCredit && (
-                       <div className="flex items-center gap-2 p-3 bg-success/10 rounded-lg border border-success/20">
-                         <span className="text-success font-semibold text-sm">✓ Using 1 Membership Credit</span>
-                       </div>
-                     )}
-                     <div className="flex justify-between text-sm">
-                       <span className="text-muted-foreground">Base Service</span>
-                       <span className={cn("font-medium", bookingData.useCredit && "line-through text-muted-foreground")}>
-                         ${pricing.basePrice.toFixed(2)}
-                       </span>
-                     </div>
-                     {pricing.serviceAddition > 0 && (
-                       <div className="flex justify-between text-sm">
-                         <span className="text-muted-foreground">Service Upgrade</span>
-                         <span className="font-medium">+${pricing.serviceAddition.toFixed(2)}</span>
-                       </div>
-                     )}
-                     {pricing.addOnsTotal > 0 && (
-                       <div className="flex justify-between text-sm">
-                         <span className="text-muted-foreground">Add-ons</span>
-                         <span className="font-medium">+${pricing.addOnsTotal.toFixed(2)}</span>
-                       </div>
-                     )}
-                     {pricing.membershipDiscount > 0 && (
-                       <div className="flex justify-between text-sm text-success">
-                         <span>Membership Discount</span>
-                         <span>-${pricing.membershipDiscount.toFixed(2)}</span>
-                       </div>
-                     )}
-                     {bookingData.useCredit && (
-                       <div className="flex justify-between text-sm text-success">
-                         <span>Credit Coverage</span>
-                         <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
-                       </div>
-                     )}
-                     <Separator />
-                     <div className="flex justify-between text-base font-semibold">
-                       <span>{bookingData.useCredit ? 'Due Today' : 'Deposit Today'}</span>
-                       <span className="text-primary">${pricing.deposit.toFixed(2)}</span>
-                     </div>
-                     {!bookingData.useCredit && (
-                       <div className="flex justify-between text-sm text-muted-foreground">
-                         <span>Balance After Cleaning</span>
-                         <span>${pricing.balanceDue.toFixed(2)}</span>
-                       </div>
-                     )}
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Payment Option Selection */}
+              {!bookingData.useCredit && (
+                <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
+                  <CardContent className="p-6">
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-primary" />
+                      Choose Your Payment Option
+                    </h4>
+                    <RadioGroup 
+                      value={bookingData.paymentOption} 
+                      onValueChange={handlePaymentOptionChange}
+                      className="space-y-4"
+                    >
+                      {/* Deposit Option */}
+                      <div className={cn(
+                        "relative flex items-start space-x-3 rounded-lg border-2 p-4 transition-all cursor-pointer hover:border-primary/50",
+                        bookingData.paymentOption === 'deposit' 
+                          ? "border-primary bg-primary/5" 
+                          : "border-border"
+                      )}>
+                        <RadioGroupItem value="deposit" id="deposit" className="mt-1" />
+                        <Label htmlFor="deposit" className="flex-1 cursor-pointer">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">Pay Deposit Now</span>
+                              <span className="text-lg font-bold text-primary">
+                                ${depositPricing.deposit.toFixed(2)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Balance due after cleaning: ${depositPricing.balanceDue.toFixed(2)}
+                            </p>
+                          </div>
+                        </Label>
+                      </div>
+
+                      {/* Full Payment Option */}
+                      <div className={cn(
+                        "relative flex items-start space-x-3 rounded-lg border-2 p-4 transition-all cursor-pointer hover:border-primary/50",
+                        bookingData.paymentOption === 'full' 
+                          ? "border-primary bg-primary/5" 
+                          : "border-border"
+                      )}>
+                        <RadioGroupItem value="full" id="full" className="mt-1" />
+                        <Label htmlFor="full" className="flex-1 cursor-pointer">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">Pay in Full</span>
+                                <span className="text-xs font-semibold px-2 py-1 bg-success/20 text-success rounded-full">
+                                  Save 10%
+                                </span>
+                              </div>
+                              <span className="text-lg font-bold text-primary">
+                                ${fullPaymentPricing.finalAmount.toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="space-y-1 text-sm">
+                              <div className="flex justify-between text-muted-foreground">
+                                <span>Original Total:</span>
+                                <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-success font-medium">
+                                <span>10% Discount:</span>
+                                <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-success font-medium pt-1">
+                                <Zap className="w-4 h-4" />
+                                <span>You save ${fullPaymentPricing.savings.toFixed(2)}!</span>
+                              </div>
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Member Credit Info */}
+              {bookingData.useCredit && (
+                <Card className="border-success/30 bg-success/5">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-2 text-success mb-3">
+                      <Sparkles className="w-5 h-5" />
+                      <h4 className="font-semibold">Using Membership Credit</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Your membership credit covers the base service. No deposit required!
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Stripe Payment Form */}
+              {clientSecret && paymentAmount > 0 && (
+                <Card className="border-primary/20">
+                  <CardContent className="p-6">
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-primary" />
+                      Payment Information
+                    </h4>
+                    <Elements stripe={stripePromise} options={{ clientSecret }}>
+                      <StripePaymentForm 
+                        amount={paymentAmount}
+                        onSuccess={handlePaymentSuccess}
+                      />
+                    </Elements>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Loading State */}
+              {isProcessing && (
+                <Card className="border-primary/20">
+                  <CardContent className="p-12">
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                      <p className="text-muted-foreground">Setting up secure payment...</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Security Badge */}
@@ -248,45 +363,10 @@ export default function BookingCheckout() {
                 <ArrowLeft className="mr-2 w-5 h-5" />
                 Back
               </Button>
-              <Button
-                size="lg"
-                className="flex-1 h-14 text-base font-semibold bg-gradient-primary hover:opacity-90 shadow-lavender"
-                onClick={handlePayment}
-                disabled={isProcessing}
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                    Processing...
-                  </>
-                 ) : bookingData.membershipPlan !== 'none' ? (
-                   <>
-                     <CreditCard className="mr-2 w-5 h-5" />
-                     Subscribe & Book First Clean
-                   </>
-                 ) : bookingData.useCredit ? (
-                   pricing.deposit === 0 ? (
-                     <>
-                       <CreditCard className="mr-2 w-5 h-5" />
-                       Confirm Booking (Free)
-                     </>
-                   ) : (
-                     <>
-                       <CreditCard className="mr-2 w-5 h-5" />
-                       Pay ${pricing.deposit.toFixed(2)} & Book
-                     </>
-                   )
-                 ) : (
-                   <>
-                     <CreditCard className="mr-2 w-5 h-5" />
-                     Pay ${pricing.deposit.toFixed(2)} Deposit
-                   </>
-                 )}
-              </Button>
             </div>
 
             <p className="text-center text-xs text-muted-foreground">
-              By clicking "Pay with Stripe", you agree to our Terms of Service and Privacy Policy
+              By completing payment, you agree to our Terms of Service and Privacy Policy
             </p>
           </CardContent>
         </Card>
@@ -298,19 +378,9 @@ export default function BookingCheckout() {
         totalSteps={6}
         steps={BOOKING_STEPS}
         onBack={handleBack}
-        onContinue={handlePayment}
         showPrice={true}
-        price={pricing.deposit}
-        continueDisabled={isProcessing}
-        continueText={
-          isProcessing
-            ? "Processing..."
-            : bookingData.membershipPlan !== 'none'
-            ? "Subscribe & Book"
-            : bookingData.useCredit && pricing.deposit === 0
-            ? "Confirm (Free)"
-            : `Pay $${pricing.deposit.toFixed(2)}`
-        }
+        price={currentAmount}
+        continueDisabled={true}
       />
     </div>
   );

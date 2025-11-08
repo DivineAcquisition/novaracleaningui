@@ -161,6 +161,33 @@ export interface PricingCalculation {
   hours: number;
 }
 
+export interface FullPaymentCalculation {
+  originalTotal: number;
+  discount: number;
+  finalAmount: number;
+  savings: number;
+}
+
+export function calculateFullPaymentWithDiscount(
+  homeSizeId: string,
+  serviceType: string,
+  addOns: string[] = [],
+  membershipPlan: string = 'none',
+  useCredit: boolean = false
+): FullPaymentCalculation {
+  const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit);
+  const originalTotal = pricing.total;
+  const discount = Math.round(originalTotal * 0.10 * 100) / 100; // 10% discount
+  const finalAmount = originalTotal - discount;
+  
+  return {
+    originalTotal,
+    discount,
+    finalAmount,
+    savings: discount,
+  };
+}
+
 export function calculatePrice(
   homeSizeId: string,
   serviceType: string,

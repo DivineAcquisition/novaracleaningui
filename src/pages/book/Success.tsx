@@ -28,6 +28,7 @@ export default function BookingSuccess() {
   const [searchParams] = useSearchParams();
   const { bookingData, resetBookingData } = useBooking();
   const sessionId = searchParams.get("session_id");
+  const paymentIntent = searchParams.get("payment_intent");
   const [canShare, setCanShare] = useState(false);
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
@@ -51,7 +52,10 @@ export default function BookingSuccess() {
     if (sessionId) {
       console.log("Payment successful, session ID:", sessionId);
     }
-  }, [sessionId]);
+    if (paymentIntent) {
+      console.log("Payment successful, payment intent ID:", paymentIntent);
+    }
+  }, [sessionId, paymentIntent]);
 
   const handleReturnHome = () => {
     resetBookingData();
@@ -149,6 +153,8 @@ export default function BookingSuccess() {
                 ? 'Your membership is active and your first credit is ready to use'
                 : bookingData.useCredit
                 ? 'Your booking is confirmed with your membership credit'
+                : bookingData.paymentOption === 'full'
+                ? 'Your payment is complete - you saved 10% by paying in full!'
                 : 'Thank you for choosing Novara Cleaning Service'}
             </CardDescription>
           </CardHeader>
@@ -200,12 +206,21 @@ export default function BookingSuccess() {
                     </div>
                   </div>
 
-                  {sessionId && (
+                  {(sessionId || paymentIntent) && (
                     <div className="flex items-start gap-3">
                       <CreditCard className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="text-xs md:text-sm text-muted-foreground">Order ID</p>
-                        <p className="font-semibold text-sm md:text-base font-mono">{sessionId.slice(-12)}</p>
+                        <p className="text-xs md:text-sm text-muted-foreground">
+                          {bookingData.paymentOption === 'full' ? 'Paid in Full' : 'Deposit Paid'}
+                        </p>
+                        <p className="font-semibold text-sm md:text-base font-mono">
+                          {sessionId ? sessionId.slice(-12) : paymentIntent?.slice(-12)}
+                        </p>
+                        {bookingData.paymentOption === 'deposit' && pricing.balanceDue > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Balance due after cleaning: ${pricing.balanceDue.toFixed(2)}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}

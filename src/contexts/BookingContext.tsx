@@ -19,6 +19,7 @@ export interface BookingData {
   serviceDuration: number;
   customerId?: string;
   addressId?: string;
+  paymentOption: 'deposit' | 'full';
 }
 
 interface BookingContextType {
@@ -47,6 +48,7 @@ const initialBookingData: BookingData = {
   city: '',
   state: '',
   serviceDuration: 0,
+  paymentOption: 'deposit',
 };
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
