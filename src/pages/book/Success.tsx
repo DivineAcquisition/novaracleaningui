@@ -5,11 +5,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Calendar, Mail, Home, Share2, Download, Clock, MapPin, CreditCard, Settings, ExternalLink, UserPlus } from "lucide-react";
+import { CheckCircle2, Calendar, Mail, Home, Share2, Download, Clock, MapPin, CreditCard, Settings, ExternalLink, UserPlus, Loader2, AlertCircle } from "lucide-react";
 import { format, parse, addHours } from "date-fns";
 import { toast } from "sonner";
 import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/lib/calendar";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,10 @@ const TIME_SLOT_MAP: Record<string, { start: number; end: number }> = {
   "16-20": { start: 16, end: 20 },
 };
 
+const logStep = (step: string, details?: any) => {
+  console.log(`[BookingSuccess] ${step}`, details);
+};
+
 export default function BookingSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -33,6 +38,9 @@ export default function BookingSuccess() {
   const paymentIntent = searchParams.get("payment_intent");
   const [canShare, setCanShare] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [paymentVerified, setPaymentVerified] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -51,14 +59,52 @@ export default function BookingSuccess() {
     }
   }, []);
 
+  // Verify payment on mount if payment_intent is present
   useEffect(() => {
-    if (sessionId) {
-      console.log("Payment successful, session ID:", sessionId);
-    }
-    if (paymentIntent) {
-      console.log("Payment successful, payment intent ID:", paymentIntent);
-    }
-  }, [sessionId, paymentIntent]);
+    const verifyPayment = async () => {
+      if (!paymentIntent) {
+        // No payment intent means either using credit or old booking flow
+        setPaymentVerified(true);
+        return;
+      }
+
+      setIsVerifyingPayment(true);
+      logStep("Starting payment verification", { paymentIntent });
+
+      try {
+        const { data, error } = await supabase.functions.invoke('verify-payment', {
+          body: { payment_intent_id: paymentIntent }
+        });
+
+        if (error) {
+          console.error("Payment verification error:", error);
+          setVerificationError(error.message || "Unable to verify payment");
+          toast.error("Payment verification failed");
+        } else if (data) {
+          console.log("Payment verification result:", data);
+          if (data.success) {
+            setPaymentVerified(true);
+            toast.success("Payment confirmed!");
+          } else {
+            setVerificationError(data.message || "Payment verification incomplete");
+            if (data.status === 'processing') {
+              toast.info("Payment is being processed");
+            } else {
+              toast.warning(data.message || "Payment verification incomplete");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Unexpected error during verification:", err);
+        setVerificationError("An unexpected error occurred");
+        toast.error("Failed to verify payment");
+      } finally {
+        setIsVerifyingPayment(false);
+      }
+    };
+
+    verifyPayment();
+  }, [paymentIntent]);
 
   // Store guest email in localStorage for easy account creation
   useEffect(() => {
@@ -158,9 +204,40 @@ export default function BookingSuccess() {
     }
   };
 
+  // Show loading state during verification
+  if (isVerifyingPayment) {
+    return (
+      <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
+        <Card className="max-w-md w-full shadow-xl">
+          <CardContent className="pt-8 pb-8 text-center space-y-4">
+            <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
+            <h2 className="text-xl font-semibold">Verifying Payment...</h2>
+            <p className="text-muted-foreground text-sm">Please wait while we confirm your booking</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 pb-32 md:pb-12">
       <div className="container max-w-3xl mx-auto">
+        {/* Show verification error if payment failed */}
+        {verificationError && (
+          <Card className="mb-6 border-destructive/50 bg-destructive/5">
+            <CardContent className="pt-6 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-destructive mb-1">Payment Verification Issue</h3>
+                <p className="text-sm text-muted-foreground">{verificationError}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  If you were charged, please contact support@novaracleaning.com
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
         <Card className="shadow-xl border-success/20 animate-fade-in">
           <CardHeader className="text-center space-y-4 pb-6 md:pb-8">
             <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">

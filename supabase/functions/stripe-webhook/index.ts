@@ -66,6 +66,67 @@ serve(async (req) => {
     };
 
     switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        logStep("Processing payment intent success", { paymentIntentId: paymentIntent.id });
+        
+        // Find booking by payment_intent_id
+        const { data: booking, error: bookingFetchError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('payment_intent_id', paymentIntent.id)
+          .single();
+
+        if (bookingFetchError || !booking) {
+          logStep("Booking not found for payment intent", { error: bookingFetchError });
+          break;
+        }
+
+        // Update booking status to confirmed
+        const { error: updateError } = await supabase
+          .from('bookings')
+          .update({ status: 'confirmed' })
+          .eq('id', booking.id);
+
+        if (updateError) {
+          logStep("Error updating booking status", updateError);
+        } else {
+          logStep("Booking confirmed via webhook", { bookingId: booking.id });
+
+          // Deduct membership credit if booking uses credit
+          if (booking.uses_credit && booking.customer_id) {
+            logStep("Deducting membership credit", { customerId: booking.customer_id });
+            
+            const { data: creditRecord, error: creditFetchError } = await supabase
+              .from('membership_credits')
+              .select('*')
+              .eq('customer_id', booking.customer_id)
+              .single();
+
+            if (!creditFetchError && creditRecord) {
+              const { error: creditUpdateError } = await supabase
+                .from('membership_credits')
+                .update({
+                  credits_used: creditRecord.credits_used + 1,
+                  credits_remaining: Math.max(0, creditRecord.credits_remaining - 1),
+                })
+                .eq('customer_id', booking.customer_id);
+
+              if (creditUpdateError) {
+                logStep("Error updating credits", creditUpdateError);
+              } else {
+                logStep("Credit deducted successfully", { 
+                  remainingCredits: creditRecord.credits_remaining - 1 
+                });
+              }
+            } else {
+              logStep("No credit record found", { error: creditFetchError });
+            }
+          }
+        }
+        break;
+      }
+
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         logStep("Processing checkout completion", { sessionId: session.id });
