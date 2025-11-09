@@ -138,6 +138,74 @@ serve(async (req) => {
 
     logStep("Booking updated", { bookingId: booking.id, newStatus });
 
+    // Send confirmation email if payment succeeded
+    if (paymentIntent.status === "succeeded") {
+      logStep("Sending confirmation emails", { email: booking.email });
+      
+      try {
+        // Send booking confirmation
+        await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+          },
+          body: JSON.stringify({
+            type: 'confirmation',
+            email: booking.email,
+            data: {
+              firstName: booking.first_name,
+              lastName: booking.last_name,
+              bookingId: booking.id,
+              serviceDate: booking.service_date,
+              timeSlot: booking.time_slot,
+              serviceType: booking.service_type,
+              homeSize: booking.home_size_id,
+              address: booking.address,
+              city: booking.city,
+              state: booking.state,
+              zipCode: booking.zip_code,
+              totalAmount: booking.total_estimate_cents,
+              depositAmount: booking.deposit_cents,
+              balanceAmount: booking.total_estimate_cents - (booking.payment_option === 'full' ? booking.total_estimate_cents - (booking.full_payment_discount || 0) : booking.deposit_cents),
+              paymentOption: booking.payment_option,
+              useCredit: booking.uses_credit,
+              addOns: booking.add_ons,
+            },
+          }),
+        });
+
+        // Send payment receipt
+        await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+          },
+          body: JSON.stringify({
+            type: 'payment_receipt',
+            email: booking.email,
+            data: {
+              firstName: booking.first_name,
+              lastName: booking.last_name,
+              bookingId: booking.id,
+              serviceDate: booking.service_date,
+              timeSlot: booking.time_slot,
+              serviceType: booking.service_type,
+              totalAmount: booking.payment_option === 'full' ? booking.total_estimate_cents - (booking.full_payment_discount || 0) : booking.deposit_cents,
+              balanceAmount: booking.payment_option === 'deposit' ? booking.total_estimate_cents - booking.deposit_cents : 0,
+              paymentOption: booking.payment_option,
+            },
+          }),
+        });
+
+        logStep("Confirmation emails sent successfully");
+      } catch (emailError) {
+        logStep("Error sending emails (non-blocking)", { error: emailError });
+        // Don't fail the whole request if emails fail
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: paymentIntent.status === "succeeded",
