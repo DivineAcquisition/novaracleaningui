@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock } from "lucide-react";
+import logo from "@/assets/logo.png";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
