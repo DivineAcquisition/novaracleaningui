@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
-import { Sparkles, User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown } from "lucide-react";
+import { Sparkles, User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown, Tag } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -72,6 +72,18 @@ const Index = () => {
           )}
         </div>
       </header>
+
+      {/* Promo Banner */}
+      <div className="bg-gradient-primary py-3">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-center gap-2 text-white">
+            <Tag className="w-4 h-4" />
+            <p className="text-sm md:text-base font-semibold">
+              Limited Time Offer: Save up to 30% with our Membership Plan
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Hero + Booking Section */}
       <section className="container mx-auto px-4 py-12 md:py-20">
@@ -147,17 +159,33 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Membership Link */}
-          <div className="pt-8">
-            <Button
-              variant="link"
-              onClick={() => navigate("/membership")}
-              className="text-base"
-            >
-              <Crown className="w-4 h-4 mr-2" />
-              Save up to 30% with membership
-            </Button>
-          </div>
+          {/* Membership Promo Card */}
+          <Card className="mt-12 border-primary/30 bg-gradient-lavender">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-shrink-0">
+                  <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
+                    <Crown className="w-8 h-8 text-white" />
+                  </div>
+                </div>
+                <div className="flex-1 text-center md:text-left space-y-2">
+                  <h3 className="text-xl md:text-2xl font-bold">Join Our Membership Program</h3>
+                  <p className="text-muted-foreground">
+                    Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
+                    Perfect for regular cleaning schedules.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => navigate("/membership")}
+                  size="lg"
+                  className="bg-primary hover:bg-primary-hover"
+                >
+                  Learn More
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
     </div>
