@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Calendar, Mail, Home, Share2, Download, Clock, MapPin, CreditCard } from "lucide-react";
+import { CheckCircle2, Calendar, Mail, Home, Share2, Download, Clock, MapPin, CreditCard, Settings, ExternalLink, UserPlus } from "lucide-react";
 import { format, parse, addHours } from "date-fns";
 import { toast } from "sonner";
 import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/lib/calendar";
@@ -27,9 +28,11 @@ export default function BookingSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { bookingData, resetBookingData } = useBooking();
+  const { user, openCustomerPortal } = useAuth();
   const sessionId = searchParams.get("session_id");
   const paymentIntent = searchParams.get("payment_intent");
   const [canShare, setCanShare] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -82,6 +85,17 @@ export default function BookingSuccess() {
       }
     } catch (error) {
       console.error('Error sharing:', error);
+    }
+  };
+
+  const handleOpenPortal = async () => {
+    setIsOpeningPortal(true);
+    try {
+      await openCustomerPortal();
+    } catch (error) {
+      toast.error('Unable to open customer portal. Please contact support@novaracleaning.com for assistance.');
+    } finally {
+      setIsOpeningPortal(false);
     }
   };
 
@@ -263,6 +277,73 @@ export default function BookingSuccess() {
                     Share
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Customer Portal / Account Creation Card */}
+            <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg md:text-xl flex items-center gap-2">
+                  {user ? (
+                    <>
+                      <Settings className="w-5 h-5 text-primary" />
+                      Manage Your Account
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-5 h-5 text-primary" />
+                      Want to Manage Your Bookings?
+                    </>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm">
+                  {user ? (
+                    <>Update payment methods, view billing history, and manage your account</>
+                  ) : (
+                    <>Create an account to track bookings, manage payments, and update future appointments</>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {user ? (
+                  <Button
+                    onClick={handleOpenPortal}
+                    disabled={isOpeningPortal}
+                    className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    {isOpeningPortal ? 'Opening...' : 'Open Customer Portal'}
+                    <ExternalLink className="w-4 h-4 ml-2" />
+                  </Button>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid gap-2 text-xs md:text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <span>Track all your bookings in one place</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <span>Manage payment methods securely</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <span>View billing history and receipts</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <span>Update future appointments</span>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => navigate('/auth')}
+                      className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Create Account
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
