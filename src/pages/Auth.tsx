@@ -98,7 +98,7 @@ export default function Auth() {
     <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
       <Card className="max-w-md w-full shadow-xl border-primary/20">
         <CardHeader className="text-center space-y-2">
-          <img src={logo} alt="HomeGlow Logo" className="mx-auto w-16 h-16 rounded-2xl mb-4 shadow-lavender" />
+          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-16 h-16 rounded-2xl mb-4 shadow-lavender" />
           <CardTitle className="text-3xl font-bold">Welcome</CardTitle>
           <CardDescription className="text-base">
             Sign in to manage your bookings and subscriptions

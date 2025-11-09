@@ -390,7 +390,7 @@ export default function BookingSuccess() {
                   <div className="flex-1">
                     <h4 className="font-semibold mb-1 text-sm md:text-base">Cleaning Day</h4>
                     <p className="text-xs md:text-sm text-muted-foreground">
-                      Our professional team will arrive during your selected time window.
+                      Our premium team will arrive during your selected time window.
                     </p>
                   </div>
                 </div>

@@ -41,8 +41,8 @@ const Index = () => {
       <header className="container mx-auto px-4 py-6">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="HomeGlow Logo" className="w-10 h-10 rounded-lg" />
-            <span className="text-xl font-bold">HomeGlow</span>
+            <img src={logo} alt="NovaraCleaning Logo" className="w-10 h-10 rounded-lg" />
+            <span className="text-xl font-bold">NovaraCleaning</span>
           </div>
           
           {user ? (
@@ -94,7 +94,7 @@ const Index = () => {
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground">
-              Professional cleaning service at transparent prices. Enter your ZIP code to get started.
+              Premium cleaning service at transparent prices. Enter your ZIP code to get started.
             </p>
           </div>
 
@@ -142,7 +142,7 @@ const Index = () => {
               <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                 <SparkleIcon className="w-5 h-5 text-primary" />
               </div>
-              <p className="text-xs md:text-sm font-medium">Professional</p>
+              <p className="text-xs md:text-sm font-medium">Premium</p>
             </div>
             <div className="space-y-2">
               <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
