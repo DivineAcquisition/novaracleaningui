@@ -1,39 +1,37 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Sparkles, Clock, Shield, Star, User, LogOut, Crown, ArrowRight } from "lucide-react";
-
-const FEATURES = [
-  {
-    icon: Sparkles,
-    title: "Professional Service",
-    description: "Experienced cleaners you can trust",
-  },
-  {
-    icon: Clock,
-    title: "Flexible Scheduling",
-    description: "Book at your convenience",
-  },
-  {
-    icon: Shield,
-    title: "Satisfaction Guaranteed",
-    description: "100% happiness guarantee",
-  },
-  {
-    icon: Star,
-    title: "Top Rated",
-    description: "4.9/5 from 10,000+ customers",
-  },
-];
+import { useBooking } from "@/contexts/BookingContext";
+import { Sparkles, User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { updateBookingData } = useBooking();
+  const [zipCode, setZipCode] = useState("");
+  const [isValidating, setIsValidating] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleStartBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (zipCode.length !== 5) {
+      return;
+    }
+
+    setIsValidating(true);
+    
+    // Simulate validation
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    updateBookingData({ zipCode });
+    navigate("/book/home");
   };
 
   return (
@@ -75,137 +73,92 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="container mx-auto px-4 py-20 text-center">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-            Professional Home Cleaning
-            <span className="block text-primary mt-2">Made Simple</span>
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
-            Book trusted cleaners in minutes. Flexible scheduling, transparent pricing, and satisfaction guaranteed.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-            <Button
-              size="lg"
-              className="h-16 px-8 text-lg font-semibold shadow-xl hover:shadow-2xl transition-all bg-gradient-primary"
-              onClick={() => navigate("/book/zip")}
-            >
+      {/* Hero + Booking Section */}
+      <section className="container mx-auto px-4 py-12 md:py-20">
+        <div className="max-w-2xl mx-auto text-center space-y-8">
+          <div className="space-y-4">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
               Book Your Cleaning
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-16 px-8 text-lg font-semibold"
-              onClick={() => navigate("/membership")}
-            >
-              <Crown className="w-5 h-5 mr-2" />
-              View Membership Plans
-            </Button>
+              <span className="block text-primary mt-2">In Minutes</span>
+            </h1>
+            
+            <p className="text-lg md:text-xl text-muted-foreground">
+              Professional cleaning service at transparent prices. Enter your ZIP code to get started.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground pt-2">
-            Starting at $129 • No commitments
-          </p>
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-          {FEATURES.map((feature, idx) => (
-            <Card key={idx} className="border-none shadow-lg hover:shadow-xl transition-shadow">
-              <CardContent className="pt-6 text-center space-y-3">
-                <div className="mx-auto w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center">
-                  <feature.icon className="w-7 h-7 text-primary" />
-                </div>
-                <h3 className="text-xl font-bold">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* Membership Section */}
-      <section className="container mx-auto px-4 py-16">
-        <Card className="max-w-5xl mx-auto shadow-2xl overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-          <CardContent className="p-0">
-            <div className="grid md:grid-cols-2 gap-0">
-              {/* Left side - Info */}
-              <div className="p-8 md:p-12 space-y-6">
-                <Badge className="bg-gradient-primary text-white border-0">
-                  <Crown className="w-4 h-4 mr-1" />
-                  Membership Benefits
-                </Badge>
-                <h2 className="text-3xl md:text-4xl font-bold">
-                  Save More with Membership
-                </h2>
-                <p className="text-lg text-muted-foreground">
-                  Get monthly cleaning credits and save up to 30% on all services. Perfect for regular maintenance.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-2">
-                    <Shield className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Monthly credits that never expire</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Star className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Exclusive discounts on add-ons</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Clock className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Priority scheduling and support</span>
-                  </li>
-                </ul>
-              </div>
-              
-              {/* Right side - CTA */}
-              <div className="bg-gradient-primary p-8 md:p-12 flex flex-col justify-center items-start text-white">
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <p className="text-white/90 text-lg">Plans starting at</p>
-                    <p className="text-5xl font-bold">$189<span className="text-2xl font-normal">/mo</span></p>
-                  </div>
-                  <Button
-                    size="lg"
-                    variant="secondary"
-                    className="w-full h-14 text-lg font-semibold"
-                    onClick={() => navigate("/membership")}
-                  >
-                    View All Plans
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </Button>
-                  <p className="text-sm text-white/80 text-center">
-                    Cancel anytime • No long-term commitment
+          {/* ZIP Code Entry */}
+          <Card className="shadow-2xl border-primary/20">
+            <CardContent className="pt-8 pb-8 space-y-6">
+              <form onSubmit={handleStartBooking} className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="zipCode" className="text-sm font-medium text-left block">
+                    Enter Your ZIP Code
+                  </label>
+                  <Input
+                    id="zipCode"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={5}
+                    placeholder="12345"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ''))}
+                    className="h-14 text-lg text-center"
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    We'll check if we service your area
                   </p>
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
 
-      {/* CTA Section */}
-      <section className="container mx-auto px-4 py-20 text-center">
-        <Card className="max-w-3xl mx-auto shadow-xl">
-          <CardContent className="pt-12 pb-12 space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Ready for a cleaner home?
-            </h2>
-            <p className="text-lg text-muted-foreground">
-              Join thousands of happy customers. Book your first cleaning in just 2 minutes.
-            </p>
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={zipCode.length !== 5 || isValidating}
+                  className="w-full h-14 text-lg font-semibold bg-gradient-primary"
+                >
+                  {isValidating ? "Checking..." : "Continue"}
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Quick Benefits */}
+          <div className="grid grid-cols-3 gap-4 pt-4">
+            <div className="space-y-2">
+              <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <SparkleIcon className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-xs md:text-sm font-medium">Professional</p>
+            </div>
+            <div className="space-y-2">
+              <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <Clock className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-xs md:text-sm font-medium">Flexible</p>
+            </div>
+            <div className="space-y-2">
+              <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-xs md:text-sm font-medium">Guaranteed</p>
+            </div>
+          </div>
+
+          {/* Membership Link */}
+          <div className="pt-8">
             <Button
-              size="lg"
-              className="h-14 px-8 text-lg font-semibold"
-              onClick={() => navigate("/book/zip")}
+              variant="link"
+              onClick={() => navigate("/membership")}
+              className="text-base"
             >
-              Get Started Now
+              <Crown className="w-4 h-4 mr-2" />
+              Save up to 30% with membership
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </section>
     </div>
   );
