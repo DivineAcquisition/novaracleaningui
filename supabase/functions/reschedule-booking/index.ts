@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import React from 'https://esm.sh/react@18.3.1';
+import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
+import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,49 +109,24 @@ serve(async (req) => {
 
     // 6. Send confirmation email
     try {
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0;">Booking Rescheduled</h1>
-          </div>
-          
-          <div style="padding: 30px; background: #f9fafb;">
-            <p style="font-size: 16px; color: #374151;">Hello ${booking.first_name},</p>
-            
-            <p style="font-size: 16px; color: #374151;">
-              Your cleaning service has been successfully rescheduled.
-            </p>
+      const emailData = {
+        firstName: booking.first_name,
+        bookingId: bookingId,
+        oldDate: oldDate,
+        oldTimeSlot: oldTimeSlot,
+        newDate: newDate,
+        newTimeSlot: newTimeSlot,
+        serviceType: booking.service_type,
+        address: `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
+      };
 
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-              <h2 style="color: #667eea; margin-top: 0;">New Appointment Details</h2>
-              <p style="margin: 10px 0;"><strong>Date:</strong> ${new Date(newDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-              <p style="margin: 10px 0;"><strong>Time:</strong> ${newTimeSlot}</p>
-              <p style="margin: 10px 0;"><strong>Service:</strong> ${booking.service_type}</p>
-              <p style="margin: 10px 0;"><strong>Address:</strong> ${booking.address}, ${booking.city}, ${booking.state}</p>
-            </div>
-
-            <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0; color: #92400e;">
-                <strong>Previous appointment:</strong> ${new Date(oldDate).toLocaleDateString()} at ${oldTimeSlot}
-              </p>
-            </div>
-
-            <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
-              If you need to make any changes, please contact us or visit your customer portal.
-            </p>
-          </div>
-          
-          <div style="background: #374151; padding: 20px; text-align: center; color: white; font-size: 12px;">
-            <p style="margin: 0;">© 2024 Novara Cleaning. All rights reserved.</p>
-          </div>
-        </div>
-      `;
+      const html = await renderAsync(React.createElement(RescheduleConfirmation, emailData));
 
       await resend.emails.send({
         from: 'Novara Cleaning <onboarding@resend.dev>',
         to: [booking.email],
         subject: 'Booking Rescheduled - Novara Cleaning',
-        html: emailHtml,
+        html,
       });
 
       console.log('Reschedule confirmation email sent');
