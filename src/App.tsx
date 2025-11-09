@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Account from "./pages/Account";
+import Membership from "./pages/Membership";
 import BookingZip from "./pages/book/Zip";
 import BookingHome from "./pages/book/Home";
 import BookingService from "./pages/book/Service";
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/account" element={<Account />} />
+              <Route path="/membership" element={<Membership />} />
               <Route path="/book/zip" element={<BookingZip />} />
               <Route path="/book/home" element={<BookingHome />} />
               <Route path="/book/service" element={<BookingService />} />

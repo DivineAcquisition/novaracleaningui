@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Sparkles, Clock, Shield, Star, User, LogOut } from "lucide-react";
+import { Sparkles, Clock, Shield, Star, User, LogOut, Crown, ArrowRight } from "lucide-react";
 
 const FEATURES = [
   {
@@ -89,15 +90,24 @@ const Index = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
             <Button
               size="lg"
-              className="h-16 px-8 text-lg font-semibold shadow-xl hover:shadow-2xl transition-all"
+              className="h-16 px-8 text-lg font-semibold shadow-xl hover:shadow-2xl transition-all bg-gradient-primary"
               onClick={() => navigate("/book/zip")}
             >
               Book Your Cleaning
             </Button>
-            <p className="text-sm text-muted-foreground">
-              Starting at $129 • No commitments
-            </p>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-16 px-8 text-lg font-semibold"
+              onClick={() => navigate("/membership")}
+            >
+              <Crown className="w-5 h-5 mr-2" />
+              View Membership Plans
+            </Button>
           </div>
+          <p className="text-sm text-muted-foreground pt-2">
+            Starting at $129 • No commitments
+          </p>
         </div>
       </section>
 
@@ -116,6 +126,65 @@ const Index = () => {
             </Card>
           ))}
         </div>
+      </section>
+
+      {/* Membership Section */}
+      <section className="container mx-auto px-4 py-16">
+        <Card className="max-w-5xl mx-auto shadow-2xl overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+          <CardContent className="p-0">
+            <div className="grid md:grid-cols-2 gap-0">
+              {/* Left side - Info */}
+              <div className="p-8 md:p-12 space-y-6">
+                <Badge className="bg-gradient-primary text-white border-0">
+                  <Crown className="w-4 h-4 mr-1" />
+                  Membership Benefits
+                </Badge>
+                <h2 className="text-3xl md:text-4xl font-bold">
+                  Save More with Membership
+                </h2>
+                <p className="text-lg text-muted-foreground">
+                  Get monthly cleaning credits and save up to 30% on all services. Perfect for regular maintenance.
+                </p>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-2">
+                    <Shield className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Monthly credits that never expire</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Star className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Exclusive discounts on add-ons</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Clock className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Priority scheduling and support</span>
+                  </li>
+                </ul>
+              </div>
+              
+              {/* Right side - CTA */}
+              <div className="bg-gradient-primary p-8 md:p-12 flex flex-col justify-center items-start text-white">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <p className="text-white/90 text-lg">Plans starting at</p>
+                    <p className="text-5xl font-bold">$189<span className="text-2xl font-normal">/mo</span></p>
+                  </div>
+                  <Button
+                    size="lg"
+                    variant="secondary"
+                    className="w-full h-14 text-lg font-semibold"
+                    onClick={() => navigate("/membership")}
+                  >
+                    View All Plans
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                  <p className="text-sm text-white/80 text-center">
+                    Cancel anytime • No long-term commitment
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       {/* CTA Section */}

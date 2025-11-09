@@ -19,7 +19,8 @@ serve(async (req) => {
 
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
   );
 
   try {
@@ -47,16 +48,13 @@ serve(async (req) => {
     
     if (customers.data.length === 0) {
       logStep("No customer found, returning unsubscribed state");
-      return new Response(
-        JSON.stringify({ 
-          subscribed: false,
-          hasCustomer: false
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        }
-      );
+      return new Response(JSON.stringify({ 
+        subscribed: false,
+        hasCustomer: false 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
     const customerId = customers.data[0].id;
@@ -65,66 +63,41 @@ serve(async (req) => {
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: "active",
-      limit: 10,
+      limit: 1,
     });
     const hasActiveSub = subscriptions.data.length > 0;
     let productId = null;
     let subscriptionEnd = null;
-    let subscriptionStatus = null;
-    let planName = null;
+    let subscriptionId = null;
 
     if (hasActiveSub) {
       const subscription = subscriptions.data[0];
+      subscriptionId = subscription.id;
       subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-      subscriptionStatus = subscription.status;
-      logStep("Active subscription found", { subscriptionId: subscription.id, endDate: subscriptionEnd });
-      
-      productId = subscription.items.data[0].price.product;
-      const priceId = subscription.items.data[0].price.id;
-      
-      // Map price IDs to plan names
-      const planMapping: Record<string, string> = {
-        "price_1SQYNoGc7k6gIVcM7q7mj2KD": "Weekly Standard Cleaning",
-        "price_1SQYOYGc7k6gIVcMceZUd8x9": "Bi-weekly Standard Cleaning",
-      };
-      planName = planMapping[priceId] || "Subscription Plan";
-      
-      logStep("Determined subscription tier", { productId, planName });
+      logStep("Active subscription found", { subscriptionId, endDate: subscriptionEnd });
+      productId = subscription.items.data[0].price.product as string;
+      logStep("Determined subscription product", { productId });
     } else {
       logStep("No active subscription found");
     }
 
-    // Get payment methods
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: customerId,
-      type: "card",
-      limit: 1,
+    return new Response(JSON.stringify({
+      subscribed: hasActiveSub,
+      hasCustomer: true,
+      product_id: productId,
+      subscription_id: subscriptionId,
+      subscription_end: subscriptionEnd,
+      customer_id: customerId,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
     });
-
-    return new Response(
-      JSON.stringify({
-        subscribed: hasActiveSub,
-        hasCustomer: true,
-        product_id: productId,
-        subscription_end: subscriptionEnd,
-        subscription_status: subscriptionStatus,
-        plan_name: planName,
-        has_payment_method: paymentMethods.data.length > 0,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in check-subscription", { message: errorMessage });
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });

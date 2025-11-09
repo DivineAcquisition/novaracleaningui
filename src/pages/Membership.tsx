@@ -1,0 +1,289 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+const MEMBERSHIP_TIERS = {
+  monthly: {
+    id: 'monthly',
+    name: 'Novara Monthly',
+    price: 189,
+    priceId: 'price_1SR2UhGc7k6gIVcMiKbuq1mo',
+    productId: 'prod_TNo6QN7DbsYAew',
+    credits: 1,
+    discount: '20%',
+    icon: Calendar,
+    color: 'from-blue-500 to-cyan-500',
+    features: [
+      '1 cleaning credit per month',
+      '20% off all add-ons',
+      'Flexible scheduling',
+      'Cancel anytime',
+      'Priority customer support',
+    ],
+    popular: false,
+  },
+  biweekly: {
+    id: 'biweekly',
+    name: 'Novara Bi-Weekly',
+    price: 289,
+    priceId: 'price_1SR2VNGc7k6gIVcMMI6Fuxga',
+    productId: 'prod_TNo7Dtg4Sn31wW',
+    credits: 2,
+    discount: '25%',
+    icon: Gift,
+    color: 'from-purple-500 to-pink-500',
+    features: [
+      '2 cleaning credits per month',
+      '25% off all add-ons',
+      'Early booking access',
+      'Cancel anytime',
+      'Priority customer support',
+      'Free rescheduling',
+    ],
+    popular: true,
+  },
+  weekly: {
+    id: 'weekly',
+    name: 'Novara Weekly',
+    price: 389,
+    priceId: 'price_1SR2VYGc7k6gIVcML2W0jVKS',
+    productId: 'prod_TNo7DH056lKJ5o',
+    credits: 4,
+    discount: '30%',
+    icon: Crown,
+    color: 'from-amber-500 to-orange-500',
+    features: [
+      '4 cleaning credits per month',
+      '30% off all add-ons',
+      'Priority scheduling',
+      'Cancel anytime',
+      'VIP customer support',
+      'Free rescheduling',
+      'Dedicated cleaning team',
+    ],
+    popular: false,
+  },
+};
+
+export default function Membership() {
+  const navigate = useNavigate();
+  const { user, subscription } = useAuth();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  const handleSubscribe = async (priceId: string, planId: string) => {
+    if (!user) {
+      toast.error('Please sign in to subscribe');
+      navigate('/auth');
+      return;
+    }
+
+    setLoadingPlan(planId);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { priceId, mode: 'subscription' },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.open(data.url, '_blank');
+        toast.success('Opening checkout in new tab...');
+      }
+    } catch (error) {
+      console.error('Error creating checkout:', error);
+      toast.error('Failed to start checkout. Please try again.');
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
+
+  const currentPlan = subscription?.subscribed 
+    ? Object.values(MEMBERSHIP_TIERS).find(tier => tier.productId === subscription.product_id)
+    : null;
+
+  return (
+    <div className="min-h-screen bg-gradient-hero">
+      {/* Hero Section */}
+      <div className="container max-w-7xl mx-auto px-4 py-12 md:py-16">
+        <div className="text-center space-y-4 mb-12">
+          <Badge className="bg-gradient-primary text-white border-0 shadow-elegant">
+            <Sparkles className="w-4 h-4 mr-1" />
+            Membership Plans
+          </Badge>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold">
+            Choose Your Perfect Plan
+          </h1>
+          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            Save time and money with our flexible membership plans. Get credits every month and enjoy exclusive discounts.
+          </p>
+        </div>
+
+        {/* Current Subscription Banner */}
+        {currentPlan && (
+          <Card className="mb-8 border-primary/50 bg-gradient-to-br from-primary/5 to-accent/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-success" />
+                Your Current Plan: {currentPlan.name}
+              </CardTitle>
+              <CardDescription>
+                You have an active subscription with {currentPlan.credits} credit(s) per month
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
+        {/* Pricing Cards */}
+        <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+          {Object.values(MEMBERSHIP_TIERS).map((tier) => {
+            const Icon = tier.icon;
+            const isCurrentPlan = currentPlan?.id === tier.id;
+            
+            return (
+              <Card
+                key={tier.id}
+                className={`relative overflow-hidden transition-all hover:shadow-xl ${
+                  tier.popular ? 'border-primary/50 shadow-lg scale-105' : ''
+                } ${isCurrentPlan ? 'border-success/50 bg-success/5' : ''}`}
+              >
+                {tier.popular && (
+                  <div className="absolute top-0 right-0">
+                    <Badge className="bg-gradient-primary text-white border-0 rounded-none rounded-bl-lg">
+                      Most Popular
+                    </Badge>
+                  </div>
+                )}
+
+                {isCurrentPlan && (
+                  <div className="absolute top-0 left-0">
+                    <Badge className="bg-success text-white border-0 rounded-none rounded-br-lg">
+                      Current Plan
+                    </Badge>
+                  </div>
+                )}
+
+                <CardHeader className="text-center space-y-4 pb-8">
+                  <div className={`mx-auto w-16 h-16 rounded-full bg-gradient-to-br ${tier.color} flex items-center justify-center shadow-elegant`}>
+                    <Icon className="w-8 h-8 text-white" />
+                  </div>
+                  
+                  <div>
+                    <CardTitle className="text-2xl mb-2">{tier.name}</CardTitle>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-4xl font-bold">${tier.price}</span>
+                      <span className="text-muted-foreground">/month</span>
+                    </div>
+                  </div>
+
+                  <Badge variant="secondary" className="text-sm">
+                    <Zap className="w-3 h-3 mr-1" />
+                    {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month
+                  </Badge>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                  <Separator />
+                  
+                  <ul className="space-y-3">
+                    {tier.features.map((feature, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Button
+                    onClick={() => handleSubscribe(tier.priceId, tier.id)}
+                    disabled={loadingPlan === tier.id || isCurrentPlan}
+                    className={`w-full h-12 ${
+                      tier.popular
+                        ? 'bg-gradient-primary shadow-elegant'
+                        : 'bg-gradient-to-r from-primary to-accent'
+                    }`}
+                  >
+                    {loadingPlan === tier.id ? (
+                      <>Processing...</>
+                    ) : isCurrentPlan ? (
+                      <>Current Plan</>
+                    ) : (
+                      <>
+                        Subscribe Now
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-xs text-center text-muted-foreground">
+                    Cancel anytime • No long-term commitment
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Benefits Section */}
+        <Card className="mt-12 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl md:text-3xl">Why Choose Novara Membership?</CardTitle>
+            <CardDescription className="text-base">
+              Join thousands of satisfied members enjoying hassle-free cleaning
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Gift className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-semibold">Monthly Credits</h3>
+                <p className="text-sm text-muted-foreground">
+                  Use your credits for any cleaning service, anytime
+                </p>
+              </div>
+
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-semibold">Exclusive Discounts</h3>
+                <p className="text-sm text-muted-foreground">
+                  Save up to 30% on all add-ons and upgrades
+                </p>
+              </div>
+
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-semibold">Flexible Scheduling</h3>
+                <p className="text-sm text-muted-foreground">
+                  Priority booking and easy rescheduling options
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* CTA Section */}
+        <div className="text-center mt-12 space-y-4">
+          <p className="text-muted-foreground">
+            Not ready for a membership?{' '}
+            <Button variant="link" onClick={() => navigate('/book/home')} className="p-0 h-auto">
+              Book a one-time cleaning
+            </Button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
