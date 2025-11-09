@@ -5,23 +5,92 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock } from "lucide-react";
-import logo from "@/assets/logo.png";
+import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock, Clock, MapPin, Package, AlertCircle, Home } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, isPast, isFuture } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+interface Booking {
+  id: string;
+  service_date: string;
+  time_slot: string;
+  service_type: string;
+  status: string;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  total_estimate_cents: number;
+  uses_credit: boolean;
+  home_size_id: string;
+}
+
+interface MembershipCredit {
+  membership_plan: string;
+  credits_per_month: number;
+  credits_remaining: number;
+  credits_used: number;
+  current_period_start: string;
+  current_period_end: string;
+}
 
 export default function Account() {
   const navigate = useNavigate();
   const { user, subscription, signOut, checkSubscription, openCustomerPortal, resetPassword } = useAuth();
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [membershipCredits, setMembershipCredits] = useState<MembershipCredit | null>(null);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
 
   useEffect(() => {
     if (!user) {
       navigate("/auth");
     } else {
       checkSubscription();
+      fetchBookings();
+      fetchMembershipCredits();
     }
   }, [user, navigate]);
+
+  const fetchBookings = async () => {
+    if (!user?.email) return;
+    
+    setIsLoadingBookings(true);
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('email', user.email)
+        .order('service_date', { ascending: false });
+
+      if (error) throw error;
+      setBookings(data || []);
+    } catch (error: any) {
+      console.error('Error fetching bookings:', error);
+      toast.error('Failed to load booking history');
+    } finally {
+      setIsLoadingBookings(false);
+    }
+  };
+
+  const fetchMembershipCredits = async () => {
+    if (!user?.email) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('membership_credits')
+        .select('*')
+        .eq('email', user.email)
+        .maybeSingle();
+
+      if (error) throw error;
+      setMembershipCredits(data);
+    } catch (error: any) {
+      console.error('Error fetching membership credits:', error);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -52,6 +121,21 @@ export default function Account() {
     setIsResettingPassword(false);
   };
 
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", label: string }> = {
+      confirmed: { variant: "default", label: "Confirmed" },
+      pending_payment: { variant: "secondary", label: "Pending Payment" },
+      cancelled: { variant: "destructive", label: "Cancelled" },
+      completed: { variant: "outline", label: "Completed" },
+    };
+    
+    const config = variants[status] || { variant: "outline", label: status };
+    return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  const upcomingBookings = bookings.filter(b => isFuture(new Date(b.service_date)) && b.status !== 'cancelled');
+  const pastBookings = bookings.filter(b => isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled');
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
@@ -62,10 +146,16 @@ export default function Account() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
-      <div className="container max-w-4xl mx-auto px-4 py-12">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">My Account</h1>
-          <p className="text-muted-foreground">Manage your profile and subscriptions</p>
+      <div className="container max-w-7xl mx-auto px-4 py-12">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">My Account</h1>
+            <p className="text-muted-foreground">Manage your profile, bookings, and subscriptions</p>
+          </div>
+          <Button variant="outline" onClick={() => navigate("/")}>
+            <Home className="w-4 h-4 mr-2" />
+            Home
+          </Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -197,6 +287,183 @@ export default function Account() {
           </Card>
         </div>
 
+        {/* Membership Credits */}
+        {membershipCredits && (
+          <Card className="mt-6 border-primary/20 bg-gradient-lavender">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary" />
+                    Membership Credits
+                  </CardTitle>
+                  <CardDescription>
+                    {membershipCredits.membership_plan.charAt(0).toUpperCase() + membershipCredits.membership_plan.slice(1)} Plan
+                  </CardDescription>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-primary">{membershipCredits.credits_remaining}</p>
+                  <p className="text-sm text-muted-foreground">Credits Available</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-semibold">{membershipCredits.credits_per_month}</p>
+                  <p className="text-xs text-muted-foreground">Per Month</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-semibold">{membershipCredits.credits_used}</p>
+                  <p className="text-xs text-muted-foreground">Used</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-semibold">
+                    {format(new Date(membershipCredits.current_period_end), "MMM d")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Next Refresh</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Upcoming Services */}
+        <Card className="mt-6 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Upcoming Services
+            </CardTitle>
+            <CardDescription>Your scheduled cleanings</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingBookings ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : upcomingBookings.length === 0 ? (
+              <div className="text-center py-8">
+                <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground mb-4">No upcoming cleanings scheduled</p>
+                <Button onClick={() => navigate("/book/zip")} className="bg-gradient-primary">
+                  Book a Cleaning
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {upcomingBookings.map((booking) => (
+                  <Card key={booking.id} className="border-primary/20">
+                    <CardContent className="pt-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-3 flex-1">
+                          <div className="flex items-start gap-3">
+                            <Clock className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="font-semibold text-lg">
+                                {format(new Date(booking.service_date), "EEEE, MMMM d, yyyy")}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{booking.time_slot}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            <MapPin className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="font-medium">{booking.address}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {booking.city}, {booking.state} {booking.zip_code}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 flex-wrap">
+                            <Badge variant="outline">{booking.service_type}</Badge>
+                            <Badge variant="outline">{booking.home_size_id}</Badge>
+                            {booking.uses_credit && <Badge className="bg-primary">Using Credit</Badge>}
+                            {getStatusBadge(booking.status)}
+                          </div>
+                        </div>
+                        <div className="text-right space-y-2">
+                          <p className="text-2xl font-bold text-primary">
+                            ${(booking.total_estimate_cents / 100).toFixed(2)}
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              toast.info("Rescheduling feature coming soon!");
+                            }}
+                          >
+                            Reschedule
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Booking History */}
+        <Card className="mt-6 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Booking History
+            </CardTitle>
+            <CardDescription>Your past cleanings</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingBookings ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : pastBookings.length === 0 ? (
+              <div className="text-center py-8">
+                <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground">No booking history yet</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Service</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pastBookings.map((booking) => (
+                      <TableRow key={booking.id}>
+                        <TableCell className="font-medium">
+                          {format(new Date(booking.service_date), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{booking.service_type}</p>
+                            <p className="text-xs text-muted-foreground">{booking.home_size_id}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm">{booking.city}, {booking.state}</p>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(booking.status)}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          ${(booking.total_estimate_cents / 100).toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Quick Actions */}
         <Card className="mt-6 border-primary/20">
           <CardHeader>
@@ -204,7 +471,7 @@ export default function Account() {
             <CardDescription>Common tasks and shortcuts</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Button
                 variant="outline"
                 className="h-auto py-4 justify-start"
@@ -234,6 +501,20 @@ export default function Account() {
                   </div>
                 </Button>
               )}
+
+              <Button
+                variant="outline"
+                className="h-auto py-4 justify-start"
+                onClick={() => navigate("/membership")}
+              >
+                <div className="flex items-start gap-3">
+                  <Package className="w-5 h-5 text-primary mt-0.5" />
+                  <div className="text-left">
+                    <p className="font-semibold">Membership Plans</p>
+                    <p className="text-xs text-muted-foreground">Save with a membership</p>
+                  </div>
+                </div>
+              </Button>
             </div>
           </CardContent>
         </Card>
