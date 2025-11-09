@@ -23,6 +23,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   checkSubscription: () => Promise<void>;
   openCustomerPortal: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -108,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = `${window.location.origin}/auth/callback`;
     
     const { error } = await supabase.auth.signUp({
       email,
@@ -116,6 +117,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: {
         emailRedirectTo: redirectUrl,
       },
+    });
+    return { error };
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
     });
     return { error };
   };
@@ -136,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         checkSubscription,
         openCustomerPortal,
+        resetPassword,
       }}
     >
       {children}

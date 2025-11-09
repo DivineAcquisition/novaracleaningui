@@ -1,17 +1,18 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2 } from "lucide-react";
+import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 export default function Account() {
   const navigate = useNavigate();
-  const { user, subscription, signOut, checkSubscription, openCustomerPortal } = useAuth();
+  const { user, subscription, signOut, checkSubscription, openCustomerPortal, resetPassword } = useAuth();
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -33,6 +34,21 @@ export default function Account() {
     } catch (error: any) {
       toast.error(error.message || "Failed to open customer portal");
     }
+  };
+
+  const handleChangePassword = async () => {
+    if (!user?.email) return;
+    
+    setIsResettingPassword(true);
+    const { error } = await resetPassword(user.email);
+    
+    if (error) {
+      toast.error(error.message || "Failed to send reset email");
+    } else {
+      toast.success("Password reset link sent to your email!");
+    }
+    
+    setIsResettingPassword(false);
   };
 
   if (!user) {
@@ -71,6 +87,24 @@ export default function Account() {
                 <p className="font-medium">{user.email}</p>
               </div>
               <Separator />
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleChangePassword}
+                disabled={isResettingPassword}
+              >
+                {isResettingPassword ? (
+                  <>
+                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                    Sending reset link...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="mr-2 w-4 h-4" />
+                    Change Password
+                  </>
+                )}
+              </Button>
               <Button
                 variant="outline"
                 className="w-full"

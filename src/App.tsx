@@ -9,6 +9,9 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Account from "./pages/Account";
 import Membership from "./pages/Membership";
+import ResetPassword from "./pages/ResetPassword";
+import UpdatePassword from "./pages/UpdatePassword";
+import AuthCallback from "./pages/AuthCallback";
 import BookingZip from "./pages/book/Zip";
 import BookingHome from "./pages/book/Home";
 import BookingService from "./pages/book/Service";
@@ -35,6 +38,9 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/account" element={<Account />} />
               <Route path="/membership" element={<Membership />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/update-password" element={<UpdatePassword />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/book/zip" element={<BookingZip />} />
               <Route path="/book/home" element={<BookingHome />} />
               <Route path="/book/service" element={<BookingService />} />
