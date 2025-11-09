@@ -38,25 +38,30 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-hero">
       {/* Header */}
-      <header className="container mx-auto px-4 py-6">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="NovaraCleaning Logo" className="w-10 h-10 rounded-lg" />
-            <span className="text-xl font-bold">NovaraCleaning</span>
+      <header className="container mx-auto px-4 py-4 md:py-6">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            <img src={logo} alt="NovaraCleaning Logo" className="w-8 h-8 md:w-10 md:h-10 rounded-lg flex-shrink-0" />
+            <span className="text-base md:text-xl font-bold truncate">NovaraCleaning</span>
           </div>
           
           {user ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => navigate("/account")}
+                className="h-9 md:h-10"
               >
-                <User className="mr-2 w-4 h-4" />
-                Account
+                <User className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Account</span>
               </Button>
               <Button
                 variant="ghost"
+                size="sm"
                 onClick={handleSignOut}
+                className="h-9 md:h-10"
+                aria-label="Sign out"
               >
                 <LogOut className="w-4 h-4" />
               </Button>
@@ -64,7 +69,9 @@ const Index = () => {
           ) : (
             <Button
               variant="outline"
+              size="sm"
               onClick={() => navigate("/auth")}
+              className="h-9 md:h-10 flex-shrink-0"
             >
               Sign In
             </Button>
@@ -127,10 +134,10 @@ const Index = () => {
                   type="submit"
                   size="lg"
                   disabled={zipCode.length !== 5 || isValidating}
-                  className="w-full h-14 text-lg font-semibold bg-gradient-primary"
+                  className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
                 >
                   {isValidating ? "Checking..." : "Continue"}
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                 </Button>
               </form>
             </CardContent>
@@ -161,15 +168,15 @@ const Index = () => {
           {/* Membership Promo Card */}
           <Card className="mt-12 border-primary/30 bg-gradient-lavender">
             <CardContent className="pt-6 pb-6">
-              <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
                 <div className="flex-shrink-0">
-                  <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
-                    <Crown className="w-8 h-8 text-white" />
+                  <div className="w-12 h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
+                    <Crown className="w-6 h-6 md:w-8 md:h-8 text-white" />
                   </div>
                 </div>
                 <div className="flex-1 text-center md:text-left space-y-2">
-                  <h3 className="text-xl md:text-2xl font-bold">Join Our Membership Program</h3>
-                  <p className="text-muted-foreground">
+                  <h3 className="text-lg md:text-2xl font-bold">Join Our Membership Program</h3>
+                  <p className="text-sm md:text-base text-muted-foreground">
                     Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
                     Perfect for regular cleaning schedules.
                   </p>
@@ -177,7 +184,7 @@ const Index = () => {
                 <Button
                   onClick={() => navigate("/membership")}
                   size="lg"
-                  className="bg-primary hover:bg-primary-hover"
+                  className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12"
                 >
                   Learn More
                   <ArrowRight className="w-4 h-4 ml-2" />
