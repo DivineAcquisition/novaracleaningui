@@ -11,6 +11,7 @@ import { format, isPast, isFuture } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 
 interface Booking {
   id: string;
@@ -25,6 +26,7 @@ interface Booking {
   total_estimate_cents: number;
   uses_credit: boolean;
   home_size_id: string;
+  service_duration?: number;
 }
 
 interface MembershipCredit {
@@ -43,6 +45,8 @@ export default function Account() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [membershipCredits, setMembershipCredits] = useState<MembershipCredit | null>(null);
   const [isLoadingBookings, setIsLoadingBookings] = useState(true);
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -119,6 +123,16 @@ export default function Account() {
     }
     
     setIsResettingPassword(false);
+  };
+
+  const handleReschedule = (booking: Booking) => {
+    setRescheduleBooking(booking);
+    setRescheduleDialogOpen(true);
+  };
+
+  const handleRescheduleSuccess = () => {
+    fetchBookings();
+    fetchMembershipCredits();
   };
 
   const getStatusBadge = (status: string) => {
@@ -389,9 +403,7 @@ export default function Account() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              toast.info("Rescheduling feature coming soon!");
-                            }}
+                            onClick={() => handleReschedule(booking)}
                           >
                             Reschedule
                           </Button>
@@ -519,6 +531,15 @@ export default function Account() {
           </CardContent>
         </Card>
       </div>
+
+      {rescheduleBooking && (
+        <RescheduleDialog
+          open={rescheduleDialogOpen}
+          onOpenChange={setRescheduleDialogOpen}
+          booking={rescheduleBooking}
+          onSuccess={handleRescheduleSuccess}
+        />
+      )}
     </div>
   );
 }

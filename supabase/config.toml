@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.test-payment-scenarios]
 verify_jwt = false
+
+[functions.reschedule-booking]
+verify_jwt = false
