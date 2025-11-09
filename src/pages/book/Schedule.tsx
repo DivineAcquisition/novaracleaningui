@@ -143,22 +143,22 @@ export default function BookingSchedule() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-6 md:pb-8">
-            <CardTitle className="text-2xl md:text-3xl font-bold">Schedule your service</CardTitle>
+      <div className="container max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
+        <Card className="shadow-xl animate-slide-in-right">
+          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
+            <CardTitle className="text-xl md:text-3xl font-bold">Schedule your service</CardTitle>
             <CardDescription className="text-sm md:text-base">
               Select your preferred date and time window
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6 md:space-y-8">
+          <CardContent className="space-y-6 md:space-y-8 px-4 md:px-6">
             {/* Membership Plan Selection */}
             <div className="space-y-4">
-              <h3 className="text-lg md:text-xl font-semibold">Choose a plan</h3>
+              <h3 className="text-base md:text-xl font-semibold">Choose a plan</h3>
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
                 {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => (
                   <Card
@@ -226,7 +226,7 @@ export default function BookingSchedule() {
 
             {/* Horizontal Date Scroller */}
             <div className="space-y-4">
-              <h3 className="text-lg md:text-xl font-semibold">Select a date</h3>
+              <h3 className="text-base md:text-xl font-semibold">Select a date</h3>
               <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
                 <div className="flex gap-3 p-4">
                   {Array.from({ length: 30 }, (_, i) => {
@@ -270,8 +270,8 @@ export default function BookingSchedule() {
 
             {/* Time Slots */}
             {selectedDate && (
-              <div className="space-y-4 animate-fade-in">
-                <h3 className="text-lg md:text-xl font-semibold">Choose a time window</h3>
+              <div className="space-y-4 animate-slide-in-right">
+                <h3 className="text-base md:text-xl font-semibold">Choose a time window</h3>
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {timeSlots.map((slot) => (
                     <Card
@@ -297,15 +297,16 @@ export default function BookingSchedule() {
 
             {/* Desktop Navigation - Hidden on Mobile */}
             <div className="hidden md:flex gap-4 pt-6">
-              <Button variant="outline" size="lg" onClick={handleBack}>
-                <ArrowLeft className="mr-2" /> Back
+              <Button variant="outline" size="lg" onClick={handleBack} className="h-12 md:h-14">
+                <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" /> Back
               </Button>
               <Button 
                 size="lg" 
                 onClick={handleContinue} 
                 disabled={!selectedDate || !selectedTime || checkingCredit || (useCredit && !creditAvailable)}
+                className="h-12 md:h-14"
               >
-                Continue <ArrowRight className="ml-2" />
+                Continue <ArrowRight className="ml-2 w-4 h-4 md:w-5 md:h-5" />
               </Button>
             </div>
           </CardContent>

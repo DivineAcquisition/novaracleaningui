@@ -52,25 +52,25 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-2xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <MapPin className="w-8 h-8 text-primary" />
+      <div className="container max-w-2xl mx-auto px-4 md:px-6 py-6 md:py-8">
+        <Card className="shadow-xl animate-slide-in-right">
+          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
+              <MapPin className="w-7 h-7 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-2xl md:text-3xl font-bold">Where do you need cleaning?</CardTitle>
+            <CardTitle className="text-xl md:text-3xl font-bold">Where do you need cleaning?</CardTitle>
             <CardDescription className="text-sm md:text-base">
               Enter your ZIP code to check availability in your area
             </CardDescription>
           </CardHeader>
           
-          <CardContent>
+          <CardContent className="px-4 md:px-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="zipCode" className="text-base font-medium">
+                <Label htmlFor="zipCode" className="text-sm md:text-base font-medium">
                   ZIP Code
                 </Label>
                 <Input
@@ -79,7 +79,7 @@ export default function BookingZip() {
                   placeholder="Enter 5-digit ZIP code"
                   value={zipCode}
                   onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                  className="h-14 text-lg"
+                  className="h-12 md:h-14 text-base md:text-lg"
                   maxLength={5}
                   autoFocus
                 />
@@ -89,11 +89,11 @@ export default function BookingZip() {
               <Button
                 type="submit"
                 size="lg"
-                className="hidden md:flex w-full h-14 text-base font-semibold"
+                className="hidden md:flex w-full h-12 md:h-14 text-base font-semibold"
                 disabled={zipCode.length !== 5 || isValidating}
               >
                 {isValidating ? "Checking availability..." : "Continue"}
-                <ArrowRight className="ml-2 w-5 h-5" />
+                <ArrowRight className="ml-2 w-4 h-4 md:w-5 md:h-5" />
               </Button>
 
               <p className="text-center text-sm text-muted-foreground">

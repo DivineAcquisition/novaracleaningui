@@ -95,26 +95,26 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4">
+      <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4">
         {/* Membership Banner */}
         {user && credits && <MembershipBanner />}
         
-        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Contact Form */}
-          <Card className="shadow-xl animate-fade-in">
-            <CardHeader className="space-y-2">
-              <CardTitle className="text-xl md:text-2xl font-bold">Your details</CardTitle>
+          <Card className="shadow-xl animate-slide-in-left">
+            <CardHeader className="space-y-2 px-4 md:px-6">
+              <CardTitle className="text-lg md:text-2xl font-bold">Your details</CardTitle>
               <CardDescription className="text-sm md:text-base">
                 Please provide your contact information
               </CardDescription>
             </CardHeader>
             
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid gap-6 sm:grid-cols-2">
+            <CardContent className="px-4 md:px-6">
+              <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+                <div className="grid gap-4 md:gap-6 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">
                       First Name <span className="text-destructive">*</span>
@@ -230,18 +230,18 @@ export default function BookingDetails() {
                     variant="outline"
                     size="lg"
                     onClick={handleBack}
-                    className="h-14"
+                    className="h-12 md:h-14"
                   >
-                    <ArrowLeft className="mr-2 w-5 h-5" />
+                    <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" />
                     Back
                   </Button>
                   <Button
                     type="submit"
                     size="lg"
-                    className="flex-1 h-14 text-base font-semibold"
+                    className="flex-1 h-12 md:h-14 text-sm md:text-base font-semibold"
                   >
                     Continue to Summary
-                    <ArrowRight className="ml-2 w-5 h-5" />
+                    <ArrowRight className="ml-2 w-4 h-4 md:w-5 md:h-5" />
                   </Button>
                 </div>
               </form>
@@ -249,7 +249,7 @@ export default function BookingDetails() {
           </Card>
 
           {/* Pricing Summary - FIRST TIME SHOWING PRICES */}
-          <Card className="shadow-xl border-2 border-primary/20 lg:sticky lg:top-8 h-fit animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          <Card className="shadow-xl border-2 border-primary/20 lg:sticky lg:top-8 h-fit animate-slide-in-right" style={{ animationDelay: "0.1s" }}>
             <CardHeader className="bg-gradient-primary text-primary-foreground">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-6 h-6" />

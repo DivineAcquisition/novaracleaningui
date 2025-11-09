@@ -49,22 +49,22 @@ export default function BookingHome() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <HomeIcon className="w-8 h-8 text-primary" />
+      <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8">
+        <Card className="shadow-xl animate-slide-in-right">
+          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
+              <HomeIcon className="w-7 h-7 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-2xl md:text-3xl font-bold">How big is your home?</CardTitle>
+            <CardTitle className="text-xl md:text-3xl font-bold">How big is your home?</CardTitle>
             <CardDescription className="text-sm md:text-base">
               Select the size that best matches your space
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 px-4 md:px-6">
             <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {HOME_SIZE_RANGES.map((size, index) => (
                 <Card
@@ -92,9 +92,9 @@ export default function BookingHome() {
                 variant="outline"
                 size="lg"
                 onClick={handleBack}
-                className="h-14"
+                className="h-12 md:h-14"
               >
-                <ArrowLeft className="mr-2 w-5 h-5" />
+                <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" />
                 Back
               </Button>
             </div>

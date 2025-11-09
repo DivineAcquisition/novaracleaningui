@@ -100,16 +100,16 @@ export default function BookingService() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4">
+      <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4">
         {/* Membership Banner */}
         {user && credits && <MembershipBanner />}
         
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8">
-            <CardTitle className="text-2xl md:text-3xl font-bold">Choose your service</CardTitle>
+        <Card className="shadow-xl animate-slide-in-right">
+          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
+            <CardTitle className="text-xl md:text-3xl font-bold">Choose your service</CardTitle>
             <CardDescription className="text-sm md:text-base">
               {hasCredits 
                 ? 'Select a service to use your membership credit'
@@ -117,8 +117,8 @@ export default function BookingService() {
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6 md:space-y-8">
-            <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
+          <CardContent className="space-y-6 md:space-y-8 px-4 md:px-6">
+            <div className="grid gap-3 md:gap-6 grid-cols-1 md:grid-cols-3">
               {SERVICES.map((service) => (
                 <Card
                   key={service.id}
@@ -214,9 +214,9 @@ export default function BookingService() {
                 variant="outline"
                 size="lg"
                 onClick={handleBack}
-                className="h-14"
+                className="h-12 md:h-14"
               >
-                <ArrowLeft className="mr-2 w-5 h-5" />
+                <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" />
                 Back
               </Button>
             </div>
