@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.send-booking-reminder-email]
 verify_jwt = false
+
+[functions.test-payment-scenarios]
+verify_jwt = false

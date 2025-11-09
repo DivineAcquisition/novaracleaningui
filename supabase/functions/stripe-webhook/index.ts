@@ -75,54 +75,73 @@ serve(async (req) => {
           .from('bookings')
           .select('*')
           .eq('payment_intent_id', paymentIntent.id)
-          .single();
+          .maybeSingle();
 
-        if (bookingFetchError || !booking) {
-          logStep("Booking not found for payment intent", { error: bookingFetchError });
+        if (bookingFetchError) {
+          logStep("Error fetching booking", { error: bookingFetchError });
           break;
         }
 
-        // Update booking status to confirmed
+        if (!booking) {
+          logStep("Booking not found for payment intent");
+          break;
+        }
+
+        // Idempotency check - if already confirmed, skip processing
+        if (booking.status === 'confirmed') {
+          logStep("Booking already confirmed - skipping webhook processing", { bookingId: booking.id });
+          break;
+        }
+
+        logStep("Processing booking confirmation", { bookingId: booking.id, currentStatus: booking.status });
+
+        // Update booking status to confirmed with optimistic locking
         const { error: updateError } = await supabase
           .from('bookings')
           .update({ status: 'confirmed' })
-          .eq('id', booking.id);
+          .eq('id', booking.id)
+          .eq('status', booking.status); // Only update if status hasn't changed
 
         if (updateError) {
           logStep("Error updating booking status", updateError);
-        } else {
-          logStep("Booking confirmed via webhook", { bookingId: booking.id });
+          break;
+        }
+        logStep("Booking confirmed via webhook", { bookingId: booking.id });
 
-          // Deduct membership credit if booking uses credit
-          if (booking.uses_credit && booking.customer_id) {
-            logStep("Deducting membership credit", { customerId: booking.customer_id });
-            
-            const { data: creditRecord, error: creditFetchError } = await supabase
+        // Deduct membership credit if booking uses credit (with idempotency and race condition checks)
+        if (booking.uses_credit && booking.customer_id) {
+          logStep("Attempting to deduct membership credit", { customerId: booking.customer_id });
+          
+          const { data: creditRecord, error: creditFetchError } = await supabase
+            .from('membership_credits')
+            .select('*')
+            .eq('customer_id', booking.customer_id)
+            .maybeSingle();
+
+          if (creditFetchError) {
+            logStep("Error fetching credit record", creditFetchError);
+          } else if (creditRecord && creditRecord.credits_remaining > 0) {
+            // Use atomic update with optimistic locking to prevent double deduction
+            const { error: creditUpdateError } = await supabase
               .from('membership_credits')
-              .select('*')
+              .update({
+                credits_used: creditRecord.credits_used + 1,
+                credits_remaining: Math.max(0, creditRecord.credits_remaining - 1),
+              })
               .eq('customer_id', booking.customer_id)
-              .single();
+              .eq('credits_remaining', creditRecord.credits_remaining); // Optimistic locking
 
-            if (!creditFetchError && creditRecord) {
-              const { error: creditUpdateError } = await supabase
-                .from('membership_credits')
-                .update({
-                  credits_used: creditRecord.credits_used + 1,
-                  credits_remaining: Math.max(0, creditRecord.credits_remaining - 1),
-                })
-                .eq('customer_id', booking.customer_id);
-
-              if (creditUpdateError) {
-                logStep("Error updating credits", creditUpdateError);
-              } else {
-                logStep("Credit deducted successfully", { 
-                  remainingCredits: creditRecord.credits_remaining - 1 
-                });
-              }
+            if (creditUpdateError) {
+              logStep("Error updating credits", creditUpdateError);
             } else {
-              logStep("No credit record found", { error: creditFetchError });
+              logStep("Credit deducted successfully", { 
+                remainingCredits: creditRecord.credits_remaining - 1 
+              });
             }
+          } else {
+            logStep("No credit available or record not found");
           }
+        }
 
           // Send confirmation emails
           logStep("Sending confirmation emails", { email: booking.email });
@@ -188,7 +207,6 @@ serve(async (req) => {
           } catch (emailError) {
             logStep("Error sending emails (non-blocking)", { error: emailError });
           }
-        }
         break;
       }
 

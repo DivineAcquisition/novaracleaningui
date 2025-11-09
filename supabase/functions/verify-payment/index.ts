@@ -50,10 +50,18 @@ serve(async (req) => {
       .from("bookings")
       .select("*")
       .eq("payment_intent_id", payment_intent_id)
-      .single();
+      .maybeSingle();
 
-    if (bookingError || !booking) {
-      logStep("Booking not found", { error: bookingError });
+    if (bookingError) {
+      logStep("Error fetching booking", { error: bookingError });
+      return new Response(
+        JSON.stringify({ error: "Error fetching booking" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
+    }
+
+    if (!booking) {
+      logStep("Booking not found");
       return new Response(
         JSON.stringify({ error: "Booking not found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
@@ -61,6 +69,23 @@ serve(async (req) => {
     }
 
     logStep("Booking found", { bookingId: booking.id, currentStatus: booking.status });
+
+    // Idempotency check - if already confirmed, don't reprocess
+    if (booking.status === 'confirmed') {
+      logStep("Booking already confirmed - skipping reprocessing");
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: paymentIntent.status,
+          message: "Booking already confirmed",
+          booking,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
 
     // Handle different payment statuses
     let newStatus = booking.status;
@@ -71,24 +96,28 @@ serve(async (req) => {
         newStatus = "confirmed";
         message = "Payment confirmed successfully";
         
-        // Deduct membership credit if booking uses credit
-        if (booking.uses_credit && booking.customer_id) {
+        // Deduct membership credit if booking uses credit (with idempotency check)
+        if (booking.uses_credit && booking.customer_id && booking.status !== 'confirmed') {
           logStep("Deducting membership credit", { customerId: booking.customer_id });
           
           const { data: creditRecord, error: creditFetchError } = await supabase
             .from("membership_credits")
             .select("*")
             .eq("customer_id", booking.customer_id)
-            .single();
+            .maybeSingle();
 
-          if (!creditFetchError && creditRecord) {
+          if (creditFetchError) {
+            logStep("Error fetching credit record", creditFetchError);
+          } else if (creditRecord && creditRecord.credits_remaining > 0) {
+            // Use atomic update to prevent race conditions
             const { error: creditUpdateError } = await supabase
               .from("membership_credits")
               .update({
                 credits_used: creditRecord.credits_used + 1,
                 credits_remaining: Math.max(0, creditRecord.credits_remaining - 1),
               })
-              .eq("customer_id", booking.customer_id);
+              .eq("customer_id", booking.customer_id)
+              .eq("credits_remaining", creditRecord.credits_remaining); // Optimistic locking
 
             if (creditUpdateError) {
               logStep("Error updating credits", creditUpdateError);
@@ -98,7 +127,7 @@ serve(async (req) => {
               });
             }
           } else {
-            logStep("No credit record found", { error: creditFetchError });
+            logStep("No credit available or record not found");
           }
         }
         break;
@@ -125,21 +154,26 @@ serve(async (req) => {
         message = `Payment status: ${paymentIntent.status}`;
     }
 
-    // Update booking status
-    const { error: updateError } = await supabase
-      .from("bookings")
-      .update({ status: newStatus })
-      .eq("id", booking.id);
+    // Update booking status only if status changed
+    if (newStatus !== booking.status) {
+      const { error: updateError } = await supabase
+        .from("bookings")
+        .update({ status: newStatus })
+        .eq("id", booking.id)
+        .eq("status", booking.status); // Optimistic locking
 
-    if (updateError) {
-      logStep("Error updating booking status", updateError);
-      throw updateError;
+      if (updateError) {
+        logStep("Error updating booking status", updateError);
+        throw updateError;
+      }
+
+      logStep("Booking updated", { bookingId: booking.id, oldStatus: booking.status, newStatus });
+    } else {
+      logStep("Booking status unchanged", { bookingId: booking.id, status: booking.status });
     }
 
-    logStep("Booking updated", { bookingId: booking.id, newStatus });
-
-    // Send confirmation email if payment succeeded
-    if (paymentIntent.status === "succeeded") {
+    // Send confirmation email if payment succeeded and not already sent
+    if (paymentIntent.status === "succeeded" && booking.status !== 'confirmed') {
       logStep("Sending confirmation emails", { email: booking.email });
       
       try {
