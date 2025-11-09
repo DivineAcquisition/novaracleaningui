@@ -4,9 +4,10 @@ import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
@@ -43,6 +44,8 @@ export default function BookingCheckout() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [stripePromise, setStripePromise] = useState<any>(null);
+  const [bookingId, setBookingId] = useState<string | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
 
   useEffect(() => {
@@ -100,10 +103,12 @@ export default function BookingCheckout() {
   const handlePaymentOptionChange = (value: 'deposit' | 'full') => {
     updateBookingData({ paymentOption: value });
     setClientSecret(null); // Reset payment intent when option changes
+    setInitError(null);
   };
 
   const handleInitializePayment = async () => {
     setIsProcessing(true);
+    setInitError(null);
     
     try {
       console.log("Creating payment intent with booking data:", bookingData);
@@ -114,7 +119,7 @@ export default function BookingCheckout() {
 
       if (error) {
         console.error("Payment intent error:", error);
-        throw error;
+        throw new Error(error.message || "Failed to initialize payment");
       }
 
       if (!data) {
@@ -132,12 +137,21 @@ export default function BookingCheckout() {
 
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
+      setBookingId(data.bookingId);
     } catch (error: any) {
       console.error("Payment initialization error:", error);
-      toast.error(error.message || "Failed to initialize payment. Please try again.");
+      const errorMessage = error.message || "Failed to initialize payment. Please try again.";
+      setInitError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleRetryPayment = () => {
+    setClientSecret(null);
+    setInitError(null);
+    handleInitializePayment();
   };
 
   const handlePaymentSuccess = () => {
@@ -321,8 +335,28 @@ export default function BookingCheckout() {
                 </Card>
               )}
 
+              {/* Initialization Error */}
+              {initError && !isProcessing && (
+                <Alert variant="destructive" className="animate-in slide-in-from-top">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Payment Setup Failed</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    <p>{initError}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRetryPayment}
+                      className="mt-2"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Try Again
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Stripe Payment Form */}
-              {stripePromise && clientSecret && paymentAmount > 0 && (
+              {stripePromise && clientSecret && paymentAmount > 0 && !initError && (
                 <Card className="border-primary/20">
                   <CardContent className="p-6">
                     <h4 className="font-semibold mb-4 flex items-center gap-2">
@@ -333,6 +367,7 @@ export default function BookingCheckout() {
                       <StripePaymentForm 
                         amount={paymentAmount}
                         onSuccess={handlePaymentSuccess}
+                        onRetry={handleRetryPayment}
                       />
                     </Elements>
                   </CardContent>
