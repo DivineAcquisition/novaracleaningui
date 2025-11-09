@@ -60,6 +60,13 @@ export default function BookingSuccess() {
     }
   }, [sessionId, paymentIntent]);
 
+  // Store guest email in localStorage for easy account creation
+  useEffect(() => {
+    if (!user && bookingData.email) {
+      localStorage.setItem('guestBookingEmail', bookingData.email);
+    }
+  }, [user, bookingData.email]);
+
   const handleReturnHome = () => {
     resetBookingData();
     navigate("/");

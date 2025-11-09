@@ -20,6 +20,15 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // Pre-fill email from guest booking if available
+  useEffect(() => {
+    const guestEmail = localStorage.getItem('guestBookingEmail');
+    if (guestEmail) {
+      setEmail(guestEmail);
+      localStorage.removeItem('guestBookingEmail');
+    }
+  }, []);
+
   useEffect(() => {
     if (user) {
       navigate("/");
