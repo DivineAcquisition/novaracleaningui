@@ -10,6 +10,8 @@ interface SubscriptionData {
   subscription_status?: string;
   plan_name?: string;
   has_payment_method?: boolean;
+  customer_id?: string;
+  subscription_id?: string;
 }
 
 interface AuthContextType {

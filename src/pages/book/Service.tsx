@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useMembershipCredits } from "@/hooks/use-membership-credits";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MembershipBanner } from "@/components/booking/MembershipBanner";
 import { Sparkles, Zap, Package, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
@@ -55,6 +58,8 @@ const ADD_ONS = [
 
 export default function BookingService() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { credits, hasCredits } = useMembershipCredits();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>(bookingData.addOns || []);
 
@@ -98,12 +103,17 @@ export default function BookingService() {
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
+      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4">
+        {/* Membership Banner */}
+        {user && credits && <MembershipBanner />}
+        
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <CardTitle className="text-2xl md:text-3xl font-bold">Choose your service</CardTitle>
             <CardDescription className="text-sm md:text-base">
-              Select the cleaning tier that fits your needs
+              {hasCredits 
+                ? 'Select a service to use your membership credit'
+                : 'Select the cleaning tier that fits your needs'}
             </CardDescription>
           </CardHeader>
           
@@ -153,6 +163,8 @@ export default function BookingService() {
                   <CardDescription>
                     {bookingData.serviceType === 'moveInOut' 
                       ? 'Fridge & Oven included. Only Windows available as add-on.'
+                      : credits
+                      ? `Member discount: ${credits.membership_plan === 'monthly' ? '20' : credits.membership_plan === 'biweekly' ? '25' : '30'}% off add-ons`
                       : 'Optional extras for your cleaning service'}
                   </CardDescription>
                 </CardHeader>

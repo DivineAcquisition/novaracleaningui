@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useMembershipCredits } from "@/hooks/use-membership-credits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, ArrowLeft, User, Mail, Phone, MapPin, DollarSign } from "lucide-react";
+import { MembershipBanner } from "@/components/booking/MembershipBanner";
+import { ArrowRight, ArrowLeft, User, Mail, Phone, MapPin, DollarSign, Gift } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { toast } from "sonner";
@@ -24,7 +28,10 @@ const BOOKING_STEPS = [
 
 export default function BookingDetails() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { credits, hasCredits } = useMembershipCredits();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
+  const [useCredit, setUseCredit] = useState(bookingData.useCredit || false);
   
   const [formData, setFormData] = useState({
     firstName: bookingData.firstName || "",
@@ -41,7 +48,7 @@ export default function BookingDetails() {
     bookingData.serviceType,
     bookingData.addOns,
     bookingData.membershipPlan,
-    bookingData.useCredit
+    useCredit
   );
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
@@ -77,7 +84,7 @@ export default function BookingDetails() {
       return;
     }
 
-    updateBookingData(formData);
+    updateBookingData({ ...formData, useCredit });
     setCurrentStep(6);
     navigate("/book/summary");
   };
@@ -91,7 +98,10 @@ export default function BookingDetails() {
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
+      <div className="container max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4">
+        {/* Membership Banner */}
+        {user && credits && <MembershipBanner />}
+        
         <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Contact Form */}
           <Card className="shadow-xl animate-fade-in">
@@ -251,6 +261,34 @@ export default function BookingDetails() {
             </CardHeader>
             
             <CardContent className="space-y-6 pt-6">
+              {/* Credit Usage Toggle for Members */}
+              {hasCredits && (
+                <Card className="bg-success/5 border-success/30">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Gift className="w-5 h-5 text-success" />
+                        <div>
+                          <p className="font-semibold">Use Membership Credit</p>
+                          <p className="text-xs text-muted-foreground">
+                            {credits?.credits_remaining} {credits?.credits_remaining === 1 ? 'credit' : 'credits'} available
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={useCredit}
+                        onCheckedChange={setUseCredit}
+                      />
+                    </div>
+                    {useCredit && (
+                      <p className="text-xs text-success">
+                        Covers up to $150 of your base price • ${(Math.min(pricing.basePrice, 150)).toFixed(2)} applied
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Service</p>
@@ -305,7 +343,7 @@ export default function BookingDetails() {
                   </div>
                 )}
 
-                {bookingData.useCredit && (
+                {useCredit && (
                   <div className="flex justify-between text-success">
                     <span>Credit Applied</span>
                     <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
