@@ -104,9 +104,22 @@ export default function Account() {
 
   const handleManageSubscription = async () => {
     try {
+      // Check if user has a Stripe customer record
+      if (!subscription?.hasCustomer) {
+        toast.error("Please complete a booking first to access the customer portal");
+        return;
+      }
+      
       await openCustomerPortal();
     } catch (error: any) {
-      toast.error(error.message || "Failed to open customer portal");
+      const errorMessage = error.message || "Failed to open customer portal";
+      
+      // Provide more specific error messages
+      if (errorMessage.includes("No Stripe customer found")) {
+        toast.error("No payment methods on file. Complete a booking to add one.");
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -147,8 +160,9 @@ export default function Account() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const upcomingBookings = bookings.filter(b => isFuture(new Date(b.service_date)) && b.status !== 'cancelled');
-  const pastBookings = bookings.filter(b => isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled');
+  const incompleteBookings = bookings.filter(b => b.status === 'pending_payment');
+  const upcomingBookings = bookings.filter(b => isFuture(new Date(b.service_date)) && b.status !== 'cancelled' && b.status !== 'pending_payment');
+  const pastBookings = bookings.filter(b => (isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled') && b.status !== 'pending_payment');
 
   if (!user) {
     return (
@@ -342,6 +356,56 @@ export default function Account() {
           </Card>
         )}
 
+        {/* Incomplete Bookings */}
+        {incompleteBookings.length > 0 && (
+          <Card className="mt-6 border-warning/50 bg-warning/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-warning" />
+                Incomplete Bookings
+              </CardTitle>
+              <CardDescription>Complete your payment to confirm these bookings</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {incompleteBookings.map((booking) => (
+                  <Alert key={booking.id} className="border-warning/50">
+                    <AlertCircle className="h-4 w-4 text-warning" />
+                    <AlertDescription>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <p className="font-semibold">
+                            {format(new Date(booking.service_date), "EEEE, MMMM d, yyyy")} at {booking.time_slot}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {booking.address}, {booking.city}, {booking.state}
+                          </p>
+                          <div className="flex gap-2">
+                            <Badge variant="outline">{booking.service_type}</Badge>
+                            <Badge variant="secondary">Payment Pending</Badge>
+                          </div>
+                        </div>
+                        <div className="text-right space-y-2">
+                          <p className="text-xl font-bold text-warning">
+                            ${(booking.total_estimate_cents / 100).toFixed(2)}
+                          </p>
+                          <Button
+                            size="sm"
+                            className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                            onClick={() => navigate(`/book/checkout?booking_id=${booking.id}`)}
+                          >
+                            Complete Payment
+                          </Button>
+                        </div>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Upcoming Services */}
         <Card className="mt-6 border-primary/20">
           <CardHeader>
@@ -349,7 +413,7 @@ export default function Account() {
               <Calendar className="w-5 h-5 text-primary" />
               Upcoming Services
             </CardTitle>
-            <CardDescription>Your scheduled cleanings</CardDescription>
+            <CardDescription>Your confirmed cleanings</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingBookings ? (
