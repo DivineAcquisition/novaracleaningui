@@ -123,7 +123,7 @@ serve(async (req) => {
       const html = await renderAsync(React.createElement(RescheduleConfirmation, emailData));
 
       await resend.emails.send({
-        from: 'Novara Cleaning <onboarding@resend.dev>',
+        from: 'Novara Cleaning <hello@notify.novaracleaning.com>',
         to: [booking.email],
         subject: 'Booking Rescheduled - Novara Cleaning',
         html,
