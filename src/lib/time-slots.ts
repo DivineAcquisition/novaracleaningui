@@ -6,6 +6,11 @@ export interface TimeSlot {
   estimatedDuration: number;
 }
 
+export function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+}
+
 export function generateTimeSlots(serviceDuration: number, serviceType: string): TimeSlot[] {
   // Base start times available (in 24hr format)
   const baseStartTimes = [8, 10, 12, 14, 16, 18];

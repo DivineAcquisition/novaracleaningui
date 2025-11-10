@@ -104,6 +104,25 @@ export default function BookingService() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4">
+        {/* New Customer Promotion Banner */}
+        {!user && (
+          <Card className="bg-gradient-to-r from-success/10 via-success/5 to-background border-2 border-success/30 shadow-lg animate-slide-in-left">
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 bg-success/20 rounded-full flex items-center justify-center">
+                  <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-success" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg md:text-xl font-bold text-success">New Customer Special!</h3>
+                  <p className="text-sm md:text-base text-foreground mt-1">
+                    Save <span className="font-bold text-success">$60</span> on your first cleaning service. No membership required!
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
         {/* Membership Banner */}
         {user && credits && <MembershipBanner />}
         

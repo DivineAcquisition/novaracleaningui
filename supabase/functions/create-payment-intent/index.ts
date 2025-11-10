@@ -40,6 +40,7 @@ const HOME_SIZE_PRICING: Record<string, number> = {
 };
 
 const DEPOSIT_AMOUNT = 3900; // $39
+const NEW_CUSTOMER_DISCOUNT = 6000; // $60
 
 // Membership discount on extras only
 const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
@@ -92,12 +93,24 @@ serve(async (req) => {
     const membershipPct = (!bookingData.useCredit && MEMBERSHIP_DISCOUNTS[membershipPlan]) ? MEMBERSHIP_DISCOUNTS[membershipPlan] : 0;
     const membershipDiscount = Math.round(extras * membershipPct);
 
+    // Check if new customer - no previous bookings
+    const { data: previousBookings } = await supabaseClient
+      .from('bookings')
+      .select('id')
+      .eq('email', bookingData.email)
+      .eq('status', 'confirmed')
+      .limit(1);
+    
+    const isNewCustomer = !previousBookings || previousBookings.length === 0;
+    const newCustomerDiscount = (isNewCustomer && membershipPlan === 'none') ? NEW_CUSTOMER_DISCOUNT : 0;
+    logStep("New customer check", { isNewCustomer, newCustomerDiscount });
+
     // Credit coverage covers up to $150 of base price
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
 
-    let totalAmount = subtotal - membershipDiscount - creditCoverage;
+    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage;
     if (totalAmount < 0) totalAmount = 0;
-    logStep("Base calculation", { subtotal, membershipDiscount, creditCoverage, totalAmount });
+    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, totalAmount });
 
     // Calculate platform fee (22%) and cleaner payout
     const platformFeePercentage = 22;

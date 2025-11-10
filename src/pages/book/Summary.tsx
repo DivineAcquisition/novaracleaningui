@@ -77,24 +77,29 @@ export default function BookingSummary() {
           </CardHeader>
           
           <CardContent className="space-y-6 md:space-y-8">
-            {/* Savings Hero Section */}
-            {(pricing.membershipDiscount > 0 || bookingData.useCredit) && (
+            {/* Savings Hero Section - Enhanced */}
+            {(pricing.membershipDiscount > 0 || bookingData.useCredit || pricing.newCustomerDiscount > 0) && (
               <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 animate-fade-in">
                 <CardHeader className="text-center pb-3 md:pb-4">
                   <div className="flex justify-center mb-2">
                     <TrendingDown className="w-8 h-8 md:w-10 md:h-10 text-green-600 dark:text-green-400" />
                   </div>
-                  <CardTitle className="text-xl md:text-2xl text-green-700 dark:text-green-400">You're Saving!</CardTitle>
+                  <CardTitle className="text-xl md:text-2xl text-green-700 dark:text-green-400">🎉 You're Saving Big!</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center space-y-3 md:space-y-4">
                   <div>
-                    <p className="text-3xl md:text-5xl font-bold text-green-600 dark:text-green-400">
-                      ${(pricing.membershipDiscount + (bookingData.useCredit ? Math.min(pricing.basePrice, 150) : 0)).toFixed(2)}
+                    <p className="text-4xl md:text-6xl font-bold text-green-600 dark:text-green-400">
+                      ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0) + (bookingData.useCredit ? Math.min(pricing.basePrice, 150) : 0)).toFixed(2)}
                     </p>
                     <p className="text-sm md:text-base text-muted-foreground mt-1">Total savings on this booking</p>
                   </div>
                   
                   <div className="flex flex-wrap gap-2 justify-center">
+                    {pricing.newCustomerDiscount > 0 && (
+                      <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs md:text-sm py-1 px-3">
+                        🎁 ${pricing.newCustomerDiscount.toFixed(2)} New Customer Discount
+                      </Badge>
+                    )}
                     {pricing.membershipDiscount > 0 && (
                       <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs md:text-sm py-1 px-3">
                         💎 ${pricing.membershipDiscount.toFixed(2)} Membership Discount
@@ -279,6 +284,12 @@ export default function BookingSummary() {
                       <span>Subtotal</span>
                       <span>${pricing.subtotal.toFixed(2)}</span>
                     </div>
+                    {pricing.newCustomerDiscount > 0 && (
+                      <div className="flex justify-between text-green-600 dark:text-green-400 text-xs md:text-sm font-semibold">
+                        <span>New Customer Discount</span>
+                        <span>-${pricing.newCustomerDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
                     {pricing.membershipDiscount > 0 && (
                       <div className="flex justify-between text-green-600 dark:text-green-400 text-xs md:text-sm">
                         <span>Membership Discount</span>

@@ -100,6 +100,8 @@ export type Database = {
           address: string
           assigned_at: string | null
           base_price_cents: number
+          bathrooms: number | null
+          bedrooms: number | null
           checkout_session_id: string | null
           city: string
           cleaner_id: string | null
@@ -108,6 +110,7 @@ export type Database = {
           created_at: string | null
           customer_id: string | null
           deposit_cents: number
+          dwelling_type: string | null
           email: string
           final_charge_cents: number | null
           first_name: string
@@ -137,6 +140,8 @@ export type Database = {
           address: string
           assigned_at?: string | null
           base_price_cents: number
+          bathrooms?: number | null
+          bedrooms?: number | null
           checkout_session_id?: string | null
           city: string
           cleaner_id?: string | null
@@ -145,6 +150,7 @@ export type Database = {
           created_at?: string | null
           customer_id?: string | null
           deposit_cents: number
+          dwelling_type?: string | null
           email: string
           final_charge_cents?: number | null
           first_name: string
@@ -174,6 +180,8 @@ export type Database = {
           address?: string
           assigned_at?: string | null
           base_price_cents?: number
+          bathrooms?: number | null
+          bedrooms?: number | null
           checkout_session_id?: string | null
           city?: string
           cleaner_id?: string | null
@@ -182,6 +190,7 @@ export type Database = {
           created_at?: string | null
           customer_id?: string | null
           deposit_cents?: number
+          dwelling_type?: string | null
           email?: string
           final_charge_cents?: number | null
           first_name?: string

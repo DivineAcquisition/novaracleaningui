@@ -156,7 +156,13 @@ export default function BookingCheckout() {
 
   const handlePaymentSuccess = () => {
     toast.success("Payment successful!");
-    navigate("/book/success");
+    // Store booking ID in booking data for additional details page
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentIntent = urlParams.get('payment_intent');
+    if (bookingId) {
+      updateBookingData({ bookingId });
+    }
+    navigate("/book/additional-details?booking_id=" + bookingId);
   };
 
   // Auto-initialize payment when component mounts

@@ -6,6 +6,8 @@ import { useMembershipCredits } from "@/hooks/use-membership-credits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { US_STATES } from "@/lib/us-states";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
@@ -212,14 +214,18 @@ export default function BookingDetails() {
 
                   <div className="space-y-2">
                     <Label htmlFor="state">State</Label>
-                    <Input
-                      id="state"
-                      value={formData.state}
-                      onChange={(e) => handleChange("state", e.target.value)}
-                      className="h-12"
-                      placeholder="CA"
-                      maxLength={2}
-                    />
+                    <Select value={formData.state} onValueChange={(value) => handleChange("state", value)}>
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {US_STATES.map((state) => (
+                          <SelectItem key={state.value} value={state.value}>
+                            {state.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -289,6 +295,25 @@ export default function BookingDetails() {
                 </Card>
               )}
 
+              {/* Show savings banner if new customer or member */}
+              {(pricing.newCustomerDiscount > 0 || pricing.membershipDiscount > 0) && (
+                <div className="bg-success/10 border border-success/30 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-success">
+                    <Gift className="w-5 h-5" />
+                    <p className="font-bold text-lg">You're Saving!</p>
+                  </div>
+                  <p className="text-2xl font-bold text-success">
+                    ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0)).toFixed(2)}
+                  </p>
+                  {pricing.newCustomerDiscount > 0 && (
+                    <p className="text-xs text-muted-foreground">New customer discount: ${pricing.newCustomerDiscount}</p>
+                  )}
+                  {pricing.membershipDiscount > 0 && (
+                    <p className="text-xs text-muted-foreground">Member discount: ${pricing.membershipDiscount.toFixed(2)}</p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Service</p>
@@ -335,6 +360,13 @@ export default function BookingDetails() {
                   <span>Subtotal</span>
                   <span>${pricing.subtotal.toFixed(2)}</span>
                 </div>
+
+                {pricing.newCustomerDiscount > 0 && (
+                  <div className="flex justify-between text-success">
+                    <span>New Customer Discount</span>
+                    <span>-${pricing.newCustomerDiscount.toFixed(2)}</span>
+                  </div>
+                )}
 
                 {pricing.membershipDiscount > 0 && (
                   <div className="flex justify-between text-success">

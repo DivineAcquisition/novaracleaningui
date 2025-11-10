@@ -59,7 +59,6 @@ export default function BookingSuccess() {
     }
   }, []);
 
-  // Verify payment on mount if payment_intent is present
   useEffect(() => {
     const verifyPayment = async () => {
       if (!paymentIntent) {
@@ -85,6 +84,14 @@ export default function BookingSuccess() {
           if (data.success) {
             setPaymentVerified(true);
             toast.success("Payment confirmed!");
+            
+            // Check if additional details are already filled
+            const bookingIdFromUrl = searchParams.get("booking_id");
+            if (bookingIdFromUrl && data.booking && !data.booking.bedrooms) {
+              // Redirect to additional details page
+              navigate(`/book/additional-details?booking_id=${bookingIdFromUrl}`);
+              return;
+            }
           } else {
             setVerificationError(data.message || "Payment verification incomplete");
             if (data.status === 'processing') {

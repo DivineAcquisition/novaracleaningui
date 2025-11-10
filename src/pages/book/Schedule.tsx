@@ -11,7 +11,7 @@ import { Clock, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { generateTimeSlots, calculateServiceDuration } from "@/lib/time-slots";
+import { generateTimeSlots, calculateServiceDuration, isWeekend } from "@/lib/time-slots";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { HOME_SIZE_RANGES, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
@@ -75,8 +75,8 @@ export default function BookingSchedule() {
   // Generate time slots based on service duration
   const timeSlots = generateTimeSlots(serviceDuration, bookingData.serviceType);
 
-  // Minimum date is 2 days from now
-  const minDate = addDays(new Date(), 2);
+  // Minimum date is 3 days from now, and we don't work weekends
+  const minDate = addDays(new Date(), 3);
 
   // Check credit availability
   useEffect(() => {
@@ -226,11 +226,20 @@ export default function BookingSchedule() {
 
             {/* Horizontal Date Scroller */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <h3 className="text-base md:text-xl font-semibold">Select a date</h3>
+              <div>
+                <h3 className="text-base md:text-xl font-semibold">Select a date</h3>
+                <p className="text-sm text-muted-foreground mt-1">We're closed on weekends. Book at least 3 days in advance.</p>
+              </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
                 <div className="flex gap-2 md:gap-3 p-3 md:p-4">
                   {Array.from({ length: 30 }, (_, i) => {
                     const date = addDays(minDate, i);
+                    
+                    // Skip weekends - we're closed Saturday and Sunday
+                    if (isWeekend(date)) {
+                      return null;
+                    }
+                    
                     const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
                     
                     return (

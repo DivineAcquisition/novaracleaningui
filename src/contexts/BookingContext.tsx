@@ -20,6 +20,10 @@ export interface BookingData {
   customerId?: string;
   addressId?: string;
   paymentOption: 'deposit' | 'full';
+  bedrooms?: number;
+  bathrooms?: number;
+  dwellingType?: string;
+  bookingId?: string;
 }
 
 interface BookingContextType {

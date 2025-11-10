@@ -12,6 +12,7 @@ export const HOURLY_RATE = 75;
 export const DEPOSIT_AMOUNT = 39;
 export const OVERTIME_RATE = 75;
 export const OVERTIME_INCREMENT = 0.5;
+export const NEW_CUSTOMER_DISCOUNT = 60;
 
 export const HOME_SIZE_RANGES: HomeSizeRange[] = [
   {
@@ -155,6 +156,7 @@ export interface PricingCalculation {
   addOnsTotal: number;
   subtotal: number;
   membershipDiscount: number;
+  newCustomerDiscount: number;
   total: number;
   deposit: number;
   balanceDue: number;
@@ -164,6 +166,7 @@ export interface PricingCalculation {
 export interface FullPaymentCalculation {
   originalTotal: number;
   discount: number;
+  newCustomerDiscount: number;
   finalAmount: number;
   savings: number;
 }
@@ -173,18 +176,21 @@ export function calculateFullPaymentWithDiscount(
   serviceType: string,
   addOns: string[] = [],
   membershipPlan: string = 'none',
-  useCredit: boolean = false
+  useCredit: boolean = false,
+  isNewCustomer: boolean = false
 ): FullPaymentCalculation {
-  const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit);
+  const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer);
   const originalTotal = pricing.total;
   const discount = Math.round(originalTotal * 0.10 * 100) / 100; // 10% discount
-  const finalAmount = originalTotal - discount;
+  const newCustomerDiscount = isNewCustomer && membershipPlan === 'none' ? NEW_CUSTOMER_DISCOUNT : 0;
+  const finalAmount = originalTotal - discount - newCustomerDiscount;
   
   return {
     originalTotal,
     discount,
+    newCustomerDiscount,
     finalAmount,
-    savings: discount,
+    savings: discount + newCustomerDiscount,
   };
 }
 
@@ -193,7 +199,8 @@ export function calculatePrice(
   serviceType: string,
   addOns: string[] = [],
   membershipPlan: string = 'none',
-  useCredit: boolean = false
+  useCredit: boolean = false,
+  isNewCustomer: boolean = false
 ): PricingCalculation {
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
   if (!homeSize) {
@@ -203,6 +210,7 @@ export function calculatePrice(
       addOnsTotal: 0,
       subtotal: 0,
       membershipDiscount: 0,
+      newCustomerDiscount: 0,
       total: 0,
       deposit: DEPOSIT_AMOUNT,
       balanceDue: 0,
@@ -238,6 +246,9 @@ export function calculatePrice(
   const extrasAmount = serviceAddition + addOnsTotal;
   const membershipDiscount = membership && !useCredit ? extrasAmount * membership.discount : 0;
   
+  // New customer discount (only for non-members)
+  const newCustomerDiscount = isNewCustomer && membershipPlan === 'none' ? NEW_CUSTOMER_DISCOUNT : 0;
+  
   // If using credit, base price is covered (up to 2 hours worth = $150)
   const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;
   
@@ -245,7 +256,7 @@ export function calculatePrice(
   const deposit = useCredit ? 0 : DEPOSIT_AMOUNT;
   
   // Total calculation
-  const total = subtotal - membershipDiscount - creditCoverage;
+  const total = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage;
   const balanceDue = Math.max(0, total - deposit);
   
   return {
@@ -254,6 +265,7 @@ export function calculatePrice(
     addOnsTotal,
     subtotal,
     membershipDiscount,
+    newCustomerDiscount,
     total,
     deposit: useCredit ? 0 : DEPOSIT_AMOUNT,
     balanceDue,
