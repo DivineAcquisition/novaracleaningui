@@ -57,7 +57,7 @@ export default function CleanerDashboard() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      navigate("/cleaner/auth");
       return;
     }
     fetchCleanerData();

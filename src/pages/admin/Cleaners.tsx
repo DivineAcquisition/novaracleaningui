@@ -102,7 +102,7 @@ export default function AdminCleaners() {
             firstName: newCleaner.firstName,
             lastName: newCleaner.lastName,
             email: newCleaner.email,
-            onboardingUrl: `${window.location.origin}/admin/cleaners`,
+            onboardingUrl: `${window.location.origin}/cleaner/auth`,
           },
         },
       });

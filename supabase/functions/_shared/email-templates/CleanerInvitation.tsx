@@ -49,10 +49,10 @@ export const CleanerInvitation = ({
         </Text>
 
         <Text style={styles.listItem}>
-          1. Complete your Stripe Connect onboarding to receive payouts
+          1. Click the button below to create your account
         </Text>
         <Text style={styles.listItem}>
-          2. Set up your profile and service areas
+          2. Complete your Stripe Connect onboarding to receive payouts
         </Text>
         <Text style={styles.listItem}>
           3. Start receiving booking assignments
@@ -60,7 +60,7 @@ export const CleanerInvitation = ({
 
         <Section style={styles.buttonSection}>
           <Button href={onboardingUrl} style={styles.button}>
-            Complete Onboarding
+            Create Your Account
           </Button>
         </Section>
 

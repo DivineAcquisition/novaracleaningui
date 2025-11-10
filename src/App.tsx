@@ -24,6 +24,7 @@ import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
+import CleanerAuth from "./pages/cleaner/Auth";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/book/success" element={<BookingSuccess />} />
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<AdminCleaners />} />
+              <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
