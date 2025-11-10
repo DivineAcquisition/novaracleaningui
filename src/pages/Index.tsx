@@ -7,36 +7,35 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 import { User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown, Tag } from "lucide-react";
 import logo from "@/assets/logo.png";
-
 const Index = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-  const { updateBookingData } = useBooking();
+  const {
+    user,
+    signOut
+  } = useAuth();
+  const {
+    updateBookingData
+  } = useBooking();
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-
   const handleSignOut = async () => {
     await signOut();
   };
-
   const handleStartBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (zipCode.length !== 5) {
       return;
     }
-
     setIsValidating(true);
-    
+
     // Simulate validation
     await new Promise(resolve => setTimeout(resolve, 500));
-    
-    updateBookingData({ zipCode });
+    updateBookingData({
+      zipCode
+    });
     navigate("/book/home");
   };
-
-  return (
-    <div className="min-h-screen bg-gradient-hero">
+  return <div className="min-h-screen bg-gradient-hero">
       {/* Header */}
       <header className="container mx-auto px-4 py-4 md:py-6">
         <div className="flex justify-between items-center gap-2">
@@ -45,37 +44,17 @@ const Index = () => {
             <span className="text-base md:text-xl font-bold truncate">NovaraCleaning</span>
           </div>
           
-          {user ? (
-            <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate("/account")}
-                className="h-9 md:h-10"
-              >
+          {user ? <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+              <Button variant="outline" size="sm" onClick={() => navigate("/account")} className="h-9 md:h-10">
                 <User className="w-4 h-4 md:mr-2" />
                 <span className="hidden md:inline">Account</span>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSignOut}
-                className="h-9 md:h-10"
-                aria-label="Sign out"
-              >
+              <Button variant="ghost" size="sm" onClick={handleSignOut} className="h-9 md:h-10" aria-label="Sign out">
                 <LogOut className="w-4 h-4" />
               </Button>
-            </div>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/auth")}
-              className="h-9 md:h-10 flex-shrink-0"
-            >
+            </div> : <Button variant="outline" size="sm" onClick={() => navigate("/auth")} className="h-9 md:h-10 flex-shrink-0">
               Sign In
-            </Button>
-          )}
+            </Button>}
         </div>
       </header>
 
@@ -97,7 +76,7 @@ const Index = () => {
           <div className="space-y-4">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
               Book Your Cleaning
-              <span className="block text-primary mt-2">In Minutes</span>
+              <span className="block text-primary mt-2 font-bold text-5xl">With Only $39 Today</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground">
@@ -113,29 +92,13 @@ const Index = () => {
                   <label htmlFor="zipCode" className="text-sm font-medium text-left block">
                     Enter Your ZIP Code
                   </label>
-                  <Input
-                    id="zipCode"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={5}
-                    placeholder="12345"
-                    value={zipCode}
-                    onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ''))}
-                    className="h-14 text-lg text-center"
-                    autoFocus
-                  />
+                  <Input id="zipCode" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={5} placeholder="12345" value={zipCode} onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} className="h-14 text-lg text-center" autoFocus />
                   <p className="text-xs text-muted-foreground">
                     We'll check if we service your area
                   </p>
                 </div>
 
-                <Button
-                  type="submit"
-                  size="lg"
-                  disabled={zipCode.length !== 5 || isValidating}
-                  className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
-                >
+                <Button type="submit" size="lg" disabled={zipCode.length !== 5 || isValidating} className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary">
                   {isValidating ? "Checking..." : "Continue"}
                   <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                 </Button>
@@ -181,11 +144,7 @@ const Index = () => {
                     Perfect for regular cleaning schedules.
                   </p>
                 </div>
-                <Button
-                  onClick={() => navigate("/membership")}
-                  size="lg"
-                  className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12"
-                >
+                <Button onClick={() => navigate("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
                   Learn More
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
@@ -194,8 +153,6 @@ const Index = () => {
           </Card>
         </div>
       </section>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
