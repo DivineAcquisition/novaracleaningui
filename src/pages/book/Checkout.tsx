@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
@@ -215,6 +215,24 @@ export default function BookingCheckout() {
           </CardHeader>
           
           <CardContent className="space-y-8">
+            {/* New Customer Discount Banner */}
+            {isNewCustomer && !user && (
+              <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center">
+                      <Gift className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-green-700">New Customer Special!</p>
+                      <p className="text-sm text-green-600">You're saving $60 on this booking 🎉</p>
+                    </div>
+                  </div>
+                  <div className="text-2xl font-bold text-green-700">-$60</div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Order Summary */}
             <div className="space-y-6">
               <h3 className="text-xl font-bold">Order Summary</h3>
@@ -282,7 +300,7 @@ export default function BookingCheckout() {
                       onValueChange={handlePaymentOptionChange}
                       className="space-y-4"
                     >
-                      {/* Deposit Option */}
+                       {/* Deposit Option */}
                       <div className={cn(
                         "relative flex items-start space-x-3 rounded-lg border-2 p-4 transition-all cursor-pointer hover:border-primary/50",
                         bookingData.paymentOption === 'deposit' 
@@ -291,7 +309,7 @@ export default function BookingCheckout() {
                       )}>
                         <RadioGroupItem value="deposit" id="deposit" className="mt-1" />
                         <Label htmlFor="deposit" className="flex-1 cursor-pointer">
-                          <div className="space-y-1">
+                          <div className="space-y-2">
                             <div className="flex items-center justify-between">
                               <span className="font-semibold">Pay Deposit Now</span>
                               <span className="text-lg font-bold text-primary">
@@ -301,6 +319,22 @@ export default function BookingCheckout() {
                             <p className="text-sm text-muted-foreground">
                               Balance due after cleaning: ${depositPricing.balanceDue.toFixed(2)}
                             </p>
+                            {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0) && (
+                              <div className="text-xs text-success space-y-0.5 pt-1 border-t border-border/50 mt-2">
+                                {depositPricing.membershipDiscount > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Membership discount applied:</span>
+                                    <span className="font-medium">-${depositPricing.membershipDiscount.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                {depositPricing.newCustomerDiscount > 0 && (
+                                  <div className="flex justify-between text-green-600">
+                                    <span>New customer discount:</span>
+                                    <span className="font-medium">-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </Label>
                       </div>
@@ -319,7 +353,7 @@ export default function BookingCheckout() {
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold">Pay in Full</span>
                                 <span className="text-xs font-semibold px-2 py-1 bg-success/20 text-success rounded-full">
-                                  Save 10%
+                                  Save {fullPaymentPricing.newCustomerDiscount > 0 ? 'Up To ' : ''}10%{fullPaymentPricing.newCustomerDiscount > 0 ? ' + $60' : ''}
                                 </span>
                               </div>
                               <span className="text-lg font-bold text-primary">
@@ -332,12 +366,22 @@ export default function BookingCheckout() {
                                 <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
                               </div>
                               <div className="flex justify-between text-success font-medium">
-                                <span>10% Discount:</span>
+                                <span>10% Full Payment Discount:</span>
                                 <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
                               </div>
-                              <div className="flex items-center gap-1 text-success font-medium pt-1">
-                                <Zap className="w-4 h-4" />
-                                <span>You save ${fullPaymentPricing.savings.toFixed(2)}!</span>
+                              {fullPaymentPricing.newCustomerDiscount > 0 && (
+                                <div className="flex justify-between text-green-600 font-medium">
+                                  <span>New Customer Discount:</span>
+                                  <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
+                                </div>
+                              )}
+                              <Separator className="my-2" />
+                              <div className="flex items-center justify-between gap-1 text-success font-bold pt-1">
+                                <span className="flex items-center gap-1">
+                                  <Zap className="w-4 h-4" />
+                                  Total Savings:
+                                </span>
+                                <span className="text-lg">${fullPaymentPricing.savings.toFixed(2)}</span>
                               </div>
                             </div>
                           </div>
