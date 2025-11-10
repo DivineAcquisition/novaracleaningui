@@ -98,9 +98,13 @@ export type Database = {
         Row: {
           add_ons: string[] | null
           address: string
+          assigned_at: string | null
           base_price_cents: number
           checkout_session_id: string | null
           city: string
+          cleaner_id: string | null
+          cleaner_payout_cents: number | null
+          completed_at: string | null
           created_at: string | null
           customer_id: string | null
           deposit_cents: number
@@ -114,7 +118,9 @@ export type Database = {
           membership_plan: string | null
           payment_intent_id: string | null
           payment_option: string | null
+          payout_status: string | null
           phone: string
+          platform_fee_cents: number | null
           service_date: string
           service_type: string
           state: string
@@ -129,9 +135,13 @@ export type Database = {
         Insert: {
           add_ons?: string[] | null
           address: string
+          assigned_at?: string | null
           base_price_cents: number
           checkout_session_id?: string | null
           city: string
+          cleaner_id?: string | null
+          cleaner_payout_cents?: number | null
+          completed_at?: string | null
           created_at?: string | null
           customer_id?: string | null
           deposit_cents: number
@@ -145,7 +155,9 @@ export type Database = {
           membership_plan?: string | null
           payment_intent_id?: string | null
           payment_option?: string | null
+          payout_status?: string | null
           phone: string
+          platform_fee_cents?: number | null
           service_date: string
           service_type: string
           state: string
@@ -160,9 +172,13 @@ export type Database = {
         Update: {
           add_ons?: string[] | null
           address?: string
+          assigned_at?: string | null
           base_price_cents?: number
           checkout_session_id?: string | null
           city?: string
+          cleaner_id?: string | null
+          cleaner_payout_cents?: number | null
+          completed_at?: string | null
           created_at?: string | null
           customer_id?: string | null
           deposit_cents?: number
@@ -176,7 +192,9 @@ export type Database = {
           membership_plan?: string | null
           payment_intent_id?: string | null
           payment_option?: string | null
+          payout_status?: string | null
           phone?: string
+          platform_fee_cents?: number | null
           service_date?: string
           service_type?: string
           state?: string
@@ -187,6 +205,83 @@ export type Database = {
           updated_at?: string | null
           uses_credit?: boolean | null
           zip_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_cleaner_id_fkey"
+            columns: ["cleaner_id"]
+            isOneToOne: false
+            referencedRelation: "cleaners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cleaners: {
+        Row: {
+          activated_at: string | null
+          available_for_bookings: boolean | null
+          completed_bookings: number | null
+          created_at: string
+          email: string
+          first_name: string
+          id: string
+          invited_at: string | null
+          last_name: string
+          max_weekly_bookings: number | null
+          onboarding_complete: boolean | null
+          payouts_enabled: boolean | null
+          phone: string
+          service_zip_codes: string[] | null
+          status: string
+          stripe_account_id: string | null
+          total_bookings: number | null
+          total_earnings_cents: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          available_for_bookings?: boolean | null
+          completed_bookings?: number | null
+          created_at?: string
+          email: string
+          first_name: string
+          id?: string
+          invited_at?: string | null
+          last_name: string
+          max_weekly_bookings?: number | null
+          onboarding_complete?: boolean | null
+          payouts_enabled?: boolean | null
+          phone: string
+          service_zip_codes?: string[] | null
+          status?: string
+          stripe_account_id?: string | null
+          total_bookings?: number | null
+          total_earnings_cents?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          available_for_bookings?: boolean | null
+          completed_bookings?: number | null
+          created_at?: string
+          email?: string
+          first_name?: string
+          id?: string
+          invited_at?: string | null
+          last_name?: string
+          max_weekly_bookings?: number | null
+          onboarding_complete?: boolean | null
+          payouts_enabled?: boolean | null
+          phone?: string
+          service_zip_codes?: string[] | null
+          status?: string
+          stripe_account_id?: string | null
+          total_bookings?: number | null
+          total_earnings_cents?: number | null
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -303,6 +398,72 @@ export type Database = {
           subscription_id?: string
         }
         Relationships: []
+      }
+      payouts: {
+        Row: {
+          booking_id: string
+          cleaner_id: string
+          cleaner_payout_cents: number
+          created_at: string
+          failed_reason: string | null
+          id: string
+          notes: string | null
+          platform_fee_cents: number
+          processed_at: string | null
+          retry_count: number | null
+          status: string
+          stripe_account_id: string
+          stripe_transfer_id: string | null
+          total_booking_amount_cents: number
+        }
+        Insert: {
+          booking_id: string
+          cleaner_id: string
+          cleaner_payout_cents: number
+          created_at?: string
+          failed_reason?: string | null
+          id?: string
+          notes?: string | null
+          platform_fee_cents: number
+          processed_at?: string | null
+          retry_count?: number | null
+          status?: string
+          stripe_account_id: string
+          stripe_transfer_id?: string | null
+          total_booking_amount_cents: number
+        }
+        Update: {
+          booking_id?: string
+          cleaner_id?: string
+          cleaner_payout_cents?: number
+          created_at?: string
+          failed_reason?: string | null
+          id?: string
+          notes?: string | null
+          platform_fee_cents?: number
+          processed_at?: string | null
+          retry_count?: number | null
+          status?: string
+          stripe_account_id?: string
+          stripe_transfer_id?: string | null
+          total_booking_amount_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_cleaner_id_fkey"
+            columns: ["cleaner_id"]
+            isOneToOne: false
+            referencedRelation: "cleaners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pricing_config: {
         Row: {

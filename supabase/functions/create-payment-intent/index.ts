@@ -99,6 +99,12 @@ serve(async (req) => {
     if (totalAmount < 0) totalAmount = 0;
     logStep("Base calculation", { subtotal, membershipDiscount, creditCoverage, totalAmount });
 
+    // Calculate platform fee (22%) and cleaner payout
+    const platformFeePercentage = 22;
+    const platformFeeCents = Math.round(totalAmount * (platformFeePercentage / 100));
+    const cleanerPayoutCents = totalAmount - platformFeeCents;
+    logStep("Payout calculation", { platformFeeCents, cleanerPayoutCents });
+
     // Determine amount to charge based on payment option
     let amountToCharge = 0;
     let fullPaymentDiscount = 0;
@@ -188,6 +194,9 @@ serve(async (req) => {
         status: amountToCharge === 0 ? 'confirmed' : 'pending_payment',
         payment_option: bookingData.paymentOption,
         full_payment_discount: fullPaymentDiscount,
+        platform_fee_cents: platformFeeCents,
+        cleaner_payout_cents: cleanerPayoutCents,
+        payout_status: 'pending',
       })
       .select()
       .single();

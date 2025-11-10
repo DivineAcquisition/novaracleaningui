@@ -38,3 +38,21 @@ verify_jwt = false
 
 [functions.reschedule-booking]
 verify_jwt = false
+
+[functions.onboard-cleaner]
+verify_jwt = true
+
+[functions.check-cleaner-status]
+verify_jwt = false
+
+[functions.assign-cleaner]
+verify_jwt = false
+
+[functions.complete-booking]
+verify_jwt = true
+
+[functions.process-payout]
+verify_jwt = false
+
+[functions.send-membership-email]
+verify_jwt = false

@@ -207,6 +207,24 @@ serve(async (req) => {
           } catch (emailError) {
             logStep("Error sending emails (non-blocking)", { error: emailError });
           }
+
+          // Auto-assign cleaner if not already assigned
+          if (!booking.cleaner_id) {
+            try {
+              logStep("Triggering auto-assignment");
+              const assignResponse = await supabase.functions.invoke('assign-cleaner', {
+                body: { bookingId: booking.id },
+              });
+              
+              if (assignResponse.error) {
+                logStep("Auto-assignment failed (non-blocking)", { error: assignResponse.error });
+              } else {
+                logStep("Cleaner assigned successfully", assignResponse.data);
+              }
+            } catch (assignError) {
+              logStep("Error auto-assigning cleaner (non-blocking)", { error: assignError });
+            }
+          }
         break;
       }
 
@@ -397,6 +415,45 @@ serve(async (req) => {
               plan: planLabels[creditsData.membership_plan as string] || creditsData.membership_plan,
             });
           }
+        }
+        break;
+      }
+
+      case 'account.updated': {
+        const account = event.data.object as Stripe.Account;
+        const accountId = account.id;
+        logStep("Processing account update", { accountId });
+        
+        // Find cleaner with this Stripe account
+        const { data: cleaner } = await supabase
+          .from("cleaners")
+          .select("*")
+          .eq("stripe_account_id", accountId)
+          .maybeSingle();
+        
+        if (cleaner) {
+          const onboardingComplete = account.details_submitted || false;
+          const payoutsEnabled = account.payouts_enabled || false;
+          
+          logStep("Updating cleaner status", { 
+            cleanerId: cleaner.id, 
+            onboardingComplete, 
+            payoutsEnabled 
+          });
+          
+          await supabase
+            .from("cleaners")
+            .update({
+              onboarding_complete: onboardingComplete,
+              payouts_enabled: payoutsEnabled,
+              status: onboardingComplete ? 'active' : 'pending',
+              activated_at: onboardingComplete && !cleaner.activated_at ? new Date().toISOString() : cleaner.activated_at,
+            })
+            .eq("id", cleaner.id);
+            
+          logStep("Cleaner status updated");
+        } else {
+          logStep("No cleaner found for account", { accountId });
         }
         break;
       }
