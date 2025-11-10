@@ -1,23 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useMembershipCredits } from "@/hooks/use-membership-credits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { US_STATES } from "@/lib/us-states";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { MembershipBanner } from "@/components/booking/MembershipBanner";
-import { ArrowRight, ArrowLeft, User, Mail, Phone, MapPin, DollarSign, Gift } from "lucide-react";
+import { ArrowRight, ArrowLeft, User, Mail, Phone, Sparkles } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { toast } from "sonner";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { calculatePrice } from "@/lib/pricing-system";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -30,19 +23,13 @@ const BOOKING_STEPS = [
 
 export default function BookingDetails() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { credits, hasCredits } = useMembershipCredits();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
-  const [useCredit, setUseCredit] = useState(bookingData.useCredit || false);
   
   const [formData, setFormData] = useState({
     firstName: bookingData.firstName || "",
     lastName: bookingData.lastName || "",
     email: bookingData.email || "",
     phone: bookingData.phone || "",
-    address: bookingData.address || "",
-    city: bookingData.city || "",
-    state: bookingData.state || "",
   });
 
   const pricing = calculatePrice(
@@ -50,12 +37,8 @@ export default function BookingDetails() {
     bookingData.serviceType,
     bookingData.addOns,
     bookingData.membershipPlan,
-    useCredit
+    bookingData.useCredit
   );
-
-  const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
-  const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
-  const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
@@ -64,13 +47,13 @@ export default function BookingDetails() {
       navigate("/book/schedule");
     },
     onSwipeLeft: () => {
-      if (formData.firstName && formData.lastName && formData.email && formData.phone && formData.address) {
+      if (formData.firstName && formData.lastName && formData.email && formData.phone) {
         updateBookingData(formData);
         setCurrentStep(6);
-        navigate("/book/summary");
+        navigate("/book/checkout");
       }
     },
-    canSwipeLeft: !!(formData.firstName && formData.lastName && formData.email && formData.phone && formData.address),
+    canSwipeLeft: !!(formData.firstName && formData.lastName && formData.email && formData.phone),
     step: 5,
   });
 
@@ -81,14 +64,14 @@ export default function BookingDetails() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone || !formData.address) {
-      toast.error("Please fill in all required fields");
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
+      toast.error("Please fill in all fields");
       return;
     }
 
-    updateBookingData({ ...formData, useCredit });
+    updateBookingData(formData);
     setCurrentStep(6);
-    navigate("/book/summary");
+    navigate("/book/checkout");
   };
 
   const handleBack = () => {
@@ -97,333 +80,146 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4">
-        {/* Membership Banner */}
-        {user && credits && <MembershipBanner />}
-        
-        <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
-          {/* Contact Form */}
-          <Card className="shadow-xl animate-slide-in-left">
-            <CardHeader className="space-y-2 px-4 md:px-6">
-              <CardTitle className="text-lg md:text-2xl font-bold">Your details</CardTitle>
-              <CardDescription className="text-sm md:text-base">
-                Please provide your contact information
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent className="px-4 md:px-6">
-              <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-                <div className="grid gap-4 md:gap-6 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">
-                      First Name <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="firstName"
-                        value={formData.firstName}
-                        onChange={(e) => handleChange("firstName", e.target.value)}
-                        className="pl-10 h-12"
-                        placeholder="John"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">
-                      Last Name <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="lastName"
-                        value={formData.lastName}
-                        onChange={(e) => handleChange("lastName", e.target.value)}
-                        className="pl-10 h-12"
-                        placeholder="Doe"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">
-                    Email <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
-                      className="pl-10 h-12"
-                      placeholder="john@example.com"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">
-                    Phone Number <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => handleChange("phone", e.target.value)}
-                      className="pl-10 h-12"
-                      placeholder="(555) 123-4567"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">
-                    Street Address <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) => handleChange("address", e.target.value)}
-                      className="pl-10 h-12"
-                      placeholder="123 Main Street"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input
-                      id="city"
-                      value={formData.city}
-                      onChange={(e) => handleChange("city", e.target.value)}
-                      className="h-12"
-                      placeholder="San Francisco"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
-                    <Select value={formData.state} onValueChange={(value) => handleChange("state", value)}>
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Select state" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {US_STATES.map((state) => (
-                          <SelectItem key={state.value} value={state.value}>
-                            {state.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Desktop Navigation - Hidden on Mobile */}
-                <div className="hidden md:flex gap-4 pt-6">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    onClick={handleBack}
-                    className="h-12 md:h-14"
-                  >
-                    <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" />
-                    Back
-                  </Button>
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="flex-1 h-12 md:h-14 text-sm md:text-base font-semibold"
-                  >
-                    Continue to Summary
-                    <ArrowRight className="ml-2 w-4 h-4 md:w-5 md:h-5" />
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* Pricing Summary - FIRST TIME SHOWING PRICES */}
-          <Card className="shadow-xl border-2 border-primary/20 lg:sticky lg:top-8 h-fit animate-slide-in-right" style={{ animationDelay: "0.1s" }}>
-            <CardHeader className="bg-gradient-primary text-primary-foreground">
-              <div className="flex items-center gap-2">
-                <DollarSign className="w-6 h-6" />
-                <CardTitle className="text-2xl font-bold">Pricing Summary</CardTitle>
+      <div className="container max-w-2xl mx-auto px-3 md:px-4 py-4 md:py-8">
+        {/* Savings Banner */}
+        {(pricing.newCustomerDiscount > 0 || pricing.membershipDiscount > 0) && (
+          <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 shadow-xl mb-6 animate-fade-in">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <Sparkles className="w-6 h-6 text-green-600 dark:text-green-400" />
+                <h3 className="text-xl font-bold text-green-700 dark:text-green-400">You're Saving Big!</h3>
               </div>
-              <CardDescription className="text-primary-foreground/90">
-                See your total costs
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent className="space-y-6 pt-6">
-              {/* Credit Usage Toggle for Members */}
-              {hasCredits && (
-                <Card className="bg-success/5 border-success/30">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Gift className="w-5 h-5 text-success" />
-                        <div>
-                          <p className="font-semibold">Use Membership Credit</p>
-                          <p className="text-xs text-muted-foreground">
-                            {credits?.credits_remaining} {credits?.credits_remaining === 1 ? 'credit' : 'credits'} available
-                          </p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={useCredit}
-                        onCheckedChange={setUseCredit}
-                      />
-                    </div>
-                    {useCredit && (
-                      <p className="text-xs text-success">
-                        Covers up to $150 of your base price • ${(Math.min(pricing.basePrice, 150)).toFixed(2)} applied
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Show savings banner if new customer or member */}
-              {(pricing.newCustomerDiscount > 0 || pricing.membershipDiscount > 0) && (
-                <div className="bg-success/10 border border-success/30 rounded-lg p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-success">
-                    <Gift className="w-5 h-5" />
-                    <p className="font-bold text-lg">You're Saving!</p>
-                  </div>
-                  <p className="text-2xl font-bold text-success">
-                    ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0)).toFixed(2)}
-                  </p>
-                  {pricing.newCustomerDiscount > 0 && (
-                    <p className="text-xs text-muted-foreground">New customer discount: ${pricing.newCustomerDiscount}</p>
-                  )}
-                  {pricing.membershipDiscount > 0 && (
-                    <p className="text-xs text-muted-foreground">Member discount: ${pricing.membershipDiscount.toFixed(2)}</p>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Service</p>
-                  <p className="font-medium">{serviceTier?.label} • {homeSize?.label}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{pricing.hours} hours @ $75/hr</p>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Base Price</span>
-                    <span className="font-medium">${pricing.basePrice.toFixed(2)}</span>
-                  </div>
-                  
-                  {pricing.serviceAddition > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{serviceTier?.label} Addition</span>
-                      <span className="font-medium">+${pricing.serviceAddition.toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  {pricing.addOnsTotal > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Add-ons</span>
-                      <span className="font-medium">+${pricing.addOnsTotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  {bookingData.addOns.length > 0 && (
-                    <div className="pl-4 space-y-1">
-                      {bookingData.addOns.map(addon => (
-                        <p key={addon} className="text-xs text-muted-foreground">
-                          • {ADD_ONS[addon as keyof typeof ADD_ONS]?.label}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                <div className="flex justify-between text-lg font-semibold">
-                  <span>Subtotal</span>
-                  <span>${pricing.subtotal.toFixed(2)}</span>
-                </div>
-
+              <div className="text-4xl font-bold text-green-600 dark:text-green-400 mb-4">
+                ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0)).toFixed(2)}
+              </div>
+              <div className="space-y-1 text-sm">
                 {pricing.newCustomerDiscount > 0 && (
-                  <div className="flex justify-between text-success">
-                    <span>New Customer Discount</span>
-                    <span>-${pricing.newCustomerDiscount.toFixed(2)}</span>
-                  </div>
+                  <p className="text-muted-foreground">
+                    ✨ New Customer Discount: ${pricing.newCustomerDiscount.toFixed(2)}
+                  </p>
                 )}
-
                 {pricing.membershipDiscount > 0 && (
-                  <div className="flex justify-between text-success">
-                    <span>{membership?.label} Discount</span>
-                    <span>-${pricing.membershipDiscount.toFixed(2)}</span>
-                  </div>
-                )}
-
-                {useCredit && (
-                  <div className="flex justify-between text-success">
-                    <span>Credit Applied</span>
-                    <span>-${Math.min(pricing.basePrice, 150).toFixed(2)}</span>
-                  </div>
-                )}
-
-                <Separator className="border-primary/30" />
-
-                <div className="space-y-3 bg-primary/5 p-4 rounded-lg">
-                  <div className="flex justify-between text-2xl font-bold text-primary">
-                    <span>Total</span>
-                    <span>${pricing.total.toFixed(2)}</span>
-                  </div>
-                  
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Deposit (today)</span>
-                      <span className="font-semibold">${pricing.deposit.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Balance (after clean)</span>
-                      <span className="font-semibold">${pricing.balanceDue.toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {bookingData.membershipPlan !== 'none' && (
-                  <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
-                    <p className="font-medium mb-1">Membership: {membership?.label}</p>
-                    <p>${membership?.monthlyPrice}/mo recurring charge</p>
-                  </div>
+                  <p className="text-muted-foreground">
+                    🎁 Member Savings: ${pricing.membershipDiscount.toFixed(2)}
+                  </p>
                 )}
               </div>
             </CardContent>
           </Card>
-        </div>
+        )}
+
+        <Card className="shadow-xl animate-fade-in">
+          <CardHeader className="text-center space-y-2 pb-6">
+            <CardTitle className="text-2xl md:text-3xl font-bold">Contact Information</CardTitle>
+            <CardDescription className="text-sm md:text-base">
+              We'll use this to send your booking confirmation
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName" className="text-sm md:text-base">
+                    First Name <span className="text-destructive">*</span>
+                  </Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Input
+                      id="firstName"
+                      value={formData.firstName}
+                      onChange={(e) => handleChange("firstName", e.target.value)}
+                      className="pl-10 h-12"
+                      placeholder="John"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="lastName" className="text-sm md:text-base">
+                    Last Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="lastName"
+                    value={formData.lastName}
+                    onChange={(e) => handleChange("lastName", e.target.value)}
+                    className="h-12"
+                    placeholder="Doe"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm md:text-base">
+                  Email <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleChange("email", e.target.value)}
+                    className="pl-10 h-12"
+                    placeholder="john@example.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-sm md:text-base">
+                  Phone Number <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => handleChange("phone", e.target.value)}
+                    className="pl-10 h-12"
+                    placeholder="(555) 123-4567"
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full h-12 md:h-14 text-base font-semibold hidden md:flex"
+                disabled={!formData.firstName || !formData.lastName || !formData.email || !formData.phone}
+              >
+                Continue to Payment
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Mobile Navigation */}
+      {/* Mobile Bottom Navigation */}
       <BottomNavigation
         currentStep={currentStep}
         totalSteps={6}
         steps={BOOKING_STEPS}
         onBack={handleBack}
-        onContinue={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
-        showPrice={true}
-        price={pricing.total}
-        continueText="Continue to Summary"
+        onContinue={() => {
+          if (formData.firstName && formData.lastName && formData.email && formData.phone) {
+            updateBookingData(formData);
+            setCurrentStep(6);
+            navigate("/book/checkout");
+          } else {
+            toast.error("Please fill in all fields");
+          }
+        }}
+        continueText="Continue to Payment"
       />
     </div>
   );

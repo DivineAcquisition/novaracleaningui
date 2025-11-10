@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -40,12 +41,14 @@ const TIME_SLOT_LABELS: Record<string, string> = {
 export default function BookingCheckout() {
   const navigate = useNavigate();
   const { bookingData, currentStep, updateBookingData } = useBooking();
+  const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [stripePromise, setStripePromise] = useState<any>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
 
   useEffect(() => {
@@ -67,13 +70,30 @@ export default function BookingCheckout() {
     init();
   }, []);
 
+  // Check if customer is new
+  useEffect(() => {
+    const checkNewCustomer = async () => {
+      if (!bookingData.email) return;
+      
+      const { data } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('email', bookingData.email)
+        .eq('status', 'confirmed')
+        .limit(1);
+      
+      setIsNewCustomer(!data || data.length === 0);
+    };
+    
+    checkNewCustomer();
+  }, [bookingData.email]);
+
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
     onSwipeRight: () => {
-      navigate("/book/summary");
+      navigate("/book/details");
     },
-    canSwipeLeft: false,
-    step: 7,
+    step: 6,
   });
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
@@ -85,7 +105,8 @@ export default function BookingCheckout() {
     bookingData.serviceType,
     bookingData.addOns,
     bookingData.membershipPlan,
-    bookingData.useCredit
+    bookingData.useCredit,
+    isNewCustomer
   );
 
   const fullPaymentPricing = calculateFullPaymentWithDiscount(
@@ -93,7 +114,8 @@ export default function BookingCheckout() {
     bookingData.serviceType,
     bookingData.addOns,
     bookingData.membershipPlan,
-    bookingData.useCredit
+    bookingData.useCredit,
+    isNewCustomer
   );
 
   const handleBack = () => {

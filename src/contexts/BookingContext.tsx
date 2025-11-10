@@ -13,9 +13,9 @@ export interface BookingData {
   lastName: string;
   email: string;
   phone: string;
-  address: string;
-  city: string;
-  state: string;
+  address?: string;
+  city?: string;
+  state?: string;
   serviceDuration: number;
   customerId?: string;
   addressId?: string;
@@ -48,9 +48,6 @@ const initialBookingData: BookingData = {
   lastName: '',
   email: '',
   phone: '',
-  address: '',
-  city: '',
-  state: '',
   serviceDuration: 0,
   paymentOption: 'deposit',
 };
