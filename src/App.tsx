@@ -2,9 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Account from "./pages/Account";
@@ -30,6 +31,33 @@ import CleanerProfile from "./pages/cleaner/Profile";
 
 const queryClient = new QueryClient();
 
+// Domain-aware routing component
+const DomainRouter = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const isContractorDomain = window.location.hostname.includes('contractor');
+    const isCleanerRoute = location.pathname.startsWith('/cleaner') || location.pathname.startsWith('/admin');
+    
+    // If on contractor domain but not on cleaner/admin route, redirect to cleaner auth
+    if (isContractorDomain && !isCleanerRoute) {
+      navigate('/cleaner/auth', { replace: true });
+    }
+    
+    // If on main domain but on cleaner route, redirect to contractor domain if available
+    if (!isContractorDomain && isCleanerRoute) {
+      const contractorUrl = window.location.href.replace(
+        window.location.hostname,
+        'contractor.' + window.location.hostname
+      );
+      window.location.href = contractorUrl;
+    }
+  }, [location.pathname, navigate]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -38,6 +66,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
+            <DomainRouter />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
