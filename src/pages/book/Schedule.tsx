@@ -13,7 +13,7 @@ import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { generateTimeSlots, calculateServiceDuration, isWeekend } from "@/lib/time-slots";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { HOME_SIZE_RANGES, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, MEMBERSHIP_PLANS, SERVICE_TIER_PRICING, ADD_ONS } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { addDays, format } from "date-fns";
@@ -156,11 +156,34 @@ export default function BookingSchedule() {
           </CardHeader>
           
           <CardContent className="space-y-6 md:space-y-8 px-4 md:px-6">
+            {/* New Customer Banner */}
+            {!user && (
+              <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50 animate-fade-in">
+                <CardContent className="p-4 text-center">
+                  <Badge className="mb-2 bg-green-600 text-white">
+                    🎉 New Customer Special
+                  </Badge>
+                  <p className="text-xl md:text-2xl font-bold text-green-700">
+                    $60 Off All Services!
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Membership Plan Selection */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
               <h3 className="text-base md:text-xl font-semibold">Choose a plan</h3>
               <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
-                {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => (
+                {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => {
+                  // Calculate potential savings based on current extras
+                  const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING]?.addition || 0;
+                  const addOnsTotal = bookingData.addOns.reduce((sum, addon) => 
+                    sum + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0), 0
+                  );
+                  const extrasAmount = serviceTierPrice + addOnsTotal;
+                  const dollarSavings = extrasAmount * plan.discount;
+
+                  return (
                   <Card
                     key={planId}
                     className={cn(
@@ -173,9 +196,16 @@ export default function BookingSchedule() {
                       <div className="flex justify-between items-start">
                         <h4 className="font-bold text-base md:text-lg">{plan.label}</h4>
                         {plan.discount > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            Save {plan.discount}%
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {(plan.discount * 100).toFixed(0)}% off extras
+                            </Badge>
+                            {extrasAmount > 0 && dollarSavings > 0 && (
+                              <span className="text-xs font-semibold text-green-600">
+                                Save ${dollarSavings.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                       <p className="text-2xl md:text-2xl font-bold text-primary">
@@ -184,7 +214,8 @@ export default function BookingSchedule() {
                       <p className="text-xs md:text-sm text-muted-foreground">{plan.description}</p>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

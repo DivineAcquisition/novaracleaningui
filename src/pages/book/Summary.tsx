@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -30,6 +32,39 @@ const TIME_SLOT_LABELS: Record<string, string> = {
 export default function BookingSummary() {
   const navigate = useNavigate();
   const { bookingData, currentStep, setCurrentStep } = useBooking();
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [checkingCustomer, setCheckingCustomer] = useState(true);
+
+  // Check if customer is new
+  useEffect(() => {
+    const checkNewCustomer = async () => {
+      if (!bookingData.email) {
+        setIsNewCustomer(false);
+        setCheckingCustomer(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('email', bookingData.email)
+          .eq('status', 'confirmed')
+          .limit(1);
+
+        if (error) throw error;
+        
+        setIsNewCustomer(!data || data.length === 0);
+      } catch (error) {
+        console.error('Error checking customer status:', error);
+        setIsNewCustomer(false);
+      } finally {
+        setCheckingCustomer(false);
+      }
+    };
+
+    checkNewCustomer();
+  }, [bookingData.email]);
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
@@ -51,7 +86,8 @@ export default function BookingSummary() {
     bookingData.serviceType,
     bookingData.addOns,
     bookingData.membershipPlan,
-    bookingData.useCredit
+    bookingData.useCredit,
+    isNewCustomer
   );
 
   const handleBack = () => {
@@ -88,7 +124,7 @@ export default function BookingSummary() {
                 </CardHeader>
                 <CardContent className="text-center space-y-3 md:space-y-4">
                   <div>
-                    <p className="text-4xl md:text-6xl font-bold text-green-600 dark:text-green-400">
+                    <p className="text-4xl sm:text-5xl md:text-6xl font-bold text-green-600 dark:text-green-400">
                       ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0) + (bookingData.useCredit ? Math.min(pricing.basePrice, 150) : 0)).toFixed(2)}
                     </p>
                     <p className="text-sm md:text-base text-muted-foreground mt-1">Total savings on this booking</p>
@@ -96,17 +132,17 @@ export default function BookingSummary() {
                   
                   <div className="flex flex-wrap gap-2 justify-center">
                     {pricing.newCustomerDiscount > 0 && (
-                      <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs md:text-sm py-1 px-3">
+                      <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs sm:text-sm md:text-base py-1.5 px-3">
                         🎁 ${pricing.newCustomerDiscount.toFixed(2)} New Customer Discount
                       </Badge>
                     )}
                     {pricing.membershipDiscount > 0 && (
-                      <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs md:text-sm py-1 px-3">
+                      <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs sm:text-sm md:text-base py-1.5 px-3">
                         💎 ${pricing.membershipDiscount.toFixed(2)} Membership Discount
                       </Badge>
                     )}
                     {bookingData.useCredit && (
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs md:text-sm py-1 px-3">
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs sm:text-sm md:text-base py-1.5 px-3">
                         ⭐ ${Math.min(pricing.basePrice, 150).toFixed(2)} Credit Applied
                       </Badge>
                     )}
