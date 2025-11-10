@@ -179,7 +179,7 @@ export default function CleanerAuth() {
       // First check if a cleaner account exists with this email
       const { data: cleanerData, error: cleanerCheckError } = await supabase
         .from("cleaners")
-        .select("id, email, user_id")
+        .select("id, email, user_id, approved")
         .eq("email", emailValidation.data)
         .maybeSingle();
 
@@ -189,6 +189,16 @@ export default function CleanerAuth() {
         toast({
           title: "No Invitation Found",
           description: "You must be invited by an admin before creating an account.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (!cleanerData.approved) {
+        toast({
+          title: "Pending Approval",
+          description: "Your account is awaiting admin approval. You'll be notified when you can sign up.",
           variant: "destructive",
         });
         setLoading(false);
@@ -236,10 +246,41 @@ export default function CleanerAuth() {
         // Link cleaner account to auth user
         const { error: updateError } = await supabase
           .from("cleaners")
-          .update({ user_id: data.user.id })
+          .update({ 
+            user_id: data.user.id,
+            activated_at: new Date().toISOString(),
+            status: "active",
+          })
           .eq("id", cleanerData.id);
 
         if (updateError) throw updateError;
+
+        // Trigger Stripe Connect onboarding
+        try {
+          const { data: onboardingData, error: onboardingError } = await supabase.functions.invoke(
+            "onboard-cleaner",
+            { body: { cleanerId: cleanerData.id } }
+          );
+
+          if (onboardingError) {
+            console.error("Failed to start Stripe onboarding:", onboardingError);
+            toast({
+              title: "Account Created",
+              description: "Please contact admin to complete payment setup.",
+            });
+          } else if (onboardingData?.url) {
+            toast({
+              title: "Account Created!",
+              description: "Redirecting to payment setup...",
+            });
+            setTimeout(() => {
+              window.location.href = onboardingData.url;
+            }, 1500);
+            return;
+          }
+        } catch (onboardingError) {
+          console.error("Stripe onboarding error:", onboardingError);
+        }
 
         toast({
           title: "Account Created!",
@@ -319,9 +360,12 @@ export default function CleanerAuth() {
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Sign In
                   </Button>
-                  <div className="text-sm text-center text-muted-foreground">
-                    <Link to="/reset-password" className="text-primary hover:underline">
-                      Forgot your password?
+                  <div className="flex items-center justify-between text-sm w-full">
+                    <Link to="/cleaner/reset-password" className="text-primary hover:underline">
+                      Forgot password?
+                    </Link>
+                    <Link to="/auth" className="text-muted-foreground hover:text-primary">
+                      Customer Login
                     </Link>
                   </div>
                 </CardFooter>

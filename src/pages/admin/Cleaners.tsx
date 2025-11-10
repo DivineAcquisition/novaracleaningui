@@ -28,6 +28,8 @@ interface Cleaner {
   completed_bookings: number;
   total_earnings_cents: number;
   created_at: string;
+  approved: boolean;
+  user_id: string | null;
 }
 
 export default function AdminCleaners() {
@@ -168,7 +170,37 @@ export default function AdminCleaners() {
     }
   };
 
+  const handleApproveCleaner = async (cleanerId: string) => {
+    try {
+      const { error } = await supabase
+        .from("cleaners")
+        .update({ approved: true })
+        .eq("id", cleanerId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Cleaner approved",
+        description: "The cleaner can now create their account.",
+      });
+
+      fetchCleaners();
+    } catch (error: any) {
+      toast({
+        title: "Error approving cleaner",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusBadge = (cleaner: Cleaner) => {
+    if (!cleaner.approved) {
+      return <Badge variant="destructive">Pending Approval</Badge>;
+    }
+    if (!cleaner.user_id) {
+      return <Badge className="bg-blue-500">Approved - No Account</Badge>;
+    }
     if (cleaner.status === "active" && cleaner.payouts_enabled) {
       return <Badge className="bg-green-500">Active</Badge>;
     }
@@ -342,8 +374,22 @@ export default function AdminCleaners() {
                     ${(cleaner.total_earnings_cents / 100).toFixed(2)}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
-                      {!cleaner.onboarding_complete && (
+                    <div className="flex gap-2 flex-wrap">
+                      {!cleaner.approved && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleApproveCleaner(cleaner.id)}
+                        >
+                          Approve
+                        </Button>
+                      )}
+                      {cleaner.approved && !cleaner.user_id && (
+                        <Badge variant="outline" className="text-xs">
+                          Waiting for signup
+                        </Badge>
+                      )}
+                      {cleaner.user_id && !cleaner.onboarding_complete && (
                         <Button
                           size="sm"
                           onClick={() => handleOnboardCleaner(cleaner.id)}

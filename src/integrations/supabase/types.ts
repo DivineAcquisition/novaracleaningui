@@ -219,6 +219,7 @@ export type Database = {
       cleaners: {
         Row: {
           activated_at: string | null
+          approved: boolean
           available_for_bookings: boolean | null
           completed_bookings: number | null
           created_at: string
@@ -241,6 +242,7 @@ export type Database = {
         }
         Insert: {
           activated_at?: string | null
+          approved?: boolean
           available_for_bookings?: boolean | null
           completed_bookings?: number | null
           created_at?: string
@@ -263,6 +265,7 @@ export type Database = {
         }
         Update: {
           activated_at?: string | null
+          approved?: boolean
           available_for_bookings?: boolean | null
           completed_bookings?: number | null
           created_at?: string
