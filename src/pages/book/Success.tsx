@@ -41,6 +41,8 @@ export default function BookingSuccess() {
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(true);
+  const [bookingValidated, setBookingValidated] = useState(false);
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -52,6 +54,101 @@ export default function BookingSuccess() {
     bookingData.useCredit
   );
 
+  // Validate booking on page load - prevent unauthorized access
+  useEffect(() => {
+    const validateBooking = async () => {
+      logStep("Starting booking validation");
+      
+      const bookingIdFromUrl = searchParams.get("booking_id");
+      const paymentIntentParam = searchParams.get("payment_intent");
+      
+      // Must have either booking_id or payment_intent to access this page
+      if (!bookingIdFromUrl && !paymentIntentParam) {
+        logStep("No booking ID or payment intent found - redirecting to home");
+        toast.error("No booking found. Please complete the booking process.");
+        navigate("/");
+        return;
+      }
+
+      try {
+        let bookingId = bookingIdFromUrl;
+        
+        // If we only have payment_intent, find the booking by payment_intent_id
+        if (!bookingId && paymentIntentParam) {
+          const { data: bookingByPayment, error: lookupError } = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('payment_intent_id', paymentIntentParam)
+            .single();
+          
+          if (lookupError || !bookingByPayment) {
+            logStep("Booking not found by payment intent", { paymentIntentParam });
+            toast.error("Booking not found. Please contact support.");
+            navigate("/");
+            return;
+          }
+          
+          bookingId = bookingByPayment.id;
+        }
+
+        // Fetch the booking to validate it
+        const { data: booking, error: bookingError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('id', bookingId)
+          .single();
+
+        if (bookingError || !booking) {
+          logStep("Booking not found in database", { bookingId });
+          toast.error("Booking not found. Please contact support.");
+          navigate("/");
+          return;
+        }
+
+        logStep("Booking found", { booking });
+
+        // Check if booking status is valid (must be confirmed or pending_payment)
+        if (booking.status !== 'confirmed' && booking.status !== 'pending_payment') {
+          logStep("Invalid booking status", { status: booking.status });
+          toast.error("Invalid booking status. Please contact support.");
+          navigate("/");
+          return;
+        }
+
+        // Check if all required post-payment details are filled
+        const requiredFields = ['address', 'city', 'state', 'bedrooms', 'bathrooms', 'dwelling_type'];
+        const missingFields = requiredFields.filter(field => !booking[field]);
+        
+        if (missingFields.length > 0) {
+          logStep("Missing required fields - redirecting to additional details", { missingFields });
+          toast.info("Please complete your booking details");
+          navigate(`/book/additional-details?booking_id=${bookingId}`);
+          return;
+        }
+
+        // If payment_intent exists but status is still pending_payment, 
+        // the payment might not have been verified yet
+        if (booking.status === 'pending_payment' && booking.payment_intent_id) {
+          logStep("Booking has payment intent but not confirmed - will verify payment");
+          // Let the payment verification effect handle this
+        }
+
+        // All validations passed
+        logStep("Booking validated successfully");
+        setBookingValidated(true);
+        
+      } catch (error) {
+        console.error("Error validating booking:", error);
+        toast.error("Error validating booking. Please contact support.");
+        navigate("/");
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateBooking();
+  }, [searchParams, navigate]);
+
   // Check if Web Share API is available
   useEffect(() => {
     if (navigator.share) {
@@ -61,6 +158,9 @@ export default function BookingSuccess() {
 
   useEffect(() => {
     const verifyPayment = async () => {
+      // Only verify payment if booking has been validated first
+      if (!bookingValidated) return;
+      
       if (!paymentIntent) {
         // No payment intent means either using credit or old booking flow
         setPaymentVerified(true);
@@ -85,13 +185,7 @@ export default function BookingSuccess() {
             setPaymentVerified(true);
             toast.success("Payment confirmed!");
             
-            // Check if additional details are already filled
-            const bookingIdFromUrl = searchParams.get("booking_id");
-            if (bookingIdFromUrl && data.booking && !data.booking.bedrooms) {
-              // Redirect to additional details page
-              navigate(`/book/additional-details?booking_id=${bookingIdFromUrl}`);
-              return;
-            }
+            // Additional details check is now handled by the validation effect
           } else {
             setVerificationError(data.message || "Payment verification incomplete");
             if (data.status === 'processing') {
@@ -111,7 +205,7 @@ export default function BookingSuccess() {
     };
 
     verifyPayment();
-  }, [paymentIntent]);
+  }, [paymentIntent, bookingValidated]);
 
   // Store guest email in localStorage for easy account creation
   useEffect(() => {
@@ -211,19 +305,30 @@ export default function BookingSuccess() {
     }
   };
 
-  // Show loading state during verification
-  if (isVerifyingPayment) {
+  // Show loading state during validation or verification
+  if (isValidating || isVerifyingPayment) {
     return (
       <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
         <Card className="max-w-md w-full shadow-xl">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
             <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
-            <h2 className="text-xl font-semibold">Verifying Payment...</h2>
-            <p className="text-muted-foreground text-sm">Please wait while we confirm your booking</p>
+            <h2 className="text-xl font-semibold">
+              {isValidating ? 'Validating Booking...' : 'Verifying Payment...'}
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              {isValidating 
+                ? 'Please wait while we validate your booking details' 
+                : 'Please wait while we confirm your booking'}
+            </p>
           </CardContent>
         </Card>
       </div>
     );
+  }
+
+  // Don't render the success page if booking is not validated
+  if (!bookingValidated) {
+    return null;
   }
 
   return (
