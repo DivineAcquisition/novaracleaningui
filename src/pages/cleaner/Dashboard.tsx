@@ -3,9 +3,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { DollarSign, Calendar, Clock, MapPin, CheckCircle2 } from "lucide-react";
+import { DollarSign, Calendar, Clock, MapPin, CheckCircle2, Settings, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface CleanerProfile {
@@ -18,6 +20,7 @@ interface CleanerProfile {
   total_earnings_cents: number;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
+  avatar_url: string | null;
 }
 
 interface Booking {
@@ -47,7 +50,7 @@ interface Payout {
 }
 
 export default function CleanerDashboard() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
@@ -202,15 +205,46 @@ export default function CleanerDashboard() {
     .filter((p) => p.status === "pending" || p.status === "processing")
     .reduce((sum, p) => sum + p.cleaner_payout_cents, 0);
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/cleaner/auth");
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold">
-          Welcome back, {profile.first_name}!
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Track your bookings and earnings
-        </p>
+      <div className="flex justify-between items-start mb-8">
+        <div className="flex items-center gap-4">
+          <Avatar className="w-16 h-16">
+            <AvatarImage src={profile.avatar_url || undefined} />
+            <AvatarFallback className="text-xl">
+              {profile.first_name[0]}{profile.last_name[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 className="text-4xl font-bold">
+              Welcome back, {profile.first_name}!
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Track your bookings and earnings
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/cleaner/profile")}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            Settings
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={handleSignOut}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign Out
+          </Button>
+        </div>
       </div>
 
       {!profile.onboarding_complete && (

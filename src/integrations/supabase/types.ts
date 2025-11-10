@@ -221,6 +221,7 @@ export type Database = {
           activated_at: string | null
           approved: boolean
           available_for_bookings: boolean | null
+          avatar_url: string | null
           completed_bookings: number | null
           created_at: string
           email: string
@@ -244,6 +245,7 @@ export type Database = {
           activated_at?: string | null
           approved?: boolean
           available_for_bookings?: boolean | null
+          avatar_url?: string | null
           completed_bookings?: number | null
           created_at?: string
           email: string
@@ -267,6 +269,7 @@ export type Database = {
           activated_at?: string | null
           approved?: boolean
           available_for_bookings?: boolean | null
+          avatar_url?: string | null
           completed_bookings?: number | null
           created_at?: string
           email?: string

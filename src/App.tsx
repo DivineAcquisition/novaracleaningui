@@ -26,6 +26,7 @@ import AdminCleaners from "./pages/admin/Cleaners";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
+import CleanerProfile from "./pages/cleaner/Profile";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const App = () => (
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+              <Route path="/cleaner/profile" element={<CleanerProfile />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

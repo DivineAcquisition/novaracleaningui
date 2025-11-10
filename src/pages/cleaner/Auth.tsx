@@ -21,6 +21,7 @@ export default function CleanerAuth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
     // If user is already logged in, redirect to cleaner dashboard
@@ -303,20 +304,18 @@ export default function CleanerAuth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 px-4 py-8">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-20 h-20 rounded-2xl mb-4 shadow-lavender" />
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent mb-2">
-            Novara Cleaning
-          </h1>
-          <p className="text-muted-foreground">Cleaner Portal</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 px-4 py-12">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-20 h-20 rounded-2xl mb-6 shadow-lavender" />
+          <h1 className="text-4xl font-bold mb-2">Novara Cleaning</h1>
+          <p className="text-muted-foreground text-lg">Cleaner Portal</p>
         </div>
 
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle>Welcome Back</CardTitle>
-            <CardDescription>
+        <Card className="shadow-xl border-primary/20">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-2xl">Welcome Back</CardTitle>
+            <CardDescription className="text-base">
               Sign in to access your cleaner dashboard
             </CardDescription>
           </CardHeader>
@@ -328,7 +327,7 @@ export default function CleanerAuth() {
 
             <TabsContent value="signin">
               <form onSubmit={handleSignIn}>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-6">
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">Email</Label>
                     <Input
@@ -339,6 +338,7 @@ export default function CleanerAuth() {
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       disabled={loading}
+                      className="h-11"
                     />
                   </div>
                   <div className="space-y-2">
@@ -351,19 +351,37 @@ export default function CleanerAuth() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       disabled={loading}
+                      className="h-11"
                     />
                   </div>
+                  <div className="flex items-center space-x-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="remember-me"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      disabled
+                    />
+                    <Label htmlFor="remember-me" className="text-sm font-normal text-muted-foreground cursor-default">
+                      Sessions are automatically saved securely
+                    </Label>
+                  </div>
                 </CardContent>
-                <CardFooter className="flex flex-col gap-4">
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <CardFooter className="flex flex-col gap-4 pb-6">
+                  <Button 
+                    type="submit" 
+                    className="w-full h-11 bg-gradient-primary hover:opacity-90 shadow-lavender" 
+                    disabled={loading}
+                  >
+                    {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                     Sign In
                   </Button>
                   <div className="flex items-center justify-between text-sm w-full">
-                    <Link to="/cleaner/reset-password" className="text-primary hover:underline">
+                    <Link to="/cleaner/reset-password" className="text-primary hover:underline font-medium">
                       Forgot password?
                     </Link>
-                    <Link to="/auth" className="text-muted-foreground hover:text-primary">
+                    <Link to="/auth" className="text-muted-foreground hover:text-primary font-medium">
                       Customer Login
                     </Link>
                   </div>
@@ -373,10 +391,13 @@ export default function CleanerAuth() {
 
             <TabsContent value="signup">
               <form onSubmit={handleSignUp}>
-                <CardContent className="space-y-4">
-                  <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground">
-                    <p>
-                      <strong>Note:</strong> You must be invited by an admin before creating an account.
+                <CardContent className="space-y-4 pt-6">
+                  <div className="bg-primary/10 border border-primary/20 p-4 rounded-lg text-sm">
+                    <p className="font-medium text-foreground">
+                      📋 Admin Invitation Required
+                    </p>
+                    <p className="text-muted-foreground mt-1">
+                      You must be invited by an admin before creating an account.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -389,6 +410,7 @@ export default function CleanerAuth() {
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       disabled={loading}
+                      className="h-11"
                     />
                   </div>
                   <div className="space-y-2">
@@ -401,15 +423,20 @@ export default function CleanerAuth() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       disabled={loading}
+                      className="h-11"
                     />
                     <p className="text-xs text-muted-foreground">
                       Must be at least 6 characters long
                     </p>
                   </div>
                 </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <CardFooter className="pb-6">
+                  <Button 
+                    type="submit" 
+                    className="w-full h-11 bg-gradient-primary hover:opacity-90 shadow-lavender" 
+                    disabled={loading}
+                  >
+                    {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                     Create Account
                   </Button>
                 </CardFooter>
