@@ -74,12 +74,12 @@ const Index = () => {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight lg:text-6xl">
               Book Your Cleaning
-              <span className="block text-primary mt-2 text-2xl md:text-3xl font-bold">With Only $39 Today + $60 Off Your Total</span>
+              <span className="block text-primary mt-2 text-2xl font-bold md:text-3xl">With Only $39 Today + $60 Off Your Total</span>
             </h1>
             
-            <p className="text-lg md:text-xl text-muted-foreground">
+            <p className="text-lg text-[#2c2c2c] font-normal md:text-sm">
               Premium cleaning service at transparent prices. Enter your ZIP code to get started.
             </p>
           </div>
@@ -92,35 +92,13 @@ const Index = () => {
                   <label htmlFor="zipCode" className="text-sm font-medium text-left block">
                     Enter Your ZIP Code
                   </label>
-                  <Input 
-                    id="zipCode" 
-                    type="text" 
-                    inputMode="numeric" 
-                    pattern="[0-9]*" 
-                    maxLength={5} 
-                    placeholder="12345" 
-                    value={zipCode} 
-                    onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} 
-                    className="h-14 text-lg text-center" 
-                    autoFocus 
-                    aria-label="ZIP code for service area"
-                    aria-required="true"
-                    aria-invalid={zipCode.length > 0 && zipCode.length !== 5}
-                    aria-describedby="zipcode-help"
-                  />
+                  <Input id="zipCode" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={5} placeholder="12345" value={zipCode} onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} className="h-14 text-lg text-center" autoFocus aria-label="ZIP code for service area" aria-required="true" aria-invalid={zipCode.length > 0 && zipCode.length !== 5} aria-describedby="zipcode-help" />
                   <p className="text-xs text-muted-foreground" id="zipcode-help">
                     We'll check if we service your area
                   </p>
                 </div>
 
-                <Button 
-                  type="submit" 
-                  size="lg" 
-                  disabled={zipCode.length !== 5 || isValidating} 
-                  className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
-                  aria-label={zipCode.length !== 5 ? "Enter a valid 5-digit ZIP code to continue" : "Check service availability"}
-                  aria-busy={isValidating}
-                >
+                <Button type="submit" size="lg" disabled={zipCode.length !== 5 || isValidating} className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary" aria-label={zipCode.length !== 5 ? "Enter a valid 5-digit ZIP code to continue" : "Check service availability"} aria-busy={isValidating}>
                   {isValidating ? "Checking..." : "Continue"}
                   <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" aria-hidden="true" />
                 </Button>
