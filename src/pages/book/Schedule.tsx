@@ -147,9 +147,9 @@ export default function BookingSchedule() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <Card className="shadow-xl animate-slide-in-right">
+        <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-xl md:text-2xl font-bold">Schedule your service</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-extrabold">Schedule your service</CardTitle>
             <CardDescription className="text-sm">
               Select your preferred date and time window
             </CardDescription>
@@ -158,7 +158,7 @@ export default function BookingSchedule() {
           <CardContent className="space-y-6 md:space-y-8 px-4 md:px-6">
             {/* New Customer Banner */}
             {!user && (
-              <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50 animate-fade-in">
+              <Card className="border-2 border-green-500/60 bg-gradient-to-br from-green-50 to-emerald-50 shadow-card animate-fade-in">
                 <CardContent className="p-4 text-center">
                   <Badge className="mb-2 bg-green-600 text-white">
                     🎉 New Customer Special
@@ -172,7 +172,7 @@ export default function BookingSchedule() {
 
             {/* Membership Plan Selection */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <h3 className="text-base md:text-lg font-semibold">Choose a plan</h3>
+              <h3 className="text-base md:text-lg font-bold">Choose a plan</h3>
               <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
                 {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => {
                   // Calculate potential savings based on current extras
@@ -187,14 +187,14 @@ export default function BookingSchedule() {
                   <Card
                     key={planId}
                     className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 active:scale-95 min-h-[140px] md:min-h-0",
-                      membershipPlan === planId && "ring-2 ring-primary shadow-lavender scale-[1.02] md:scale-105"
+                      "card-interactive min-h-[140px] md:min-h-0",
+                      membershipPlan === planId && "ring-2 ring-primary border-primary/60 shadow-lavender scale-[1.02] md:scale-105"
                     )}
                     onClick={() => setMembershipPlan(planId)}
                   >
                     <CardContent className="p-5 md:p-6 space-y-2 flex flex-col justify-center h-full">
                       <div className="flex justify-between items-start">
-                        <h4 className="font-bold text-base md:text-lg">{plan.label}</h4>
+                        <h4 className="font-extrabold text-base md:text-lg">{plan.label}</h4>
                         {plan.discount > 0 && (
                           <div className="flex flex-col items-end gap-1">
                             <Badge variant="secondary" className="text-xs">
@@ -208,7 +208,7 @@ export default function BookingSchedule() {
                           </div>
                         )}
                       </div>
-                      <p className="text-xl md:text-2xl font-bold text-primary">
+                      <p className="text-xl md:text-2xl font-extrabold text-primary">
                         ${plan.monthlyPrice}<span className="text-sm text-muted-foreground">/mo</span>
                       </p>
                       <p className="text-xs md:text-sm text-muted-foreground">{plan.description}</p>
@@ -221,7 +221,7 @@ export default function BookingSchedule() {
 
             {/* Credit Usage Toggle */}
             {membershipPlan !== 'none' && (
-              <Card className="bg-muted/50">
+              <Card className="bg-muted/50 border border-border/60 shadow-md">
                 <CardContent className="p-4 md:p-6">
                   <div className="flex items-start space-x-3">
                     <Checkbox
@@ -258,7 +258,7 @@ export default function BookingSchedule() {
             {/* Horizontal Date Scroller */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
               <div>
-                <h3 className="text-base md:text-xl font-semibold">Select a date</h3>
+                <h3 className="text-base md:text-xl font-bold">Select a date</h3>
                 <p className="text-sm text-muted-foreground mt-1">We're closed on weekends. Book at least 3 days in advance.</p>
               </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
@@ -278,10 +278,10 @@ export default function BookingSchedule() {
                         key={i}
                         onClick={() => setSelectedDate(date)}
                         className={cn(
-                          "flex-shrink-0 w-[85px] md:w-20 cursor-pointer transition-all duration-300 min-h-[85px] md:min-h-[80px] active:scale-95",
+                          "card-interactive flex-shrink-0 w-[85px] md:w-20 min-h-[85px] md:min-h-[80px]",
                           isSelected 
-                            ? "bg-primary text-primary-foreground border-primary shadow-lg scale-110 ring-2 ring-primary/50" 
-                            : "hover:border-primary/50 hover:scale-105"
+                            ? "bg-primary text-primary-foreground border-primary shadow-xl scale-110 ring-2 ring-primary/50" 
+                            : ""
                         )}
                       >
                         <CardContent className="p-3 md:p-3 text-center space-y-1 flex flex-col justify-center h-full">
@@ -311,14 +311,14 @@ export default function BookingSchedule() {
             {/* Time Slots */}
             {selectedDate && (
               <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-                <h3 className="text-base md:text-xl font-semibold">Choose a time window</h3>
+                <h3 className="text-base md:text-xl font-bold">Choose a time window</h3>
                 <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {timeSlots.map((slot) => (
                     <Card
                       key={slot.id}
                       className={cn(
-                        "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 active:scale-95 min-h-[110px] md:min-h-[100px]",
-                        selectedTime === slot.id && "ring-2 ring-primary shadow-lavender scale-[1.02] md:scale-105 bg-primary/5"
+                        "card-interactive min-h-[110px] md:min-h-[100px]",
+                        selectedTime === slot.id && "ring-2 ring-primary border-primary/60 shadow-lavender scale-[1.02] md:scale-105 bg-primary/5"
                       )}
                       onClick={() => setSelectedTime(slot.id)}
                     >

@@ -47,10 +47,11 @@ All colors MUST be HSL.
     --gradient-hero: linear-gradient(180deg, hsl(0 0% 100%), hsl(244 50% 97%));
     --gradient-lavender: linear-gradient(135deg, hsl(260 100% 50% / 0.1), hsl(244 100% 81% / 0.1));
     
-    --shadow-sm: 0 1px 2px 0 hsl(260 20% 30% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(260 20% 30% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(260 20% 30% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(260 20% 30% / 0.1);
+    --shadow-sm: 0 1px 3px 0 hsl(260 20% 30% / 0.04);
+    --shadow-md: 0 4px 12px hsl(260 20% 30% / 0.05);
+    --shadow-lg: 0 10px 20px hsl(260 20% 30% / 0.06);
+    --shadow-xl: 0 20px 40px hsl(260 20% 30% / 0.08);
+    --shadow-card: 0 4px 24px hsl(260 20% 30% / 0.06);
     --shadow-lavender: 0 0 20px hsl(260 100% 50% / 0.25), 0 0 40px hsl(260 100% 50% / 0.15);
     
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -177,5 +178,40 @@ All colors MUST be HSL.
   
   .animate-slide-in-left {
     animation: slide-in-from-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer components {
+  .card-outlined {
+    @apply border-2 border-border/50 shadow-card;
+  }
+  
+  .card-outlined-hover {
+    @apply border-2 border-border/50 shadow-card transition-all duration-300;
+    @apply hover:border-primary/30 hover:shadow-lg;
+  }
+  
+  .card-interactive {
+    @apply border-2 border-border/40 shadow-card transition-all duration-300;
+    @apply hover:border-primary/50 hover:shadow-xl hover:scale-[1.02];
+    @apply active:scale-95;
+  }
+}
+
+@layer utilities {
+  .text-weight-extra-bold {
+    font-weight: 800;
+  }
+  
+  .text-weight-bold {
+    font-weight: 700;
+  }
+  
+  .text-weight-semibold {
+    font-weight: 600;
+  }
+  
+  .text-weight-medium {
+    font-weight: 500;
   }
 }

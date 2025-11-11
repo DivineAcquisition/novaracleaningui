@@ -84,6 +84,7 @@ export default {
         'md': 'var(--shadow-md)',
         'lg': 'var(--shadow-lg)',
         'xl': 'var(--shadow-xl)',
+        'card': 'var(--shadow-card)',
         'lavender': 'var(--shadow-lavender)',
       },
       transitionTimingFunction: {
