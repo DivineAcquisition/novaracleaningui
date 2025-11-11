@@ -44,16 +44,6 @@ export function BottomNavigation({
         ))}
       </div>
       
-      {/* Price Display (if applicable) */}
-      {showPrice && price > 0 && (
-        <div className="px-4 py-2 bg-primary/5 border-t border-primary/10">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Total</span>
-            <span className="text-lg font-bold text-primary">${price.toFixed(2)}</span>
-          </div>
-        </div>
-      )}
-      
       {/* Navigation Buttons */}
       <div className="flex gap-2 p-3">
         {onBack && (

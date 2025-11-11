@@ -213,17 +213,17 @@ export default function BookingCheckout() {
             {/* New Customer Discount Banner */}
             {isNewCustomer && !user && (
               <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center">
-                      <Gift className="w-5 h-5 text-white" />
+                <CardContent className="p-3 md:p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-600 flex items-center justify-center">
+                      <Gift className="w-4 h-4 md:w-5 md:h-5 text-white" />
                     </div>
                     <div>
-                      <p className="font-bold text-green-700">New Customer Special!</p>
-                      <p className="text-sm text-green-600">You're saving $60 on this booking 🎉</p>
+                      <p className="text-sm font-bold md:text-base text-green-700">New Customer Special!</p>
+                      <p className="text-xs md:text-sm text-green-600">You're saving $60 on this booking 🎉</p>
                     </div>
                   </div>
-                  <div className="text-lg md:text-2xl font-bold text-green-700">-$60</div>
+                  <div className="text-base md:text-2xl font-bold text-green-700">-$60</div>
                 </CardContent>
               </Card>
             )}
@@ -236,12 +236,12 @@ export default function BookingCheckout() {
               
               <div className="grid gap-4 md:grid-cols-2" role="region" aria-labelledby="order-summary-heading">
                 <Card className="border-2 border-primary/30 shadow-md">
-                  <CardContent className="p-6 space-y-3">
+                  <CardContent className="p-4 md:p-6 space-y-2 md:space-y-3">
                     <div className="flex items-center gap-2 text-primary">
-                      <Sparkles className="w-5 h-5" />
-                      <h4 className="font-semibold">Service Details</h4>
+                      <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
+                      <h4 className="font-semibold text-sm md:text-base">Service Details</h4>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Service</span>
                         <span className="font-medium">{serviceTier?.label}</span>
@@ -259,12 +259,12 @@ export default function BookingCheckout() {
                 </Card>
 
                 <Card className="border-2 border-primary/30 shadow-md">
-                  <CardContent className="p-6 space-y-3">
+                  <CardContent className="p-4 md:p-6 space-y-2 md:space-y-3">
                     <div className="flex items-center gap-2 text-primary">
-                      <Calendar className="w-5 h-5" />
-                      <h4 className="font-semibold">Schedule</h4>
+                      <Calendar className="w-4 h-4 md:w-5 md:h-5" />
+                      <h4 className="font-semibold text-sm md:text-base">Schedule</h4>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Date</span>
                         <span className="font-medium">
@@ -299,34 +299,34 @@ export default function BookingCheckout() {
                     >
                        {/* Deposit Option */}
                       <div className={cn(
-                        "relative flex items-start space-x-3 rounded-lg border-2 p-4 transition-all cursor-pointer hover:border-primary/50",
+                        "relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50",
                         bookingData.paymentOption === 'deposit' 
                           ? "border-primary bg-primary/5" 
                           : "border-border"
                       )}>
                         <RadioGroupItem value="deposit" id="deposit" className="mt-1" />
                         <Label htmlFor="deposit" className="flex-1 cursor-pointer">
-                          <div className="space-y-2">
+                          <div className="space-y-1.5 md:space-y-2">
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold">Pay Deposit Now</span>
-                              <span className="text-lg font-bold text-primary">
+                              <span className="font-semibold text-sm md:text-base">Pay Deposit Now</span>
+                              <span className="text-base md:text-lg font-bold text-primary">
                                 ${depositPricing.deposit.toFixed(2)}
                               </span>
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              Balance due after cleaning: ${depositPricing.balanceDue.toFixed(2)}
+                            <p className="text-xs md:text-sm text-muted-foreground">
+                              Balance after: ${depositPricing.balanceDue.toFixed(2)}
                             </p>
                             {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0) && (
-                              <div className="text-xs text-success space-y-0.5 pt-1 border-t border-border/50 mt-2">
+                              <div className="text-[10px] md:text-xs text-success space-y-0.5 pt-1 border-t border-border/50 mt-2">
                                 {depositPricing.membershipDiscount > 0 && (
                                   <div className="flex justify-between">
-                                    <span>Membership discount applied:</span>
+                                    <span>Membership:</span>
                                     <span className="font-medium">-${depositPricing.membershipDiscount.toFixed(2)}</span>
                                   </div>
                                 )}
                                 {depositPricing.newCustomerDiscount > 0 && (
                                   <div className="flex justify-between text-green-600">
-                                    <span>New customer discount:</span>
+                                    <span>New customer:</span>
                                     <span className="font-medium">-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
                                   </div>
                                 )}
@@ -338,47 +338,47 @@ export default function BookingCheckout() {
 
                       {/* Full Payment Option */}
                       <div className={cn(
-                        "relative flex items-start space-x-3 rounded-lg border-2 p-4 transition-all cursor-pointer hover:border-primary/50",
+                        "relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50",
                         bookingData.paymentOption === 'full' 
                           ? "border-primary bg-primary/5" 
                           : "border-border"
                       )}>
                         <RadioGroupItem value="full" id="full" className="mt-1" />
                         <Label htmlFor="full" className="flex-1 cursor-pointer">
-                          <div className="space-y-2">
+                          <div className="space-y-1.5 md:space-y-2">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold">Pay in Full</span>
-                                <span className="text-xs font-semibold px-2 py-1 bg-success/20 text-success rounded-full">
+                              <div className="flex items-center gap-1.5 md:gap-2">
+                                <span className="font-semibold text-sm md:text-base">Pay in Full</span>
+                                <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-1 bg-success/20 text-success rounded-full">
                                   Save {fullPaymentPricing.newCustomerDiscount > 0 ? 'Up To ' : ''}10%{fullPaymentPricing.newCustomerDiscount > 0 ? ' + $60' : ''}
                                 </span>
                               </div>
-                              <span className="text-lg font-bold text-primary">
+                              <span className="text-base md:text-lg font-bold text-primary">
                                 ${fullPaymentPricing.finalAmount.toFixed(2)}
                               </span>
                             </div>
-                            <div className="space-y-1 text-sm">
+                            <div className="space-y-0.5 md:space-y-1 text-xs md:text-sm">
                               <div className="flex justify-between text-muted-foreground">
-                                <span>Original Total:</span>
+                                <span>Original:</span>
                                 <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
                               </div>
                               <div className="flex justify-between text-success font-medium">
-                                <span>10% Full Payment Discount:</span>
+                                <span>10% Discount:</span>
                                 <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
                               </div>
                               {fullPaymentPricing.newCustomerDiscount > 0 && (
                                 <div className="flex justify-between text-green-600 font-medium">
-                                  <span>New Customer Discount:</span>
+                                  <span>New Customer:</span>
                                   <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
                                 </div>
                               )}
-                              <Separator className="my-2" />
-                              <div className="flex items-center justify-between gap-1 text-success font-bold pt-1">
+                              <Separator className="my-1 md:my-2" />
+                              <div className="flex items-center justify-between gap-1 text-success font-bold pt-0.5 md:pt-1">
                                 <span className="flex items-center gap-1">
-                                  <Zap className="w-4 h-4" />
+                                  <Zap className="w-3 h-3 md:w-4 md:h-4" />
                                   Total Savings:
                                 </span>
-                                <span className="text-lg">${fullPaymentPricing.savings.toFixed(2)}</span>
+                                <span className="text-base md:text-lg">${fullPaymentPricing.savings.toFixed(2)}</span>
                               </div>
                             </div>
                           </div>
