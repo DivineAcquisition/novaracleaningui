@@ -17,11 +17,8 @@ import BookingZip from "./pages/book/Zip";
 import BookingHome from "./pages/book/Home";
 import BookingService from "./pages/book/Service";
 import BookingSchedule from "./pages/book/Schedule";
-import BookingDetails from "./pages/book/Details";
-import BookingSummary from "./pages/book/Summary";
 import BookingCheckout from "./pages/book/Checkout";
 import BookingSuccess from "./pages/book/Success";
-import AdditionalDetails from "./pages/book/AdditionalDetails";
 import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
@@ -80,11 +77,8 @@ const App = () => (
               <Route path="/book/home" element={<BookingHome />} />
               <Route path="/book/service" element={<BookingService />} />
               <Route path="/book/schedule" element={<BookingSchedule />} />
-              <Route path="/book/details" element={<BookingDetails />} />
-              <Route path="/book/summary" element={<BookingSummary />} />
               <Route path="/book/checkout" element={<BookingCheckout />} />
               <Route path="/book/success" element={<BookingSuccess />} />
-              <Route path="/book/additional-details" element={<AdditionalDetails />} />
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<AdminCleaners />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />

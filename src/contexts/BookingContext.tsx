@@ -61,7 +61,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   });
   
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 6;
+  const totalSteps = 5;
 
   useEffect(() => {
     localStorage.setItem('bookingData', JSON.stringify(bookingData));

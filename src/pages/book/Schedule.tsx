@@ -23,8 +23,7 @@ const BOOKING_STEPS = [
   { number: 2, label: "Home Size" },
   { number: 3, label: "Service" },
   { number: 4, label: "Schedule" },
-  { number: 5, label: "Details" },
-  { number: 6, label: "Payment" },
+  { number: 5, label: "Checkout" },
 ];
 
 export default function BookingSchedule() {
@@ -36,11 +35,6 @@ export default function BookingSchedule() {
     bookingData.serviceDate ? new Date(bookingData.serviceDate) : undefined
   );
   const [selectedTime, setSelectedTime] = useState(bookingData.timeSlot || "");
-  const [membershipPlan, setMembershipPlan] = useState(bookingData.membershipPlan || "none");
-  const [useCredit, setUseCredit] = useState(bookingData.useCredit || false);
-  const [creditAvailable, setCreditAvailable] = useState(false);
-  const [creditAvailableDate, setCreditAvailableDate] = useState<string>("");
-  const [checkingCredit, setCheckingCredit] = useState(false);
   const [serviceDuration, setServiceDuration] = useState(2);
 
   // Swipe gesture handlers
@@ -50,11 +44,11 @@ export default function BookingSchedule() {
       navigate("/book/service");
     },
     onSwipeLeft: () => {
-      if (selectedDate && selectedTime && !checkingCredit && (!useCredit || creditAvailable)) {
+      if (selectedDate && selectedTime) {
         handleContinue();
       }
     },
-    canSwipeLeft: !!(selectedDate && selectedTime && !checkingCredit && (!useCredit || creditAvailable)),
+    canSwipeLeft: !!(selectedDate && selectedTime),
     step: 4,
   });
 
@@ -78,63 +72,18 @@ export default function BookingSchedule() {
   // Minimum date is 3 days from now, and we don't work weekends
   const minDate = addDays(new Date(), 3);
 
-  // Check credit availability
-  useEffect(() => {
-    if (!useCredit || !user || !selectedDate) {
-      setCreditAvailable(true);
-      return;
-    }
-
-    const checkCredit = async () => {
-      setCheckingCredit(true);
-      try {
-        const { data, error } = await supabase.functions.invoke('check-subscription', {
-          body: { 
-            userId: user.id,
-            requestedDate: format(selectedDate, 'yyyy-MM-dd')
-          }
-        });
-
-        if (error) throw error;
-
-        if (data.canUseCredit) {
-          setCreditAvailable(true);
-        } else {
-          setCreditAvailable(false);
-          setCreditAvailableDate(data.nextAvailableDate);
-          toast.error(`Credit not available until ${data.nextAvailableDate}`);
-        }
-      } catch (error) {
-        console.error('Error checking credit:', error);
-        toast.error('Failed to check credit availability');
-        setCreditAvailable(false);
-      } finally {
-        setCheckingCredit(false);
-      }
-    };
-
-    checkCredit();
-  }, [useCredit, user, selectedDate]);
-
   const handleContinue = () => {
     if (!selectedDate || !selectedTime) {
       toast.error("Please select both date and time");
       return;
     }
 
-    if (useCredit && !creditAvailable) {
-      toast.error("Credit is not available for the selected date");
-      return;
-    }
-
     updateBookingData({
       serviceDate: format(selectedDate, 'yyyy-MM-dd'),
       timeSlot: selectedTime,
-      membershipPlan,
-      useCredit,
     });
     setCurrentStep(5);
-    navigate("/book/details");
+    navigate("/book/checkout");
   };
 
   const handleBack = () => {
@@ -144,7 +93,7 @@ export default function BookingSchedule() {
 
   return (
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
-      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+      <ProgressBar currentStep={currentStep} totalSteps={5} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
         <Card className="shadow-xl animate-slide-in-right">
@@ -166,91 +115,6 @@ export default function BookingSchedule() {
                   <p className="text-xl md:text-2xl font-bold text-green-700">
                     $60 Off All Services!
                   </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Membership Plan Selection */}
-            <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <h3 className="text-base md:text-xl font-semibold">Choose a plan</h3>
-              <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
-                {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => {
-                  // Calculate potential savings based on current extras
-                  const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING]?.addition || 0;
-                  const addOnsTotal = bookingData.addOns.reduce((sum, addon) => 
-                    sum + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0), 0
-                  );
-                  const extrasAmount = serviceTierPrice + addOnsTotal;
-                  const dollarSavings = extrasAmount * plan.discount;
-
-                  return (
-                  <Card
-                    key={planId}
-                    className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 active:scale-95 min-h-[140px] md:min-h-0",
-                      membershipPlan === planId && "ring-2 ring-primary shadow-lavender scale-[1.02] md:scale-105"
-                    )}
-                    onClick={() => setMembershipPlan(planId)}
-                  >
-                    <CardContent className="p-5 md:p-6 space-y-2 flex flex-col justify-center h-full">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-bold text-base md:text-lg">{plan.label}</h4>
-                        {plan.discount > 0 && (
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge variant="secondary" className="text-xs">
-                              {(plan.discount * 100).toFixed(0)}% off extras
-                            </Badge>
-                            {extrasAmount > 0 && dollarSavings > 0 && (
-                              <span className="text-xs font-semibold text-green-600">
-                                Save ${dollarSavings.toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-2xl md:text-2xl font-bold text-primary">
-                        ${plan.monthlyPrice}<span className="text-sm text-muted-foreground">/mo</span>
-                      </p>
-                      <p className="text-xs md:text-sm text-muted-foreground">{plan.description}</p>
-                    </CardContent>
-                  </Card>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Credit Usage Toggle */}
-            {membershipPlan !== 'none' && (
-              <Card className="bg-muted/50">
-                <CardContent className="p-4 md:p-6">
-                  <div className="flex items-start space-x-3">
-                    <Checkbox
-                      id="useCredit"
-                      checked={useCredit}
-                      onCheckedChange={(checked) => setUseCredit(checked as boolean)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1 space-y-2">
-                      <label
-                        htmlFor="useCredit"
-                        className="text-sm md:text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        Use membership credit for this booking
-                      </label>
-                      {useCredit && !creditAvailable && creditAvailableDate && (
-                        <div className="flex items-start gap-2 text-xs md:text-sm text-amber-600 dark:text-amber-500">
-                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                          <span>Credit available from {creditAvailableDate}</span>
-                        </div>
-                      )}
-                      {useCredit && creditAvailable && (
-                        <div className="flex items-center gap-2 text-xs md:text-sm text-success">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Credit available for this date</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             )}
@@ -343,7 +207,7 @@ export default function BookingSchedule() {
               <Button 
                 size="lg" 
                 onClick={handleContinue} 
-                disabled={!selectedDate || !selectedTime || checkingCredit || (useCredit && !creditAvailable)}
+                disabled={!selectedDate || !selectedTime}
                 className="h-12 md:h-14"
               >
                 Continue <ArrowRight className="ml-2 w-4 h-4 md:w-5 md:h-5" />
@@ -356,11 +220,11 @@ export default function BookingSchedule() {
       {/* Mobile Navigation */}
       <BottomNavigation
         currentStep={currentStep}
-        totalSteps={6}
+        totalSteps={5}
         steps={BOOKING_STEPS}
         onBack={handleBack}
         onContinue={handleContinue}
-        continueDisabled={!selectedDate || !selectedTime || checkingCredit || (useCredit && !creditAvailable)}
+        continueDisabled={!selectedDate || !selectedTime}
       />
     </div>
   );
