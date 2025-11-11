@@ -255,85 +255,172 @@ export default function BookingSchedule() {
               </Card>
             )}
 
-            {/* Horizontal Date Scroller */}
-            <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <div>
-                <h3 className="text-base md:text-lg font-semibold">Select a date</h3>
-                <p className="text-sm text-muted-foreground mt-1">We're closed on weekends. Book at least 3 days in advance.</p>
-              </div>
-              <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
-                <div className="flex gap-2 md:gap-3 p-3 md:p-4">
-                  {Array.from({ length: 30 }, (_, i) => {
-                    const date = addDays(minDate, i);
-                    
-                    // Skip weekends - we're closed Saturday and Sunday
-                    if (isWeekend(date)) {
-                      return null;
-                    }
-                    
-                    const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-                    
-                    return (
-                      <Card
-                        key={i}
-                        onClick={() => setSelectedDate(date)}
-                        className={cn(
-                          "card-interactive flex-shrink-0 w-[85px] md:w-20 min-h-[85px] md:min-h-[80px]",
-                          isSelected 
-                            ? "bg-primary text-primary-foreground border-primary shadow-xl scale-110 ring-2 ring-primary/50" 
-                            : ""
-                        )}
-                      >
-                        <CardContent className="p-3 md:p-3 text-center space-y-1 flex flex-col justify-center h-full">
-                          <p className={cn(
-                            "text-xs md:text-xs font-semibold uppercase tracking-wide",
-                            isSelected ? "opacity-95" : "opacity-70"
-                          )}>
-                            {format(date, 'EEE')}
-                          </p>
-                          <p className="text-2xl font-bold">
-                            {format(date, 'd')}
-                          </p>
-                          <p className={cn(
-                            "text-sm md:text-xs font-medium",
-                            isSelected ? "opacity-95" : "opacity-70"
-                          )}>
-                            {format(date, 'MMM')}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+            {/* Date & Time Selection - Side by Side Layout */}
+            <div className="grid md:grid-cols-2 gap-6 animate-slide-in-from-right">
+              {/* Date Selection */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base md:text-lg font-semibold">Select Date</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Choose your preferred service day
+                  </p>
                 </div>
-              </ScrollArea>
-            </div>
+                
+                <Card className="border-2 border-border/50 shadow-md">
+                  <CardContent className="p-4">
+                    <ScrollArea className="h-[400px] pr-4">
+                      <div className="space-y-2">
+                        {Array.from({ length: 30 }, (_, i) => {
+                          const date = addDays(minDate, i);
+                          
+                          // Skip weekends - we're closed Saturday and Sunday
+                          if (isWeekend(date)) {
+                            return null;
+                          }
+                          
+                          const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+                          const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                          
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => setSelectedDate(date)}
+                              className={cn(
+                                "w-full p-4 rounded-lg border-2 transition-all duration-200 text-left",
+                                "hover:border-primary/40 hover:shadow-md",
+                                isSelected 
+                                  ? "bg-primary text-primary-foreground border-primary shadow-md" 
+                                  : "border-border/60 bg-background hover:bg-accent/30"
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                  <div className={cn(
+                                    "text-center min-w-[48px]",
+                                    isSelected && "text-primary-foreground"
+                                  )}>
+                                    <p className="text-xs font-medium uppercase tracking-wide opacity-80">
+                                      {format(date, 'EEE')}
+                                    </p>
+                                    <p className="text-2xl font-bold leading-none mt-1">
+                                      {format(date, 'd')}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className={cn(
+                                      "font-semibold",
+                                      isSelected && "text-primary-foreground"
+                                    )}>
+                                      {format(date, 'MMMM d, yyyy')}
+                                    </p>
+                                    <p className={cn(
+                                      "text-sm mt-0.5",
+                                      isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+                                    )}>
+                                      {format(date, 'EEEE')}
+                                    </p>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                    
+                    <div className="mt-4 pt-4 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        We're closed on weekends. Book at least 3 days in advance.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            {/* Time Slots */}
-            {selectedDate && (
-              <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-                <h3 className="text-base md:text-lg font-semibold">Choose a time window</h3>
-                <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {timeSlots.map((slot) => (
-                    <Card
-                      key={slot.id}
-                      className={cn(
-                        "card-interactive min-h-[110px] md:min-h-[100px]",
-                        selectedTime === slot.id && "ring-2 ring-primary border-primary/60 shadow-lavender scale-[1.02] md:scale-105 bg-primary/5"
-                      )}
-                      onClick={() => setSelectedTime(slot.id)}
-                    >
-                      <CardContent className="p-5 md:p-6 text-center space-y-2 flex flex-col justify-center h-full">
-                        <Clock className="mx-auto w-9 h-9 md:w-8 md:h-8 text-primary" />
-                        <p className="font-semibold text-base md:text-base">{slot.label}</p>
-                        <Badge variant="secondary" className="text-xs mx-auto">
-                          {slot.estimatedDuration} {slot.estimatedDuration === 1 ? 'hour' : 'hours'}
-                        </Badge>
-                      </CardContent>
-                    </Card>
-                  ))}
+              {/* Time Selection */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base md:text-lg font-semibold">Select Time</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedDate 
+                      ? `Available times for ${format(selectedDate, 'MMM d')}`
+                      : 'Choose a date first'}
+                  </p>
                 </div>
+                
+                {selectedDate ? (
+                  <Card className="border-2 border-border/50 shadow-md">
+                    <CardContent className="p-4">
+                      <div className="space-y-3">
+                        {timeSlots.map((slot) => {
+                          const isSelected = selectedTime === slot.id;
+                          
+                          return (
+                            <button
+                              key={slot.id}
+                              onClick={() => setSelectedTime(slot.id)}
+                              className={cn(
+                                "w-full p-4 rounded-lg border-2 transition-all duration-200 text-left",
+                                "hover:border-primary/40 hover:shadow-md",
+                                isSelected 
+                                  ? "bg-primary text-primary-foreground border-primary shadow-md" 
+                                  : "border-border/60 bg-background hover:bg-accent/30"
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className={cn(
+                                    "w-10 h-10 rounded-lg flex items-center justify-center",
+                                    isSelected 
+                                      ? "bg-primary-foreground/20" 
+                                      : "bg-primary/10"
+                                  )}>
+                                    <Clock className={cn(
+                                      "w-5 h-5",
+                                      isSelected ? "text-primary-foreground" : "text-primary"
+                                    )} />
+                                  </div>
+                                  <div>
+                                    <p className={cn(
+                                      "font-semibold",
+                                      isSelected && "text-primary-foreground"
+                                    )}>
+                                      {slot.label}
+                                    </p>
+                                    <p className={cn(
+                                      "text-sm mt-0.5",
+                                      isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+                                    )}>
+                                      {slot.estimatedDuration} {slot.estimatedDuration === 1 ? 'hour' : 'hours'} service
+                                    </p>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-2 border-dashed border-border/50">
+                    <CardContent className="p-8 text-center">
+                      <Clock className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+                      <p className="text-muted-foreground">
+                        Please select a date to view available time slots
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Desktop Navigation - Hidden on Mobile */}
             <div className="hidden md:flex gap-4 pt-6">
