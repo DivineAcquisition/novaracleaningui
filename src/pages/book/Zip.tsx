@@ -61,8 +61,8 @@ export default function BookingZip() {
             <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
               <MapPin className="w-7 h-7 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-xl md:text-3xl font-bold">Where do you need cleaning?</CardTitle>
-            <CardDescription className="text-sm md:text-base">
+            <CardTitle className="text-xl md:text-2xl font-bold">Where do you need cleaning?</CardTitle>
+            <CardDescription className="text-sm">
               Enter your ZIP code to check availability in your area
             </CardDescription>
           </CardHeader>
@@ -70,7 +70,7 @@ export default function BookingZip() {
           <CardContent className="px-4 md:px-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="zipCode" className="text-sm md:text-base font-medium">
+                <Label htmlFor="zipCode" className="text-sm font-medium">
                   ZIP Code
                 </Label>
                 <Input

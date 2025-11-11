@@ -58,8 +58,8 @@ export default function BookingHome() {
             <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
               <HomeIcon className="w-7 h-7 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-xl md:text-3xl font-bold">How big is your home?</CardTitle>
-            <CardDescription className="text-sm md:text-base">
+            <CardTitle className="text-xl md:text-2xl font-bold">How big is your home?</CardTitle>
+            <CardDescription className="text-sm">
               Select the size that best matches your space
             </CardDescription>
           </CardHeader>

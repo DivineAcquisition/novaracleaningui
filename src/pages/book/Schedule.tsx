@@ -149,8 +149,8 @@ export default function BookingSchedule() {
       <div className="container max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
         <Card className="shadow-xl animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-xl md:text-3xl font-bold">Schedule your service</CardTitle>
-            <CardDescription className="text-sm md:text-base">
+            <CardTitle className="text-xl md:text-2xl font-bold">Schedule your service</CardTitle>
+            <CardDescription className="text-sm">
               Select your preferred date and time window
             </CardDescription>
           </CardHeader>
@@ -163,7 +163,7 @@ export default function BookingSchedule() {
                   <Badge className="mb-2 bg-green-600 text-white">
                     🎉 New Customer Special
                   </Badge>
-                  <p className="text-xl md:text-2xl font-bold text-green-700">
+                  <p className="text-lg md:text-xl font-bold text-green-700">
                     $60 Off All Services!
                   </p>
                 </CardContent>
@@ -172,7 +172,7 @@ export default function BookingSchedule() {
 
             {/* Membership Plan Selection */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <h3 className="text-base md:text-xl font-semibold">Choose a plan</h3>
+              <h3 className="text-base md:text-lg font-semibold">Choose a plan</h3>
               <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
                 {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => {
                   // Calculate potential savings based on current extras
@@ -208,7 +208,7 @@ export default function BookingSchedule() {
                           </div>
                         )}
                       </div>
-                      <p className="text-2xl md:text-2xl font-bold text-primary">
+                      <p className="text-xl md:text-2xl font-bold text-primary">
                         ${plan.monthlyPrice}<span className="text-sm text-muted-foreground">/mo</span>
                       </p>
                       <p className="text-xs md:text-sm text-muted-foreground">{plan.description}</p>

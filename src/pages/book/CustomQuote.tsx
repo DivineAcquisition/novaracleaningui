@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Home, Loader2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
 
 export default function CustomQuote() {
   const navigate = useNavigate();
@@ -23,14 +24,28 @@ export default function CustomQuote() {
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
+    const { name, value } = e.target;
+    if (name === 'phone') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: formatPhoneNumber(value)
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isValidPhoneNumber(formData.phone)) {
+      toast.error("Please enter a valid 10-digit phone number");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -38,7 +53,7 @@ export default function CustomQuote() {
         body: {
           fullName: formData.fullName,
           email: formData.email,
-          phone: formData.phone,
+          phone: getRawPhoneNumber(formData.phone), // Store raw digits only
           address: formData.address,
           sqft: parseInt(formData.sqft),
           notes: formData.notes,
@@ -69,8 +84,8 @@ export default function CustomQuote() {
             <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
               <CheckCircle2 className="w-12 h-12 text-success" />
             </div>
-            <CardTitle className="text-4xl font-bold">Request Received!</CardTitle>
-            <CardDescription className="text-lg">
+            <CardTitle className="text-2xl md:text-4xl font-bold">Request Received!</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               We'll contact you within 24 hours with a custom quote
             </CardDescription>
           </CardHeader>
@@ -103,8 +118,8 @@ export default function CustomQuote() {
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <Home className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="text-3xl font-bold">Request a Custom Quote</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-xl md:text-3xl font-bold">Request a Custom Quote</CardTitle>
+            <CardDescription className="text-sm">
               For homes over 5,000 sq ft, we provide personalized quotes
             </CardDescription>
           </CardHeader>

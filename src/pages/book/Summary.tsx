@@ -106,8 +106,8 @@ export default function BookingSummary() {
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
-            <CardTitle className="text-2xl md:text-3xl font-bold">Review your booking</CardTitle>
-            <CardDescription className="text-sm md:text-base">
+            <CardTitle className="text-xl md:text-2xl font-bold">Review your booking</CardTitle>
+            <CardDescription className="text-sm">
               Please review your booking details before confirming
             </CardDescription>
           </CardHeader>
@@ -120,14 +120,14 @@ export default function BookingSummary() {
                   <div className="flex justify-center mb-2">
                     <TrendingDown className="w-8 h-8 md:w-10 md:h-10 text-green-600 dark:text-green-400" />
                   </div>
-                  <CardTitle className="text-xl md:text-2xl text-green-700 dark:text-green-400">🎉 You're Saving Big!</CardTitle>
+                  <CardTitle className="text-lg md:text-xl font-bold text-green-700 dark:text-green-400">🎉 You're Saving Big!</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center space-y-3 md:space-y-4">
                   <div>
-                    <p className="text-4xl sm:text-5xl md:text-6xl font-bold text-green-600 dark:text-green-400">
+                    <p className="text-2xl sm:text-3xl md:text-5xl font-bold text-green-600 dark:text-green-400">
                       ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0) + (bookingData.useCredit ? Math.min(pricing.basePrice, 150) : 0)).toFixed(2)}
                     </p>
-                    <p className="text-sm md:text-base text-muted-foreground mt-1">Total savings on this booking</p>
+                    <p className="text-xs md:text-sm text-muted-foreground mt-1">Total savings on this booking</p>
                   </div>
                   
                   <div className="flex flex-wrap gap-2 justify-center">

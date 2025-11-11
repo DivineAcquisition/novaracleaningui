@@ -87,8 +87,8 @@ export default function AdditionalDetails() {
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10 text-primary" />
           </div>
-          <CardTitle className="text-2xl md:text-3xl font-bold">Almost Done!</CardTitle>
-          <CardDescription className="text-sm md:text-base">
+          <CardTitle className="text-xl md:text-2xl font-bold">Almost Done!</CardTitle>
+          <CardDescription className="text-sm">
             Please provide your service address and property details
           </CardDescription>
         </CardHeader>

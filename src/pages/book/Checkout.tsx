@@ -208,8 +208,8 @@ export default function BookingCheckout() {
             <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
               <CreditCard className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-2xl md:text-3xl font-bold">Secure Checkout</CardTitle>
-            <CardDescription className="text-sm md:text-base">
+            <CardTitle className="text-xl md:text-2xl font-bold">Secure Checkout</CardTitle>
+            <CardDescription className="text-sm">
               Review your order and complete your booking
             </CardDescription>
           </CardHeader>
@@ -228,14 +228,14 @@ export default function BookingCheckout() {
                       <p className="text-sm text-green-600">You're saving $60 on this booking 🎉</p>
                     </div>
                   </div>
-                  <div className="text-2xl font-bold text-green-700">-$60</div>
+                  <div className="text-lg md:text-2xl font-bold text-green-700">-$60</div>
                 </CardContent>
               </Card>
             )}
 
             {/* Order Summary */}
             <div className="space-y-6">
-              <h3 className="text-xl font-bold">Order Summary</h3>
+              <h3 className="text-lg md:text-xl font-bold">Order Summary</h3>
               
               <div className="grid gap-4 md:grid-cols-2">
                 <Card className="border-primary/20">

@@ -11,6 +11,7 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { toast } from "sonner";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { calculatePrice } from "@/lib/pricing-system";
+import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -58,7 +59,12 @@ export default function BookingDetails() {
   });
 
   const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === "phone") {
+      const formatted = formatPhoneNumber(value);
+      setFormData(prev => ({ ...prev, [field]: formatted }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -69,7 +75,16 @@ export default function BookingDetails() {
       return;
     }
 
-    updateBookingData(formData);
+    if (!isValidPhoneNumber(formData.phone)) {
+      toast.error("Please enter a valid 10-digit phone number");
+      return;
+    }
+
+    // Store the raw phone number (digits only) for backend
+    updateBookingData({
+      ...formData,
+      phone: getRawPhoneNumber(formData.phone)
+    });
     setCurrentStep(6);
     navigate("/book/checkout");
   };
@@ -89,10 +104,10 @@ export default function BookingDetails() {
           <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 shadow-xl mb-6 animate-fade-in">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 mb-3">
-                <Sparkles className="w-6 h-6 text-green-600 dark:text-green-400" />
-                <h3 className="text-xl font-bold text-green-700 dark:text-green-400">You're Saving Big!</h3>
+                <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-green-600 dark:text-green-400" />
+                <h3 className="text-lg md:text-xl font-bold text-green-700 dark:text-green-400">You're Saving Big!</h3>
               </div>
-              <div className="text-4xl font-bold text-green-600 dark:text-green-400 mb-4">
+              <div className="text-2xl md:text-4xl font-bold text-green-600 dark:text-green-400 mb-4">
                 ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0)).toFixed(2)}
               </div>
               <div className="space-y-1 text-sm">
@@ -113,8 +128,8 @@ export default function BookingDetails() {
 
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-6">
-            <CardTitle className="text-2xl md:text-3xl font-bold">Contact Information</CardTitle>
-            <CardDescription className="text-sm md:text-base">
+            <CardTitle className="text-xl md:text-2xl font-bold">Contact Information</CardTitle>
+            <CardDescription className="text-sm">
               We'll use this to send your booking confirmation
             </CardDescription>
           </CardHeader>
@@ -123,7 +138,7 @@ export default function BookingDetails() {
             <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-sm md:text-base">
+                  <Label htmlFor="firstName" className="text-sm">
                     First Name <span className="text-destructive">*</span>
                   </Label>
                   <div className="relative">
@@ -140,7 +155,7 @@ export default function BookingDetails() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-sm md:text-base">
+                  <Label htmlFor="lastName" className="text-sm">
                     Last Name <span className="text-destructive">*</span>
                   </Label>
                   <Input
@@ -155,7 +170,7 @@ export default function BookingDetails() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm md:text-base">
+                <Label htmlFor="email" className="text-sm">
                   Email <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
@@ -173,7 +188,7 @@ export default function BookingDetails() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-sm md:text-base">
+                <Label htmlFor="phone" className="text-sm">
                   Phone Number <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
