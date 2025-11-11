@@ -179,18 +179,31 @@ export function calculateFullPaymentWithDiscount(
   useCredit: boolean = false,
   isNewCustomer: boolean = false
 ): FullPaymentCalculation {
+  // Get base pricing WITH new customer discount already applied
   const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer);
-  const originalTotal = pricing.total;
-  const discount = Math.round(originalTotal * 0.10 * 100) / 100; // 10% discount
-  const newCustomerDiscount = isNewCustomer && membershipPlan === 'none' ? NEW_CUSTOMER_DISCOUNT : 0;
-  const finalAmount = originalTotal - discount - newCustomerDiscount;
+  
+  // pricing.total already has membership discount and new customer discount applied
+  // So we need to add back the new customer discount to get the true pre-full-payment-discount total
+  const totalBeforeFullPaymentDiscount = pricing.total + pricing.newCustomerDiscount;
+  
+  // Calculate 10% full payment discount on the amount AFTER new customer discount
+  const fullPaymentDiscount = Math.round(totalBeforeFullPaymentDiscount * 0.10 * 100) / 100;
+  
+  // Final amount = total (which already has new customer discount) - full payment discount
+  const finalAmount = totalBeforeFullPaymentDiscount - fullPaymentDiscount;
+  
+  // originalTotal should be the subtotal (before any discounts) for display purposes
+  const originalTotal = pricing.subtotal;
+  
+  // Total savings = new customer + membership + full payment discounts
+  const totalSavings = pricing.newCustomerDiscount + pricing.membershipDiscount + fullPaymentDiscount;
   
   return {
-    originalTotal,
-    discount,
-    newCustomerDiscount,
-    finalAmount,
-    savings: discount + newCustomerDiscount,
+    originalTotal: originalTotal,
+    discount: fullPaymentDiscount,
+    newCustomerDiscount: pricing.newCustomerDiscount,
+    finalAmount: finalAmount,
+    savings: totalSavings,
   };
 }
 
