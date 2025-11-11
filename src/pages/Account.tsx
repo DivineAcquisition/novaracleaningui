@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
+import { ModifyBookingDialog } from "@/components/booking/ModifyBookingDialog";
 
 interface Booking {
   id: string;
@@ -27,6 +28,11 @@ interface Booking {
   uses_credit: boolean;
   home_size_id: string;
   service_duration?: number;
+  add_ons: string[];
+  bedrooms: number | null;
+  bathrooms: number | null;
+  dwelling_type: string | null;
+  membership_plan: string;
 }
 
 interface MembershipCredit {
@@ -47,6 +53,8 @@ export default function Account() {
   const [isLoadingBookings, setIsLoadingBookings] = useState(true);
   const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
   const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [modifyBooking, setModifyBooking] = useState<Booking | null>(null);
+  const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -144,6 +152,16 @@ export default function Account() {
   };
 
   const handleRescheduleSuccess = () => {
+    fetchBookings();
+    fetchMembershipCredits();
+  };
+
+  const handleModify = (booking: Booking) => {
+    setModifyBooking(booking);
+    setModifyDialogOpen(true);
+  };
+
+  const handleModifySuccess = () => {
     fetchBookings();
     fetchMembershipCredits();
   };
@@ -464,13 +482,22 @@ export default function Account() {
                           <p className="text-2xl font-bold text-primary">
                             ${(booking.total_estimate_cents / 100).toFixed(2)}
                           </p>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleReschedule(booking)}
-                          >
-                            Reschedule
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleModify(booking)}
+                            >
+                              Modify
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReschedule(booking)}
+                            >
+                              Reschedule
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -602,6 +629,15 @@ export default function Account() {
           onOpenChange={setRescheduleDialogOpen}
           booking={rescheduleBooking}
           onSuccess={handleRescheduleSuccess}
+        />
+      )}
+
+      {modifyBooking && (
+        <ModifyBookingDialog
+          open={modifyDialogOpen}
+          onOpenChange={setModifyDialogOpen}
+          booking={modifyBooking}
+          onSuccess={handleModifySuccess}
         />
       )}
     </div>

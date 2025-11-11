@@ -4,6 +4,7 @@ import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { BookingConfirmation } from '../_shared/email-templates/BookingConfirmation.tsx';
 import { PaymentReceipt } from '../_shared/email-templates/PaymentReceipt.tsx';
+import { BookingModification } from '../_shared/email-templates/BookingModification.tsx';
 import { generateICalFile } from '../_shared/calendar-utils.ts';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -19,7 +20,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 interface BookingEmailRequest {
-  type: 'confirmation' | 'payment_receipt';
+  type: 'confirmation' | 'payment_receipt' | 'modification';
   email: string;
   data: {
     firstName?: string;
@@ -42,7 +43,9 @@ interface BookingEmailRequest {
     newCustomerDiscount?: number;
     membershipDiscount?: number;
     fullPaymentDiscount?: number;
+    priceDifference?: string;
   };
+  bookingData?: any;
 }
 
 
@@ -54,7 +57,7 @@ serve(async (req: Request) => {
   try {
     logStep("Function started");
 
-    const { type, email, data }: BookingEmailRequest = await req.json();
+    const { type, email, data, bookingData }: BookingEmailRequest = await req.json();
     logStep("Email request received", { type, email });
 
     if (!email) {
@@ -122,6 +125,9 @@ serve(async (req: Request) => {
     } else if (type === 'payment_receipt') {
       html = await renderAsync(React.createElement(PaymentReceipt, data));
       subject = `Payment Received - Novara Cleaning Receipt`;
+    } else if (type === 'modification') {
+      html = await renderAsync(React.createElement(BookingModification, { bookingData }));
+      subject = `Booking Updated - Your Changes Have Been Saved`;
     } else {
       throw new Error(`Unknown email type: ${type}`);
     }
