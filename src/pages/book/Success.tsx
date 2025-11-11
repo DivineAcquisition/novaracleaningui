@@ -117,12 +117,15 @@ export default function BookingSuccess() {
           return;
         }
 
+        // Check if all required post-payment details are filled
         const requiredFields = ['address', 'city', 'state', 'bedrooms', 'bathrooms', 'dwelling_type'];
         const missingFields = requiredFields.filter(field => !booking[field]);
         
         if (missingFields.length > 0) {
-          logStep("Missing required fields - but these are now collected at checkout", { missingFields });
-          // All fields should be collected at checkout now, so if missing, something went wrong
+          logStep("Missing required fields - redirecting to additional details", { missingFields });
+          toast.info("Please complete your booking details");
+          navigate(`/book/additional-details?booking_id=${bookingId}`);
+          return;
         }
 
         // If payment_intent exists but status is still pending_payment, 
