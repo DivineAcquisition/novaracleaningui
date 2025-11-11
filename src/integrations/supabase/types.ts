@@ -102,6 +102,7 @@ export type Database = {
           base_price_cents: number
           bathrooms: number | null
           bedrooms: number | null
+          booking_number: number | null
           checkout_session_id: string | null
           city: string
           cleaner_id: string | null
@@ -144,6 +145,7 @@ export type Database = {
           base_price_cents: number
           bathrooms?: number | null
           bedrooms?: number | null
+          booking_number?: number | null
           checkout_session_id?: string | null
           city: string
           cleaner_id?: string | null
@@ -186,6 +188,7 @@ export type Database = {
           base_price_cents?: number
           bathrooms?: number | null
           bedrooms?: number | null
+          booking_number?: number | null
           checkout_session_id?: string | null
           city?: string
           cleaner_id?: string | null

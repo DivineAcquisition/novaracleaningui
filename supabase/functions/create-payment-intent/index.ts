@@ -93,17 +93,18 @@ serve(async (req) => {
     const membershipPct = (!bookingData.useCredit && MEMBERSHIP_DISCOUNTS[membershipPlan]) ? MEMBERSHIP_DISCOUNTS[membershipPlan] : 0;
     const membershipDiscount = Math.round(extras * membershipPct);
 
-    // Check if new customer - no previous bookings
+    // Check booking history to determine booking number and new customer status
     const { data: previousBookings } = await supabaseClient
       .from('bookings')
-      .select('id')
+      .select('id, status')
       .eq('email', bookingData.email)
-      .eq('status', 'confirmed')
-      .limit(1);
+      .in('status', ['confirmed', 'completed'])
+      .order('created_at', { ascending: false });
     
-    const isNewCustomer = !previousBookings || previousBookings.length === 0;
+    const bookingNumber = (previousBookings?.length || 0) + 1;
+    const isNewCustomer = bookingNumber === 1;
     const newCustomerDiscount = (isNewCustomer && membershipPlan === 'none') ? NEW_CUSTOMER_DISCOUNT : 0;
-    logStep("New customer check", { isNewCustomer, newCustomerDiscount });
+    logStep("Customer booking history", { bookingNumber, isNewCustomer, previousBookings: previousBookings?.length || 0, newCustomerDiscount });
 
     // Credit coverage covers up to $150 of base price
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
@@ -119,6 +120,7 @@ serve(async (req) => {
     logStep("Payout calculation", { platformFeeCents, cleanerPayoutCents });
 
     // Determine amount to charge based on payment option
+    // CRITICAL: Always charge at minimum $1 for card verification, even when using credit
     let amountToCharge = 0;
     let fullPaymentDiscount = 0;
 
@@ -127,9 +129,14 @@ serve(async (req) => {
       amountToCharge = totalAmount - fullPaymentDiscount;
       logStep("Full payment selected", { originalAmount: totalAmount, discount: fullPaymentDiscount, finalAmount: amountToCharge });
     } else {
-      // Deposit payment
-      amountToCharge = bookingData.useCredit ? 0 : DEPOSIT_AMOUNT;
-      logStep(bookingData.useCredit ? "Member using credit - no deposit required" : "Deposit payment", { depositAmount: amountToCharge });
+      // Deposit payment - always require at least $1 minimum for card verification
+      if (bookingData.useCredit) {
+        amountToCharge = 100; // $1 minimum authorization to capture card
+        logStep("Member using credit - $1 card authorization required", { depositAmount: amountToCharge });
+      } else {
+        amountToCharge = DEPOSIT_AMOUNT;
+        logStep("Deposit payment", { depositAmount: amountToCharge });
+      }
     }
 
     // Check if customer exists in Stripe
@@ -152,35 +159,30 @@ serve(async (req) => {
       logStep("Created new customer", { customerId });
     }
 
-    // Create PaymentIntent only if amount is greater than 0
-    let paymentIntentId = null;
-    let clientSecret = null;
+    // CRITICAL: Always create PaymentIntent - no bookings without payment verification
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountToCharge,
+      currency: "usd",
+      customer: customerId,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      metadata: {
+        serviceType: bookingData.serviceType,
+        homeSizeId: bookingData.homeSizeId,
+        serviceDate: bookingData.serviceDate,
+        timeSlot: bookingData.timeSlot,
+        paymentOption: bookingData.paymentOption,
+        bookingNumber: String(bookingNumber),
+        isNewCustomer: String(isNewCustomer),
+      },
+    });
 
-    if (amountToCharge > 0) {
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountToCharge,
-        currency: "usd",
-        customer: customerId,
-        automatic_payment_methods: {
-          enabled: true,
-        },
-        metadata: {
-          serviceType: bookingData.serviceType,
-          homeSizeId: bookingData.homeSizeId,
-          serviceDate: bookingData.serviceDate,
-          timeSlot: bookingData.timeSlot,
-          paymentOption: bookingData.paymentOption,
-        },
-      });
+    const paymentIntentId = paymentIntent.id;
+    const clientSecret = paymentIntent.client_secret;
+    logStep("Created payment intent", { paymentIntentId, amount: amountToCharge, bookingNumber });
 
-      paymentIntentId = paymentIntent.id;
-      clientSecret = paymentIntent.client_secret;
-      logStep("Created payment intent", { paymentIntentId, amount: amountToCharge });
-    } else {
-      logStep("No payment required - member using credit");
-    }
-
-    // Store provisional booking in database
+    // Store provisional booking in database - ALWAYS as pending_payment
     const { data: booking, error: bookingError } = await supabaseClient
       .from("bookings")
       .insert({
@@ -200,16 +202,17 @@ serve(async (req) => {
         membership_plan: membershipPlan,
         uses_credit: bookingData.useCredit || false,
         base_price_cents: basePrice,
-        deposit_cents: bookingData.paymentOption === 'deposit' ? DEPOSIT_AMOUNT : 0,
+        deposit_cents: bookingData.paymentOption === 'deposit' ? (bookingData.useCredit ? 100 : DEPOSIT_AMOUNT) : 0,
         total_estimate_cents: totalAmount,
         payment_intent_id: paymentIntentId,
         customer_id: customerId,
-        status: amountToCharge === 0 ? 'confirmed' : 'pending_payment',
+        status: 'pending_payment', // CRITICAL: Always pending until payment verified
         payment_option: bookingData.paymentOption,
         full_payment_discount: fullPaymentDiscount,
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: 'pending',
+        booking_number: bookingNumber,
       })
       .select()
       .single();
@@ -226,7 +229,9 @@ serve(async (req) => {
         clientSecret,
         amount: amountToCharge,
         bookingId: booking.id,
-        requiresPayment: amountToCharge > 0,
+        requiresPayment: true, // ALWAYS true - no bookings without payment verification
+        bookingNumber,
+        isNewCustomer,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

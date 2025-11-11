@@ -70,18 +70,19 @@ export default function BookingCheckout() {
     init();
   }, []);
 
-  // Check if customer is new
+  // Check customer booking history to determine if they are a new customer
   useEffect(() => {
     const checkNewCustomer = async () => {
       if (!bookingData.email) return;
       
       const { data } = await supabase
         .from('bookings')
-        .select('id')
+        .select('id, status')
         .eq('email', bookingData.email)
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'completed'])
         .limit(1);
       
+      // Only truly first-time customers (no confirmed/completed bookings) get the discount
       setIsNewCustomer(!data || data.length === 0);
     };
     
@@ -150,13 +151,7 @@ export default function BookingCheckout() {
 
       console.log("Payment intent created:", data);
 
-      // If no payment required (member using credit), go directly to success
-      if (!data.requiresPayment) {
-        toast.success("Booking confirmed!");
-        navigate(`/book/success?booking_id=${data.bookingId}`);
-        return;
-      }
-
+      // CRITICAL: Always require payment verification - no auto-confirmation
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
