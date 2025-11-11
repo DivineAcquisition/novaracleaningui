@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
+import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
 import { useSwipeable } from "react-swipeable";
 
 // Stripe publishable key will be loaded from an Edge Function at runtime
@@ -311,6 +312,15 @@ export default function BookingCheckout() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Savings Visualizer */}
+              <SavingsVisualizer
+                originalPrice={depositPricing.subtotal}
+                newCustomerDiscount={isNewCustomer ? 60 : 0}
+                membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0}
+                fullPaymentDiscount={bookingData.paymentOption === 'full' ? (fullPaymentPricing.originalTotal - fullPaymentPricing.finalAmount - (isNewCustomer ? 60 : 0) - (bookingData.membershipPlan ? depositPricing.membershipDiscount : 0)) : 0}
+                finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.deposit : fullPaymentPricing.finalAmount}
+              />
 
               {/* Payment Option Selection */}
               {!bookingData.useCredit && (
