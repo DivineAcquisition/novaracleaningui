@@ -76,7 +76,7 @@ const Index = () => {
           <div className="space-y-4">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
               Book Your Cleaning
-              <span className="block text-primary mt-2 font-bold text-4xl">With Only $39 Today + $60 Off Your Total</span>
+              <span className="block text-primary mt-2 text-3xl font-bold">With Only $39 Today + $60 Off Your Total</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground">
