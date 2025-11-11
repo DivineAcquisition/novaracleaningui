@@ -203,7 +203,7 @@ export default function BookingCheckout() {
             <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
               <CreditCard className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-xl md:text-2xl font-extrabold">Secure Checkout</CardTitle>
+            <CardTitle className="text-lg md:text-xl font-semibold">Secure Checkout</CardTitle>
             <CardDescription className="text-sm">
               Review your order and complete your booking
             </CardDescription>
@@ -230,7 +230,7 @@ export default function BookingCheckout() {
 
             {/* Order Summary */}
             <div className="space-y-6">
-              <h3 className="text-lg md:text-xl font-extrabold">Order Summary</h3>
+              <h3 className="text-lg md:text-xl font-semibold">Order Summary</h3>
               
               <div className="grid gap-4 md:grid-cols-2">
                 <Card className="border-2 border-primary/30 shadow-md">

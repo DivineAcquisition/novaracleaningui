@@ -113,7 +113,7 @@ export default function BookingService() {
                   <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-success" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-base md:text-lg font-extrabold text-success">New Customer Special!</h3>
+                  <h3 className="text-base md:text-lg font-semibold text-success">New Customer Special!</h3>
                   <p className="text-sm text-foreground mt-1">
                     Save <span className="font-bold text-success">$60</span> on your first cleaning service. No membership required!
                   </p>
@@ -128,7 +128,7 @@ export default function BookingService() {
         
         <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-xl md:text-2xl font-extrabold">Choose your service</CardTitle>
+            <CardTitle className="text-lg md:text-xl font-semibold">Choose your service</CardTitle>
             <CardDescription className="text-sm">
               {hasCredits 
                 ? 'Select a service to use your membership credit'
@@ -158,7 +158,7 @@ export default function BookingService() {
                         <service.icon className="w-7 h-7 text-primary" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-extrabold">{service.name}</h3>
+                        <h3 className="text-lg font-semibold">{service.name}</h3>
                         <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
                       </div>
                     </div>
@@ -178,7 +178,7 @@ export default function BookingService() {
             {bookingData.serviceType && (
               <Card className="bg-muted/50 border border-border/60 shadow-md">
                 <CardHeader>
-                  <CardTitle className="text-lg font-bold">À La Carte Add-ons</CardTitle>
+                  <CardTitle className="text-lg font-semibold">À La Carte Add-ons</CardTitle>
                   <CardDescription>
                     {bookingData.serviceType === 'moveInOut' 
                       ? 'Fridge & Oven included. Only Windows available as add-on.'

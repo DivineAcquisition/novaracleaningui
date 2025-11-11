@@ -462,7 +462,7 @@ export default function BookingSuccess() {
             <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
               <CheckCircle2 className="w-10 h-10 md:w-12 md:h-12 text-success" />
             </div>
-            <CardTitle className="text-2xl md:text-4xl font-bold">
+            <CardTitle className="text-xl md:text-3xl font-bold">
               {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
             </CardTitle>
             <CardDescription className="text-sm md:text-lg">
@@ -480,7 +480,7 @@ export default function BookingSuccess() {
             {/* Booking Details Card */}
             <Card className="bg-primary/5 border-primary/20">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg md:text-xl flex items-center gap-2">
+                <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-primary" />
                   Your Booking Details
                 </CardTitle>

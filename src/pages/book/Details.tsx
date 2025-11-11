@@ -219,7 +219,7 @@ export default function BookingDetails() {
           <CardContent className="p-6 md:p-8">
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl md:text-3xl font-extrabold">Contact & Address Information</h2>
+                <h2 className="text-xl md:text-2xl font-bold">Contact & Address Information</h2>
                 <p className="text-muted-foreground mt-2">
                   We'll need these details to confirm your booking
                 </p>
@@ -228,7 +228,7 @@ export default function BookingDetails() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Contact Information */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-bold">Contact Details</h3>
+                  <h3 className="text-lg font-semibold">Contact Details</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -321,7 +321,7 @@ export default function BookingDetails() {
 
                 {/* Service Address */}
                 <div className="space-y-4 border-t pt-6">
-                  <h3 className="text-lg font-bold">Service Address</h3>
+                  <h3 className="text-lg font-semibold">Service Address</h3>
                   
                   <div className="space-y-2">
                     <Label htmlFor="address" className="text-sm">

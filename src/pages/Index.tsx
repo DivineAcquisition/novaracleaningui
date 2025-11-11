@@ -41,7 +41,7 @@ const Index = () => {
         <div className="flex justify-between items-center gap-2">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <img src={logo} alt="NovaraCleaning Logo" className="w-8 h-8 md:w-10 md:h-10 rounded-lg flex-shrink-0" />
-            <span className="text-base md:text-xl font-bold truncate">NovaraCleaning</span>
+            <span className="text-base md:text-lg font-semibold truncate">NovaraCleaning</span>
           </div>
           
           {user ? <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
@@ -63,7 +63,7 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 text-white">
             <Tag className="w-4 h-4" />
-            <p className="text-sm md:text-base font-semibold">
+            <p className="text-sm md:text-base font-medium">
               Limited Time Offer: Save up to 30% with our Membership Plan
             </p>
           </div>
@@ -74,9 +74,9 @@ const Index = () => {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
               Book Your Cleaning
-              <span className="block text-primary mt-2 text-3xl font-extrabold">With Only $39 Today + $60 Off Your Total</span>
+              <span className="block text-primary mt-2 text-2xl md:text-3xl font-bold">With Only $39 Today + $60 Off Your Total</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground">
@@ -119,7 +119,7 @@ const Index = () => {
                   </div>
                 </div>
                 <div className="flex-1 text-center md:text-left space-y-2">
-                  <h3 className="text-lg md:text-2xl font-extrabold">Join Our Membership Program</h3>
+                  <h3 className="text-lg md:text-xl font-semibold">Join Our Membership Program</h3>
                   <p className="text-sm md:text-base text-muted-foreground">
                     Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
                     Perfect for regular cleaning schedules.

@@ -149,7 +149,7 @@ export default function BookingSchedule() {
       <div className="container max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
         <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-xl md:text-2xl font-extrabold">Schedule your service</CardTitle>
+            <CardTitle className="text-lg md:text-xl font-semibold">Schedule your service</CardTitle>
             <CardDescription className="text-sm">
               Select your preferred date and time window
             </CardDescription>
@@ -163,7 +163,7 @@ export default function BookingSchedule() {
                   <Badge className="mb-2 bg-green-600 text-white">
                     🎉 New Customer Special
                   </Badge>
-                  <p className="text-lg md:text-xl font-bold text-green-700">
+                  <p className="text-base md:text-lg font-semibold text-green-700">
                     $60 Off All Services!
                   </p>
                 </CardContent>
@@ -172,7 +172,7 @@ export default function BookingSchedule() {
 
             {/* Membership Plan Selection */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <h3 className="text-base md:text-lg font-bold">Choose a plan</h3>
+              <h3 className="text-base md:text-lg font-semibold">Choose a plan</h3>
               <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
                 {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => {
                   // Calculate potential savings based on current extras
@@ -194,7 +194,7 @@ export default function BookingSchedule() {
                   >
                     <CardContent className="p-5 md:p-6 space-y-2 flex flex-col justify-center h-full">
                       <div className="flex justify-between items-start">
-                        <h4 className="font-extrabold text-base md:text-lg">{plan.label}</h4>
+                        <h4 className="font-semibold text-base md:text-lg">{plan.label}</h4>
                         {plan.discount > 0 && (
                           <div className="flex flex-col items-end gap-1">
                             <Badge variant="secondary" className="text-xs">
@@ -208,7 +208,7 @@ export default function BookingSchedule() {
                           </div>
                         )}
                       </div>
-                      <p className="text-xl md:text-2xl font-extrabold text-primary">
+                      <p className="text-xl md:text-2xl font-bold text-primary">
                         ${plan.monthlyPrice}<span className="text-sm text-muted-foreground">/mo</span>
                       </p>
                       <p className="text-xs md:text-sm text-muted-foreground">{plan.description}</p>
@@ -258,7 +258,7 @@ export default function BookingSchedule() {
             {/* Horizontal Date Scroller */}
             <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
               <div>
-                <h3 className="text-base md:text-xl font-bold">Select a date</h3>
+                <h3 className="text-base md:text-lg font-semibold">Select a date</h3>
                 <p className="text-sm text-muted-foreground mt-1">We're closed on weekends. Book at least 3 days in advance.</p>
               </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
@@ -291,7 +291,7 @@ export default function BookingSchedule() {
                           )}>
                             {format(date, 'EEE')}
                           </p>
-                          <p className="text-3xl md:text-2xl font-bold">
+                          <p className="text-2xl font-bold">
                             {format(date, 'd')}
                           </p>
                           <p className={cn(
@@ -311,7 +311,7 @@ export default function BookingSchedule() {
             {/* Time Slots */}
             {selectedDate && (
               <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-                <h3 className="text-base md:text-xl font-bold">Choose a time window</h3>
+                <h3 className="text-base md:text-lg font-semibold">Choose a time window</h3>
                 <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {timeSlots.map((slot) => (
                     <Card

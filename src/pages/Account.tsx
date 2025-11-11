@@ -211,7 +211,7 @@ export default function Account() {
       <div className="container max-w-7xl mx-auto px-4 py-12">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-extrabold mb-2">My Account</h1>
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">My Account</h1>
             <p className="text-muted-foreground">Manage your profile, bookings, and subscriptions</p>
           </div>
           <Button variant="outline" onClick={() => navigate("/")}>
@@ -229,7 +229,7 @@ export default function Account() {
                   <User className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="font-bold">Profile</CardTitle>
+                  <CardTitle className="font-semibold">Profile</CardTitle>
                   <CardDescription>Your account information</CardDescription>
                 </div>
               </div>
@@ -277,7 +277,7 @@ export default function Account() {
                   <CreditCard className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="font-bold">Subscription</CardTitle>
+                  <CardTitle className="font-semibold">Subscription</CardTitle>
                   <CardDescription>Your current plan</CardDescription>
                 </div>
               </div>
@@ -355,7 +355,7 @@ export default function Account() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2 font-bold">
+                  <CardTitle className="flex items-center gap-2 font-semibold">
                     <Package className="w-5 h-5 text-primary" />
                     Membership Credits
                   </CardTitle>
@@ -364,7 +364,7 @@ export default function Account() {
                   </CardDescription>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-extrabold text-primary">{membershipCredits.credits_remaining}</p>
+                  <p className="text-2xl md:text-3xl font-bold text-primary">{membershipCredits.credits_remaining}</p>
                   <p className="text-sm text-muted-foreground">Credits Available</p>
                 </div>
               </div>
@@ -372,15 +372,15 @@ export default function Account() {
             <CardContent>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-2xl font-semibold">{membershipCredits.credits_per_month}</p>
+                  <p className="text-xl font-semibold">{membershipCredits.credits_per_month}</p>
                   <p className="text-xs text-muted-foreground">Per Month</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-semibold">{membershipCredits.credits_used}</p>
+                  <p className="text-xl font-semibold">{membershipCredits.credits_used}</p>
                   <p className="text-xs text-muted-foreground">Used</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-semibold">
+                  <p className="text-xl font-semibold">
                     {format(new Date(membershipCredits.current_period_end), "MMM d")}
                   </p>
                   <p className="text-xs text-muted-foreground">Next Refresh</p>
@@ -394,7 +394,7 @@ export default function Account() {
         {incompleteBookings.length > 0 && (
           <Card className="mt-6 border-2 border-warning/60 bg-warning/5 shadow-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 font-bold">
+              <CardTitle className="flex items-center gap-2 font-semibold">
                 <AlertCircle className="w-5 h-5 text-warning" />
                 Incomplete Bookings
               </CardTitle>
@@ -443,7 +443,7 @@ export default function Account() {
         {/* Upcoming Services */}
         <Card className="mt-6 border-primary/20">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 font-semibold">
               <Calendar className="w-5 h-5 text-primary" />
               Upcoming Services
             </CardTitle>
