@@ -1,38 +1,43 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useBooking } from "@/contexts/BookingContext";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, ArrowLeft, User, Mail, Phone, Sparkles } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useNavigate } from "react-router-dom";
+import { useBooking } from "@/contexts/BookingContext";
+import { useBookingSwipe } from "@/hooks/use-booking-swipe";
+import { validateEmail, validatePhone } from "@/lib/form-validation";
+import { formatPhoneNumber } from "@/lib/input-formatters";
+import { calculatePrice } from "@/lib/pricing-system";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
+import { US_STATES } from "@/lib/us-states";
 import { toast } from "sonner";
-import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { calculatePrice } from "@/lib/pricing-system";
-import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
-import { validateEmail, validateName, validatePhone } from "@/lib/form-validation";
+import { ArrowRight, User, Mail, Phone, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BOOKING_STEPS = [
-  { number: 1, label: "Location" },
-  { number: 2, label: "Home Size" },
-  { number: 3, label: "Service" },
-  { number: 4, label: "Schedule" },
-  { number: 5, label: "Details" },
-  { number: 6, label: "Payment" },
+  { id: 1, name: "ZIP Code" },
+  { id: 2, name: "Home Size" },
+  { id: 3, name: "Service" },
+  { id: 4, name: "Schedule" },
+  { id: 5, name: "Contact Info" },
+  { id: 6, name: "Payment" },
 ];
 
 export default function BookingDetails() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
-  
+
   const [formData, setFormData] = useState({
     firstName: bookingData.firstName || "",
     lastName: bookingData.lastName || "",
     email: bookingData.email || "",
     phone: bookingData.phone || "",
+    address: bookingData.address || "",
+    city: bookingData.city || "",
+    state: bookingData.state || "",
   });
 
   const [errors, setErrors] = useState({
@@ -40,6 +45,9 @@ export default function BookingDetails() {
     lastName: "",
     email: "",
     phone: "",
+    address: "",
+    city: "",
+    state: "",
   });
 
   const [touched, setTouched] = useState({
@@ -47,66 +55,41 @@ export default function BookingDetails() {
     lastName: false,
     email: false,
     phone: false,
+    address: false,
+    city: false,
+    state: false,
   });
 
-  const pricing = calculatePrice(
-    bookingData.homeSizeId,
-    bookingData.serviceType,
-    bookingData.addOns,
-    bookingData.membershipPlan,
-    bookingData.useCredit
-  );
-
-  // Swipe gesture handlers
-  const swipeHandlers = useBookingSwipe({
-    onSwipeRight: () => {
-      setCurrentStep(4);
-      navigate("/book/schedule");
-    },
-    onSwipeLeft: () => {
-      if (formData.firstName && formData.lastName && formData.email && formData.phone) {
-        updateBookingData(formData);
-        setCurrentStep(6);
-        navigate("/book/checkout");
-      }
-    },
-    canSwipeLeft: !!(formData.firstName && formData.lastName && formData.email && formData.phone),
-    step: 5,
-  });
-
-  const validateField = (field: string, value: string) => {
-    let validation;
-    switch (field) {
+  const validateField = (name: string, value: string) => {
+    switch (name) {
       case "firstName":
-        validation = validateName(value, "First name");
-        break;
       case "lastName":
-        validation = validateName(value, "Last name");
-        break;
+        return value.trim().length === 0 ? `${name === "firstName" ? "First" : "Last"} name is required` : "";
       case "email":
-        validation = validateEmail(value);
-        break;
+        return !validateEmail(value) ? "Please enter a valid email address" : "";
       case "phone":
-        validation = validatePhone(value);
-        break;
+        return !validatePhone(value) ? "Please enter a valid phone number" : "";
+      case "address":
+        return value.trim().length === 0 ? "Street address is required" : "";
+      case "city":
+        return value.trim().length === 0 ? "City is required" : "";
+      case "state":
+        return value.trim().length === 0 ? "State is required" : "";
       default:
-        validation = { isValid: true };
+        return "";
     }
-    return validation.error || "";
   };
 
   const handleChange = (field: string, value: string) => {
     if (field === "phone") {
       const formatted = formatPhoneNumber(value);
       setFormData(prev => ({ ...prev, [field]: formatted }));
-      // Validate on change if already touched
       if (touched[field as keyof typeof touched]) {
         const error = validateField(field, formatted);
         setErrors(prev => ({ ...prev, [field]: error }));
       }
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
-      // Validate on change if already touched
       if (touched[field as keyof typeof touched]) {
         const error = validateField(field, value);
         setErrors(prev => ({ ...prev, [field]: error }));
@@ -125,12 +108,16 @@ export default function BookingDetails() {
     e.preventDefault();
     
     // Mark all fields as touched
-    setTouched({
+    const allTouched = {
       firstName: true,
       lastName: true,
       email: true,
       phone: true,
-    });
+      address: true,
+      city: true,
+      state: true,
+    };
+    setTouched(allTouched);
 
     // Validate all fields
     const newErrors = {
@@ -138,8 +125,10 @@ export default function BookingDetails() {
       lastName: validateField("lastName", formData.lastName),
       email: validateField("email", formData.email),
       phone: validateField("phone", formData.phone),
+      address: validateField("address", formData.address),
+      city: validateField("city", formData.city),
+      state: validateField("state", formData.state),
     };
-
     setErrors(newErrors);
 
     // Check if there are any errors
@@ -149,28 +138,32 @@ export default function BookingDetails() {
       return;
     }
 
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    if (!isValidPhoneNumber(formData.phone)) {
-      toast.error("Please enter a valid 10-digit phone number");
-      return;
-    }
-
-    // Store the raw phone number (digits only) for backend
+    // Update booking context with all form data including address
     updateBookingData({
-      ...formData,
-      phone: getRawPhoneNumber(formData.phone)
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      phone: formData.phone.replace(/\D/g, ""), // Store only digits
+      address: formData.address,
+      city: formData.city,
+      state: formData.state,
     });
+
     setCurrentStep(6);
     navigate("/book/checkout");
   };
 
   const isFormValid = () => {
-    return formData.firstName && formData.lastName && formData.email && formData.phone &&
-           !errors.firstName && !errors.lastName && !errors.email && !errors.phone;
+    return (
+      formData.firstName.trim() !== "" &&
+      formData.lastName.trim() !== "" &&
+      validateEmail(formData.email) &&
+      validatePhone(formData.phone) &&
+      formData.address.trim() !== "" &&
+      formData.city.trim() !== "" &&
+      formData.state.trim() !== "" &&
+      !Object.values(errors).some(error => error !== "")
+    );
   };
 
   const handleBack = () => {
@@ -178,143 +171,239 @@ export default function BookingDetails() {
     navigate("/book/schedule");
   };
 
+  const handlers = useBookingSwipe({
+    onSwipeRight: handleBack,
+    onSwipeLeft: () => {
+      if (isFormValid()) {
+        handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+      }
+    },
+    canSwipeLeft: isFormValid(),
+    canSwipeRight: true,
+  });
+
+  const pricing = calculatePrice(
+    bookingData.serviceType || "standard",
+    bookingData.homeSizeId || "medium",
+    bookingData.addOns || [],
+    bookingData.membershipPlan || "none",
+    false, // useCredit
+    true // isNewCustomer
+  );
+
+  const totalSavings = pricing.membershipDiscount + pricing.newCustomerDiscount;
+
+  const PROGRESS_STEPS = [
+    { number: 1, label: "ZIP Code" },
+    { number: 2, label: "Home Size" },
+    { number: 3, label: "Service" },
+    { number: 4, label: "Schedule" },
+    { number: 5, label: "Contact" },
+    { number: 6, label: "Payment" },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
-      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
-      
-      <div className="container max-w-2xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        {/* Savings Banner */}
-        {(pricing.newCustomerDiscount > 0 || pricing.membershipDiscount > 0) && (
-          <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 shadow-xl mb-6 animate-fade-in">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-green-600 dark:text-green-400" />
-                <h3 className="text-lg md:text-xl font-bold text-green-700 dark:text-green-400">You're Saving Big!</h3>
-              </div>
-              <div className="text-2xl md:text-4xl font-bold text-green-600 dark:text-green-400 mb-4">
-                ${((pricing.newCustomerDiscount || 0) + (pricing.membershipDiscount || 0)).toFixed(2)}
-              </div>
-              <div className="space-y-1 text-sm">
-                {pricing.newCustomerDiscount > 0 && (
-                  <p className="text-muted-foreground">
-                    ✨ New Customer Discount: ${pricing.newCustomerDiscount.toFixed(2)}
-                  </p>
-                )}
-                {pricing.membershipDiscount > 0 && (
-                  <p className="text-muted-foreground">
-                    🎁 Member Savings: ${pricing.membershipDiscount.toFixed(2)}
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+    <div className="min-h-screen bg-background pb-24 md:pb-8" {...handlers}>
+      <div className="container max-w-4xl mx-auto px-4 py-4 md:py-8">
+        <ProgressBar currentStep={currentStep} totalSteps={6} steps={PROGRESS_STEPS} />
+
+        {totalSavings > 0 && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <p className="text-green-800 font-semibold text-center">
+              You're saving ${(totalSavings / 100).toFixed(2)} on this booking! 🎉
+            </p>
+          </div>
         )}
 
-        <Card className="shadow-xl animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-6">
-            <CardTitle className="text-xl md:text-2xl font-bold">Contact Information</CardTitle>
-            <CardDescription className="text-sm">
-              We'll use this to send your booking confirmation
-            </CardDescription>
-          </CardHeader>
+        <Card className="border-none shadow-lg">
+          <CardContent className="p-6 md:p-8">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold">Contact & Address Information</h2>
+                <p className="text-muted-foreground mt-2">
+                  We'll need these details to confirm your booking
+                </p>
+              </div>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-sm">
-                    First Name <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={(e) => handleChange("firstName", e.target.value)}
-                      onBlur={() => handleBlur("firstName")}
-                      className={cn("pl-10 h-12", errors.firstName && touched.firstName && "border-destructive")}
-                      placeholder="John"
-                      required
-                    />
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Contact Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Contact Details</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName" className="text-sm">
+                        First Name <span className="text-destructive">*</span>
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) => handleChange("firstName", e.target.value)}
+                          onBlur={() => handleBlur("firstName")}
+                          className={cn("pl-10 h-12", errors.firstName && touched.firstName && "border-destructive")}
+                          placeholder="John"
+                          required
+                        />
+                      </div>
+                      {errors.firstName && touched.firstName && (
+                        <p className="text-sm text-destructive mt-1">{errors.firstName}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName" className="text-sm">
+                        Last Name <span className="text-destructive">*</span>
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) => handleChange("lastName", e.target.value)}
+                          onBlur={() => handleBlur("lastName")}
+                          className={cn("pl-10 h-12", errors.lastName && touched.lastName && "border-destructive")}
+                          placeholder="Doe"
+                          required
+                        />
+                      </div>
+                      {errors.lastName && touched.lastName && (
+                        <p className="text-sm text-destructive mt-1">{errors.lastName}</p>
+                      )}
+                    </div>
                   </div>
-                  {errors.firstName && touched.firstName && (
-                    <p className="text-sm text-destructive mt-1">{errors.firstName}</p>
-                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-sm">
+                      Email Address <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleChange("email", e.target.value)}
+                        onBlur={() => handleBlur("email")}
+                        className={cn("pl-10 h-12", errors.email && touched.email && "border-destructive")}
+                        placeholder="john@example.com"
+                        required
+                      />
+                    </div>
+                    {errors.email && touched.email && (
+                      <p className="text-sm text-destructive mt-1">{errors.email}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone" className="text-sm">
+                      Phone Number <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => handleChange("phone", e.target.value)}
+                        onBlur={() => handleBlur("phone")}
+                        className={cn("pl-10 h-12", errors.phone && touched.phone && "border-destructive")}
+                        placeholder="(555) 123-4567"
+                        required
+                      />
+                    </div>
+                    {errors.phone && touched.phone && (
+                      <p className="text-sm text-destructive mt-1">{errors.phone}</p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-sm">
-                    Last Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="lastName"
-                    value={formData.lastName}
-                    onChange={(e) => handleChange("lastName", e.target.value)}
-                    onBlur={() => handleBlur("lastName")}
-                    className={cn("h-12", errors.lastName && touched.lastName && "border-destructive")}
-                    placeholder="Doe"
-                    required
-                  />
-                  {errors.lastName && touched.lastName && (
-                    <p className="text-sm text-destructive mt-1">{errors.lastName}</p>
-                  )}
-                </div>
-              </div>
+                {/* Service Address */}
+                <div className="space-y-4 border-t pt-6">
+                  <h3 className="text-lg font-semibold">Service Address</h3>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="address" className="text-sm">
+                      Street Address <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="address"
+                        value={formData.address}
+                        onChange={(e) => handleChange("address", e.target.value)}
+                        onBlur={() => handleBlur("address")}
+                        className={cn("pl-10 h-12", errors.address && touched.address && "border-destructive")}
+                        placeholder="123 Main St"
+                        required
+                      />
+                    </div>
+                    {errors.address && touched.address && (
+                      <p className="text-sm text-destructive mt-1">{errors.address}</p>
+                    )}
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm">
-                  Email <span className="text-destructive">*</span>
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleChange("email", e.target.value)}
-                    onBlur={() => handleBlur("email")}
-                    className={cn("pl-10 h-12", errors.email && touched.email && "border-destructive")}
-                    placeholder="john@example.com"
-                    required
-                  />
-                </div>
-                {errors.email && touched.email && (
-                  <p className="text-sm text-destructive mt-1">{errors.email}</p>
-                )}
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="city" className="text-sm">
+                        City <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="city"
+                        value={formData.city}
+                        onChange={(e) => handleChange("city", e.target.value)}
+                        onBlur={() => handleBlur("city")}
+                        className={cn("h-12", errors.city && touched.city && "border-destructive")}
+                        placeholder="City"
+                        required
+                      />
+                      {errors.city && touched.city && (
+                        <p className="text-sm text-destructive mt-1">{errors.city}</p>
+                      )}
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-sm">
-                  Phone Number <span className="text-destructive">*</span>
-                </Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleChange("phone", e.target.value)}
-                    onBlur={() => handleBlur("phone")}
-                    className={cn("pl-10 h-12", errors.phone && touched.phone && "border-destructive")}
-                    placeholder="(555) 123-4567"
-                    required
-                  />
+                    <div className="space-y-2">
+                      <Label htmlFor="state" className="text-sm">
+                        State <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={formData.state}
+                        onValueChange={(value) => {
+                          setFormData(prev => ({ ...prev, state: value }));
+                          setErrors(prev => ({ ...prev, state: validateField("state", value) }));
+                          setTouched(prev => ({ ...prev, state: true }));
+                        }}
+                      >
+                        <SelectTrigger className={cn("h-12", errors.state && touched.state && "border-destructive")}>
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {US_STATES.map((state) => (
+                            <SelectItem key={state.value} value={state.value}>
+                              {state.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.state && touched.state && (
+                        <p className="text-sm text-destructive mt-1">{errors.state}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                {errors.phone && touched.phone && (
-                  <p className="text-sm text-destructive mt-1">{errors.phone}</p>
-                )}
-              </div>
 
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full h-12 md:h-14 text-base font-semibold hidden md:flex"
-                disabled={!isFormValid()}
-              >
-                Continue to Payment
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full h-12 md:h-14 text-base font-semibold hidden md:flex"
+                  disabled={!isFormValid()}
+                >
+                  Continue to Payment
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </form>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -323,7 +412,7 @@ export default function BookingDetails() {
       <BottomNavigation
         currentStep={currentStep}
         totalSteps={6}
-        steps={BOOKING_STEPS}
+        steps={PROGRESS_STEPS}
         onBack={handleBack}
         onContinue={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
         continueDisabled={!isFormValid()}

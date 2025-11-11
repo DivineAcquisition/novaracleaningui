@@ -127,6 +127,7 @@ export type Database = {
           payout_status: string | null
           phone: string
           platform_fee_cents: number | null
+          rating_submitted: boolean | null
           service_date: string
           service_type: string
           state: string
@@ -170,6 +171,7 @@ export type Database = {
           payout_status?: string | null
           phone: string
           platform_fee_cents?: number | null
+          rating_submitted?: boolean | null
           service_date: string
           service_type: string
           state: string
@@ -213,6 +215,7 @@ export type Database = {
           payout_status?: string | null
           phone?: string
           platform_fee_cents?: number | null
+          rating_submitted?: boolean | null
           service_date?: string
           service_type?: string
           state?: string
@@ -234,12 +237,58 @@ export type Database = {
           },
         ]
       }
+      cleaner_ratings: {
+        Row: {
+          booking_id: string
+          cleaner_id: string
+          created_at: string
+          customer_email: string
+          id: string
+          rating: number
+          review: string | null
+        }
+        Insert: {
+          booking_id: string
+          cleaner_id: string
+          created_at?: string
+          customer_email: string
+          id?: string
+          rating: number
+          review?: string | null
+        }
+        Update: {
+          booking_id?: string
+          cleaner_id?: string
+          created_at?: string
+          customer_email?: string
+          id?: string
+          rating?: number
+          review?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaner_ratings_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaner_ratings_cleaner_id_fkey"
+            columns: ["cleaner_id"]
+            isOneToOne: false
+            referencedRelation: "cleaners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cleaners: {
         Row: {
           activated_at: string | null
           approved: boolean
           available_for_bookings: boolean | null
           avatar_url: string | null
+          average_rating: number | null
           completed_bookings: number | null
           created_at: string
           email: string
@@ -256,6 +305,7 @@ export type Database = {
           stripe_account_id: string | null
           total_bookings: number | null
           total_earnings_cents: number | null
+          total_ratings: number | null
           updated_at: string
           user_id: string | null
         }
@@ -264,6 +314,7 @@ export type Database = {
           approved?: boolean
           available_for_bookings?: boolean | null
           avatar_url?: string | null
+          average_rating?: number | null
           completed_bookings?: number | null
           created_at?: string
           email: string
@@ -280,6 +331,7 @@ export type Database = {
           stripe_account_id?: string | null
           total_bookings?: number | null
           total_earnings_cents?: number | null
+          total_ratings?: number | null
           updated_at?: string
           user_id?: string | null
         }
@@ -288,6 +340,7 @@ export type Database = {
           approved?: boolean
           available_for_bookings?: boolean | null
           avatar_url?: string | null
+          average_rating?: number | null
           completed_bookings?: number | null
           created_at?: string
           email?: string
@@ -304,6 +357,7 @@ export type Database = {
           stripe_account_id?: string | null
           total_bookings?: number | null
           total_earnings_cents?: number | null
+          total_ratings?: number | null
           updated_at?: string
           user_id?: string | null
         }

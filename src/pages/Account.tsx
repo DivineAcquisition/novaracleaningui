@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { ModifyBookingDialog } from "@/components/booking/ModifyBookingDialog";
+import { RatingDialog } from "@/components/booking/RatingDialog";
 
 interface Booking {
   id: string;
@@ -33,6 +34,8 @@ interface Booking {
   bathrooms: number | null;
   dwelling_type: string | null;
   membership_plan: string;
+  rating_submitted: boolean;
+  cleaner_id: string | null;
 }
 
 interface MembershipCredit {
@@ -55,6 +58,8 @@ export default function Account() {
   const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
   const [modifyBooking, setModifyBooking] = useState<Booking | null>(null);
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
+  const [ratingBooking, setRatingBooking] = useState<Booking | null>(null);
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -164,6 +169,17 @@ export default function Account() {
   const handleModifySuccess = () => {
     fetchBookings();
     fetchMembershipCredits();
+  };
+
+  const handleRating = (booking: Booking) => {
+    setRatingBooking(booking);
+    setRatingDialogOpen(true);
+  };
+
+  const handleRatingSubmitted = () => {
+    setRatingDialogOpen(false);
+    setRatingBooking(null);
+    fetchBookings();
   };
 
   const getStatusBadge = (status: string) => {
@@ -537,10 +553,11 @@ export default function Account() {
                       <TableHead>Location</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pastBookings.map((booking) => (
+                     {pastBookings.map((booking) => (
                       <TableRow key={booking.id}>
                         <TableCell className="font-medium">
                           {format(new Date(booking.service_date), "MMM d, yyyy")}
@@ -557,6 +574,19 @@ export default function Account() {
                         <TableCell>{getStatusBadge(booking.status)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           ${(booking.total_estimate_cents / 100).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {booking.status === "completed" && booking.cleaner_id && !booking.rating_submitted ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRating(booking)}
+                            >
+                              Rate Cleaner
+                            </Button>
+                          ) : booking.rating_submitted ? (
+                            <Badge variant="secondary">Rated</Badge>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -638,6 +668,16 @@ export default function Account() {
           onOpenChange={setModifyDialogOpen}
           booking={modifyBooking}
           onSuccess={handleModifySuccess}
+        />
+      )}
+
+      {ratingBooking && (
+        <RatingDialog
+          open={ratingDialogOpen}
+          onOpenChange={setRatingDialogOpen}
+          bookingId={ratingBooking.id}
+          cleanerName={`Your Cleaner`}
+          onRatingSubmitted={handleRatingSubmitted}
         />
       )}
     </div>
