@@ -21,6 +21,7 @@ import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
+import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { useSwipeable } from "react-swipeable";
 
 // Stripe publishable key will be loaded from an Edge Function at runtime
@@ -132,10 +133,18 @@ export default function BookingCheckout() {
     setInitError(null);
   };
 
+  // Trigger haptic feedback on mobile devices
+  const triggerHaptic = () => {
+    if (navigator.vibrate) {
+      navigator.vibrate(50); // Short, subtle vibration
+    }
+  };
+
   // Swipe gesture handlers for payment option toggle
   const paymentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       if (effectivePaymentOption === 'deposit') {
+        triggerHaptic();
         setSwipeDirection('left');
         setTimeout(() => {
           handlePaymentOptionChange('full');
@@ -145,6 +154,7 @@ export default function BookingCheckout() {
     },
     onSwipedRight: () => {
       if (effectivePaymentOption === 'full') {
+        triggerHaptic();
         setSwipeDirection('right');
         setTimeout(() => {
           handlePaymentOptionChange('deposit');
@@ -321,6 +331,17 @@ export default function BookingCheckout() {
                 fullPaymentDiscount={bookingData.paymentOption === 'full' ? (fullPaymentPricing.originalTotal - fullPaymentPricing.finalAmount - (isNewCustomer ? 60 : 0) - (bookingData.membershipPlan ? depositPricing.membershipDiscount : 0)) : 0}
                 finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.deposit : fullPaymentPricing.finalAmount}
               />
+
+              {/* Payment Comparison View */}
+              <div className="space-y-3">
+                <h3 className="text-lg md:text-xl font-semibold">Compare Payment Options</h3>
+                <PaymentComparison
+                  depositPricing={depositPricing}
+                  fullPaymentPricing={fullPaymentPricing}
+                  selectedOption={effectivePaymentOption}
+                  onSelect={handlePaymentOptionChange}
+                />
+              </div>
 
               {/* Payment Option Selection */}
               {!bookingData.useCredit && (
