@@ -43,6 +43,8 @@ export default function BookingSuccess() {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(true);
   const [bookingValidated, setBookingValidated] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [bookingId, setBookingId] = useState<string | null>(null);
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -135,6 +137,7 @@ export default function BookingSuccess() {
 
         // All validations passed
         logStep("Booking validated successfully");
+        setBookingId(bookingId);
         setBookingValidated(true);
         
       } catch (error) {
@@ -206,6 +209,110 @@ export default function BookingSuccess() {
 
     verifyPayment();
   }, [paymentIntent, bookingValidated]);
+
+  // Send confirmation email automatically
+  useEffect(() => {
+    const sendConfirmationEmail = async () => {
+      // Only send if booking is validated and payment is verified (or no payment needed)
+      if (!bookingValidated || !bookingId || emailSent) return;
+      if (paymentIntent && !paymentVerified) return;
+
+      logStep("Checking if email should be sent", { bookingId, emailSent });
+
+      try {
+        // Check if email was already sent for this booking (idempotency)
+        const { data: booking, error: fetchError } = await supabase
+          .from('bookings')
+          .select('confirmation_email_sent, email, first_name, service_date, time_slot, service_type, home_size_id, address, city, state, zip_code, total_estimate_cents, deposit_cents, payment_option, uses_credit, add_ons')
+          .eq('id', bookingId)
+          .single();
+
+        if (fetchError || !booking) {
+          logStep("Error fetching booking for email", { error: fetchError });
+          return;
+        }
+
+        if (booking.confirmation_email_sent) {
+          logStep("Email already sent for this booking");
+          setEmailSent(true);
+          return;
+        }
+
+        // Calculate discounts
+        const isNewCustomer = !user; // If not logged in, they're a new customer
+        const newCustomerDiscount = isNewCustomer ? 6000 : 0; // $60 in cents
+        
+        // Get membership discount if applicable
+        const membershipDiscount = bookingData.membershipPlan !== 'none' 
+          ? Math.round(pricing.membershipDiscount || 0)
+          : 0;
+
+        // Get full payment discount if applicable
+        const fullPaymentDiscount = booking.payment_option === 'full'
+          ? Math.round((booking.total_estimate_cents - booking.deposit_cents) * 0.1)
+          : 0;
+
+        logStep("Sending confirmation email", { 
+          bookingId, 
+          email: booking.email,
+          discounts: { newCustomerDiscount, membershipDiscount, fullPaymentDiscount }
+        });
+
+        // Send the email via edge function
+        const { error: emailError } = await supabase.functions.invoke('send-booking-email', {
+          body: {
+            type: 'confirmation',
+            email: booking.email,
+            data: {
+              firstName: booking.first_name,
+              bookingId: bookingId,
+              serviceDate: booking.service_date,
+              timeSlot: booking.time_slot,
+              serviceType: booking.service_type,
+              homeSize: HOME_SIZE_RANGES.find(h => h.id === booking.home_size_id)?.label,
+              address: booking.address,
+              city: booking.city,
+              state: booking.state,
+              zipCode: booking.zip_code,
+              totalAmount: booking.total_estimate_cents,
+              depositAmount: booking.deposit_cents,
+              balanceAmount: booking.total_estimate_cents - booking.deposit_cents,
+              paymentOption: booking.payment_option,
+              useCredit: booking.uses_credit,
+              addOns: booking.add_ons || [],
+              newCustomerDiscount,
+              membershipDiscount,
+              fullPaymentDiscount,
+            }
+          }
+        });
+
+        if (emailError) {
+          console.error("Error sending confirmation email:", emailError);
+          // Don't show error to user - this is not critical
+          logStep("Email send failed", { error: emailError });
+        } else {
+          logStep("Confirmation email sent successfully");
+          
+          // Mark email as sent in database
+          await supabase
+            .from('bookings')
+            .update({ 
+              confirmation_email_sent: true,
+              confirmation_email_sent_at: new Date().toISOString()
+            })
+            .eq('id', bookingId);
+
+          setEmailSent(true);
+        }
+      } catch (error) {
+        console.error("Unexpected error sending confirmation email:", error);
+        // Silent failure - don't disrupt user experience
+      }
+    };
+
+    sendConfirmationEmail();
+  }, [bookingValidated, paymentVerified, paymentIntent, bookingId, emailSent, user, bookingData.membershipPlan, pricing]);
 
   // Store guest email in localStorage for easy account creation
   useEffect(() => {
@@ -437,6 +544,14 @@ export default function BookingSuccess() {
                 </div>
 
                 <Separator />
+
+                {/* Email Sent Confirmation */}
+                {emailSent && (
+                  <div className="flex items-center gap-2 text-sm text-success bg-success/10 p-3 rounded-lg border border-success/20">
+                    <Mail className="w-4 h-4" />
+                    <span>✉️ Confirmation email sent to {bookingData.email}</span>
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="grid grid-cols-2 gap-3">

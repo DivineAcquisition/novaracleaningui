@@ -107,6 +107,8 @@ export type Database = {
           cleaner_id: string | null
           cleaner_payout_cents: number | null
           completed_at: string | null
+          confirmation_email_sent: boolean | null
+          confirmation_email_sent_at: string | null
           created_at: string | null
           customer_id: string | null
           deposit_cents: number
@@ -147,6 +149,8 @@ export type Database = {
           cleaner_id?: string | null
           cleaner_payout_cents?: number | null
           completed_at?: string | null
+          confirmation_email_sent?: boolean | null
+          confirmation_email_sent_at?: string | null
           created_at?: string | null
           customer_id?: string | null
           deposit_cents: number
@@ -187,6 +191,8 @@ export type Database = {
           cleaner_id?: string | null
           cleaner_payout_cents?: number | null
           completed_at?: string | null
+          confirmation_email_sent?: boolean | null
+          confirmation_email_sent_at?: string | null
           created_at?: string | null
           customer_id?: string | null
           deposit_cents?: number

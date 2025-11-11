@@ -23,6 +23,9 @@ interface BookingConfirmationProps {
   paymentOption?: string;
   useCredit?: boolean;
   addOns?: string[];
+  newCustomerDiscount?: number;
+  membershipDiscount?: number;
+  fullPaymentDiscount?: number;
 }
 
 const formatTimeSlot = (slot: string) => {
@@ -96,6 +99,41 @@ export const BookingConfirmation = (props: BookingConfirmationProps) => {
         />
       </Section>
 
+      {/* Savings Section - Show all discounts */}
+      {(props.newCustomerDiscount || props.membershipDiscount || props.fullPaymentDiscount) && (
+        <Section style={savingsBox}>
+          <Text style={savingsTitle}>💰 Your Savings</Text>
+          {props.newCustomerDiscount && (
+            <DetailRow 
+              label="New Customer Discount:" 
+              value={<span style={savingsAmount}>-${(props.newCustomerDiscount / 100).toFixed(2)}</span>} 
+            />
+          )}
+          {props.membershipDiscount && (
+            <DetailRow 
+              label="Membership Savings:" 
+              value={<span style={savingsAmount}>-${(props.membershipDiscount / 100).toFixed(2)}</span>} 
+            />
+          )}
+          {props.fullPaymentDiscount && (
+            <DetailRow 
+              label="Pay in Full Discount:" 
+              value={<span style={savingsAmount}>-${(props.fullPaymentDiscount / 100).toFixed(2)}</span>} 
+            />
+          )}
+          <Hr style={{ margin: '12px 0' }} />
+          <DetailRow 
+            label="Total Savings:" 
+            value={
+              <span style={totalSavingsAmount}>
+                -${(((props.newCustomerDiscount || 0) + (props.membershipDiscount || 0) + (props.fullPaymentDiscount || 0)) / 100).toFixed(2)}
+              </span>
+            }
+            isLast
+          />
+        </Section>
+      )}
+
       {props.useCredit ? (
         <Highlight variant="success">
           <Text style={highlightTitle}>✨ Membership Credit Used</Text>
@@ -124,7 +162,6 @@ export const BookingConfirmation = (props: BookingConfirmationProps) => {
             }
             isLast
           />
-          <Text style={savingsText}>✓ You saved 10% by paying in full!</Text>
         </Section>
       )}
 
@@ -213,6 +250,33 @@ const successBadge = {
 const savingsText = {
   margin: '12px 0 0 0',
   fontSize: '14px',
+  color: BRAND.colors.success,
+};
+
+const savingsBox = {
+  backgroundColor: '#f0fdf4', // light green background
+  padding: BRAND.spacing.lg,
+  borderRadius: BRAND.borderRadius.lg,
+  margin: `${BRAND.spacing.lg} 0`,
+  border: `2px solid ${BRAND.colors.success}`,
+};
+
+const savingsTitle = {
+  margin: '0 0 16px 0',
+  fontSize: '18px',
+  fontWeight: '600',
+  color: BRAND.colors.success,
+};
+
+const savingsAmount = {
+  fontSize: '14px',
+  fontWeight: '600',
+  color: BRAND.colors.success,
+};
+
+const totalSavingsAmount = {
+  fontSize: '16px',
+  fontWeight: '700',
   color: BRAND.colors.success,
 };
 
