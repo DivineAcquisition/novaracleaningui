@@ -107,26 +107,7 @@ const Index = () => {
           </Card>
 
           {/* Quick Benefits */}
-          <div className="grid grid-cols-3 gap-4 pt-4">
-            <div className="space-y-2">
-              <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                <SparkleIcon className="w-5 h-5 text-primary" />
-              </div>
-              <p className="text-xs md:text-sm font-medium">Premium</p>
-            </div>
-            <div className="space-y-2">
-              <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                <Clock className="w-5 h-5 text-primary" />
-              </div>
-              <p className="text-xs md:text-sm font-medium">Flexible</p>
-            </div>
-            <div className="space-y-2">
-              <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                <Shield className="w-5 h-5 text-primary" />
-              </div>
-              <p className="text-xs md:text-sm font-medium">Guaranteed</p>
-            </div>
-          </div>
+          
 
           {/* Membership Promo Card */}
           <Card className="mt-12 border-primary/30 bg-gradient-lavender">
