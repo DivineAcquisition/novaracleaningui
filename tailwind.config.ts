@@ -20,6 +20,8 @@ export default {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
+        "focus-ring": "hsl(var(--focus-ring))",
+        "focus-ring-offset": "hsl(var(--focus-ring-offset))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {

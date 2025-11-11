@@ -37,6 +37,8 @@ All colors MUST be HSL.
     --border: 260 25% 90%;
     --input: 260 25% 90%;
     --ring: 260 100% 50%;
+    --focus-ring: 260 100% 50%;
+    --focus-ring-offset: 0 0% 100%;
 
     --radius: 0.75rem;
     
@@ -103,6 +105,8 @@ All colors MUST be HSL.
     --border: 260 30% 22%;
     --input: 260 30% 18%;
     --ring: 260 100% 60%;
+    --focus-ring: 260 100% 65%;
+    --focus-ring-offset: 260 35% 10%;
     
     --success: 142 76% 36%;
     --warning: 38 92% 50%;
@@ -133,6 +137,37 @@ All colors MUST be HSL.
   
   body {
     @apply bg-background text-foreground font-sans;
+  }
+  
+  /* Custom focus styles with enhanced visibility and brand consistency */
+  *:focus-visible {
+    @apply outline-none ring-[3px] ring-primary ring-offset-2 ring-offset-background;
+    transition: box-shadow 0.2s ease-in-out;
+  }
+  
+  /* Enhanced focus for interactive elements */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [role="button"]:focus-visible,
+  [role="radio"]:focus-visible,
+  [role="checkbox"]:focus-visible,
+  [role="tab"]:focus-visible {
+    @apply ring-[3px] ring-primary ring-offset-2 ring-offset-background;
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 5px hsl(var(--focus-ring));
+  }
+  
+  /* Focus for card-based interactions */
+  .card-interactive:focus-visible {
+    @apply ring-[3px] ring-primary ring-offset-2 ring-offset-background border-primary/50;
+  }
+  
+  /* Skip to content link for keyboard users */
+  .skip-to-content:focus {
+    @apply fixed top-4 left-4 z-50 px-4 py-2 bg-primary text-primary-foreground rounded-md;
+    @apply ring-4 ring-primary-glow ring-offset-2 ring-offset-background;
   }
   
   @keyframes slide-up {
