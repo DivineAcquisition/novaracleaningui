@@ -1,23 +1,60 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw, CreditCard } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface StripePaymentFormProps {
   amount: number;
   onSuccess: () => void;
   onRetry?: () => void;
+  customerEmail?: string;
 }
 
-export function StripePaymentForm({ amount, onSuccess, onRetry }: StripePaymentFormProps) {
+export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }: StripePaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<string | null>(null);
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<any[]>([]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("new");
+  const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
+  const [saveForFuture, setSaveForFuture] = useState(true);
+
+  // Load saved payment methods for returning customers
+  useEffect(() => {
+    const loadPaymentMethods = async () => {
+      if (!user || !customerEmail) return;
+      
+      setLoadingPaymentMethods(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("get-saved-payment-methods", {
+          body: { email: customerEmail }
+        });
+
+        if (error) throw error;
+        
+        if (data && data.paymentMethods && data.paymentMethods.length > 0) {
+          setSavedPaymentMethods(data.paymentMethods);
+        }
+      } catch (error: any) {
+        console.error("Error loading payment methods:", error);
+      } finally {
+        setLoadingPaymentMethods(false);
+      }
+    };
+
+    loadPaymentMethods();
+  }, [user, customerEmail]);
 
   const getErrorMessage = (error: any): { title: string; message: string; type: string } => {
     const errorCode = error.code || error.type;
@@ -80,10 +117,40 @@ export function StripePaymentForm({ amount, onSuccess, onRetry }: StripePaymentF
     setErrorType(null);
 
     try {
+      // If using saved payment method
+      if (selectedPaymentMethod !== "new" && savedPaymentMethods.length > 0) {
+        const paymentMethod = savedPaymentMethods.find(pm => pm.id === selectedPaymentMethod);
+        if (paymentMethod) {
+          // Use the saved payment method
+          const { error } = await stripe.confirmPayment({
+            elements,
+            confirmParams: {
+              return_url: `${window.location.origin}/book/success`,
+              payment_method: selectedPaymentMethod,
+            },
+          });
+
+          if (error) {
+            const errorDetails = getErrorMessage(error);
+            setPaymentError(errorDetails.message);
+            setErrorType(errorDetails.type);
+            
+            toast({
+              title: errorDetails.title,
+              description: errorDetails.message,
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+      }
+
+      // New payment method - confirm and optionally save
       const { error } = await stripe.confirmPayment({
         elements,
         confirmParams: {
           return_url: `${window.location.origin}/book/success`,
+          save_payment_method: saveForFuture,
         },
       });
 
@@ -155,13 +222,68 @@ export function StripePaymentForm({ amount, onSuccess, onRetry }: StripePaymentF
         </Alert>
       )}
 
-      <div className="rounded-lg border border-border bg-card p-6">
-        <PaymentElement 
-          options={{
-            layout: "tabs",
-          }}
-        />
-      </div>
+      {/* Saved Payment Methods for Returning Customers */}
+      {savedPaymentMethods.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <h4 className="font-semibold mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Select Payment Method
+            </h4>
+            <RadioGroup value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
+              {savedPaymentMethods.map((pm) => (
+                <div key={pm.id} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-accent/50 transition-colors">
+                  <RadioGroupItem value={pm.id} id={pm.id} />
+                  <Label htmlFor={pm.id} className="flex-1 cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">
+                        {pm.card?.brand?.toUpperCase()} •••• {pm.card?.last4}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        Exp {pm.card?.exp_month}/{pm.card?.exp_year}
+                      </span>
+                    </div>
+                  </Label>
+                </div>
+              ))}
+              <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-accent/50 transition-colors">
+                <RadioGroupItem value="new" id="new" />
+                <Label htmlFor="new" className="flex-1 cursor-pointer">
+                  <span className="font-medium">Use a new payment method</span>
+                </Label>
+              </div>
+            </RadioGroup>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Show Payment Element only for new payment method */}
+      {selectedPaymentMethod === "new" && (
+        <>
+          <div className="rounded-lg border border-border bg-card p-6">
+            <PaymentElement 
+              options={{
+                layout: "tabs",
+              }}
+            />
+          </div>
+          
+          {user && (
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="save-payment"
+                checked={saveForFuture}
+                onChange={(e) => setSaveForFuture(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="save-payment" className="text-sm cursor-pointer">
+                Save payment method for future bookings
+              </Label>
+            </div>
+          )}
+        </>
+      )}
       
       <Button
         type="submit"

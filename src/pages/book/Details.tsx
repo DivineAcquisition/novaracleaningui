@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { calculatePrice } from "@/lib/pricing-system";
 import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
+import { validateEmail, validateName, validatePhone } from "@/lib/form-validation";
+import { cn } from "@/lib/utils";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -31,6 +33,20 @@ export default function BookingDetails() {
     lastName: bookingData.lastName || "",
     email: bookingData.email || "",
     phone: bookingData.phone || "",
+  });
+
+  const [errors, setErrors] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
+
+  const [touched, setTouched] = useState({
+    firstName: false,
+    lastName: false,
+    email: false,
+    phone: false,
   });
 
   const pricing = calculatePrice(
@@ -58,18 +74,81 @@ export default function BookingDetails() {
     step: 5,
   });
 
+  const validateField = (field: string, value: string) => {
+    let validation;
+    switch (field) {
+      case "firstName":
+        validation = validateName(value, "First name");
+        break;
+      case "lastName":
+        validation = validateName(value, "Last name");
+        break;
+      case "email":
+        validation = validateEmail(value);
+        break;
+      case "phone":
+        validation = validatePhone(value);
+        break;
+      default:
+        validation = { isValid: true };
+    }
+    return validation.error || "";
+  };
+
   const handleChange = (field: string, value: string) => {
     if (field === "phone") {
       const formatted = formatPhoneNumber(value);
       setFormData(prev => ({ ...prev, [field]: formatted }));
+      // Validate on change if already touched
+      if (touched[field as keyof typeof touched]) {
+        const error = validateField(field, formatted);
+        setErrors(prev => ({ ...prev, [field]: error }));
+      }
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
+      // Validate on change if already touched
+      if (touched[field as keyof typeof touched]) {
+        const error = validateField(field, value);
+        setErrors(prev => ({ ...prev, [field]: error }));
+      }
     }
+  };
+
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    const value = formData[field as keyof typeof formData];
+    const error = validateField(field, value);
+    setErrors(prev => ({ ...prev, [field]: error }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Mark all fields as touched
+    setTouched({
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+    });
+
+    // Validate all fields
+    const newErrors = {
+      firstName: validateField("firstName", formData.firstName),
+      lastName: validateField("lastName", formData.lastName),
+      email: validateField("email", formData.email),
+      phone: validateField("phone", formData.phone),
+    };
+
+    setErrors(newErrors);
+
+    // Check if there are any errors
+    const hasErrors = Object.values(newErrors).some(error => error !== "");
+    if (hasErrors) {
+      toast.error("Please fix the errors before continuing");
+      return;
+    }
+
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
       toast.error("Please fill in all fields");
       return;
@@ -87,6 +166,11 @@ export default function BookingDetails() {
     });
     setCurrentStep(6);
     navigate("/book/checkout");
+  };
+
+  const isFormValid = () => {
+    return formData.firstName && formData.lastName && formData.email && formData.phone &&
+           !errors.firstName && !errors.lastName && !errors.email && !errors.phone;
   };
 
   const handleBack = () => {
@@ -147,11 +231,15 @@ export default function BookingDetails() {
                       id="firstName"
                       value={formData.firstName}
                       onChange={(e) => handleChange("firstName", e.target.value)}
-                      className="pl-10 h-12"
+                      onBlur={() => handleBlur("firstName")}
+                      className={cn("pl-10 h-12", errors.firstName && touched.firstName && "border-destructive")}
                       placeholder="John"
                       required
                     />
                   </div>
+                  {errors.firstName && touched.firstName && (
+                    <p className="text-sm text-destructive mt-1">{errors.firstName}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -162,10 +250,14 @@ export default function BookingDetails() {
                     id="lastName"
                     value={formData.lastName}
                     onChange={(e) => handleChange("lastName", e.target.value)}
-                    className="h-12"
+                    onBlur={() => handleBlur("lastName")}
+                    className={cn("h-12", errors.lastName && touched.lastName && "border-destructive")}
                     placeholder="Doe"
                     required
                   />
+                  {errors.lastName && touched.lastName && (
+                    <p className="text-sm text-destructive mt-1">{errors.lastName}</p>
+                  )}
                 </div>
               </div>
 
@@ -180,11 +272,15 @@ export default function BookingDetails() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
-                    className="pl-10 h-12"
+                    onBlur={() => handleBlur("email")}
+                    className={cn("pl-10 h-12", errors.email && touched.email && "border-destructive")}
                     placeholder="john@example.com"
                     required
                   />
                 </div>
+                {errors.email && touched.email && (
+                  <p className="text-sm text-destructive mt-1">{errors.email}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -198,18 +294,22 @@ export default function BookingDetails() {
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleChange("phone", e.target.value)}
-                    className="pl-10 h-12"
+                    onBlur={() => handleBlur("phone")}
+                    className={cn("pl-10 h-12", errors.phone && touched.phone && "border-destructive")}
                     placeholder="(555) 123-4567"
                     required
                   />
                 </div>
+                {errors.phone && touched.phone && (
+                  <p className="text-sm text-destructive mt-1">{errors.phone}</p>
+                )}
               </div>
 
               <Button
                 type="submit"
                 size="lg"
                 className="w-full h-12 md:h-14 text-base font-semibold hidden md:flex"
-                disabled={!formData.firstName || !formData.lastName || !formData.email || !formData.phone}
+                disabled={!isFormValid()}
               >
                 Continue to Payment
                 <ArrowRight className="ml-2 w-5 h-5" />
@@ -225,15 +325,8 @@ export default function BookingDetails() {
         totalSteps={6}
         steps={BOOKING_STEPS}
         onBack={handleBack}
-        onContinue={() => {
-          if (formData.firstName && formData.lastName && formData.email && formData.phone) {
-            updateBookingData(formData);
-            setCurrentStep(6);
-            navigate("/book/checkout");
-          } else {
-            toast.error("Please fill in all fields");
-          }
-        }}
+        onContinue={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+        continueDisabled={!isFormValid()}
         continueText="Continue to Payment"
       />
     </div>

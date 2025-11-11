@@ -114,8 +114,8 @@ serve(async (req: Request) => {
           });
 
           logStep("Calendar attachment generated", { bookingId: data.bookingId });
-        } catch (calError) {
-          logStep("Error generating calendar attachment", { error: calError.message });
+        } catch (calError: any) {
+          logStep("Error generating calendar attachment", { error: calError?.message || String(calError) });
           // Continue without attachment if calendar generation fails
         }
       }

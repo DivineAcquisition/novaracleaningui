@@ -108,6 +108,8 @@ export default function BookingHome() {
         totalSteps={6}
         steps={BOOKING_STEPS}
         onBack={handleBack}
+        continueDisabled={!bookingData.homeSizeId}
+        continueText="Continue"
       />
     </div>
   );

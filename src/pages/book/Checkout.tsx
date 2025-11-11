@@ -436,11 +436,12 @@ export default function BookingCheckout() {
                       Payment Information
                     </h4>
                     <Elements stripe={stripePromise} options={{ clientSecret }}>
-                      <StripePaymentForm 
-                        amount={paymentAmount}
-                        onSuccess={handlePaymentSuccess}
-                        onRetry={handleRetryPayment}
-                      />
+            <StripePaymentForm
+              amount={paymentAmount}
+              onSuccess={handlePaymentSuccess}
+              onRetry={handleRetryPayment}
+              customerEmail={bookingData.email}
+            />
                     </Elements>
                   </CardContent>
                 </Card>
