@@ -82,12 +82,12 @@ export default function AdditionalDetails() {
 
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
-      <Card className="max-w-lg w-full shadow-xl animate-fade-in">
+      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in">
         <CardHeader className="text-center space-y-4 pb-6">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10 text-primary" />
           </div>
-          <CardTitle className="text-xl md:text-2xl font-bold">Almost Done!</CardTitle>
+          <CardTitle className="text-xl md:text-2xl font-extrabold">Almost Done!</CardTitle>
           <CardDescription className="text-sm">
             Please provide your service address and property details
           </CardDescription>

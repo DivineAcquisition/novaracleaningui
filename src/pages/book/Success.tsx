@@ -416,10 +416,10 @@ export default function BookingSuccess() {
   if (isValidating || isVerifyingPayment) {
     return (
       <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
-        <Card className="max-w-md w-full shadow-xl">
+        <Card variant="outlined" className="max-w-md w-full shadow-card">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
             <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-bold">
               {isValidating ? 'Validating Booking...' : 'Verifying Payment...'}
             </h2>
             <p className="text-muted-foreground text-sm">

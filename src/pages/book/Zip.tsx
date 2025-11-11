@@ -56,12 +56,12 @@ export default function BookingZip() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-2xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <Card className="shadow-xl animate-slide-in-right">
+        <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
             <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
               <MapPin className="w-7 h-7 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-xl md:text-2xl font-bold">Where do you need cleaning?</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-extrabold">Where do you need cleaning?</CardTitle>
             <CardDescription className="text-sm">
               Enter your ZIP code to check availability in your area
             </CardDescription>

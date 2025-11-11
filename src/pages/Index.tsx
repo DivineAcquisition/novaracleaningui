@@ -74,9 +74,9 @@ const Index = () => {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight">
               Book Your Cleaning
-              <span className="block text-primary mt-2 text-3xl font-bold">With Only $39 Today + $60 Off Your Total</span>
+              <span className="block text-primary mt-2 text-3xl font-extrabold">With Only $39 Today + $60 Off Your Total</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground">
@@ -85,7 +85,7 @@ const Index = () => {
           </div>
 
           {/* ZIP Code Entry */}
-          <Card className="shadow-2xl border-primary/20">
+          <Card variant="outlined" className="border-primary/30 shadow-card">
             <CardContent className="pt-8 pb-8 space-y-6">
               <form onSubmit={handleStartBooking} className="space-y-4">
                 <div className="space-y-2">
@@ -110,7 +110,7 @@ const Index = () => {
           
 
           {/* Membership Promo Card */}
-          <Card className="mt-12 border-primary/30 bg-gradient-lavender">
+          <Card className="mt-12 border-2 border-primary/40 bg-gradient-lavender shadow-card">
             <CardContent className="pt-6 pb-6">
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
                 <div className="flex-shrink-0">
@@ -119,7 +119,7 @@ const Index = () => {
                   </div>
                 </div>
                 <div className="flex-1 text-center md:text-left space-y-2">
-                  <h3 className="text-lg md:text-2xl font-bold">Join Our Membership Program</h3>
+                  <h3 className="text-lg md:text-2xl font-extrabold">Join Our Membership Program</h3>
                   <p className="text-sm md:text-base text-muted-foreground">
                     Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
                     Perfect for regular cleaning schedules.

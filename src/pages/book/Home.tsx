@@ -53,12 +53,12 @@ export default function BookingHome() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <Card className="shadow-xl animate-slide-in-right">
+        <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
             <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
               <HomeIcon className="w-7 h-7 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-xl md:text-2xl font-bold">How big is your home?</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-extrabold">How big is your home?</CardTitle>
             <CardDescription className="text-sm">
               Select the size that best matches your space
             </CardDescription>
@@ -70,15 +70,15 @@ export default function BookingHome() {
                 <Card
                   key={size.id}
                   className={cn(
-                    "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 animate-fade-in",
-                    bookingData.homeSizeId === size.id && "ring-2 ring-primary shadow-lavender"
+                    "card-interactive animate-fade-in",
+                    bookingData.homeSizeId === size.id && "ring-2 ring-primary border-primary/60 shadow-lavender"
                   )}
                   style={{ animationDelay: `${index * 0.1}s` }}
                   onClick={() => handleSelect(size.id)}
                 >
                   <CardContent className="p-4 md:p-6 space-y-3">
                     <div className="text-center">
-                      <h3 className="text-lg font-bold text-foreground">{size.label}</h3>
+                      <h3 className="text-lg font-extrabold text-foreground">{size.label}</h3>
                       <p className="text-sm text-muted-foreground mt-1">{size.bedroomRange}</p>
                     </div>
                   </CardContent>

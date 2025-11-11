@@ -211,7 +211,7 @@ export default function Account() {
       <div className="container max-w-7xl mx-auto px-4 py-12">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold mb-2">My Account</h1>
+            <h1 className="text-4xl font-extrabold mb-2">My Account</h1>
             <p className="text-muted-foreground">Manage your profile, bookings, and subscriptions</p>
           </div>
           <Button variant="outline" onClick={() => navigate("/")}>
@@ -222,14 +222,14 @@ export default function Account() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Profile Card */}
-          <Card className="border-primary/20">
+          <Card className="border-2 border-primary/30 shadow-card">
             <CardHeader>
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
                   <User className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Profile</CardTitle>
+                  <CardTitle className="font-bold">Profile</CardTitle>
                   <CardDescription>Your account information</CardDescription>
                 </div>
               </div>
@@ -270,14 +270,14 @@ export default function Account() {
           </Card>
 
           {/* Subscription Card */}
-          <Card className="border-primary/20">
+          <Card className="border-2 border-primary/30 shadow-card">
             <CardHeader>
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
                   <CreditCard className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <CardTitle>Subscription</CardTitle>
+                  <CardTitle className="font-bold">Subscription</CardTitle>
                   <CardDescription>Your current plan</CardDescription>
                 </div>
               </div>
@@ -351,11 +351,11 @@ export default function Account() {
 
         {/* Membership Credits */}
         {membershipCredits && (
-          <Card className="mt-6 border-primary/20 bg-gradient-lavender">
+          <Card className="mt-6 border-2 border-primary/40 bg-gradient-lavender shadow-card">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 font-bold">
                     <Package className="w-5 h-5 text-primary" />
                     Membership Credits
                   </CardTitle>
@@ -364,7 +364,7 @@ export default function Account() {
                   </CardDescription>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-primary">{membershipCredits.credits_remaining}</p>
+                  <p className="text-3xl font-extrabold text-primary">{membershipCredits.credits_remaining}</p>
                   <p className="text-sm text-muted-foreground">Credits Available</p>
                 </div>
               </div>
@@ -392,9 +392,9 @@ export default function Account() {
 
         {/* Incomplete Bookings */}
         {incompleteBookings.length > 0 && (
-          <Card className="mt-6 border-warning/50 bg-warning/5">
+          <Card className="mt-6 border-2 border-warning/60 bg-warning/5 shadow-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 font-bold">
                 <AlertCircle className="w-5 h-5 text-warning" />
                 Incomplete Bookings
               </CardTitle>

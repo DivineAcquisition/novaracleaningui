@@ -198,12 +198,12 @@ export default function BookingCheckout() {
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        <Card className="shadow-xl border-primary/20 animate-fade-in">
+        <Card variant="outlined" className="border-primary/30 shadow-card animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
             <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
               <CreditCard className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-xl md:text-2xl font-bold">Secure Checkout</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-extrabold">Secure Checkout</CardTitle>
             <CardDescription className="text-sm">
               Review your order and complete your booking
             </CardDescription>
@@ -230,10 +230,10 @@ export default function BookingCheckout() {
 
             {/* Order Summary */}
             <div className="space-y-6">
-              <h3 className="text-lg md:text-xl font-bold">Order Summary</h3>
+              <h3 className="text-lg md:text-xl font-extrabold">Order Summary</h3>
               
               <div className="grid gap-4 md:grid-cols-2">
-                <Card className="border-primary/20">
+                <Card className="border-2 border-primary/30 shadow-md">
                   <CardContent className="p-6 space-y-3">
                     <div className="flex items-center gap-2 text-primary">
                       <Sparkles className="w-5 h-5" />
@@ -256,7 +256,7 @@ export default function BookingCheckout() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-primary/20">
+                <Card className="border-2 border-primary/30 shadow-md">
                   <CardContent className="p-6 space-y-3">
                     <div className="flex items-center gap-2 text-primary">
                       <Calendar className="w-5 h-5" />

@@ -106,14 +106,14 @@ export default function BookingService() {
       <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4">
         {/* New Customer Promotion Banner */}
         {!user && (
-          <Card className="bg-gradient-to-r from-success/10 via-success/5 to-background border-2 border-success/30 shadow-lg animate-slide-in-left">
+          <Card className="bg-gradient-to-r from-success/10 via-success/5 to-background border-2 border-success/40 shadow-card animate-slide-in-left">
             <CardContent className="p-4 md:p-6">
               <div className="flex items-center gap-3 md:gap-4">
                 <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 bg-success/20 rounded-full flex items-center justify-center">
                   <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-success" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-base md:text-lg font-bold text-success">New Customer Special!</h3>
+                  <h3 className="text-base md:text-lg font-extrabold text-success">New Customer Special!</h3>
                   <p className="text-sm text-foreground mt-1">
                     Save <span className="font-bold text-success">$60</span> on your first cleaning service. No membership required!
                   </p>
@@ -126,9 +126,9 @@ export default function BookingService() {
         {/* Membership Banner */}
         {user && credits && <MembershipBanner />}
         
-        <Card className="shadow-xl animate-slide-in-right">
+        <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-xl md:text-2xl font-bold">Choose your service</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-extrabold">Choose your service</CardTitle>
             <CardDescription className="text-sm">
               {hasCredits 
                 ? 'Select a service to use your membership credit'
@@ -142,8 +142,8 @@ export default function BookingService() {
                 <Card
                   key={service.id}
                   className={cn(
-                    "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 relative",
-                    bookingData.serviceType === service.id && "ring-2 ring-primary shadow-lg"
+                    "card-interactive relative",
+                    bookingData.serviceType === service.id && "ring-2 ring-primary border-primary/60 shadow-lavender"
                   )}
                   onClick={() => handleSelect(service.id)}
                 >
@@ -158,7 +158,7 @@ export default function BookingService() {
                         <service.icon className="w-7 h-7 text-primary" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold">{service.name}</h3>
+                        <h3 className="text-xl font-extrabold">{service.name}</h3>
                         <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
                       </div>
                     </div>
@@ -176,9 +176,9 @@ export default function BookingService() {
             </div>
 
             {bookingData.serviceType && (
-              <Card className="bg-muted/50">
+              <Card className="bg-muted/50 border border-border/60 shadow-md">
                 <CardHeader>
-                  <CardTitle className="text-lg">À La Carte Add-ons</CardTitle>
+                  <CardTitle className="text-lg font-bold">À La Carte Add-ons</CardTitle>
                   <CardDescription>
                     {bookingData.serviceType === 'moveInOut' 
                       ? 'Fridge & Oven included. Only Windows available as add-on.'
