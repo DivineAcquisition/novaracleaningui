@@ -153,7 +153,7 @@ export default function BookingCheckout() {
       // If no payment required (member using credit), go directly to success
       if (!data.requiresPayment) {
         toast.success("Booking confirmed!");
-        navigate("/book/success");
+        navigate(`/book/success?booking_id=${data.bookingId}`);
         return;
       }
 
