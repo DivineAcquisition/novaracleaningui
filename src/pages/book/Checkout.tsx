@@ -230,9 +230,11 @@ export default function BookingCheckout() {
 
             {/* Order Summary */}
             <div className="space-y-6">
-              <h3 className="text-lg md:text-xl font-semibold">Order Summary</h3>
+            <h3 className="text-lg md:text-xl font-semibold" id="order-summary-heading">
+              Order Summary
+            </h3>
               
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2" role="region" aria-labelledby="order-summary-heading">
                 <Card className="border-2 border-primary/30 shadow-md">
                   <CardContent className="p-6 space-y-3">
                     <div className="flex items-center gap-2 text-primary">

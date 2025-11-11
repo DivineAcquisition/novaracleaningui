@@ -232,90 +232,110 @@ export default function BookingDetails() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="firstName" className="text-sm">
-                        First Name <span className="text-destructive">*</span>
-                      </Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="firstName"
-                          value={formData.firstName}
-                          onChange={(e) => handleChange("firstName", e.target.value)}
-                          onBlur={() => handleBlur("firstName")}
-                          className={cn("pl-10 h-12", errors.firstName && touched.firstName && "border-destructive")}
-                          placeholder="John"
-                          required
-                        />
-                      </div>
-                      {errors.firstName && touched.firstName && (
-                        <p className="text-sm text-destructive mt-1">{errors.firstName}</p>
-                      )}
+                  <Label htmlFor="firstName" className="text-sm">
+                    First Name <span className="text-destructive" aria-label="required">*</span>
+                  </Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      id="firstName"
+                      value={formData.firstName}
+                      onChange={(e) => handleChange("firstName", e.target.value)}
+                      onBlur={() => handleBlur("firstName")}
+                      className={cn("pl-10 h-12", errors.firstName && touched.firstName && "border-destructive")}
+                      placeholder="John"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!(errors.firstName && touched.firstName)}
+                      aria-describedby={errors.firstName && touched.firstName ? "firstName-error" : undefined}
+                    />
+                  </div>
+                  {errors.firstName && touched.firstName && (
+                    <p className="text-sm text-destructive mt-1" id="firstName-error" role="alert">
+                      {errors.firstName}
+                    </p>
+                  )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="lastName" className="text-sm">
-                        Last Name <span className="text-destructive">*</span>
-                      </Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="lastName"
-                          value={formData.lastName}
-                          onChange={(e) => handleChange("lastName", e.target.value)}
-                          onBlur={() => handleBlur("lastName")}
-                          className={cn("pl-10 h-12", errors.lastName && touched.lastName && "border-destructive")}
-                          placeholder="Doe"
-                          required
-                        />
-                      </div>
-                      {errors.lastName && touched.lastName && (
-                        <p className="text-sm text-destructive mt-1">{errors.lastName}</p>
-                      )}
+                  <Label htmlFor="lastName" className="text-sm">
+                    Last Name <span className="text-destructive" aria-label="required">*</span>
+                  </Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      id="lastName"
+                      value={formData.lastName}
+                      onChange={(e) => handleChange("lastName", e.target.value)}
+                      onBlur={() => handleBlur("lastName")}
+                      className={cn("pl-10 h-12", errors.lastName && touched.lastName && "border-destructive")}
+                      placeholder="Doe"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!(errors.lastName && touched.lastName)}
+                      aria-describedby={errors.lastName && touched.lastName ? "lastName-error" : undefined}
+                    />
+                  </div>
+                  {errors.lastName && touched.lastName && (
+                    <p className="text-sm text-destructive mt-1" id="lastName-error" role="alert">
+                      {errors.lastName}
+                    </p>
+                  )}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm">
-                      Email Address <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleChange("email", e.target.value)}
-                        onBlur={() => handleBlur("email")}
-                        className={cn("pl-10 h-12", errors.email && touched.email && "border-destructive")}
-                        placeholder="john@example.com"
-                        required
-                      />
-                    </div>
-                    {errors.email && touched.email && (
-                      <p className="text-sm text-destructive mt-1">{errors.email}</p>
-                    )}
+                  <Label htmlFor="email" className="text-sm">
+                    Email Address <span className="text-destructive" aria-label="required">*</span>
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleChange("email", e.target.value)}
+                      onBlur={() => handleBlur("email")}
+                      className={cn("pl-10 h-12", errors.email && touched.email && "border-destructive")}
+                      placeholder="john@example.com"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!(errors.email && touched.email)}
+                      aria-describedby={errors.email && touched.email ? "email-error" : undefined}
+                    />
+                  </div>
+                  {errors.email && touched.email && (
+                    <p className="text-sm text-destructive mt-1" id="email-error" role="alert">
+                      {errors.email}
+                    </p>
+                  )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-sm">
-                      Phone Number <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => handleChange("phone", e.target.value)}
-                        onBlur={() => handleBlur("phone")}
-                        className={cn("pl-10 h-12", errors.phone && touched.phone && "border-destructive")}
-                        placeholder="(555) 123-4567"
-                        required
-                      />
-                    </div>
-                    {errors.phone && touched.phone && (
-                      <p className="text-sm text-destructive mt-1">{errors.phone}</p>
-                    )}
+                  <Label htmlFor="phone" className="text-sm">
+                    Phone Number <span className="text-destructive" aria-label="required">*</span>
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => handleChange("phone", e.target.value)}
+                      onBlur={() => handleBlur("phone")}
+                      className={cn("pl-10 h-12", errors.phone && touched.phone && "border-destructive")}
+                      placeholder="(555) 123-4567"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!(errors.phone && touched.phone)}
+                      aria-describedby={errors.phone && touched.phone ? "phone-error" : undefined}
+                    />
+                  </div>
+                  {errors.phone && touched.phone && (
+                    <p className="text-sm text-destructive mt-1" id="phone-error" role="alert">
+                      {errors.phone}
+                    </p>
+                  )}
                   </div>
                 </div>
 
@@ -324,24 +344,29 @@ export default function BookingDetails() {
                   <h3 className="text-lg font-semibold">Service Address</h3>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="address" className="text-sm">
-                      Street Address <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="address"
-                        value={formData.address}
-                        onChange={(e) => handleChange("address", e.target.value)}
-                        onBlur={() => handleBlur("address")}
-                        className={cn("pl-10 h-12", errors.address && touched.address && "border-destructive")}
-                        placeholder="123 Main St"
-                        required
-                      />
-                    </div>
-                    {errors.address && touched.address && (
-                      <p className="text-sm text-destructive mt-1">{errors.address}</p>
-                    )}
+                  <Label htmlFor="address" className="text-sm">
+                    Street Address <span className="text-destructive" aria-label="required">*</span>
+                  </Label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => handleChange("address", e.target.value)}
+                      onBlur={() => handleBlur("address")}
+                      className={cn("pl-10 h-12", errors.address && touched.address && "border-destructive")}
+                      placeholder="123 Main St"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!(errors.address && touched.address)}
+                      aria-describedby={errors.address && touched.address ? "address-error" : undefined}
+                    />
+                  </div>
+                  {errors.address && touched.address && (
+                    <p className="text-sm text-destructive mt-1" id="address-error" role="alert">
+                      {errors.address}
+                    </p>
+                  )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -398,9 +423,15 @@ export default function BookingDetails() {
                   size="lg"
                   className="w-full h-12 md:h-14 text-base font-semibold hidden md:flex"
                   disabled={!isFormValid()}
+                  aria-label={
+                    !isFormValid() 
+                      ? "Please complete all required fields to continue" 
+                      : "Continue to payment"
+                  }
+                  aria-disabled={!isFormValid()}
                 >
                   Continue to Payment
-                  <ArrowRight className="ml-2 w-5 h-5" />
+                  <ArrowRight className="ml-2 w-5 h-5" aria-hidden="true" />
                 </Button>
               </form>
             </div>

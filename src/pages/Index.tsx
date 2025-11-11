@@ -92,15 +92,37 @@ const Index = () => {
                   <label htmlFor="zipCode" className="text-sm font-medium text-left block">
                     Enter Your ZIP Code
                   </label>
-                  <Input id="zipCode" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={5} placeholder="12345" value={zipCode} onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} className="h-14 text-lg text-center" autoFocus />
-                  <p className="text-xs text-muted-foreground">
+                  <Input 
+                    id="zipCode" 
+                    type="text" 
+                    inputMode="numeric" 
+                    pattern="[0-9]*" 
+                    maxLength={5} 
+                    placeholder="12345" 
+                    value={zipCode} 
+                    onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} 
+                    className="h-14 text-lg text-center" 
+                    autoFocus 
+                    aria-label="ZIP code for service area"
+                    aria-required="true"
+                    aria-invalid={zipCode.length > 0 && zipCode.length !== 5}
+                    aria-describedby="zipcode-help"
+                  />
+                  <p className="text-xs text-muted-foreground" id="zipcode-help">
                     We'll check if we service your area
                   </p>
                 </div>
 
-                <Button type="submit" size="lg" disabled={zipCode.length !== 5 || isValidating} className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary">
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  disabled={zipCode.length !== 5 || isValidating} 
+                  className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                  aria-label={zipCode.length !== 5 ? "Enter a valid 5-digit ZIP code to continue" : "Check service availability"}
+                  aria-busy={isValidating}
+                >
                   {isValidating ? "Checking..." : "Continue"}
-                  <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
+                  <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" aria-hidden="true" />
                 </Button>
               </form>
             </CardContent>
