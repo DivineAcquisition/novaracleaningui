@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock, Clock, MapPin, Package, AlertCircle, Home } from "lucide-react";
+import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock, Clock, MapPin, Package, AlertCircle, Home, X } from "lucide-react";
 import { toast } from "sonner";
 import { format, isPast, isFuture } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -181,6 +181,22 @@ export default function Account() {
     setRatingDialogOpen(false);
     setRatingBooking(null);
     fetchBookings();
+  };
+
+  const handleCancel = (booking: Booking) => {
+    // Open GoHighLevel form with pre-filled booking data
+    const ghlFormUrl = 'https://novaracleaning.com/cancel-booking';
+    const params = new URLSearchParams({
+      booking_id: booking.id,
+      email: user?.email || '',
+      customer_name: user?.email?.split('@')[0] || '',
+      service_date: booking.service_date,
+      time_slot: booking.time_slot,
+      service_type: booking.service_type,
+      address: `${booking.address}, ${booking.city}, ${booking.state}`,
+      total_amount: (booking.total_estimate_cents / 100).toFixed(2),
+    });
+    window.open(`${ghlFormUrl}?${params.toString()}`, '_blank');
   };
 
   const getStatusBadge = (status: string) => {
@@ -509,7 +525,7 @@ export default function Account() {
                           <p className="text-2xl font-bold text-primary">
                             ${(booking.total_estimate_cents / 100).toFixed(2)}
                           </p>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               variant="outline"
                               size="sm"
@@ -523,6 +539,14 @@ export default function Account() {
                               onClick={() => handleReschedule(booking)}
                             >
                               Reschedule
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleCancel(booking)}
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              Cancel
                             </Button>
                           </div>
                         </div>
