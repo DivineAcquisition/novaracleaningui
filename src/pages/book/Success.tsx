@@ -213,9 +213,8 @@ export default function BookingSuccess() {
   // Send confirmation email automatically
   useEffect(() => {
     const sendConfirmationEmail = async () => {
-      // Only send if booking is validated and payment is verified (or no payment needed)
+      // Send email for any booking that reaches Success page
       if (!bookingValidated || !bookingId || emailSent) return;
-      if (paymentIntent && !paymentVerified) return;
 
       logStep("Checking if email should be sent", { bookingId, emailSent });
 
@@ -439,7 +438,7 @@ export default function BookingSuccess() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 pb-32 md:pb-12">
+    <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 pb-24 md:pb-12">
       <div className="container max-w-3xl mx-auto">
         {/* Show verification error if payment failed */}
         {verificationError && (
@@ -458,14 +457,14 @@ export default function BookingSuccess() {
         )}
         
         <Card className="shadow-xl border-success/20 animate-fade-in">
-          <CardHeader className="text-center space-y-4 pb-6 md:pb-8">
-            <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
-              <CheckCircle2 className="w-10 h-10 md:w-12 md:h-12 text-success" />
+          <CardHeader className="text-center space-y-3 md:space-y-4 pb-4 md:pb-8">
+            <div className="mx-auto w-14 h-14 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-2 md:mb-4 animate-in zoom-in duration-500">
+              <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 text-success" />
             </div>
-            <CardTitle className="text-xl md:text-3xl font-bold">
+            <CardTitle className="text-lg md:text-3xl font-bold">
               {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
             </CardTitle>
-            <CardDescription className="text-sm md:text-lg">
+            <CardDescription className="text-xs md:text-lg">
               {bookingData.membershipPlan !== 'none' 
                 ? 'Your membership is active and your first credit is ready to use'
                 : bookingData.useCredit
@@ -476,17 +475,17 @@ export default function BookingSuccess() {
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6 md:space-y-8">
+          <CardContent className="space-y-4 md:space-y-8">
             {/* Booking Details Card */}
             <Card className="bg-primary/5 border-primary/20">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg md:text-xl font-semibold flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
+              <CardHeader className="pb-3 md:pb-4">
+                <CardTitle className="text-base md:text-xl font-semibold flex items-center gap-2">
+                  <Calendar className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                   Your Booking Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3 md:gap-4">
+              <CardContent className="space-y-3 md:space-y-4">
+                <div className="grid gap-2 md:gap-4">
                   <div className="flex items-start gap-3">
                     <Calendar className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
@@ -547,18 +546,18 @@ export default function BookingSuccess() {
 
                 {/* Email Sent Confirmation */}
                 {emailSent && (
-                  <div className="flex items-center gap-2 text-sm text-success bg-success/10 p-3 rounded-lg border border-success/20">
-                    <Mail className="w-4 h-4" />
+                  <div className="flex items-center gap-2 text-xs md:text-sm text-success bg-success/10 p-2 md:p-3 rounded-lg border border-success/20">
+                    <Mail className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
                     <span>✉️ Confirmation email sent to {bookingData.email}</span>
                   </div>
                 )}
 
                 {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 md:gap-3">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full h-12 text-sm md:text-base">
-                        <Calendar className="w-4 h-4 mr-2" />
+                      <Button variant="outline" className="w-full h-10 md:h-12 text-xs md:text-base">
+                        <Calendar className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                         Add to Calendar
                       </Button>
                     </DropdownMenuTrigger>
@@ -581,10 +580,10 @@ export default function BookingSuccess() {
 
                   <Button 
                     variant="outline" 
-                    className="w-full h-12 text-sm md:text-base"
+                    className="w-full h-10 md:h-12 text-xs md:text-base"
                     onClick={handleShare}
                   >
-                    <Share2 className="w-4 h-4 mr-2" />
+                    <Share2 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                     Share
                   </Button>
                 </div>
@@ -593,8 +592,8 @@ export default function BookingSuccess() {
 
             {/* Customer Portal / Account Creation Card */}
             <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg md:text-xl flex items-center gap-2">
+              <CardHeader className="pb-3 md:pb-4">
+                <CardTitle className="text-base md:text-xl flex items-center gap-2">
                   {user ? (
                     <>
                       <Settings className="w-5 h-5 text-primary" />

@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { US_STATES } from "@/lib/us-states";
 
 const DWELLING_TYPES = [
   { value: 'single_family', label: 'Single Family Home' },
@@ -25,9 +23,6 @@ export default function AdditionalDetails() {
   const [searchParams] = useSearchParams();
   const bookingId = searchParams.get("booking_id");
   
-  const [address, setAddress] = useState<string>("");
-  const [city, setCity] = useState<string>("");
-  const [state, setState] = useState<string>("");
   const [bedrooms, setBedrooms] = useState<string>("");
   const [bathrooms, setBathrooms] = useState<string>("");
   const [dwellingType, setDwellingType] = useState<string>("");
@@ -43,8 +38,8 @@ export default function AdditionalDetails() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!address || !city || !state || !bedrooms || !bathrooms || !dwellingType) {
-      toast.error("Please fill in all fields");
+    if (!bedrooms || !bathrooms || !dwellingType) {
+      toast.error("Please fill in all property details");
       return;
     }
 
@@ -59,9 +54,6 @@ export default function AdditionalDetails() {
       const { error } = await supabase
         .from("bookings")
         .update({
-          address: address,
-          city: city,
-          state: state,
           bedrooms: parseInt(bedrooms),
           bathrooms: parseFloat(bathrooms),
           dwelling_type: dwellingType,
@@ -87,62 +79,14 @@ export default function AdditionalDetails() {
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10 text-primary" />
           </div>
-          <CardTitle className="text-lg md:text-xl font-semibold">Almost Done!</CardTitle>
+          <CardTitle className="text-lg md:text-xl font-semibold">Property Details</CardTitle>
           <CardDescription className="text-sm">
-            Please provide your service address and property details
+            Help us prepare for your service
           </CardDescription>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="address">
-                Street Address <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="h-12"
-                placeholder="123 Main Street"
-                required
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="city">
-                  City <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="city"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="h-12"
-                  placeholder="San Francisco"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="state">
-                  State <span className="text-destructive">*</span>
-                </Label>
-                <Select value={state} onValueChange={setState}>
-                  <SelectTrigger id="state" className="h-12">
-                    <SelectValue placeholder="Select state" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {US_STATES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="bedrooms">
                 Number of Bedrooms <span className="text-destructive">*</span>
@@ -202,7 +146,7 @@ export default function AdditionalDetails() {
             <Button
               type="submit"
               size="lg"
-              disabled={isSubmitting || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType}
+              disabled={isSubmitting || !bedrooms || !bathrooms || !dwellingType}
               className="w-full h-12 md:h-14 text-base font-semibold"
             >
               {isSubmitting ? "Saving..." : "Complete Booking"}

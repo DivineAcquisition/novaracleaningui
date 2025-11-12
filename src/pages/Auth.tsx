@@ -66,7 +66,7 @@ export default function Auth() {
       }
     } else {
       toast.success("Welcome back!");
-      navigate("/");
+      navigate("/account");
     }
     
     setIsLoading(false);
