@@ -157,24 +157,24 @@ export default function BookingSchedule() {
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
+      <div className="container max-w-4xl mx-auto px-3 md:px-6 py-4 md:py-8">
         <Card variant="outlined" className="animate-slide-in-right">
-          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-lg md:text-xl font-semibold">Schedule your service</CardTitle>
-            <CardDescription className="text-sm">
+          <CardHeader className="text-center space-y-1.5 pb-4 px-3 md:px-6 md:pb-8">
+            <CardTitle className="text-base md:text-xl font-semibold">Schedule your service</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
               Select your preferred date and time window
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6 md:space-y-8 px-4 md:px-6">
+          <CardContent className="space-y-4 md:space-y-8 px-3 md:px-6">
             {/* New Customer Banner */}
             {!user && (
               <Card className="border-2 border-green-500/60 bg-gradient-to-br from-green-50 to-emerald-50 shadow-card animate-fade-in">
-                <CardContent className="p-4 text-center">
-                  <Badge className="mb-2 bg-green-600 text-white">
+                <CardContent className="p-3 md:p-4 text-center">
+                  <Badge className="mb-1.5 md:mb-2 bg-green-600 text-white text-xs">
                     🎉 New Customer Special
                   </Badge>
-                  <p className="text-base md:text-lg font-semibold text-green-700">
+                  <p className="text-sm md:text-lg font-semibold text-green-700">
                     $60 Off All Services!
                   </p>
                 </CardContent>
@@ -182,9 +182,9 @@ export default function BookingSchedule() {
             )}
 
             {/* Membership Plan Selection */}
-            <div className="space-y-3 md:space-y-4 animate-slide-in-from-right">
-              <h3 className="text-base md:text-lg font-semibold">Choose a plan</h3>
-              <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
+            <div className="space-y-2.5 md:space-y-4 animate-slide-in-from-right">
+              <h3 className="text-sm md:text-lg font-semibold">Choose a plan</h3>
+              <div className="grid gap-2.5 md:gap-4 grid-cols-1 sm:grid-cols-2">
                 {Object.entries(MEMBERSHIP_PLANS).map(([planId, plan]) => {
                   // Calculate potential savings based on current extras
                   const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING]?.addition || 0;

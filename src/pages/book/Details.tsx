@@ -204,45 +204,45 @@ export default function BookingDetails() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8" {...handlers}>
-      <div className="container max-w-4xl mx-auto px-4 py-4 md:py-8">
+      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <ProgressBar currentStep={currentStep} totalSteps={6} steps={PROGRESS_STEPS} />
 
         {totalSavings > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-            <p className="text-green-800 font-semibold text-center">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 md:p-4 mb-4 md:mb-6">
+            <p className="text-green-800 font-semibold text-center text-sm md:text-base">
               You're saving ${(totalSavings / 100).toFixed(2)} on this booking! 🎉
             </p>
           </div>
         )}
 
         <Card variant="outlined" className="shadow-card">
-          <CardContent className="p-6 md:p-8">
-            <div className="space-y-6">
+          <CardContent className="p-4 md:p-8">
+            <div className="space-y-4 md:space-y-6">
               <div>
-                <h2 className="text-xl md:text-2xl font-bold">Contact & Address Information</h2>
-                <p className="text-muted-foreground mt-2">
+                <h2 className="text-lg md:text-2xl font-bold">Contact & Address Information</h2>
+                <p className="text-muted-foreground mt-1 md:mt-2 text-xs md:text-sm">
                   We'll need these details to confirm your booking
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
                 {/* Contact Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Contact Details</h3>
+                <div className="space-y-3 md:space-y-4">
+                  <h3 className="text-base md:text-lg font-semibold">Contact Details</h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                    <div className="space-y-1.5 md:space-y-2">
+                  <Label htmlFor="firstName" className="text-xs md:text-sm">
                     First Name <span className="text-destructive" aria-label="required">*</span>
                   </Label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-muted-foreground" aria-hidden="true" />
                     <Input
                       id="firstName"
                       value={formData.firstName}
                       onChange={(e) => handleChange("firstName", e.target.value)}
                       onBlur={() => handleBlur("firstName")}
-                      className={cn("pl-10 h-12", errors.firstName && touched.firstName && "border-destructive")}
+                      className={cn("pl-9 md:pl-10 h-10 md:h-12 text-sm md:text-base", errors.firstName && touched.firstName && "border-destructive")}
                       placeholder="John"
                       required
                       aria-required="true"
@@ -251,7 +251,7 @@ export default function BookingDetails() {
                     />
                   </div>
                   {errors.firstName && touched.firstName && (
-                    <p className="text-sm text-destructive mt-1" id="firstName-error" role="alert">
+                    <p className="text-xs md:text-sm text-destructive mt-1" id="firstName-error" role="alert">
                       {errors.firstName}
                     </p>
                   )}

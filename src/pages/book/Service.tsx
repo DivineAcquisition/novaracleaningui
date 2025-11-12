@@ -103,18 +103,18 @@ export default function BookingService() {
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4">
+      <div className="container max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8 space-y-3 md:space-y-4">
         {/* New Customer Promotion Banner */}
         {!user && (
           <Card className="bg-gradient-to-r from-success/10 via-success/5 to-background border-2 border-success/40 shadow-card animate-slide-in-left">
-            <CardContent className="p-4 md:p-6">
-              <div className="flex items-center gap-3 md:gap-4">
-                <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 bg-success/20 rounded-full flex items-center justify-center">
-                  <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-success" />
+            <CardContent className="p-3 md:p-6">
+              <div className="flex items-center gap-2 md:gap-4">
+                <div className="flex-shrink-0 w-10 h-10 md:w-14 md:h-14 bg-success/20 rounded-full flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 md:w-7 md:h-7 text-success" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-base md:text-lg font-semibold text-success">New Customer Special!</h3>
-                  <p className="text-sm text-foreground mt-1">
+                  <h3 className="text-sm md:text-lg font-semibold text-success">New Customer Special!</h3>
+                  <p className="text-xs md:text-sm text-foreground mt-0.5 md:mt-1">
                     Save <span className="font-bold text-success">$60</span> on your first cleaning service. No membership required!
                   </p>
                 </div>
@@ -127,17 +127,17 @@ export default function BookingService() {
         {user && credits && <MembershipBanner />}
         
         <Card variant="outlined" className="animate-slide-in-right">
-          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <CardTitle className="text-lg md:text-xl font-semibold">Choose your service</CardTitle>
-            <CardDescription className="text-sm">
+          <CardHeader className="text-center space-y-1.5 pb-4 px-3 md:px-6 md:pb-8">
+            <CardTitle className="text-base md:text-xl font-semibold">Choose your service</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
               {hasCredits 
                 ? 'Select a service to use your membership credit'
                 : 'Select the cleaning tier that fits your needs'}
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6 md:space-y-8 px-4 md:px-6">
-            <div className="grid gap-3 md:gap-6 grid-cols-1 md:grid-cols-3">
+          <CardContent className="space-y-4 md:space-y-8 px-3 md:px-6">
+            <div className="grid gap-2.5 md:gap-6 grid-cols-1 md:grid-cols-3">
               {SERVICES.map((service) => (
                 <Card
                   key={service.id}
@@ -148,23 +148,23 @@ export default function BookingService() {
                   onClick={() => handleSelect(service.id)}
                 >
                   {service.badge && (
-                    <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">
+                    <Badge className="absolute -top-1.5 md:-top-2 left-1/2 -translate-x-1/2 bg-primary text-xs">
                       {service.badge}
                     </Badge>
                   )}
-                  <CardContent className="p-4 md:p-6 space-y-4">
-                    <div className="text-center space-y-3">
-                      <div className="mx-auto w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center">
-                        <service.icon className="w-7 h-7 text-primary" />
+                  <CardContent className="p-3 md:p-6 space-y-3 md:space-y-4">
+                    <div className="text-center space-y-2 md:space-y-3">
+                      <div className="mx-auto w-11 h-11 md:w-14 md:h-14 bg-primary/10 rounded-full flex items-center justify-center">
+                        <service.icon className="w-5 h-5 md:w-7 md:h-7 text-primary" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
+                        <h3 className="text-base md:text-lg font-semibold">{service.name}</h3>
+                        <p className="text-xs md:text-sm text-muted-foreground mt-0.5 md:mt-1">{service.description}</p>
                       </div>
                     </div>
-                    <ul className="space-y-2 pt-4 border-t">
+                    <ul className="space-y-1.5 md:space-y-2 pt-3 md:pt-4 border-t">
                       {service.features.map((feature, idx) => (
-                        <li key={idx} className="text-sm flex items-start gap-2">
+                        <li key={idx} className="text-xs md:text-sm flex items-start gap-1.5 md:gap-2">
                           <span className="text-primary mt-0.5">✓</span>
                           <span>{feature}</span>
                         </li>

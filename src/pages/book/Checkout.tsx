@@ -238,17 +238,17 @@ export default function BookingCheckout() {
       
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card variant="outlined" className="border-primary/30 shadow-card animate-fade-in">
-          <CardHeader className="text-center space-y-2 pb-8">
-            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-4 shadow-lavender">
-              <CreditCard className="w-8 h-8 text-white" />
+          <CardHeader className="text-center space-y-1.5 pb-5 md:pb-8">
+            <div className="mx-auto w-12 h-12 md:w-16 md:h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-2 md:mb-4 shadow-lavender">
+              <CreditCard className="w-6 h-6 md:w-8 md:h-8 text-white" />
             </div>
-            <CardTitle className="text-lg md:text-xl font-semibold">Secure Checkout</CardTitle>
-            <CardDescription className="text-sm">
+            <CardTitle className="text-base md:text-xl font-semibold">Secure Checkout</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
               Review your order and complete your booking
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-8">
+          <CardContent className="space-y-5 md:space-y-8">
             {/* New Customer Discount Banner */}
             {isNewCustomer && !user && (
               <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">

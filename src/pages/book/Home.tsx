@@ -52,20 +52,20 @@ export default function BookingHome() {
     <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8">
+      <div className="container max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
         <Card variant="outlined" className="animate-slide-in-right">
-          <CardHeader className="text-center space-y-2 pb-6 px-4 md:px-6 md:pb-8">
-            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3 md:mb-4">
-              <HomeIcon className="w-7 h-7 md:w-8 md:h-8 text-primary" />
+          <CardHeader className="text-center space-y-1.5 pb-4 px-3 md:px-6 md:pb-8">
+            <div className="mx-auto w-12 h-12 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-2 md:mb-4">
+              <HomeIcon className="w-6 h-6 md:w-8 md:h-8 text-primary" />
             </div>
-            <CardTitle className="text-lg md:text-xl font-semibold">How big is your home?</CardTitle>
-            <CardDescription className="text-sm">
+            <CardTitle className="text-base md:text-xl font-semibold">How big is your home?</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
               Select the size that best matches your space
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="space-y-6 px-4 md:px-6">
-            <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          <CardContent className="space-y-4 md:space-y-6 px-3 md:px-6">
+            <div className="grid gap-2.5 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {HOME_SIZE_RANGES.map((size, index) => (
                 <Card
                   key={size.id}
@@ -76,10 +76,10 @@ export default function BookingHome() {
                   style={{ animationDelay: `${index * 0.1}s` }}
                   onClick={() => handleSelect(size.id)}
                 >
-                  <CardContent className="p-4 md:p-6 space-y-3">
+                  <CardContent className="p-3 md:p-6 space-y-2 md:space-y-3">
                     <div className="text-center">
-                      <h3 className="text-lg font-semibold text-foreground">{size.label}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">{size.bedroomRange}</p>
+                      <h3 className="text-base md:text-lg font-semibold text-foreground">{size.label}</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-0.5 md:mt-1">{size.bedroomRange}</p>
                     </div>
                   </CardContent>
                 </Card>
