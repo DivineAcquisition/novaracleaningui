@@ -288,8 +288,46 @@ export default function BookingSuccess() {
 
         if (emailError) {
           console.error("Error sending confirmation email:", emailError);
-          // Don't show error to user - this is not critical
-          logStep("Email send failed", { error: emailError });
+          logStep("Email send failed, adding to retry queue", { error: emailError });
+          
+          // Add to retry queue for background processing
+          const { error: queueError } = await supabase
+            .from('email_retry_queue')
+            .insert({
+              booking_id: bookingId,
+              email_type: 'confirmation',
+              recipient_email: booking.email,
+              email_data: {
+                firstName: booking.first_name,
+                bookingId: bookingId,
+                serviceDate: booking.service_date,
+                timeSlot: booking.time_slot,
+                serviceType: booking.service_type,
+                homeSize: HOME_SIZE_RANGES.find(h => h.id === booking.home_size_id)?.label,
+                address: booking.address,
+                city: booking.city,
+                state: booking.state,
+                zipCode: booking.zip_code,
+                totalAmount: booking.total_estimate_cents,
+                depositAmount: booking.deposit_cents,
+                balanceAmount: booking.total_estimate_cents - booking.deposit_cents,
+                paymentOption: booking.payment_option,
+                useCredit: booking.uses_credit,
+                addOns: booking.add_ons || [],
+                newCustomerDiscount,
+                membershipDiscount,
+                fullPaymentDiscount,
+              },
+              retry_count: 0,
+              next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // Retry in 5 minutes
+              status: 'pending',
+            });
+          
+          if (queueError) {
+            console.error("Failed to queue email for retry:", queueError);
+          } else {
+            logStep("Email queued for retry");
+          }
         } else {
           logStep("Confirmation email sent successfully");
           

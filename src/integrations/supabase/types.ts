@@ -432,6 +432,62 @@ export type Database = {
         }
         Relationships: []
       }
+      email_retry_queue: {
+        Row: {
+          booking_id: string
+          created_at: string | null
+          email_data: Json
+          email_type: string
+          id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          max_retries: number | null
+          next_retry_at: string | null
+          recipient_email: string
+          retry_count: number | null
+          sent_at: string | null
+          status: string | null
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string | null
+          email_data: Json
+          email_type: string
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          max_retries?: number | null
+          next_retry_at?: string | null
+          recipient_email: string
+          retry_count?: number | null
+          sent_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string | null
+          email_data?: Json
+          email_type?: string
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          max_retries?: number | null
+          next_retry_at?: string | null
+          recipient_email?: string
+          retry_count?: number | null
+          sent_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_retry_queue_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       membership_credits: {
         Row: {
           created_at: string | null
