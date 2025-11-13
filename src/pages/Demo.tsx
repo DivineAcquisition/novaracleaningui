@@ -78,8 +78,8 @@ export default function Demo() {
                     <p className="text-muted-foreground">
                       See how our custom interface helped NovaraCleaning increase bookings by 40%
                     </p>
-                    <Button variant="outline" asChild>
-                      <a href="/book/zip">Try Live Demo</a>
+                    <Button variant="outline">
+                      Try Live Demo
                     </Button>
                   </div>
                   <div className="bg-background/80 backdrop-blur-sm rounded-lg p-6 border shadow-lg">
@@ -190,11 +190,9 @@ export default function Demo() {
                   Click below to start a sample booking with NovaraCleaning and see 
                   how our interface guides customers from start to finish.
                 </p>
-                <Button size="lg" asChild className="text-base px-8">
-                  <a href="/book/zip">
-                    Launch Demo
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </a>
+                <Button size="lg" className="text-base px-8">
+                  Launch Demo
+                  <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             </CardContent>
