@@ -7,6 +7,7 @@ import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 import Index from "./pages/Index";
+import Demo from "./pages/Demo";
 import Auth from "./pages/Auth";
 import Account from "./pages/Account";
 import Membership from "./pages/Membership";
@@ -70,6 +71,7 @@ const App = () => (
             <DomainRouter />
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/demo" element={<Demo />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/account" element={<Account />} />
               <Route path="/membership" element={<Membership />} />
