@@ -225,6 +225,22 @@ serve(async (req) => {
               logStep("Error auto-assigning cleaner (non-blocking)", { error: assignError });
             }
           }
+
+          // Send booking data to Zapier webhook
+          try {
+            logStep("Triggering Zapier webhook");
+            const zapierResponse = await supabase.functions.invoke('send-zapier-webhook', {
+              body: { bookingId: booking.id },
+            });
+            
+            if (zapierResponse.error) {
+              logStep("Zapier webhook failed (non-blocking)", { error: zapierResponse.error });
+            } else {
+              logStep("Zapier webhook sent successfully", zapierResponse.data);
+            }
+          } catch (zapierError) {
+            logStep("Error sending Zapier webhook (non-blocking)", { error: zapierError });
+          }
         break;
       }
 
