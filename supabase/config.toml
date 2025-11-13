@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.retry-failed-emails]
 verify_jwt = false
+
+[functions.send-zapier-webhook]
+verify_jwt = false
