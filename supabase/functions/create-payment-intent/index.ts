@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { 
+  getEstimatedHours, 
+  calculateCleanerPayout,
+  DEFAULT_CLEANER_HOURLY_RATE_CENTS 
+} from "../_shared/payout-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -113,11 +118,19 @@ serve(async (req) => {
     if (totalAmount < 0) totalAmount = 0;
     logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, totalAmount });
 
-    // Calculate platform fee (22%) and cleaner payout
-    const platformFeePercentage = 22;
-    const platformFeeCents = Math.round(totalAmount * (platformFeePercentage / 100));
-    const cleanerPayoutCents = totalAmount - platformFeeCents;
-    logStep("Payout calculation", { platformFeeCents, cleanerPayoutCents });
+    // Calculate cleaner payout using hourly rate ($20/hr default)
+    const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
+    const cleanerHourlyRateCents = DEFAULT_CLEANER_HOURLY_RATE_CENTS;
+    const cleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
+    const platformFeeCents = totalAmount - cleanerPayoutCents;
+    
+    logStep("Payout calculation (hourly-based)", { 
+      estimatedHours, 
+      hourlyRate: cleanerHourlyRateCents / 100,
+      cleanerPayoutCents, 
+      platformFeeCents,
+      totalAmount 
+    });
 
     // Determine amount to charge based on payment option
     // CRITICAL: Always charge at minimum $1 for card verification, even when using credit
@@ -213,6 +226,8 @@ serve(async (req) => {
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: 'pending',
         booking_number: bookingNumber,
+        estimated_duration_hours: estimatedHours,
+        cleaner_hourly_rate_cents: cleanerHourlyRateCents,
       })
       .select()
       .single();

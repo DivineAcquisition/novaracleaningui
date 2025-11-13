@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { 
+  getEstimatedHours, 
+  calculateCleanerPayout,
+  DEFAULT_CLEANER_HOURLY_RATE_CENTS 
+} from "../_shared/payout-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,6 +82,20 @@ serve(async (req) => {
 
     logStep("Booking and cleaner validated");
 
+    // Recalculate cleaner payout using hourly rate at payout time
+    const estimatedHours = booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
+    const cleanerHourlyRateCents = booking.cleaner_hourly_rate_cents || DEFAULT_CLEANER_HOURLY_RATE_CENTS;
+    const cleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
+    const platformFeeCents = booking.total_estimate_cents - cleanerPayoutCents;
+
+    logStep("Recalculated payout (hourly-based)", {
+      estimatedHours,
+      hourlyRate: cleanerHourlyRateCents / 100,
+      cleanerPayoutCents,
+      platformFeeCents,
+      totalAmount: booking.total_estimate_cents
+    });
+
     // Create payout record
     const { data: payoutRecord, error: payoutInsertError } = await supabase
       .from("payouts")
@@ -84,8 +103,8 @@ serve(async (req) => {
         booking_id: bookingId,
         cleaner_id: cleaner.id,
         total_booking_amount_cents: booking.total_estimate_cents,
-        platform_fee_cents: booking.platform_fee_cents,
-        cleaner_payout_cents: booking.cleaner_payout_cents,
+        platform_fee_cents: platformFeeCents,
+        cleaner_payout_cents: cleanerPayoutCents,
         stripe_account_id: cleaner.stripe_account_id,
         status: "processing",
       })
@@ -105,14 +124,16 @@ serve(async (req) => {
     // Create Stripe transfer
     try {
       const transfer = await stripe.transfers.create({
-        amount: booking.cleaner_payout_cents,
+        amount: cleanerPayoutCents,
         currency: "usd",
         destination: cleaner.stripe_account_id,
-        description: `Payout for booking ${bookingId.substring(0, 8)}`,
+        description: `Payout for booking ${bookingId.substring(0, 8)} - ${estimatedHours}hrs @ $${cleanerHourlyRateCents / 100}/hr`,
         metadata: {
           booking_id: bookingId,
           cleaner_id: cleaner.id,
           payout_id: payoutRecord.id,
+          estimated_hours: String(estimatedHours),
+          hourly_rate_cents: String(cleanerHourlyRateCents),
         },
       });
 
@@ -134,12 +155,12 @@ serve(async (req) => {
         .update({ payout_status: "completed" })
         .eq("id", bookingId);
 
-      // Update cleaner earnings
+      // Update cleaner earnings using recalculated payout amount
       await supabase
         .from("cleaners")
         .update({
           completed_bookings: cleaner.completed_bookings + 1,
-          total_earnings_cents: cleaner.total_earnings_cents + booking.cleaner_payout_cents,
+          total_earnings_cents: cleaner.total_earnings_cents + cleanerPayoutCents,
         })
         .eq("id", cleaner.id);
 
@@ -149,8 +170,10 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           transfer_id: transfer.id,
-          amount_cents: booking.cleaner_payout_cents,
-          amount_dollars: (booking.cleaner_payout_cents / 100).toFixed(2),
+          amount_cents: cleanerPayoutCents,
+          amount_dollars: (cleanerPayoutCents / 100).toFixed(2),
+          estimated_hours: estimatedHours,
+          hourly_rate: cleanerHourlyRateCents / 100,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

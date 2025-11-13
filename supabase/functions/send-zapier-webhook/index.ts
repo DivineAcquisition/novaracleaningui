@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { 
+  getEstimatedHours, 
+  calculateCleanerPayout,
+  getSqftRange,
+  DEFAULT_CLEANER_HOURLY_RATE_CENTS 
+} from "../_shared/payout-utils.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,19 +20,7 @@ const logStep = (step: string, details?: any) => {
 
 // Map home_size_id to Sq Ft single-select format
 function mapSqFtRange(homeSizeId: string): string {
-  const mapping: Record<string, string> = {
-    '0_999': '0-999',
-    '1000_1500': '1000-1500',
-    '1501_2000': '1501-2000',
-    '2001_2500': '2001-2500',
-    '2501_3000': '2501-3000',
-    '3001_3500': '3001-3500',
-    '3501_4000': '3501-4000',
-    '4001_4500': '4001-4500',
-    '4501_5000': '4501-5000',
-    '5000_plus': '5001+'
-  };
-  return mapping[homeSizeId] || '1000-1500';
+  return getSqftRange(homeSizeId);
 }
 
 // Map service_type to Service Type enum
@@ -90,23 +84,6 @@ function formatCurrency(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-// Get estimated hours from home size
-function getEstimatedHours(homeSizeId: string): number {
-  const hoursMapping: Record<string, number> = {
-    '0_999': 2,
-    '1000_1500': 3,
-    '1501_2000': 4,
-    '2001_2500': 5,
-    '2501_3000': 6,
-    '3001_3500': 7,
-    '3501_4000': 8,
-    '4001_4500': 9,
-    '4501_5000': 10,
-    '5000_plus': 12
-  };
-  return hoursMapping[homeSizeId] || 4;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -146,8 +123,8 @@ serve(async (req) => {
 
     // Calculate estimated hours and payout
     const estimatedHours = booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
-    const cleanerHourlyRateCents = booking.cleaner_hourly_rate_cents || 2000; // $20/hr default
-    const cleanerPayoutCents = estimatedHours * cleanerHourlyRateCents;
+    const cleanerHourlyRateCents = booking.cleaner_hourly_rate_cents || DEFAULT_CLEANER_HOURLY_RATE_CENTS;
+    const cleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
     const totalChargedCents = booking.final_charge_cents || booking.total_estimate_cents;
     const companyNetCents = totalChargedCents - cleanerPayoutCents;
 
