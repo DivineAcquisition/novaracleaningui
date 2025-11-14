@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/lib/calendar";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
+import { ReferralSection } from "@/components/ReferralSection";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +46,8 @@ export default function BookingSuccess() {
   const [bookingValidated, setBookingValidated] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [referralLink, setReferralLink] = useState<string>('');
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -627,6 +630,9 @@ export default function BookingSuccess() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Referral Section */}
+            <ReferralSection email={bookingData.email} />
 
             {/* Customer Portal / Account Creation Card */}
             <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">

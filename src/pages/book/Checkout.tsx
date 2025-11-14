@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift, ChevronLeft, ChevronRight } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
@@ -53,6 +55,9 @@ export default function BookingCheckout() {
   const [initError, setInitError] = useState<string | null>(null);
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [isValidatingReferral, setIsValidatingReferral] = useState(false);
+  const [referralValid, setReferralValid] = useState<boolean | null>(null);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
 
   useEffect(() => {
@@ -266,6 +271,72 @@ export default function BookingCheckout() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Referral Code Input */}
+            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="referralCode" className="text-sm font-medium">
+                    Have a Referral Code?
+                  </Label>
+                  {referralValid !== null && (
+                    <Badge variant={referralValid ? "default" : "destructive"} className="text-xs">
+                      {referralValid ? '✓ Valid - $50 off!' : '✗ Invalid'}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    id="referralCode"
+                    placeholder="Enter code (e.g., ABC12345)"
+                    value={referralCode}
+                    onChange={(e) => {
+                      const code = e.target.value.toUpperCase();
+                      setReferralCode(code);
+                      setReferralValid(null);
+                      updateBookingData({ referralCode: code });
+                    }}
+                    maxLength={8}
+                    className="font-mono"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!referralCode || isValidatingReferral}
+                    onClick={async () => {
+                      setIsValidatingReferral(true);
+                      try {
+                        const { data } = await supabase
+                          .from('customers')
+                          .select('email')
+                          .eq('referral_code', referralCode)
+                          .maybeSingle();
+
+                        const isValid = !!data && data.email !== bookingData.email;
+                        setReferralValid(isValid);
+                        if (isValid) {
+                          toast.success('Referral code applied! You saved $50');
+                        } else {
+                          toast.error(data ? 'Cannot use your own referral code' : 'Invalid referral code');
+                        }
+                      } catch (error) {
+                        setReferralValid(false);
+                        toast.error('Error validating code');
+                      } finally {
+                        setIsValidatingReferral(false);
+                      }
+                    }}
+                  >
+                    {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
+                {referralValid && (
+                  <p className="text-xs text-green-600">
+                    🎉 You'll save $50 on this booking!
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Order Summary */}
             <div className="space-y-6">

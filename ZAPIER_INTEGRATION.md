@@ -82,11 +82,34 @@ To change this:
 #### Service Details
 - `Service Type` - Standard, Deep, or Move In/Out
 - `Frequency` - One-Time, Weekly, Bi-weekly, Monthly
+- `Dwelling Type` - House, Apartment, Condo, Townhouse, or Not Specified
+- `Membership Plan` - None, Monthly (1 clean/month), Bi-Weekly (2 cleans/month), Weekly (4 cleans/month)
 - `Sq Ft` - Square footage range (e.g., "800–1,199")
 - `Bedrooms` - Number of bedrooms
 - `Bathrooms` - Number of bathrooms
 - `Add-ons` - Comma-separated list of add-ons
 - `Notes to Team` - Special instructions for cleaners
+
+## Referral System
+
+### Overview
+The booking system now includes a complete referral program where customers can earn $50 credits by referring friends.
+
+### How It Works
+1. **Code Generation**: Each customer automatically gets a unique 8-character referral code after their first booking
+2. **Sharing**: Customers can share their code via the Success page or Account page
+3. **Application**: New customers enter the referral code during checkout for $50 off
+4. **Tracking**: Referrals are tracked in the `referrals` table with pending/completed status
+5. **Reward**: Referrer earns $50 credit when referred customer completes their first booking
+
+### Database Tables
+- `customers.referral_code` - Stores unique referral codes
+- `referrals` - Tracks referral relationships and credits
+
+### Edge Functions
+- `generate-referral-code` - Creates unique referral codes for customers
+- Modified `stripe-webhook` - Generates codes and tracks referrals on booking completion
+- Modified `create-payment-intent` - Validates and applies referral discounts
 
 #### Scheduling
 - `Scheduled Date` - Service date (YYYY-MM-DD)

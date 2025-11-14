@@ -70,6 +70,29 @@ function mapBookingStatus(status: string): string {
   return mapping[status] || 'Booked';
 }
 
+// Map dwelling_type to formatted string
+function mapDwellingType(dwellingType: string | null): string {
+  if (!dwellingType) return 'Not Specified';
+  const mapping: Record<string, string> = {
+    'house': 'House',
+    'apartment': 'Apartment',
+    'condo': 'Condo',
+    'townhouse': 'Townhouse'
+  };
+  return mapping[dwellingType] || dwellingType;
+}
+
+// Map membership_plan to formatted string
+function mapMembershipPlan(membershipPlan: string): string {
+  const mapping: Record<string, string> = {
+    'none': 'None',
+    'monthly': 'Monthly (1 clean/month)',
+    'biweekly': 'Bi-Weekly (2 cleans/month)',
+    'weekly': 'Weekly (4 cleans/month)'
+  };
+  return mapping[membershipPlan] || 'None';
+}
+
 // Determine Payment Status
 function getPaymentStatus(status: string, paymentOption: string): string {
   if (status === 'completed') return 'Paid in Full';
@@ -161,6 +184,8 @@ serve(async (req) => {
       "Sq Ft": mapSqFtRange(booking.home_size_id),
       "Bedrooms": booking.bedrooms || 0,
       "Bathrooms": booking.bathrooms || 0,
+      "Dwelling Type": mapDwellingType(booking.dwelling_type),
+      "Membership Plan": mapMembershipPlan(booking.membership_plan || 'none'),
       "Add-ons": mapAddOns(booking.add_ons || []),
       "Notes to Team": booking.team_notes || "",
       

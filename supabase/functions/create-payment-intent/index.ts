@@ -109,14 +109,37 @@ serve(async (req) => {
     const bookingNumber = (previousBookings?.length || 0) + 1;
     const isNewCustomer = bookingNumber === 1;
     const newCustomerDiscount = (isNewCustomer && membershipPlan === 'none') ? NEW_CUSTOMER_DISCOUNT : 0;
-    logStep("Customer booking history", { bookingNumber, isNewCustomer, previousBookings: previousBookings?.length || 0, newCustomerDiscount });
+
+    // Validate referral code if provided
+    let referralDiscountCents = 0;
+    let referralCode = '';
+    if (bookingData.referralCode) {
+      logStep("Validating referral code", { code: bookingData.referralCode });
+      const { data: referrer } = await supabaseClient
+        .from('customers')
+        .select('id, email')
+        .eq('referral_code', bookingData.referralCode)
+        .maybeSingle();
+
+      if (referrer && referrer.email !== bookingData.email) {
+        referralDiscountCents = 5000; // $50 discount
+        referralCode = bookingData.referralCode;
+        logStep("Valid referral code applied", { discount: referralDiscountCents, referrerEmail: referrer.email });
+      } else if (referrer && referrer.email === bookingData.email) {
+        logStep("Referral code rejected - cannot refer yourself");
+      } else {
+        logStep("Invalid referral code");
+      }
+    }
+
+    logStep("Customer booking history", { bookingNumber, isNewCustomer, previousBookings: previousBookings?.length || 0, newCustomerDiscount, referralDiscountCents });
 
     // Credit coverage covers up to $150 of base price
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
 
-    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage;
+    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents;
     if (totalAmount < 0) totalAmount = 0;
-    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, totalAmount });
+    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, totalAmount });
 
     // Calculate cleaner payout using hourly rate ($20/hr default)
     const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
@@ -188,6 +211,7 @@ serve(async (req) => {
         paymentOption: bookingData.paymentOption,
         bookingNumber: String(bookingNumber),
         isNewCustomer: String(isNewCustomer),
+        referralCode: referralCode || '',
       },
     });
 

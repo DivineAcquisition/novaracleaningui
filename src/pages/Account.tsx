@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock, Clock, MapPin, Package, AlertCircle, Home, X } from "lucide-react";
+import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock, Clock, MapPin, Package, AlertCircle, Home, X, UserPlus } from "lucide-react";
+import { ReferralSection } from "@/components/ReferralSection";
 import { toast } from "sonner";
 import { format, isPast, isFuture } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -415,6 +416,13 @@ export default function Account() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Referral Section */}
+        {user?.email && (
+          <div className="mt-6">
+            <ReferralSection email={user.email} />
+          </div>
         )}
 
         {/* Incomplete Bookings */}

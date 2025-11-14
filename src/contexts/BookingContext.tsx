@@ -24,6 +24,7 @@ export interface BookingData {
   bathrooms?: number;
   dwellingType?: string;
   bookingId?: string;
+  referralCode?: string;
 }
 
 interface BookingContextType {
