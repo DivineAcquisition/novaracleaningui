@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift, ChevronLeft, ChevronRight } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
@@ -621,6 +621,12 @@ export default function BookingCheckout() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Home Size</span>
                         <span className="font-medium">{homeSize?.label}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-border/40 pt-1.5 md:pt-2 mt-1.5 md:mt-2">
+                        <span className="text-muted-foreground">Estimated Time</span>
+                        <span className="font-semibold text-primary">
+                          {getEstimatedHours(bookingData.homeSizeId)} hrs @ ${HOURLY_RATE}/hr
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Membership</span>
