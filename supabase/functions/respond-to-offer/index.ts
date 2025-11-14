@@ -77,6 +77,28 @@ serve(async (req) => {
       throw updateError;
     }
 
+    // Update cleaner performance metrics
+    const { data: cleaner } = await supabase
+      .from('cleaners')
+      .select('total_offers_received, total_offers_accepted')
+      .eq('id', assignment.cleaner_id)
+      .single();
+
+    const newOffersReceived = (cleaner?.total_offers_received || 0) + 1;
+    const newOffersAccepted = action === 'accept' 
+      ? (cleaner?.total_offers_accepted || 0) + 1 
+      : (cleaner?.total_offers_accepted || 0);
+    const newAcceptanceRate = (newOffersAccepted / newOffersReceived) * 100;
+
+    await supabase
+      .from('cleaners')
+      .update({
+        total_offers_received: newOffersReceived,
+        total_offers_accepted: newOffersAccepted,
+        acceptance_rate: Math.round(newAcceptanceRate * 10) / 10
+      })
+      .eq('id', assignment.cleaner_id);
+
     // If accepted, update cleaner scores
     if (action === "accept") {
       await supabase.functions.invoke("update-cleaner-scores", {

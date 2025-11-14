@@ -22,38 +22,38 @@ Deno.serve(async (req) => {
   try {
     logStep("Test webhook invocation started");
 
-    // Get the most recent confirmed booking
-    const { data: bookings, error: bookingError } = await supabase
-      .from('bookings')
+    // Get the most recent test job
+    const { data: jobs, error: jobError } = await supabase
+      .from('jobs')
       .select('id')
-      .eq('status', 'confirmed')
+      .eq('status', 'New')
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (bookingError || !bookings || bookings.length === 0) {
-      throw new Error('No confirmed bookings found for testing');
+    if (jobError || !jobs || jobs.length === 0) {
+      throw new Error('No test jobs found. Please create a test job first.');
     }
 
-    const bookingId = bookings[0].id;
-    logStep("Testing with booking", { bookingId });
+    const jobId = jobs[0].id;
+    logStep("Testing with job", { jobId });
 
-    // Invoke the send-zapier-webhook function
+    // Invoke the send-zapier-webhook function with job dispatch
     const { data, error: webhookError } = await supabase.functions.invoke(
       'send-zapier-webhook',
-      { body: { bookingId } }
+      { body: { jobId } }
     );
 
     if (webhookError) {
       throw webhookError;
     }
 
-    logStep("Test webhook sent successfully");
+    logStep("Test dispatch webhook sent successfully");
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        bookingId,
-        message: 'Test webhook sent successfully. Check your Zapier dashboard.' 
+        jobId,
+        message: 'Test dispatch webhook sent with cleaner team metrics. Check your Zapier dashboard.' 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );

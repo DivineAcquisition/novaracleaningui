@@ -115,6 +115,37 @@ const WebhookMonitor = () => {
         </div>
       </div>
 
+      {/* Test Dispatch Webhook Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Test Dispatch Webhook</CardTitle>
+          <CardDescription>
+            Send a test dispatch webhook with cleaner team metrics to your Zapier integration
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            This will send a webhook for the test job with 2 assigned cleaners including their performance metrics
+            (workload scores, weighted scores, acceptance rates, on-time rates).
+          </p>
+          <Button onClick={async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke("test-zapier-webhook");
+              if (error) throw error;
+              toast.success("Test dispatch webhook sent", {
+                description: "Check your Zapier dashboard for the webhook data with cleaner metrics",
+              });
+            } catch (error: any) {
+              toast.error("Failed to send test dispatch webhook", {
+                description: error.message,
+              });
+            }
+          }} variant="default">
+            Send Test Dispatch Webhook
+          </Button>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
