@@ -96,15 +96,25 @@ export type Database = {
       }
       bookings: {
         Row: {
+          access_notes: string | null
           add_ons: string[] | null
           address: string
+          after_photos: string[] | null
+          arrival_window: string | null
           assigned_at: string | null
           base_price_cents: number
           bathrooms: number | null
           bedrooms: number | null
+          before_photos: string[] | null
+          booker_source: string | null
+          booking_channel: string | null
           booking_number: number | null
+          cancel_reason: string | null
+          check_in_time: string | null
+          check_out_time: string | null
           checkout_session_id: string | null
           city: string
+          cleaner_hourly_rate_cents: number | null
           cleaner_id: string | null
           cleaner_payout_cents: number | null
           completed_at: string | null
@@ -113,16 +123,23 @@ export type Database = {
           created_at: string | null
           customer_id: string | null
           deposit_cents: number
+          dispatch_notes: string | null
           dwelling_type: string | null
           email: string
+          estimated_duration_hours: number | null
           final_charge_cents: number | null
           first_name: string
+          frequency: string | null
           full_payment_discount: number | null
           home_size_id: string
           id: string
+          issues_flag: boolean | null
+          issues_notes: string | null
+          job_id: string | null
           last_name: string
           membership_plan: string | null
           payment_intent_id: string | null
+          payment_method: string | null
           payment_option: string | null
           payout_status: string | null
           phone: string
@@ -130,25 +147,39 @@ export type Database = {
           rating_submitted: boolean | null
           service_date: string
           service_type: string
+          sqft: number | null
           state: string
           status: string | null
           stripe_invoice_id: string | null
+          tax_cents: number | null
+          team_notes: string | null
           time_slot: string
+          tip_cents: number | null
           total_estimate_cents: number
           updated_at: string | null
           uses_credit: boolean | null
           zip_code: string
         }
         Insert: {
+          access_notes?: string | null
           add_ons?: string[] | null
           address: string
+          after_photos?: string[] | null
+          arrival_window?: string | null
           assigned_at?: string | null
           base_price_cents: number
           bathrooms?: number | null
           bedrooms?: number | null
+          before_photos?: string[] | null
+          booker_source?: string | null
+          booking_channel?: string | null
           booking_number?: number | null
+          cancel_reason?: string | null
+          check_in_time?: string | null
+          check_out_time?: string | null
           checkout_session_id?: string | null
           city: string
+          cleaner_hourly_rate_cents?: number | null
           cleaner_id?: string | null
           cleaner_payout_cents?: number | null
           completed_at?: string | null
@@ -157,16 +188,23 @@ export type Database = {
           created_at?: string | null
           customer_id?: string | null
           deposit_cents: number
+          dispatch_notes?: string | null
           dwelling_type?: string | null
           email: string
+          estimated_duration_hours?: number | null
           final_charge_cents?: number | null
           first_name: string
+          frequency?: string | null
           full_payment_discount?: number | null
           home_size_id: string
           id?: string
+          issues_flag?: boolean | null
+          issues_notes?: string | null
+          job_id?: string | null
           last_name: string
           membership_plan?: string | null
           payment_intent_id?: string | null
+          payment_method?: string | null
           payment_option?: string | null
           payout_status?: string | null
           phone: string
@@ -174,25 +212,39 @@ export type Database = {
           rating_submitted?: boolean | null
           service_date: string
           service_type: string
+          sqft?: number | null
           state: string
           status?: string | null
           stripe_invoice_id?: string | null
+          tax_cents?: number | null
+          team_notes?: string | null
           time_slot: string
+          tip_cents?: number | null
           total_estimate_cents: number
           updated_at?: string | null
           uses_credit?: boolean | null
           zip_code: string
         }
         Update: {
+          access_notes?: string | null
           add_ons?: string[] | null
           address?: string
+          after_photos?: string[] | null
+          arrival_window?: string | null
           assigned_at?: string | null
           base_price_cents?: number
           bathrooms?: number | null
           bedrooms?: number | null
+          before_photos?: string[] | null
+          booker_source?: string | null
+          booking_channel?: string | null
           booking_number?: number | null
+          cancel_reason?: string | null
+          check_in_time?: string | null
+          check_out_time?: string | null
           checkout_session_id?: string | null
           city?: string
+          cleaner_hourly_rate_cents?: number | null
           cleaner_id?: string | null
           cleaner_payout_cents?: number | null
           completed_at?: string | null
@@ -201,16 +253,23 @@ export type Database = {
           created_at?: string | null
           customer_id?: string | null
           deposit_cents?: number
+          dispatch_notes?: string | null
           dwelling_type?: string | null
           email?: string
+          estimated_duration_hours?: number | null
           final_charge_cents?: number | null
           first_name?: string
+          frequency?: string | null
           full_payment_discount?: number | null
           home_size_id?: string
           id?: string
+          issues_flag?: boolean | null
+          issues_notes?: string | null
+          job_id?: string | null
           last_name?: string
           membership_plan?: string | null
           payment_intent_id?: string | null
+          payment_method?: string | null
           payment_option?: string | null
           payout_status?: string | null
           phone?: string
@@ -218,10 +277,14 @@ export type Database = {
           rating_submitted?: boolean | null
           service_date?: string
           service_type?: string
+          sqft?: number | null
           state?: string
           status?: string | null
           stripe_invoice_id?: string | null
+          tax_cents?: number | null
+          team_notes?: string | null
           time_slot?: string
+          tip_cents?: number | null
           total_estimate_cents?: number
           updated_at?: string | null
           uses_credit?: boolean | null
@@ -233,6 +296,13 @@ export type Database = {
             columns: ["cleaner_id"]
             isOneToOne: false
             referencedRelation: "cleaners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -284,6 +354,7 @@ export type Database = {
       }
       cleaners: {
         Row: {
+          acceptance_rate: number | null
           activated_at: string | null
           approved: boolean
           available_for_bookings: boolean | null
@@ -293,23 +364,43 @@ export type Database = {
           created_at: string
           email: string
           first_name: string
+          home_lat: number | null
+          home_lng: number | null
+          home_zip: string | null
           id: string
           invited_at: string | null
+          jobs_assigned_last_7d: number | null
           last_name: string
+          max_travel_miles: number | null
           max_weekly_bookings: number | null
+          on_time_rate: number | null
           onboarding_complete: boolean | null
+          pay_rate_hr: number
           payouts_enabled: boolean | null
           phone: string
+          preferred_work_days: string[] | null
           service_zip_codes: string[] | null
+          skillset: string[] | null
+          sms_notifications_enabled: boolean | null
+          sms_quiet_hours_end: string | null
+          sms_quiet_hours_start: string | null
+          state: string | null
           status: string
+          status_today: string | null
           stripe_account_id: string | null
           total_bookings: number | null
           total_earnings_cents: number | null
+          total_offers_accepted: number | null
+          total_offers_received: number | null
+          total_on_time_arrivals: number | null
           total_ratings: number | null
           updated_at: string
           user_id: string | null
+          weighted_score: number | null
+          workload_score: number | null
         }
         Insert: {
+          acceptance_rate?: number | null
           activated_at?: string | null
           approved?: boolean
           available_for_bookings?: boolean | null
@@ -319,23 +410,43 @@ export type Database = {
           created_at?: string
           email: string
           first_name: string
+          home_lat?: number | null
+          home_lng?: number | null
+          home_zip?: string | null
           id?: string
           invited_at?: string | null
+          jobs_assigned_last_7d?: number | null
           last_name: string
+          max_travel_miles?: number | null
           max_weekly_bookings?: number | null
+          on_time_rate?: number | null
           onboarding_complete?: boolean | null
+          pay_rate_hr?: number
           payouts_enabled?: boolean | null
           phone: string
+          preferred_work_days?: string[] | null
           service_zip_codes?: string[] | null
+          skillset?: string[] | null
+          sms_notifications_enabled?: boolean | null
+          sms_quiet_hours_end?: string | null
+          sms_quiet_hours_start?: string | null
+          state?: string | null
           status?: string
+          status_today?: string | null
           stripe_account_id?: string | null
           total_bookings?: number | null
           total_earnings_cents?: number | null
+          total_offers_accepted?: number | null
+          total_offers_received?: number | null
+          total_on_time_arrivals?: number | null
           total_ratings?: number | null
           updated_at?: string
           user_id?: string | null
+          weighted_score?: number | null
+          workload_score?: number | null
         }
         Update: {
+          acceptance_rate?: number | null
           activated_at?: string | null
           approved?: boolean
           available_for_bookings?: boolean | null
@@ -345,21 +456,40 @@ export type Database = {
           created_at?: string
           email?: string
           first_name?: string
+          home_lat?: number | null
+          home_lng?: number | null
+          home_zip?: string | null
           id?: string
           invited_at?: string | null
+          jobs_assigned_last_7d?: number | null
           last_name?: string
+          max_travel_miles?: number | null
           max_weekly_bookings?: number | null
+          on_time_rate?: number | null
           onboarding_complete?: boolean | null
+          pay_rate_hr?: number
           payouts_enabled?: boolean | null
           phone?: string
+          preferred_work_days?: string[] | null
           service_zip_codes?: string[] | null
+          skillset?: string[] | null
+          sms_notifications_enabled?: boolean | null
+          sms_quiet_hours_end?: string | null
+          sms_quiet_hours_start?: string | null
+          state?: string | null
           status?: string
+          status_today?: string | null
           stripe_account_id?: string | null
           total_bookings?: number | null
           total_earnings_cents?: number | null
+          total_offers_accepted?: number | null
+          total_offers_received?: number | null
+          total_on_time_arrivals?: number | null
           total_ratings?: number | null
           updated_at?: string
           user_id?: string | null
+          weighted_score?: number | null
+          workload_score?: number | null
         }
         Relationships: []
       }
@@ -401,36 +531,104 @@ export type Database = {
       }
       customers: {
         Row: {
+          address: string | null
+          analytics_source: string | null
+          city: string | null
           created_at: string
           email: string
           first_name: string
           id: string
           last_name: string
+          lat: number | null
+          lng: number | null
           phone: string | null
           referral_code: string | null
+          state: string | null
           updated_at: string
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          zip: string | null
         }
         Insert: {
+          address?: string | null
+          analytics_source?: string | null
+          city?: string | null
           created_at?: string
           email: string
           first_name: string
           id?: string
           last_name: string
+          lat?: number | null
+          lng?: number | null
           phone?: string | null
           referral_code?: string | null
+          state?: string | null
           updated_at?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          zip?: string | null
         }
         Update: {
+          address?: string | null
+          analytics_source?: string | null
+          city?: string | null
           created_at?: string
           email?: string
           first_name?: string
           id?: string
           last_name?: string
+          lat?: number | null
+          lng?: number | null
           phone?: string | null
           referral_code?: string | null
+          state?: string | null
           updated_at?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          zip?: string | null
         }
         Relationships: []
+      }
+      dispatch_alerts: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          reason: string
+          resolved: boolean | null
+          resolved_at: string | null
+          severity: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          reason: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          severity?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          reason?: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_alerts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_retry_queue: {
         Row: {
@@ -484,6 +682,161 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_assignments: {
+        Row: {
+          assigned_at: string
+          cleaner_id: string
+          created_at: string
+          distance_miles: number | null
+          estimated_pay_cents: number | null
+          id: string
+          job_id: string
+          pay_rate_hr: number | null
+          reminder_count: number | null
+          reminder_sent_at: string | null
+          responded_at: string | null
+          role: string
+          status: string
+        }
+        Insert: {
+          assigned_at?: string
+          cleaner_id: string
+          created_at?: string
+          distance_miles?: number | null
+          estimated_pay_cents?: number | null
+          id?: string
+          job_id: string
+          pay_rate_hr?: number | null
+          reminder_count?: number | null
+          reminder_sent_at?: string | null
+          responded_at?: string | null
+          role?: string
+          status?: string
+        }
+        Update: {
+          assigned_at?: string
+          cleaner_id?: string
+          created_at?: string
+          distance_miles?: number | null
+          estimated_pay_cents?: number | null
+          id?: string
+          job_id?: string
+          pay_rate_hr?: number | null
+          reminder_count?: number | null
+          reminder_sent_at?: string | null
+          responded_at?: string | null
+          role?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_assignments_cleaner_id_fkey"
+            columns: ["cleaner_id"]
+            isOneToOne: false
+            referencedRelation: "cleaners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_assignments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          actual_duration_hours: number | null
+          address: string
+          analytics_source: string | null
+          bathrooms: number | null
+          bedrooms: number | null
+          check_in_time: string | null
+          check_out_time: string | null
+          city: string
+          created_at: string
+          customer_id: string | null
+          dispatch_alert_reason: string | null
+          duration_est_hours: number
+          id: string
+          lat: number | null
+          lng: number | null
+          manual_intervention_required: boolean | null
+          min_cleaners_required: number
+          notes: string | null
+          service_type: string
+          sq_ft: number | null
+          start_datetime: string
+          state: string
+          status: string
+          updated_at: string
+          zip: string
+        }
+        Insert: {
+          actual_duration_hours?: number | null
+          address: string
+          analytics_source?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          check_in_time?: string | null
+          check_out_time?: string | null
+          city: string
+          created_at?: string
+          customer_id?: string | null
+          dispatch_alert_reason?: string | null
+          duration_est_hours?: number
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          manual_intervention_required?: boolean | null
+          min_cleaners_required?: number
+          notes?: string | null
+          service_type?: string
+          sq_ft?: number | null
+          start_datetime: string
+          state: string
+          status?: string
+          updated_at?: string
+          zip: string
+        }
+        Update: {
+          actual_duration_hours?: number | null
+          address?: string
+          analytics_source?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          check_in_time?: string | null
+          check_out_time?: string | null
+          city?: string
+          created_at?: string
+          customer_id?: string | null
+          dispatch_alert_reason?: string | null
+          duration_est_hours?: number
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          manual_intervention_required?: boolean | null
+          min_cleaners_required?: number
+          notes?: string | null
+          service_type?: string
+          sq_ft?: number | null
+          start_datetime?: string
+          state?: string
+          status?: string
+          updated_at?: string
+          zip?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
@@ -701,6 +1054,95 @@ export type Database = {
           },
         ]
       }
+      reviews: {
+        Row: {
+          cleaner_id: string | null
+          comment: string | null
+          created_at: string
+          id: string
+          job_id: string
+          rating: number
+        }
+        Insert: {
+          cleaner_id?: string | null
+          comment?: string | null
+          created_at?: string
+          id?: string
+          job_id: string
+          rating: number
+        }
+        Update: {
+          cleaner_id?: string | null
+          comment?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_cleaner_id_fkey"
+            columns: ["cleaner_id"]
+            isOneToOne: false
+            referencedRelation: "cleaners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_logs: {
+        Row: {
+          cost: number | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_assignment_id: string | null
+          message: string
+          provider_message_id: string | null
+          status: string
+          to_phone: string
+          type: string
+        }
+        Insert: {
+          cost?: number | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_assignment_id?: string | null
+          message: string
+          provider_message_id?: string | null
+          status?: string
+          to_phone: string
+          type: string
+        }
+        Update: {
+          cost?: number | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_assignment_id?: string | null
+          message?: string
+          provider_message_id?: string | null
+          status?: string
+          to_phone?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_logs_job_assignment_id_fkey"
+            columns: ["job_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "job_assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -721,6 +1163,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      webhook_failures: {
+        Row: {
+          booking_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          payload: Json
+          resolved: boolean | null
+          retry_count: number | null
+          webhook_url: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          payload: Json
+          resolved?: boolean | null
+          retry_count?: number | null
+          webhook_url: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json
+          resolved?: boolean | null
+          retry_count?: number | null
+          webhook_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_failures_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
