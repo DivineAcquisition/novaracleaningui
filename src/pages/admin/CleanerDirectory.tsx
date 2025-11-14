@@ -14,21 +14,21 @@ interface Cleaner {
   last_name: string;
   email: string;
   phone: string;
-  state: string;
-  home_zip: string;
-  status_today: string;
+  state: string | null;
+  home_zip: string | null;
+  status_today: string | null;
   approved: boolean;
   available_for_bookings: boolean;
-  max_travel_miles: number;
-  preferred_work_days: string[];
-  average_rating: number;
-  total_ratings: number;
-  jobs_assigned_last_7d: number;
-  workload_score: number;
-  weighted_score: number;
-  completed_bookings: number;
-  acceptance_rate: number;
-  on_time_rate: number;
+  max_travel_miles: number | null;
+  preferred_work_days: string[] | null;
+  average_rating: number | null;
+  total_ratings: number | null;
+  jobs_assigned_last_7d: number | null;
+  workload_score: number | null;
+  weighted_score: number | null;
+  completed_bookings: number | null;
+  acceptance_rate: number | null;
+  on_time_rate: number | null;
 }
 
 export default function CleanerDirectory() {
@@ -49,8 +49,8 @@ export default function CleanerDirectory() {
 
       if (error) throw error;
 
-      setCleaners(data || []);
-      setFilteredCleaners(data || []);
+      setCleaners((data as any) || []);
+      setFilteredCleaners((data as any) || []);
     } catch (error: any) {
       console.error("Error fetching cleaners:", error);
       toast({
@@ -88,19 +88,19 @@ export default function CleanerDirectory() {
     setFilteredCleaners(filtered);
   }, [searchQuery, stateFilter, statusFilter, cleaners]);
 
-  const getAvailabilityBadge = (status: string) => {
+  const getAvailabilityBadge = (status: string | null) => {
     return status === "Available" 
       ? <Badge variant="default">Available</Badge>
       : <Badge variant="secondary">Unavailable</Badge>;
   };
 
-  const getRatingDisplay = (rating: number, count: number) => {
-    if (count === 0) return <span className="text-muted-foreground text-sm">No reviews</span>;
+  const getRatingDisplay = (rating: number | null, count: number | null) => {
+    if (!count || count === 0) return <span className="text-muted-foreground text-sm">No reviews</span>;
     
     return (
       <div className="flex items-center gap-1">
         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-        <span className="font-medium">{rating.toFixed(1)}</span>
+        <span className="font-medium">{rating?.toFixed(1) || '0.0'}</span>
         <span className="text-sm text-muted-foreground">({count})</span>
       </div>
     );
