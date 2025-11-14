@@ -81,6 +81,11 @@ export default function BookingCheckout() {
   const [autoAppliedPromo, setAutoAppliedPromo] = useState<EligiblePromo | null>(null);
   const [isAutoApplying, setIsAutoApplying] = useState(false);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
+  
+  // Determine checkout scenario
+  const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
+  const isMemberUsingCredit = bookingData.useCredit === true;
+
   useEffect(() => {
     // Ensure default payment option for old localStorage payloads
     if (!bookingData.paymentOption) {
@@ -279,6 +284,32 @@ export default function BookingCheckout() {
     delta: 50,
     preventScrollOnSwipe: false
   });
+  const handleMembershipCheckout = async () => {
+    setIsProcessing(true);
+    setInitError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { bookingData }
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        // Open Stripe checkout in new tab
+        window.open(data.url, '_blank');
+        toast.success("Redirecting to secure checkout...");
+      } else {
+        throw new Error("No checkout URL returned");
+      }
+    } catch (error: any) {
+      console.error("Membership checkout error:", error);
+      setInitError(error.message || "Failed to create checkout session");
+      toast.error("Failed to start checkout. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleInitializePayment = async () => {
     setIsProcessing(true);
     setInitError(null);
@@ -566,15 +597,87 @@ export default function BookingCheckout() {
               {/* Savings Visualizer */}
               <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={isNewCustomer ? 60 : 0} membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0} fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0} promoDiscount={promoDiscount} finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount} />
 
-              {/* Payment Comparison View */}
-              <div className="space-y-3">
-                <h3 className="text-lg md:text-xl font-semibold">Compare Payment Options</h3>
-                <PaymentComparison depositPricing={depositPricing} fullPaymentPricing={fullPaymentPricing} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
-              </div>
+              {/* Membership Subscription Card - NEW MEMBER SIGNUP */}
+              {isNewMembershipSignup && (
+                <Card className="border-primary bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5">
+                  <CardContent className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-semibold flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-primary" />
+                        Membership Subscription
+                      </h3>
+                      <Badge variant="default" className="text-sm">
+                        {MEMBERSHIP_PLANS[bookingData.membershipPlan]?.name || 'Monthly'}
+                      </Badge>
+                    </div>
+                    
+                    <div className="bg-background/80 rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-semibold">Monthly Price:</span>
+                        <span className="text-2xl font-bold text-primary">
+                          ${(MEMBERSHIP_PLANS[bookingData.membershipPlan]?.price || 189).toFixed(2)}/mo
+                        </span>
+                      </div>
+                      <Separator />
+                      <div className="flex items-center gap-2 text-success">
+                        <Sparkles className="w-4 h-4" />
+                        <span className="font-medium">First cleaning included with membership</span>
+                      </div>
+                    </div>
 
-              {/* Payment Option Selection */}
-              {!bookingData.useCredit && <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
-                  <CardContent className="p-4 md:p-6">
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm">What's Included:</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li className="flex items-start gap-2">
+                          <span className="text-success">✓</span>
+                          <span>{MEMBERSHIP_PLANS[bookingData.membershipPlan]?.creditsPerMonth || 1} cleaning credit per month</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-success">✓</span>
+                          <span>Priority booking & scheduling</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-success">✓</span>
+                          <span>Flexible reschedule options</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-success">✓</span>
+                          <span>Cancel anytime</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Member Using Credit - SHOW $0 */}
+              {isMemberUsingCredit && (
+                <Card className="border-success bg-gradient-to-br from-success/10 to-success/5">
+                  <CardContent className="p-6 text-center space-y-3">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-success/20 flex items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-success" />
+                    </div>
+                    <h3 className="text-2xl font-bold">Using Membership Credit</h3>
+                    <div className="text-4xl font-bold text-success">$0.00</div>
+                    <p className="text-sm text-muted-foreground">
+                      Your membership credit covers this booking
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Regular Customer Payment Options */}
+              {!isNewMembershipSignup && !isMemberUsingCredit && (
+                <>
+                  {/* Payment Comparison View */}
+                  <div className="space-y-3">
+                    <h3 className="text-lg md:text-xl font-semibold">Compare Payment Options</h3>
+                    <PaymentComparison depositPricing={depositPricing} fullPaymentPricing={fullPaymentPricing} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
+                  </div>
+
+                  {/* Payment Option Selection */}
+                  {!bookingData.useCredit && <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
+                      <CardContent className="p-4 md:p-6">
                     <div className="flex items-center justify-between mb-3 md:mb-4">
                       <h4 className="font-semibold text-sm md:text-base flex items-center gap-2">
                         <Zap className="w-4 h-4 md:w-5 md:h-5 text-primary" />
@@ -676,7 +779,7 @@ export default function BookingCheckout() {
                 </Card>}
 
               {/* Member Credit Info */}
-              {bookingData.useCredit && <Card className="border-success/30 bg-success/5">
+              {bookingData.useCredit && !isNewMembershipSignup && <Card className="border-success/30 bg-success/5">
                   <CardContent className="p-6">
                     <div className="flex items-center gap-2 text-success mb-3">
                       <Sparkles className="w-5 h-5" />
@@ -687,6 +790,8 @@ export default function BookingCheckout() {
                     </p>
                   </CardContent>
                 </Card>}
+              </>
+              )}
 
               {/* Initialization Error */}
               {initError && !isProcessing && <Alert variant="destructive" className="animate-in slide-in-from-top">
@@ -702,7 +807,7 @@ export default function BookingCheckout() {
                 </Alert>}
 
               {/* Stripe Payment Form */}
-              {stripePromise && clientSecret && paymentAmount > 0 && !initError && <Card className="border-primary/20">
+              {stripePromise && clientSecret && paymentAmount > 0 && !initError && !isNewMembershipSignup && <Card className="border-primary/20">
                   <CardContent className="p-6">
                     <h4 className="font-semibold mb-4 flex items-center gap-2">
                       <CreditCard className="w-5 h-5 text-primary" />
@@ -715,6 +820,38 @@ export default function BookingCheckout() {
                     </Elements>
                   </CardContent>
                 </Card>}
+
+              {/* Membership Checkout Button */}
+              {isNewMembershipSignup && !isProcessing && (
+                <Button 
+                  onClick={handleMembershipCheckout}
+                  size="lg"
+                  className="w-full h-14 text-lg"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      Subscribe & Book First Clean
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Member Using Credit - Confirm Button */}
+              {isMemberUsingCredit && !isProcessing && (
+                <Button 
+                  onClick={() => navigate("/book/success")}
+                  size="lg"
+                  className="w-full h-14 text-lg"
+                >
+                  Confirm Booking
+                </Button>
+              )}
 
               {/* Loading State */}
               {isProcessing && <Card className="border-primary/20">

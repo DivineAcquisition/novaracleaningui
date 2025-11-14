@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ const SKILLSET_OPTIONS = [
 export default function CleanerOnboarding() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const location = useLocation();
   const [userId, setUserId] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -44,6 +45,7 @@ export default function CleanerOnboarding() {
     lastName: "",
     phone: "",
     email: "",
+    password: "", // Add password field for new signups
     state: "",
     homeZip: "",
     maxTravelMiles: 20,
@@ -53,52 +55,51 @@ export default function CleanerOnboarding() {
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
 
-  // Check authentication and existing profile
+  // Check if PIN was validated or if user is already logged in
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // Check if user came from PIN landing page
+        const pinValidated = location.state?.pinValidated;
+        
+        // Check if user is already authenticated
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (sessionError || !session) {
-          toast({
-            title: "Authentication Required",
-            description: "Please sign in to complete your profile.",
-            variant: "destructive",
-          });
-          navigate("/cleaner/auth");
-          return;
-        }
+        if (session) {
+          // User is logged in, set their user ID
+          setUserId(session.user.id);
+          
+          // Check if cleaner profile already exists
+          const { data: existingCleaner, error: checkError } = await supabase
+            .from("cleaners")
+            .select("id, onboarding_complete")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
 
-        setUserId(session.user.id);
+          if (checkError) {
+            console.error("Error checking cleaner profile:", checkError);
+          }
 
-        // Check if cleaner profile already exists
-        const { data: existingCleaner, error: checkError } = await supabase
-          .from("cleaners")
-          .select("id, onboarding_complete")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-
-        if (checkError) {
-          console.error("Error checking cleaner profile:", checkError);
-        }
-
-        if (existingCleaner) {
-          if (existingCleaner.onboarding_complete) {
+          if (existingCleaner?.onboarding_complete) {
             // Already completed onboarding, redirect to dashboard
             navigate("/cleaner/dashboard");
             return;
           }
+        } else if (!pinValidated) {
+          // Not logged in and no PIN validation, redirect to PIN page
+          navigate("/cleaner/onboard");
+          return;
         }
 
         setCheckingAuth(false);
       } catch (error) {
         console.error("Auth check error:", error);
-        navigate("/cleaner/auth");
+        navigate("/cleaner/onboard");
       }
     };
 
     checkAuth();
-  }, [navigate, toast]);
+  }, [navigate, toast, location]);
 
   const handleDayToggle = (day: string) => {
     setFormData(prev => ({
@@ -137,16 +138,6 @@ export default function CleanerOnboarding() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!userId) {
-      toast({
-        title: "Authentication Error",
-        description: "Please sign in again to continue.",
-        variant: "destructive",
-      });
-      navigate("/cleaner/auth");
-      return;
-    }
-    
     // Validate all fields
     const nameValidation = validateName(formData.firstName, "First name");
     if (!nameValidation.isValid) {
@@ -177,6 +168,17 @@ export default function CleanerOnboarding() {
       return;
     }
 
+    // For new signups (no userId), require password
+    if (!userId && !formData.password) {
+      toast({ title: "Error", description: "Please enter a password (minimum 6 characters)", variant: "destructive" });
+      return;
+    }
+
+    if (!userId && formData.password.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+
     if (formData.preferredWorkDays.length === 0) {
       toast({
         title: "Error",
@@ -198,6 +200,36 @@ export default function CleanerOnboarding() {
     setIsLoading(true);
 
     try {
+      let finalUserId = userId;
+
+      // If no userId, create auth account first
+      if (!userId) {
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/cleaner/dashboard`,
+            data: {
+              is_cleaner: true,
+              first_name: formData.firstName,
+              last_name: formData.lastName
+            }
+          }
+        });
+
+        if (signUpError) {
+          toast({ title: "Signup Error", description: signUpError.message, variant: "destructive" });
+          throw signUpError;
+        }
+
+        if (!signUpData.user) {
+          toast({ title: "Error", description: "Failed to create account", variant: "destructive" });
+          return;
+        }
+
+        finalUserId = signUpData.user.id;
+      }
+    
       // Upload avatar if provided
       let avatarUrl = null;
       if (formData.avatarFile) {
@@ -237,7 +269,7 @@ export default function CleanerOnboarding() {
       const { data: cleanerData, error: insertError } = await supabase
         .from("cleaners")
         .insert({
-          user_id: userId,
+          user_id: finalUserId,
           first_name: formData.firstName,
           last_name: formData.lastName,
           phone: formData.phone,
@@ -383,6 +415,25 @@ export default function CleanerOnboarding() {
                     onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   />
                 </div>
+
+                {/* Show password field for new signups */}
+                {!userId && (
+                  <div>
+                    <Label htmlFor="password">Create Password *</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Minimum 6 characters"
+                      value={formData.password}
+                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    />
+                    <p className="text-sm text-muted-foreground mt-1">
+                      This will be your login password
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="phone">Phone *</Label>

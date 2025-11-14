@@ -307,6 +307,33 @@ export type Database = {
           },
         ]
       }
+      cleaner_onboarding_pins: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          pin_code: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          pin_code: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          pin_code?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       cleaner_ratings: {
         Row: {
           booking_id: string
