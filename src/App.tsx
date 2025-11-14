@@ -26,6 +26,7 @@ import AdditionalDetails from "./pages/book/AdditionalDetails";
 import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
+import AdminWebhooks from "./pages/admin/WebhookMonitor";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
@@ -89,6 +90,7 @@ const App = () => (
               <Route path="/book/additional-details" element={<AdditionalDetails />} />
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<AdminCleaners />} />
+              <Route path="/admin/webhooks" element={<AdminWebhooks />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
