@@ -381,13 +381,19 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
       });
 
       if (response.ok) {
-        logStep("Webhook sent successfully", { 
-          id, 
-          type,
-          status: response.status 
-        });
+        logStep("Webhook sent successfully", { id, type, status: response.status });
         return new Response(
-          JSON.stringify({ success: true, id, type }),
+          JSON.stringify({ 
+            success: true, 
+            id, 
+            type,
+            payload,
+            response: {
+              status: response.status,
+              body: respText
+            },
+            webhookUrl: ZAPIER_WEBHOOK_URL
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
       }
