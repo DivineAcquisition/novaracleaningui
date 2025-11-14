@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
-import { User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown, Tag } from "lucide-react";
+import { User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown } from "lucide-react";
 import logo from "@/assets/logo.png";
 const Index = () => {
   const navigate = useNavigate();
@@ -62,9 +62,9 @@ const Index = () => {
       <div className="bg-gradient-primary py-3">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 text-white">
-            <Tag className="w-4 h-4" />
-            <p className="text-sm md:text-base font-medium">
-              Limited Time Offer: Save up to 30% with our Membership Plan
+            
+            <p className="text-sm md:text-base text-center font-semibold">
+              Save up to 30% with our Membership Plan
             </p>
           </div>
         </div>
@@ -74,12 +74,12 @@ const Index = () => {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight lg:text-6xl">
-              Book Your Cleaning
-              <span className="block text-primary mt-2 text-2xl font-bold md:text-3xl">                                          With Only $39 Today                                                                 </span>
+            <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-sans">
+              Book Your Cleaning Today For Only $39                                   
+              
             </h1>
             
-            <p className="text-lg text-[#2c2c2c] font-normal md:text-sm">
+            <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">
               Premium cleaning service at transparent prices. Enter your ZIP code to get started.
             </p>
           </div>
