@@ -88,6 +88,17 @@ serve(async (req) => {
       logStep("Payout triggered successfully");
     }
 
+    // Trigger Zapier webhook for completed booking
+    try {
+      await supabase.functions.invoke('send-zapier-webhook', {
+        body: { bookingId }
+      });
+      logStep("Zapier webhook triggered");
+    } catch (webhookError) {
+      // Log but don't fail the completion if webhook fails
+      logStep("Zapier webhook failed (non-critical)", { error: webhookError });
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { WebhookTestButton } from "@/components/admin/WebhookTestButton";
 
 interface WebhookFailure {
   id: string;
@@ -105,10 +106,13 @@ const WebhookMonitor = () => {
             Track and manage Zapier webhook integration status
           </p>
         </div>
-        <Button onClick={fetchFailures} variant="outline">
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <WebhookTestButton />
+          <Button onClick={fetchFailures} variant="outline">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
