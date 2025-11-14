@@ -27,10 +27,14 @@ import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
 import AdminWebhooks from "./pages/admin/WebhookMonitor";
+import DispatchQueue from "./pages/admin/DispatchQueue";
+import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerProfile from "./pages/cleaner/Profile";
+import CleanerOnboarding from "./pages/cleaner/Onboarding";
+import CleanerJobOffers from "./pages/cleaner/JobOffers";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -99,10 +103,14 @@ const App = () => (
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
+              <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
+              <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
               <Route path="/cleaner/profile" element={<CleanerProfile />} />
+              <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
+              <Route path="/cleaner/offers" element={<CleanerJobOffers />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

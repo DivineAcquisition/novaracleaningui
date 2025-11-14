@@ -80,3 +80,15 @@ verify_jwt = false
 
 [functions.cancel-booking]
 verify_jwt = false
+
+[functions.geocode-address]
+verify_jwt = false
+
+[functions.dispatch-job]
+verify_jwt = true
+
+[functions.update-cleaner-availability]
+verify_jwt = false
+
+[functions.update-cleaner-scores]
+verify_jwt = false
