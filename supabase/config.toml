@@ -92,3 +92,9 @@ verify_jwt = false
 
 [functions.update-cleaner-scores]
 verify_jwt = false
+
+[functions.send-sms-notification]
+verify_jwt = false
+
+[functions.respond-to-offer]
+verify_jwt = false
