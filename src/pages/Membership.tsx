@@ -21,6 +21,7 @@ const MEMBERSHIP_TIERS = {
     icon: Calendar,
     color: 'from-blue-500 to-cyan-500',
     features: [
+      '🎁 First cleaning included ($225 value)',
       '1 cleaning credit per month',
       '20% off all add-ons',
       'Flexible scheduling',
@@ -40,6 +41,7 @@ const MEMBERSHIP_TIERS = {
     icon: Gift,
     color: 'from-purple-500 to-pink-500',
     features: [
+      '🎁 First cleaning included ($225 value)',
       '2 cleaning credits per month',
       '25% off all add-ons',
       'Early booking access',
@@ -60,6 +62,7 @@ const MEMBERSHIP_TIERS = {
     icon: Crown,
     color: 'from-amber-500 to-orange-500',
     features: [
+      '🎁 First cleaning included ($225 value)',
       '4 cleaning credits per month',
       '30% off all add-ons',
       'Priority scheduling',
@@ -122,6 +125,7 @@ export default function Membership() {
             Choose Your Perfect Plan
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            Subscribe today and get your first cleaning immediately with your membership credit
             Save time and money with our flexible membership plans. Get credits every month and enjoy exclusive discounts.
           </p>
         </div>
