@@ -114,10 +114,10 @@ export default function CleanerAuth() {
       }
 
       if (data.user) {
-        // Check if user is a cleaner
+        // Check if user has a cleaner profile and if onboarding is complete
         const { data: cleanerData, error: cleanerError } = await supabase
           .from("cleaners")
-          .select("id, email")
+          .select("id, email, onboarding_complete")
           .eq("user_id", data.user.id)
           .maybeSingle();
 
@@ -130,6 +130,16 @@ export default function CleanerAuth() {
             variant: "destructive",
           });
           await supabase.auth.signOut();
+          return;
+        }
+
+        // Check if onboarding is complete
+        if (!cleanerData.onboarding_complete) {
+          toast({
+            title: "Complete Your Profile",
+            description: "Please complete your onboarding to access the dashboard.",
+          });
+          navigate("/cleaner/onboarding");
           return;
         }
 
@@ -178,47 +188,8 @@ export default function CleanerAuth() {
         return;
       }
 
-      // First check if a cleaner account exists with this email
-      const { data: cleanerData, error: cleanerCheckError } = await supabase
-        .from("cleaners")
-        .select("id, email, user_id, approved")
-        .eq("email", emailValidation.data)
-        .maybeSingle();
-
-      if (cleanerCheckError) throw cleanerCheckError;
-
-      if (!cleanerData) {
-        toast({
-          title: "No Invitation Found",
-          description: "You must be invited by an admin before creating an account.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (!cleanerData.approved) {
-        toast({
-          title: "Pending Approval",
-          description: "Your account is awaiting admin approval. You'll be notified when you can sign up.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (cleanerData.user_id) {
-        toast({
-          title: "Account Already Exists",
-          description: "An account is already linked to this email. Please sign in instead.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Create auth account
-      const redirectUrl = `${window.location.origin}/cleaner/dashboard`;
+      // Create auth account - no pre-checks needed, onboarding will handle profile creation
+      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
       const { data, error } = await supabase.auth.signUp({
         email: emailValidation.data,
         password: passwordValidation.data,
@@ -245,52 +216,13 @@ export default function CleanerAuth() {
       }
 
       if (data.user) {
-        // Link cleaner account to auth user
-        const { error: updateError } = await supabase
-          .from("cleaners")
-          .update({ 
-            user_id: data.user.id,
-            activated_at: new Date().toISOString(),
-            status: "active",
-          })
-          .eq("id", cleanerData.id);
-
-        if (updateError) throw updateError;
-
-        // Trigger Stripe Connect onboarding
-        try {
-          const { data: onboardingData, error: onboardingError } = await supabase.functions.invoke(
-            "onboard-cleaner",
-            { body: { cleanerId: cleanerData.id } }
-          );
-
-          if (onboardingError) {
-            console.error("Failed to start Stripe onboarding:", onboardingError);
-            toast({
-              title: "Account Created",
-              description: "Please contact admin to complete payment setup.",
-            });
-          } else if (onboardingData?.url) {
-            toast({
-              title: "Account Created!",
-              description: "Redirecting to payment setup...",
-            });
-            setTimeout(() => {
-              window.location.href = onboardingData.url;
-            }, 1500);
-            return;
-          }
-        } catch (onboardingError) {
-          console.error("Stripe onboarding error:", onboardingError);
-        }
-
         toast({
           title: "Account Created!",
-          description: "Please check your email to verify your account.",
+          description: "Please complete your profile to get started.",
         });
         
-        // Auto sign in after signup
-        navigate("/cleaner/dashboard");
+        // Redirect to onboarding to complete profile
+        navigate("/cleaner/onboarding");
       }
     } catch (error: any) {
       toast({
