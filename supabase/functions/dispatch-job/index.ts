@@ -200,14 +200,22 @@ serve(async (req) => {
       }))
     });
 
-    // Create job assignments
-    const assignments = selectedCleaners.map((cleaner, index) => ({
-      job_id: jobId,
-      cleaner_id: cleaner.id,
-      distance_miles: cleaner.distance_miles,
-      role: index === 0 ? "Lead" : "Support",
-      status: "Offered"
-    }));
+    // Create job assignments with estimated pay
+    const assignments = selectedCleaners.map((cleaner, index) => {
+      const estimatedPayCents = Math.round(
+        (cleaner.pay_rate_hr || 18) * job.duration_est_hours * 100
+      );
+      
+      return {
+        job_id: jobId,
+        cleaner_id: cleaner.id,
+        distance_miles: cleaner.distance_miles,
+        role: index === 0 ? "Lead" : "Support",
+        status: "Offered",
+        pay_rate_hr: cleaner.pay_rate_hr || 18,
+        estimated_pay_cents: estimatedPayCents
+      };
+    });
 
     const { data: createdAssignments, error: assignError } = await supabase
       .from("job_assignments")

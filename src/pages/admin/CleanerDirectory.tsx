@@ -27,6 +27,8 @@ interface Cleaner {
   workload_score: number;
   weighted_score: number;
   completed_bookings: number;
+  acceptance_rate: number;
+  on_time_rate: number;
 }
 
 export default function CleanerDirectory() {
@@ -230,6 +232,8 @@ export default function CleanerDirectory() {
                   <TableHead>Status</TableHead>
                   <TableHead>Work Days</TableHead>
                   <TableHead>Rating</TableHead>
+                  <TableHead>On-Time Rate</TableHead>
+                  <TableHead>Acceptance Rate</TableHead>
                   <TableHead>Last 7 Days</TableHead>
                   <TableHead>Workload</TableHead>
                   <TableHead>Score</TableHead>
@@ -270,8 +274,29 @@ export default function CleanerDirectory() {
                         ))}
                       </div>
                     </TableCell>
+                    <TableCell>{getRatingDisplay(cleaner.average_rating, cleaner.total_ratings)}</TableCell>
                     <TableCell>
-                      {getRatingDisplay(cleaner.average_rating, cleaner.total_ratings)}
+                      <div className="flex items-center gap-2">
+                        <span className={
+                          (cleaner.on_time_rate || 0) >= 90 ? 'text-green-600' :
+                          (cleaner.on_time_rate || 0) >= 75 ? 'text-yellow-600' :
+                          'text-red-600'
+                        }>
+                          {cleaner.on_time_rate?.toFixed(1) || 0}%
+                        </span>
+                        {(cleaner.on_time_rate || 0) >= 90 && <span>🟢</span>}
+                        {(cleaner.on_time_rate || 0) >= 75 && (cleaner.on_time_rate || 0) < 90 && <span>🟡</span>}
+                        {(cleaner.on_time_rate || 0) < 75 && <span>🔴</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={
+                        (cleaner.acceptance_rate || 0) >= 80 ? 'text-green-600' :
+                        (cleaner.acceptance_rate || 0) >= 60 ? 'text-yellow-600' :
+                        'text-red-600'
+                      }>
+                        {cleaner.acceptance_rate?.toFixed(1) || 0}%
+                      </span>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">

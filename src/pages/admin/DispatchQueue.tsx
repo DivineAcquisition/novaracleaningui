@@ -21,6 +21,9 @@ interface Job {
   min_cleaners_required: number;
   manual_intervention_required: boolean;
   dispatch_alert_reason: string | null;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  actual_duration_hours: number | null;
 }
 
 interface JobAssignment {
@@ -28,9 +31,13 @@ interface JobAssignment {
   status: string;
   role: string;
   cleaner_id: string;
+  pay_rate_hr: number;
+  estimated_pay_cents: number;
   cleaners: {
     first_name: string;
     last_name: string;
+    on_time_rate: number;
+    acceptance_rate: number;
   };
 }
 
@@ -58,7 +65,7 @@ export default function DispatchQueue() {
         const jobIds = data.map(j => j.id);
         const { data: assignmentsData, error: assignmentsError } = await supabase
           .from("job_assignments")
-          .select("*, cleaners(first_name, last_name)")
+          .select("*, cleaners(first_name, last_name, on_time_rate, acceptance_rate)")
           .in("job_id", jobIds);
 
         if (assignmentsError) throw assignmentsError;
@@ -274,13 +281,38 @@ export default function DispatchQueue() {
                         </TableCell>
                         <TableCell>
                           {jobAssignments.length > 0 ? (
-                            <div className="space-y-1">
+                            <div className="space-y-2">
+                              {job.check_in_time && (
+                                <div className="text-sm mb-2">
+                                  <span className="text-muted-foreground">Check-in: </span>
+                                  <span className="font-medium">
+                                    {format(new Date(job.check_in_time), 'h:mm a')}
+                                  </span>
+                                  {new Date(job.check_in_time).getTime() - new Date(job.start_datetime).getTime() > 15 * 60 * 1000 && (
+                                    <Badge variant="destructive" className="ml-2 text-xs">Late</Badge>
+                                  )}
+                                </div>
+                              )}
                               {jobAssignments.map(assignment => (
-                                <div key={assignment.id} className="text-sm">
-                                  {assignment.cleaners.first_name} {assignment.cleaners.last_name}
-                                  <Badge variant="outline" className="ml-2 text-xs">
+                                <div key={assignment.id} className="flex items-center gap-2 text-sm">
+                                  <span className="font-medium">
+                                    {assignment.cleaners.first_name} {assignment.cleaners.last_name}
+                                  </span>
+                                  <Badge variant={
+                                    assignment.status === "Confirmed" ? "default" :
+                                    assignment.status === "In Progress" ? "secondary" :
+                                    "outline"
+                                  } className="text-xs">
                                     {assignment.status}
                                   </Badge>
+                                  {assignment.role === "Lead" && (
+                                    <Badge variant="outline" className="text-xs">Lead</Badge>
+                                  )}
+                                  {assignment.pay_rate_hr && (
+                                    <span className="text-xs text-muted-foreground">
+                                      ${assignment.pay_rate_hr}/hr
+                                    </span>
+                                  )}
                                 </div>
                               ))}
                             </div>

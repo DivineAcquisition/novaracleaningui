@@ -108,6 +108,18 @@ serve(async (req) => {
         }
         logStep("Booking confirmed via webhook", { bookingId: booking.id });
 
+        // Trigger auto-dispatch for the booking
+        logStep("Triggering auto-dispatch for booking");
+        try {
+          await supabase.functions.invoke('auto-dispatch-booking', {
+            body: { bookingId: booking.id }
+          });
+          logStep("Auto-dispatch triggered successfully");
+        } catch (dispatchError) {
+          logStep("Auto-dispatch failed (non-critical)", { error: dispatchError });
+          // Don't fail the webhook - booking is still confirmed
+        }
+
         // Deduct membership credit if booking uses credit (with idempotency and race condition checks)
         if (booking.uses_credit && booking.customer_id) {
           logStep("Attempting to deduct membership credit", { customerId: booking.customer_id });
