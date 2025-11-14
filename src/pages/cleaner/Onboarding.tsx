@@ -245,11 +245,12 @@ export default function CleanerOnboarding() {
       let avatarUrl = null;
       if (formData.avatarFile) {
         const fileExt = formData.avatarFile.name.split('.').pop();
-        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const baseName = `${crypto.randomUUID()}.${fileExt}`;
+        const storagePath = `${finalUserId}/${Date.now()}-${baseName}`;
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('cleaner-avatars')
-          .upload(fileName, formData.avatarFile, {
+          .upload(storagePath, formData.avatarFile, {
             contentType: formData.avatarFile.type,
             upsert: false
           });
@@ -261,7 +262,7 @@ export default function CleanerOnboarding() {
 
         const { data: { publicUrl } } = supabase.storage
           .from('cleaner-avatars')
-          .getPublicUrl(fileName);
+          .getPublicUrl(storagePath);
         
         avatarUrl = publicUrl;
       }
