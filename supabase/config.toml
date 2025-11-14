@@ -74,3 +74,6 @@ verify_jwt = true
 
 [functions.test-zapier-webhook]
 verify_jwt = true
+
+[functions.cancel-booking]
+verify_jwt = false

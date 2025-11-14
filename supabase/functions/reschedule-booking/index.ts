@@ -135,6 +135,16 @@ serve(async (req) => {
       // Don't fail the request if email fails
     }
 
+    // Trigger Zapier webhook for rescheduled booking
+    try {
+      await supabase.functions.invoke('send-zapier-webhook', {
+        body: { bookingId }
+      });
+      console.log('Zapier webhook triggered for rescheduled booking');
+    } catch (webhookError) {
+      console.error('Zapier webhook failed (non-critical):', webhookError);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,
