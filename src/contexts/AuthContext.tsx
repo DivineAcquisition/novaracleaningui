@@ -12,6 +12,8 @@ interface SubscriptionData {
   has_payment_method?: boolean;
   customer_id?: string;
   subscription_id?: string;
+  is_paused?: boolean;
+  resumes_at?: string;
 }
 
 interface AuthContextType {

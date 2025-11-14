@@ -110,3 +110,9 @@ verify_jwt = false
 
 [functions.check-credit-expiry]
 verify_jwt = false
+
+[functions.pause-subscription]
+verify_jwt = true
+
+[functions.resume-subscription]
+verify_jwt = true

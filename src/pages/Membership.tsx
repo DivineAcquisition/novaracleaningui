@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight } from "lucide-react";
+import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight, PauseCircle, PlayCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SavingsComparison } from "@/components/membership/SavingsComparison";
+import { PauseResumeDialog } from "@/components/membership/PauseResumeDialog";
 
 const MEMBERSHIP_TIERS = {
   monthly: {
@@ -78,8 +79,9 @@ const MEMBERSHIP_TIERS = {
 
 export default function Membership() {
   const navigate = useNavigate();
-  const { user, subscription } = useAuth();
+  const { user, subscription, checkSubscription } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [pauseResumeDialogOpen, setPauseResumeDialogOpen] = useState(false);
 
   const handleSubscribe = async (priceId: string, planId: string) => {
     if (!user) {
@@ -133,15 +135,68 @@ export default function Membership() {
 
         {/* Current Subscription Banner */}
         {currentPlan && (
-          <Card className="mb-8 border-primary/50 bg-gradient-to-br from-primary/5 to-accent/5">
+          <Card className={`mb-8 ${subscription?.is_paused ? 'border-warning/50 bg-gradient-to-br from-warning/5 to-orange/5' : 'border-primary/50 bg-gradient-to-br from-primary/5 to-accent/5'}`}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-success" />
-                Your Current Plan: {currentPlan.name}
-              </CardTitle>
-              <CardDescription>
-                You have an active subscription with {currentPlan.credits} credit(s) per month
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <CardTitle className="flex items-center gap-2">
+                    {subscription?.is_paused ? (
+                      <PauseCircle className="w-5 h-5 text-warning" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-success" />
+                    )}
+                    {subscription?.is_paused ? 'Paused: ' : 'Your Current Plan: '}
+                    {currentPlan.name}
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    {subscription?.is_paused ? (
+                      <>
+                        Your subscription is paused
+                        {subscription.resumes_at && (
+                          <span className="block mt-1">
+                            Scheduled to resume on {new Date(subscription.resumes_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      `You have an active subscription with ${currentPlan.credits} credit(s) per month`
+                    )}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant={subscription?.is_paused ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPauseResumeDialogOpen(true)}
+                  className={subscription?.is_paused ? "bg-success hover:bg-success/90" : ""}
+                >
+                  {subscription?.is_paused ? (
+                    <>
+                      <PlayCircle className="w-4 h-4 mr-2" />
+                      Resume
+                    </>
+                  ) : (
+                    <>
+                      <PauseCircle className="w-4 h-4 mr-2" />
+                      Pause
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {subscription?.is_paused && (
+                <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/20">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-warning mt-0.5" />
+                    <div className="text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">Your membership is on hold</p>
+                      <p className="mt-1">
+                        While paused, you won't be charged and credits won't be issued. Your benefits and pricing are saved.
+                        Resume anytime to continue.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardHeader>
           </Card>
         )}
@@ -298,6 +353,15 @@ export default function Membership() {
           </p>
         </div>
       </div>
+      
+      {/* Pause/Resume Dialog */}
+      <PauseResumeDialog
+        open={pauseResumeDialogOpen}
+        onOpenChange={setPauseResumeDialogOpen}
+        isPaused={subscription?.is_paused || false}
+        resumesAt={subscription?.resumes_at}
+        onSuccess={checkSubscription}
+      />
     </div>
   );
 }
