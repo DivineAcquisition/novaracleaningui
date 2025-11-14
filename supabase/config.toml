@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.auto-dispatch-booking]
 verify_jwt = false
+
+[functions.check-credit-expiry]
+verify_jwt = false

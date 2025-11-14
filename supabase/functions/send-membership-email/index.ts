@@ -6,6 +6,7 @@ import { MembershipWelcome } from '../_shared/email-templates/MembershipWelcome.
 import { MembershipRenewal } from '../_shared/email-templates/MembershipRenewal.tsx';
 import { CreditAllocated } from '../_shared/email-templates/CreditAllocated.tsx';
 import { SubscriptionCancelled } from '../_shared/email-templates/SubscriptionCancelled.tsx';
+import { CreditExpiryWarning } from '../_shared/email-templates/CreditExpiryWarning.tsx';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -20,7 +21,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 interface MembershipEmailRequest {
-  type: 'welcome' | 'renewal' | 'credit_allocated' | 'subscription_cancelled';
+  type: 'welcome' | 'renewal' | 'credit_allocated' | 'subscription_cancelled' | 'credit_expiry_warning';
   email: string;
   data: {
     name?: string;
@@ -28,6 +29,7 @@ interface MembershipEmailRequest {
     credits?: number;
     renewalDate?: string;
     amount?: number;
+    expiryDate?: string;
   };
 }
 
@@ -66,6 +68,10 @@ serve(async (req: Request) => {
       case 'subscription_cancelled':
         html = await renderAsync(React.createElement(SubscriptionCancelled, data));
         subject = `Your Novara Membership Has Been Cancelled`;
+        break;
+      case 'credit_expiry_warning':
+        html = await renderAsync(React.createElement(CreditExpiryWarning, data));
+        subject = `⚠️ Your Cleaning Credits Expire Soon!`;
         break;
       default:
         throw new Error(`Unknown email type: ${type}`);

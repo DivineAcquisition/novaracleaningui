@@ -443,7 +443,7 @@ serve(async (req) => {
           };
           
           const plan = planNameMap[priceId] || 'monthly';
-          const creditsPerMonth = { monthly: 1, biweekly: 2, weekly: 4 }[plan];
+          const creditsPerMonth: number = { monthly: 1, biweekly: 2, weekly: 4 }[plan] || 1;
           const planLabels: Record<string, string> = { 
             monthly: 'Novara Monthly', 
             biweekly: 'Novara Bi-Weekly', 
@@ -488,6 +488,36 @@ serve(async (req) => {
               credits: creditsPerMonth,
               renewalDate: new Date(subscription.current_period_end * 1000).toISOString(),
             });
+
+            // Send SMS notification if phone number available
+            try {
+              const { data: customerData } = await supabase
+                .from('customers')
+                .select('phone')
+                .eq('id', customerId)
+                .single();
+
+              if (customerData?.phone) {
+                const smsMessage = `Novara: ${creditsPerMonth} new cleaning credit${creditsPerMonth > 1 ? 's' : ''} added to your ${planLabels[plan]} membership! Book now: https://novaracleaning.com/book`;
+
+                await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms-notification`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                  },
+                  body: JSON.stringify({
+                    toPhone: customerData.phone,
+                    message: smsMessage,
+                    type: 'confirmation',
+                  }),
+                });
+
+                logStep("SMS notification sent for credit allocation", { phone: customerData.phone });
+              }
+            } catch (smsError) {
+              logStep("Error sending SMS (non-blocking)", { error: smsError });
+            }
           }
         }
         break;
