@@ -195,6 +195,9 @@ export default function CleanerAuth() {
         password: passwordValidation.data,
         options: {
           emailRedirectTo: redirectUrl,
+          data: {
+            is_cleaner: true, // Tag this as a cleaner account
+          },
         },
       });
 
