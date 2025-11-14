@@ -116,3 +116,13 @@ verify_jwt = true
 
 [functions.resume-subscription]
 verify_jwt = true
+
+[functions.initiate-cleaner-stripe-connect]
+verify_jwt = true
+
+[functions.send-phone-verification]
+verify_jwt = true
+
+[functions.verify-phone-code]
+verify_jwt = true
+
