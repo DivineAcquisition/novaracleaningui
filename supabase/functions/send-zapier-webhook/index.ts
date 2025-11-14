@@ -24,14 +24,14 @@ function mapSqFtRange(homeSizeId: string): string {
   return getSqftRange(homeSizeId);
 }
 
-// Map service_type to Service Type enum
+// Map service_type to Service Type enum with exact names
 function mapServiceType(serviceType: string): string {
   const mapping: Record<string, string> = {
-    'standard': 'Standard',
-    'deep': 'Deep',
-    'moveInOut': 'Move In/Out'
+    'standard': 'Standard Cleaning',
+    'deep': 'Deep Cleaning',
+    'moveInOut': 'Move In/Out Cleaning'
   };
-  return mapping[serviceType] || 'Standard';
+  return mapping[serviceType] || 'Standard Cleaning';
 }
 
 // Map add_ons array to formatted string
