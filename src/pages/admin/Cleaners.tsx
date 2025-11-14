@@ -33,8 +33,6 @@ interface Cleaner {
 }
 
 export default function AdminCleaners() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -46,12 +44,8 @@ export default function AdminCleaners() {
   });
 
   useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
     fetchCleaners();
-  }, [user, navigate]);
+  }, []);
 
   const fetchCleaners = async () => {
     try {
