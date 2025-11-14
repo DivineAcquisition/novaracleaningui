@@ -2,11 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Home as HomeIcon, ArrowRight, ArrowLeft } from "lucide-react";
+import { Home as HomeIcon, ArrowRight, ArrowLeft, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 
 const BOOKING_STEPS = [
@@ -77,9 +77,13 @@ export default function BookingHome() {
                   onClick={() => handleSelect(size.id)}
                 >
                   <CardContent className="p-3 md:p-6 space-y-2 md:space-y-3">
-                    <div className="text-center">
+                    <div className="text-center space-y-1">
                       <h3 className="text-base md:text-lg font-semibold text-foreground">{size.label}</h3>
-                      <p className="text-xs md:text-sm text-muted-foreground mt-0.5 md:mt-1">{size.bedroomRange}</p>
+                      <p className="text-xs md:text-sm text-muted-foreground">{size.bedroomRange}</p>
+                      <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/80">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>~{getEstimatedHours(size.id)} hrs @ ${HOURLY_RATE}/hr</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
