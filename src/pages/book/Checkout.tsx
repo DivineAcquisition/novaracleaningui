@@ -730,7 +730,7 @@ export default function BookingCheckout() {
                               <p className="text-xs md:text-sm text-muted-foreground">
                                 Balance after: ${depositPricing.balanceDue.toFixed(2)}
                               </p>
-                              {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0) && (
+                              {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0 || promoDiscount > 0) && (
                                 <div className="text-[10px] md:text-xs space-y-0.5 pt-1.5 border-t border-border/50 mt-2">
                                   {depositPricing.newCustomerDiscount > 0 && (
                                     <div className="flex items-center justify-between text-green-600 font-semibold">
@@ -745,6 +745,15 @@ export default function BookingCheckout() {
                                     <div className="flex justify-between text-success">
                                       <span>Membership discount:</span>
                                       <span className="font-medium">-${depositPricing.membershipDiscount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {promoDiscount > 0 && (
+                                    <div className="flex items-center justify-between text-green-600 font-semibold">
+                                      <span className="flex items-center gap-1">
+                                        <Gift className="w-3 h-3" />
+                                        Promo Code:
+                                      </span>
+                                      <span>-${promoDiscount.toFixed(2)}</span>
                                     </div>
                                   )}
                                 </div>
