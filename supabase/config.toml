@@ -101,3 +101,9 @@ verify_jwt = false
 
 [functions.update-cleaner-performance]
 verify_jwt = false
+
+[functions.job-check-in]
+verify_jwt = false
+
+[functions.auto-dispatch-booking]
+verify_jwt = false

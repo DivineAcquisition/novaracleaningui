@@ -31,7 +31,6 @@ import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
-import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerProfile from "./pages/cleaner/Profile";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import CleanerJobOffers from "./pages/cleaner/JobOffers";
@@ -107,7 +106,7 @@ const App = () => (
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
-              <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+              <Route path="/cleaner/dashboard" element={<CleanerJobOffers />} />
               <Route path="/cleaner/profile" element={<CleanerProfile />} />
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               <Route path="/cleaner/offers" element={<CleanerJobOffers />} />
