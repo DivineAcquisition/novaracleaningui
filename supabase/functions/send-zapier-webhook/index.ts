@@ -268,6 +268,20 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       status: booking.status 
     });
 
+    // Fetch customer referral code
+    const { data: customerData } = await supabase
+      .from('customers')
+      .select('referral_code')
+      .eq('id', booking.customer_id)
+      .maybeSingle();
+
+    // Fetch subscription ID if exists
+    const { data: membershipData } = await supabase
+      .from('membership_credits')
+      .select('subscription_id')
+      .eq('customer_id', booking.customer_id)
+      .maybeSingle();
+
     // Calculate estimated hours and payout
     const estimatedHours = booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
     const cleanerHourlyRateCents = booking.cleaner_hourly_rate_cents || DEFAULT_CLEANER_HOURLY_RATE_CENTS;
@@ -280,6 +294,9 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const creditDiscount = booking.uses_credit ? booking.base_price_cents : 0;
     const fullPaymentDiscount = booking.full_payment_discount || 0;
     const totalDiscountCents = newCustomerDiscount + creditDiscount + fullPaymentDiscount;
+
+    // Get origin URL for referral link
+    const origin = Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '') || 'https://yourdomain.com';
 
     // Build Zapier payload
     const payload = {
@@ -295,6 +312,12 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Service Address": `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
       "First Name": booking.first_name,
       "Last Name": booking.last_name,
+      
+      // Customer Referral Information
+      "Customer Referral Code": customerData?.referral_code || "",
+      "Referral Link": customerData?.referral_code 
+        ? `${origin}/book?ref=${customerData.referral_code}` 
+        : "",
       
       // Location Details
       "City": booking.city,
@@ -341,12 +364,26 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Issues Flag": booking.issues_flag || false,
       "Issues Notes": booking.issues_notes || "",
       
+      // Transaction Data
+      "Stripe Customer ID": booking.customer_id || "",
+      "Stripe Subscription ID": membershipData?.subscription_id || "",
+      "Payment Intent ID": booking.payment_intent_id || "",
+      "Checkout Session ID": booking.checkout_session_id || "",
+      "Stripe Invoice ID": booking.stripe_invoice_id || "",
+      
       // Financial Information
       "Price": formatCurrency(booking.base_price_cents),
       "Deposit": formatCurrency(booking.deposit_cents),
       "Discount/Credit": formatCurrency(totalDiscountCents),
       "Tax": formatCurrency(booking.tax_cents || 0),
       "Total Charged": formatCurrency(totalChargedCents),
+      "Remaining Balance": booking.payment_option === 'deposit' 
+        ? formatCurrency(booking.total_estimate_cents - booking.deposit_cents)
+        : "$0.00",
+      "Invoice URL": booking.stripe_invoice_id 
+        ? `https://invoice.stripe.com/i/${booking.stripe_invoice_id}` 
+        : "",
+      "Invoice Status": booking.stripe_invoice_id ? "Sent" : "N/A",
       "Payment Status": getPaymentStatus(booking.status, booking.payment_option),
       "Payment Method": booking.payment_method || "Card",
       "Cleaner Split %": Math.round((cleanerPayoutCents / totalChargedCents) * 100),

@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin } from "lucide-react";
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
+import { processAvatarImage } from "@/lib/image-compression";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -119,19 +120,29 @@ export default function CleanerOnboarding() {
     }));
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast({ title: "Error", description: "Please upload an image file", variant: "destructive" });
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toast({ title: "Error", description: "Image must be less than 5MB", variant: "destructive" });
-        return;
-      }
-      setFormData(prev => ({ ...prev, avatarFile: file }));
-      setAvatarPreview(URL.createObjectURL(file));
+    if (!file) return;
+
+    try {
+      setIsLoading(true);
+      const { file: compressedFile, preview } = await processAvatarImage(file);
+      
+      setFormData(prev => ({ ...prev, avatarFile: compressedFile }));
+      setAvatarPreview(preview);
+      
+      toast({
+        title: "Image ready",
+        description: "Image compressed and ready for upload",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Image processing failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
