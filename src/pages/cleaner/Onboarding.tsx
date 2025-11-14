@@ -20,6 +20,19 @@ const US_STATES = [
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+const SKILLSET_OPTIONS = [
+  "Standard Cleaning",
+  "Deep Cleaning",
+  "Move-In/Move-Out",
+  "Vacation Rental Turnover",
+  "Pet-Friendly Cleaning",
+  "Eco-Friendly Products",
+  "Window Cleaning",
+  "Carpet Cleaning",
+  "Post-Construction Cleaning",
+  "Commercial Cleaning"
+];
+
 export default function CleanerOnboarding() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -32,8 +45,11 @@ export default function CleanerOnboarding() {
     state: "",
     homeZip: "",
     maxTravelMiles: 20,
-    preferredWorkDays: [] as string[]
+    preferredWorkDays: [] as string[],
+    skillset: [] as string[],
+    avatarFile: null as File | null
   });
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
 
   const handleDayToggle = (day: string) => {
     setFormData(prev => ({
@@ -42,6 +58,31 @@ export default function CleanerOnboarding() {
         ? prev.preferredWorkDays.filter(d => d !== day)
         : [...prev.preferredWorkDays, day]
     }));
+  };
+
+  const handleSkillToggle = (skill: string) => {
+    setFormData(prev => ({
+      ...prev,
+      skillset: prev.skillset.includes(skill)
+        ? prev.skillset.filter(s => s !== skill)
+        : [...prev.skillset, skill]
+    }));
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({ title: "Error", description: "Please upload an image file", variant: "destructive" });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "Error", description: "Image must be less than 5MB", variant: "destructive" });
+        return;
+      }
+      setFormData(prev => ({ ...prev, avatarFile: file }));
+      setAvatarPreview(URL.createObjectURL(file));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,9 +127,43 @@ export default function CleanerOnboarding() {
       return;
     }
 
+    if (formData.skillset.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please select at least one skill or specialty",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      // Upload avatar if provided
+      let avatarUrl = null;
+      if (formData.avatarFile) {
+        const fileExt = formData.avatarFile.name.split('.').pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('cleaner-avatars')
+          .upload(fileName, formData.avatarFile, {
+            contentType: formData.avatarFile.type,
+            upsert: false
+          });
+
+        if (uploadError) {
+          toast({ title: "Error", description: "Failed to upload profile photo", variant: "destructive" });
+          throw uploadError;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('cleaner-avatars')
+          .getPublicUrl(fileName);
+        
+        avatarUrl = publicUrl;
+      }
+
       // Geocode home address
       const { data: geoData, error: geoError } = await supabase.functions.invoke("geocode-address", {
         body: {
@@ -113,6 +188,8 @@ export default function CleanerOnboarding() {
           home_lng: geoData.lng,
           max_travel_miles: formData.maxTravelMiles,
           preferred_work_days: formData.preferredWorkDays,
+          avatar_url: avatarUrl,
+          skillset: formData.skillset,
           pay_rate_hr: 18.00,
           status_today: formData.preferredWorkDays.includes(new Date().toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3))
             ? "Available"
@@ -198,6 +275,30 @@ export default function CleanerOnboarding() {
                     onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                   />
                 </div>
+
+                {/* Profile Photo */}
+                <div className="space-y-4">
+                  <Label htmlFor="avatar">Profile Photo (Optional)</Label>
+                  <div className="flex items-center gap-4">
+                    {avatarPreview && (
+                      <img 
+                        src={avatarPreview} 
+                        alt="Preview" 
+                        className="w-24 h-24 rounded-full object-cover border-2 border-border"
+                      />
+                    )}
+                    <Input
+                      id="avatar"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="flex-1"
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Upload a professional photo. This will be shown to customers. Max 5MB.
+                  </p>
+                </div>
               </div>
 
               {/* Location Information */}
@@ -282,6 +383,28 @@ export default function CleanerOnboarding() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Standard hourly rate for all cleaners
                   </p>
+                </div>
+
+                {/* Skills & Specialties */}
+                <div className="space-y-4">
+                  <Label>Your Skills & Specialties *</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Select all services you're comfortable providing (select at least one)
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {SKILLSET_OPTIONS.map((skill) => (
+                      <div key={skill} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={skill}
+                          checked={formData.skillset.includes(skill)}
+                          onCheckedChange={() => handleSkillToggle(skill)}
+                        />
+                        <Label htmlFor={skill} className="font-normal cursor-pointer">
+                          {skill}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
