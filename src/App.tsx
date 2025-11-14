@@ -31,6 +31,7 @@ import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerProfile from "./pages/cleaner/Profile";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -89,8 +90,8 @@ const App = () => (
               <Route path="/book/success" element={<BookingSuccess />} />
               <Route path="/book/additional-details" element={<AdditionalDetails />} />
               <Route path="/book/custom-quote" element={<CustomQuote />} />
-              <Route path="/admin/cleaners" element={<AdminCleaners />} />
-              <Route path="/admin/webhooks" element={<AdminWebhooks />} />
+              <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
+              <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
