@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { WebhookTestButton } from "@/components/admin/WebhookTestButton";
+import ZapierDirectTest from "@/components/admin/ZapierDirectTest";
 
 interface WebhookFailure {
   id: string;
@@ -143,6 +144,17 @@ const WebhookMonitor = () => {
           }} variant="default">
             Send Test Dispatch Webhook
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Send to Custom Webhook URL */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Send to Custom Webhook URL</CardTitle>
+          <CardDescription>Post a sample payload directly to any Zapier Catch Hook to verify reception.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ZapierDirectTest />
         </CardContent>
       </Card>
 

@@ -344,6 +344,23 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
 async function sendWebhook(supabase: any, payload: any, id: string, type: string) {
   logStep("Payload constructed", { id, type });
 
+  // Ensure Zapier URL is configured
+  if (!ZAPIER_WEBHOOK_URL) {
+    logStep("Missing ZAPIER_WEBHOOK_URL secret");
+    return new Response(
+      JSON.stringify({ error: "ZAPIER_WEBHOOK_URL not set in environment" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+    );
+  }
+
+  // Log destination host for verification without leaking full URL
+  try {
+    const urlHost = new URL(ZAPIER_WEBHOOK_URL).host;
+    logStep("Sending to Zapier", { urlHost });
+  } catch (_) {
+    logStep("Invalid ZAPIER_WEBHOOK_URL format");
+  }
+
   // Send to Zapier with retry logic
   let retryCount = 0;
   const MAX_RETRIES = 3;
@@ -354,6 +371,13 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
+      });
+
+      // Capture response body for debugging (Zapier often returns empty string)
+      const respText = await response.text().catch(() => "");
+      logStep("Zapier response", {
+        status: response.status,
+        bodyPreview: respText ? respText.slice(0, 200) : ""
       });
 
       if (response.ok) {
