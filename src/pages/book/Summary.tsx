@@ -106,7 +106,7 @@ export default function BookingSummary() {
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card className="shadow-xl animate-fade-in">
           <CardHeader className="text-center space-y-2 pb-8">
-            <CardTitle className="text-xl md:text-2xl font-bold">Review your booking</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-bold font-jakarta">Review your booking</CardTitle>
             <CardDescription className="text-sm">
               Please review your booking details before confirming
             </CardDescription>
@@ -120,7 +120,7 @@ export default function BookingSummary() {
                   <div className="flex justify-center mb-2">
                     <TrendingDown className="w-8 h-8 md:w-10 md:h-10 text-green-600 dark:text-green-400" />
                   </div>
-                  <CardTitle className="text-lg md:text-xl font-bold text-green-700 dark:text-green-400">🎉 You're Saving Big!</CardTitle>
+                  <CardTitle className="text-lg md:text-xl font-bold text-green-700 dark:text-green-400 font-jakarta">🎉 You're Saving Big!</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center space-y-3 md:space-y-4">
                   <div>
@@ -154,7 +154,7 @@ export default function BookingSummary() {
             {/* What You Pay Today - Hero */}
             <Card className="border-2 border-primary/30 shadow-lg animate-fade-in">
               <CardHeader className="text-center bg-gradient-to-br from-primary/5 to-primary/10 pb-3 md:pb-4">
-                <CardTitle className="text-lg md:text-xl flex items-center justify-center gap-2">
+                <CardTitle className="text-lg md:text-xl flex items-center justify-center gap-2 font-jakarta">
                   <DollarSign className="w-5 h-5 md:w-6 md:h-6 text-primary" />
                   What You Pay Today
                 </CardTitle>
