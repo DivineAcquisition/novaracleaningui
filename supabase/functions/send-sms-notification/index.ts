@@ -6,9 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
+const messageBirdAccessKey = Deno.env.get("MESSAGEBIRD_ACCESS_KEY");
+const messageBirdOriginator = Deno.env.get("MESSAGEBIRD_ORIGINATOR");
 
 interface SMSRequest {
   toPhone: string;
@@ -49,30 +48,30 @@ serve(async (req) => {
       console.error("Failed to create SMS log:", logError);
     }
 
-    // Send SMS via Twilio
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
-    const formData = new URLSearchParams({
-      To: toPhone,
-      From: twilioPhoneNumber!,
-      Body: message,
-    });
+    // Send SMS via MessageBird
+    const messageBirdUrl = "https://rest.messagebird.com/messages";
+    const requestBody = {
+      originator: messageBirdOriginator,
+      recipients: [toPhone],
+      body: message,
+    };
 
-    const twilioResponse = await fetch(twilioUrl, {
+    const messageBirdResponse = await fetch(messageBirdUrl, {
       method: "POST",
       headers: {
-        "Authorization": `Basic ${btoa(`${twilioAccountSid}:${twilioAuthToken}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `AccessKey ${messageBirdAccessKey}`,
+        "Content-Type": "application/json",
       },
-      body: formData.toString(),
+      body: JSON.stringify(requestBody),
     });
 
-    const twilioData = await twilioResponse.json();
+    const messageBirdData = await messageBirdResponse.json();
 
-    if (!twilioResponse.ok) {
-      throw new Error(`Twilio error: ${twilioData.message || "Unknown error"}`);
+    if (!messageBirdResponse.ok) {
+      throw new Error(`MessageBird error: ${messageBirdData.errors?.[0]?.description || "Unknown error"}`);
     }
 
-    console.log(`[SMS] Sent successfully. SID: ${twilioData.sid}`);
+    console.log(`[SMS] Sent successfully. ID: ${messageBirdData.id}`);
 
     // Update log with success
     if (logEntry) {
@@ -80,8 +79,8 @@ serve(async (req) => {
         .from("sms_logs")
         .update({
           status: "sent",
-          twilio_sid: twilioData.sid,
-          cost: parseFloat(twilioData.price || "0") * -1 // Twilio returns negative price
+          provider_message_id: messageBirdData.id,
+          cost: messageBirdData.price?.amount || 0
         })
         .eq("id", logEntry.id);
     }
@@ -89,8 +88,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        sid: twilioData.sid,
-        status: twilioData.status
+        messageId: messageBirdData.id,
+        status: messageBirdData.recipients?.items?.[0]?.status || "sent"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
