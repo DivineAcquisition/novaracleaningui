@@ -108,6 +108,79 @@ serve(async (req) => {
         }
         logStep("Booking confirmed via webhook", { bookingId: booking.id });
 
+        // Create invoice for remaining balance if deposit was paid
+        if (booking.payment_option === 'deposit') {
+          const remainingBalanceCents = booking.total_estimate_cents - booking.deposit_cents;
+          
+          if (remainingBalanceCents > 0) {
+            logStep("Creating invoice for remaining balance", { 
+              remainingBalance: remainingBalanceCents,
+              serviceDate: booking.service_date
+            });
+
+            try {
+              // Get or create Stripe customer
+              const customers = await stripe.customers.list({ 
+                email: booking.email, 
+                limit: 1 
+              });
+              
+              let customerId = customers.data[0]?.id;
+              if (!customerId) {
+                const customer = await stripe.customers.create({
+                  email: booking.email,
+                  name: `${booking.first_name} ${booking.last_name}`,
+                  phone: booking.phone,
+                });
+                customerId = customer.id;
+              }
+
+              // Create invoice
+              const invoice = await stripe.invoices.create({
+                customer: customerId,
+                collection_method: 'send_invoice',
+                days_until_due: Math.max(0, Math.ceil((new Date(booking.service_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
+                description: `Remaining balance for ${booking.service_type} cleaning on ${booking.service_date}`,
+                metadata: {
+                  booking_id: booking.id,
+                  booking_number: booking.booking_number?.toString() || '',
+                },
+              });
+
+              // Add line item for remaining balance
+              await stripe.invoiceItems.create({
+                customer: customerId,
+                invoice: invoice.id,
+                amount: remainingBalanceCents,
+                currency: 'usd',
+                description: `Remaining Balance - ${booking.service_type} Cleaning Service`,
+              });
+
+              // Finalize and send invoice
+              const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id, {
+                auto_advance: true,
+              });
+
+              await stripe.invoices.sendInvoice(invoice.id);
+
+              // Update booking with invoice ID
+              await supabase
+                .from('bookings')
+                .update({ stripe_invoice_id: invoice.id })
+                .eq('id', booking.id);
+
+              logStep("Invoice created and sent", { 
+                invoiceId: invoice.id,
+                invoiceUrl: finalizedInvoice.hosted_invoice_url 
+              });
+            } catch (invoiceError) {
+              const errorMessage = invoiceError instanceof Error ? invoiceError.message : String(invoiceError);
+              logStep("Error creating invoice (non-critical)", { error: errorMessage });
+              // Don't fail the webhook - booking is still confirmed
+            }
+          }
+        }
+
         // Trigger auto-dispatch for the booking
         logStep("Triggering auto-dispatch for booking");
         try {
