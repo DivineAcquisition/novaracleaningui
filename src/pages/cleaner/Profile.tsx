@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User } from "lucide-react";
+import { processAvatarImage } from "@/lib/image-compression";
 
 interface CleanerProfile {
   id: string;
@@ -66,6 +67,9 @@ export default function CleanerProfile() {
     try {
       setUploading(true);
 
+      // Process image (compress and validate)
+      const { file: compressedFile } = await processAvatarImage(file);
+
       // Delete old avatar if exists
       if (profile.avatar_url) {
         const oldPath = profile.avatar_url.split('/').pop();
@@ -77,13 +81,13 @@ export default function CleanerProfile() {
       }
 
       // Upload new avatar
-      const fileExt = file.name.split('.').pop();
+      const fileExt = compressedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('cleaner-avatars')
-        .upload(filePath, file);
+        .upload(filePath, compressedFile);
 
       if (uploadError) throw uploadError;
 
