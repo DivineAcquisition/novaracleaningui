@@ -979,28 +979,43 @@ export type Database = {
       promo_codes: {
         Row: {
           active: boolean
+          applies_to: string | null
           code: string
           created_at: string
           expires_at: string | null
           id: string
+          max_total_uses: number | null
+          max_uses_per_customer: number | null
+          min_profit_margin_percent: number | null
+          total_uses: number | null
           type: Database["public"]["Enums"]["promo_type"]
           value: number
         }
         Insert: {
           active?: boolean
+          applies_to?: string | null
           code: string
           created_at?: string
           expires_at?: string | null
           id?: string
+          max_total_uses?: number | null
+          max_uses_per_customer?: number | null
+          min_profit_margin_percent?: number | null
+          total_uses?: number | null
           type: Database["public"]["Enums"]["promo_type"]
           value: number
         }
         Update: {
           active?: boolean
+          applies_to?: string | null
           code?: string
           created_at?: string
           expires_at?: string | null
           id?: string
+          max_total_uses?: number | null
+          max_uses_per_customer?: number | null
+          min_profit_margin_percent?: number | null
+          total_uses?: number | null
           type?: Database["public"]["Enums"]["promo_type"]
           value?: number
         }

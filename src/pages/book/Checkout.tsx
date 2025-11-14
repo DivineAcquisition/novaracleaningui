@@ -58,6 +58,10 @@ export default function BookingCheckout() {
   const [referralCode, setReferralCode] = useState<string>('');
   const [isValidatingReferral, setIsValidatingReferral] = useState(false);
   const [referralValid, setReferralValid] = useState<boolean | null>(null);
+  const [promoCode, setPromoCode] = useState<string>('');
+  const [isValidatingPromo, setIsValidatingPromo] = useState(false);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
 
   useEffect(() => {
@@ -116,7 +120,8 @@ export default function BookingCheckout() {
     bookingData.addOns,
     bookingData.membershipPlan,
     bookingData.useCredit,
-    isNewCustomer
+    isNewCustomer,
+    promoDiscount
   );
 
   const fullPaymentPricing = calculateFullPaymentWithDiscount(
@@ -125,8 +130,77 @@ export default function BookingCheckout() {
     bookingData.addOns,
     bookingData.membershipPlan,
     bookingData.useCredit,
-    isNewCustomer
+    isNewCustomer,
+    promoDiscount
   );
+
+  const handleValidatePromo = async () => {
+    if (!promoCode.trim()) return;
+    
+    setIsValidatingPromo(true);
+    setPromoMessage(null);
+    
+    try {
+      const { data: promo, error } = await supabase
+        .from('promo_codes')
+        .select('*')
+        .eq('code', promoCode.toUpperCase())
+        .eq('active', true)
+        .single();
+
+      if (error || !promo) {
+        setPromoMessage('Invalid promo code');
+        setPromoDiscount(0);
+        toast.error('Invalid promo code');
+        return;
+      }
+
+      // Check expiration
+      if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+        setPromoMessage('This promo code has expired');
+        setPromoDiscount(0);
+        toast.error('This promo code has expired');
+        return;
+      }
+
+      // Check eligibility
+      if (promo.applies_to === 'new_customers' && !isNewCustomer) {
+        setPromoMessage('This code is only for new customers');
+        setPromoDiscount(0);
+        toast.error('This code is only for new customers');
+        return;
+      }
+
+      if (promo.applies_to === 'returning_customers' && isNewCustomer) {
+        setPromoMessage('This code is only for returning customers');
+        setPromoDiscount(0);
+        toast.error('This code is only for returning customers');
+        return;
+      }
+
+      // Calculate discount
+      const subtotal = depositPricing.subtotal;
+      let discount = 0;
+      
+      if (promo.type === 'percent') {
+        discount = Math.round((subtotal * promo.value) / 100 * 100) / 100;
+      } else {
+        discount = promo.value;
+      }
+
+      setPromoDiscount(discount);
+      setPromoMessage(`🎉 ${promo.value}% off applied!`);
+      updateBookingData({ promoCode: promoCode.toUpperCase() });
+      toast.success(`Promo code applied! You're saving $${discount}`);
+    } catch (err) {
+      console.error('Error validating promo:', err);
+      setPromoMessage('Error validating promo code');
+      setPromoDiscount(0);
+      toast.error('Error validating promo code');
+    } finally {
+      setIsValidatingPromo(false);
+    }
+  };
 
   const handleBack = () => {
     navigate("/book/summary");
@@ -254,6 +328,27 @@ export default function BookingCheckout() {
           </CardHeader>
           
           <CardContent className="space-y-5 md:space-y-8">
+            {/* Holiday Promotion Banner */}
+            <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 overflow-hidden relative">
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIi8+PC9zdmc+')] opacity-50"></div>
+              <CardContent className="p-4 md:p-6 relative z-10">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg">
+                      <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-base md:text-lg font-bold text-foreground">🎄 Holiday Special!</p>
+                      <p className="text-xs md:text-sm text-muted-foreground">Save up to 25% on your cleaning</p>
+                    </div>
+                  </div>
+                  <div className="hidden sm:flex flex-col items-end">
+                    <Badge variant="secondary" className="text-xs">Offer ends Jan 5</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* New Customer Discount Banner */}
             {isNewCustomer && !user && (
               <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">
@@ -338,6 +433,60 @@ export default function BookingCheckout() {
               </CardContent>
             </Card>
 
+            {/* Promo Code Input */}
+            <Card className="border-2 border-primary/30 bg-gradient-to-br from-accent/10 to-primary/10">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="promoCode" className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    Holiday Promo Code
+                  </Label>
+                  {promoMessage && (
+                    <Badge variant={promoDiscount > 0 ? "default" : "destructive"} className="text-xs">
+                      {promoDiscount > 0 ? `✓ -$${promoDiscount}` : '✗ Invalid'}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    id="promoCode"
+                    placeholder="Enter promo code"
+                    value={promoCode}
+                    onChange={(e) => {
+                      const code = e.target.value.toUpperCase();
+                      setPromoCode(code);
+                      setPromoMessage(null);
+                      setPromoDiscount(0);
+                    }}
+                    maxLength={15}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={!promoCode || isValidatingPromo}
+                    onClick={handleValidatePromo}
+                    className="bg-gradient-primary hover:opacity-90"
+                  >
+                    {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
+                {promoMessage && (
+                  <p className={cn(
+                    "text-xs font-medium",
+                    promoDiscount > 0 ? "text-green-600" : "text-destructive"
+                  )}>
+                    {promoMessage}
+                  </p>
+                )}
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>• <strong>HOLIDAY25</strong>: 25% off for new customers</p>
+                  <p>• <strong>JOLLY20</strong>: 20% off for returning customers</p>
+                  <p>• <strong>NEWYEAR15</strong>: 15% off any service</p>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Order Summary */}
             <div className="space-y-6">
             <h3 className="text-lg md:text-xl font-semibold" id="order-summary-heading">
@@ -399,8 +548,9 @@ export default function BookingCheckout() {
                 originalPrice={depositPricing.subtotal}
                 newCustomerDiscount={isNewCustomer ? 60 : 0}
                 membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0}
-                fullPaymentDiscount={bookingData.paymentOption === 'full' ? (fullPaymentPricing.originalTotal - fullPaymentPricing.finalAmount - (isNewCustomer ? 60 : 0) - (bookingData.membershipPlan ? depositPricing.membershipDiscount : 0)) : 0}
-                finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.deposit : fullPaymentPricing.finalAmount}
+                fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0}
+                promoDiscount={promoDiscount}
+                finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount}
               />
 
               {/* Payment Comparison View */}

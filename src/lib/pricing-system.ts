@@ -163,12 +163,36 @@ export interface PricingCalculation {
   hours: number;
 }
 
+export interface PromoCode {
+  code: string;
+  type: 'percent' | 'amount';
+  value: number;
+  applies_to: 'all' | 'new_customers' | 'returning_customers';
+  min_profit_margin_percent: number;
+  max_uses_per_customer?: number;
+  total_uses: number;
+  max_total_uses?: number;
+}
+
+export interface PromoValidation {
+  valid: boolean;
+  discount: number;
+  message?: string;
+  promoCode?: PromoCode;
+}
+
 export interface FullPaymentCalculation {
   originalTotal: number;
   discount: number;
   newCustomerDiscount: number;
+  promoDiscount: number;
   finalAmount: number;
   savings: number;
+}
+
+export function getEstimatedHours(homeSizeId: string): number {
+  const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
+  return homeSize?.baseHours || 4;
 }
 
 export function calculateFullPaymentWithDiscount(
@@ -177,7 +201,8 @@ export function calculateFullPaymentWithDiscount(
   addOns: string[] = [],
   membershipPlan: string = 'none',
   useCredit: boolean = false,
-  isNewCustomer: boolean = false
+  isNewCustomer: boolean = false,
+  promoDiscount: number = 0
 ): FullPaymentCalculation {
   // Get base pricing WITH new customer discount already applied
   const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer);
@@ -189,20 +214,22 @@ export function calculateFullPaymentWithDiscount(
   // Calculate 10% full payment discount on the amount AFTER new customer discount
   const fullPaymentDiscount = Math.round(totalBeforeFullPaymentDiscount * 0.10 * 100) / 100;
   
-  // Final amount = total (which already has new customer discount) - full payment discount
-  const finalAmount = totalBeforeFullPaymentDiscount - fullPaymentDiscount;
+  // Apply promo discount (already calculated and validated)
+  const finalBeforePromo = totalBeforeFullPaymentDiscount - fullPaymentDiscount;
+  const finalAmount = finalBeforePromo - promoDiscount;
   
   // originalTotal should be the subtotal (before any discounts) for display purposes
   const originalTotal = pricing.subtotal;
   
-  // Total savings = new customer + membership + full payment discounts
-  const totalSavings = pricing.newCustomerDiscount + pricing.membershipDiscount + fullPaymentDiscount;
+  // Total savings = new customer + membership + full payment + promo discounts
+  const totalSavings = pricing.newCustomerDiscount + pricing.membershipDiscount + fullPaymentDiscount + promoDiscount;
   
   return {
     originalTotal: originalTotal,
     discount: fullPaymentDiscount,
     newCustomerDiscount: pricing.newCustomerDiscount,
-    finalAmount: finalAmount,
+    promoDiscount,
+    finalAmount: Math.max(0, finalAmount),
     savings: totalSavings,
   };
 }
@@ -213,7 +240,8 @@ export function calculatePrice(
   addOns: string[] = [],
   membershipPlan: string = 'none',
   useCredit: boolean = false,
-  isNewCustomer: boolean = false
+  isNewCustomer: boolean = false,
+  promoDiscount: number = 0
 ): PricingCalculation {
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
   if (!homeSize) {
@@ -268,8 +296,8 @@ export function calculatePrice(
   // Deposit: $0 for members using credit, $39 otherwise
   const deposit = useCredit ? 0 : DEPOSIT_AMOUNT;
   
-  // Total calculation
-  const total = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage;
+  // Total calculation with promo discount
+  const total = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - promoDiscount;
   const balanceDue = Math.max(0, total - deposit);
   
   return {
@@ -279,9 +307,93 @@ export function calculatePrice(
     subtotal,
     membershipDiscount,
     newCustomerDiscount,
-    total,
+    total: Math.max(0, total),
     deposit: useCredit ? 0 : DEPOSIT_AMOUNT,
     balanceDue,
     hours: homeSize.baseHours,
+  };
+}
+
+/**
+ * Apply and validate promo code
+ */
+export async function applyPromoCode(
+  code: string,
+  subtotal: number,
+  homeSizeId: string,
+  isNewCustomer: boolean,
+  customerEmail: string,
+  supabase: any
+): Promise<PromoValidation> {
+  if (!code.trim()) {
+    return { valid: false, discount: 0, message: 'Please enter a promo code' };
+  }
+
+  // Fetch promo code from database
+  const { data: promoCode, error } = await supabase
+    .from('promo_codes')
+    .select('*')
+    .eq('code', code.toUpperCase())
+    .eq('active', true)
+    .single();
+
+  if (error || !promoCode) {
+    return { valid: false, discount: 0, message: 'Invalid promo code' };
+  }
+
+  // Check expiration
+  if (promoCode.expires_at && new Date(promoCode.expires_at) < new Date()) {
+    return { valid: false, discount: 0, message: 'This promo code has expired' };
+  }
+
+  // Check customer eligibility
+  if (promoCode.applies_to === 'new_customers' && !isNewCustomer) {
+    return { valid: false, discount: 0, message: 'This code is only for new customers' };
+  }
+  if (promoCode.applies_to === 'returning_customers' && isNewCustomer) {
+    return { valid: false, discount: 0, message: 'This code is only for returning customers' };
+  }
+
+  // Check total usage limit
+  if (promoCode.max_total_uses && promoCode.total_uses >= promoCode.max_total_uses) {
+    return { valid: false, discount: 0, message: 'This promo code has reached its usage limit' };
+  }
+
+  // Check per-customer usage limit
+  if (promoCode.max_uses_per_customer) {
+    const { data: customerUsage } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('email', customerEmail)
+      .ilike('team_notes', `%${code.toUpperCase()}%`); // Promo codes stored in team_notes
+
+    if (customerUsage && customerUsage.length >= promoCode.max_uses_per_customer) {
+      return { 
+        valid: false, 
+        discount: 0, 
+        message: `You've already used this code ${promoCode.max_uses_per_customer} time(s)` 
+      };
+    }
+  }
+
+  // Calculate discount
+  let discount = 0;
+  if (promoCode.type === 'percent') {
+    discount = Math.round((subtotal * promoCode.value) / 100 * 100) / 100;
+  } else {
+    discount = promoCode.value;
+  }
+
+  // Validate profit margin (import validateDiscount if needed)
+  const finalPrice = subtotal - discount;
+  if (finalPrice < 0) {
+    return { valid: false, discount: 0, message: 'Invalid discount amount' };
+  }
+
+  return {
+    valid: true,
+    discount,
+    message: `🎉 ${promoCode.value}% off applied!`,
+    promoCode: promoCode as PromoCode,
   };
 }

@@ -6,6 +6,7 @@ interface SavingsVisualizerProps {
   newCustomerDiscount: number;
   membershipDiscount: number;
   fullPaymentDiscount: number;
+  promoDiscount?: number;
   finalPrice: number;
 }
 
@@ -14,15 +15,17 @@ export const SavingsVisualizer = ({
   newCustomerDiscount,
   membershipDiscount,
   fullPaymentDiscount,
+  promoDiscount = 0,
   finalPrice,
 }: SavingsVisualizerProps) => {
-  const totalSavings = newCustomerDiscount + membershipDiscount + fullPaymentDiscount;
+  const totalSavings = newCustomerDiscount + membershipDiscount + fullPaymentDiscount + promoDiscount;
   const savingsPercentage = (totalSavings / originalPrice) * 100;
 
   // Calculate cumulative percentages for stacked visualization
   const newCustomerPercent = (newCustomerDiscount / originalPrice) * 100;
   const membershipPercent = ((newCustomerDiscount + membershipDiscount) / originalPrice) * 100;
   const fullPaymentPercent = ((newCustomerDiscount + membershipDiscount + fullPaymentDiscount) / originalPrice) * 100;
+  const promoPercent = ((newCustomerDiscount + membershipDiscount + fullPaymentDiscount + promoDiscount) / originalPrice) * 100;
 
   return (
     <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-4 md:p-6 border border-primary/20">
@@ -75,6 +78,20 @@ export const SavingsVisualizer = ({
             </div>
             <Progress 
               value={fullPaymentPercent} 
+              className="h-2 bg-muted"
+            />
+          </div>
+        )}
+
+        {/* Promo Discount Bar */}
+        {promoDiscount > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-foreground/80">🎄 Holiday Promo</span>
+              <span className="text-green-600 font-medium">-${promoDiscount.toFixed(2)}</span>
+            </div>
+            <Progress 
+              value={promoPercent} 
               className="h-2 bg-muted"
             />
           </div>
