@@ -42,15 +42,22 @@ const DomainRouter = () => {
 
   useEffect(() => {
     const isContractorDomain = window.location.hostname.includes('contractor');
-    const isCleanerRoute = location.pathname.startsWith('/cleaner') || location.pathname.startsWith('/admin');
+    const isCleanerRoute = location.pathname.startsWith('/cleaner');
+    const isAdminRoute = location.pathname.startsWith('/admin');
     
-    // If on contractor domain but not on cleaner/admin route, redirect to cleaner auth
+    // Admin routes are accessible from main domain (no redirect needed)
+    if (isAdminRoute) {
+      return;
+    }
+    
+    // If on contractor domain but not on cleaner route, redirect to cleaner auth
     if (isContractorDomain && !isCleanerRoute) {
       navigate('/cleaner/auth', { replace: true });
     }
     
     // If on main domain but on cleaner route, redirect to contractor domain if available
-    if (!isContractorDomain && isCleanerRoute) {
+    // Skip redirect in preview/development mode
+    if (!isContractorDomain && isCleanerRoute && !window.location.hostname.includes('lovableproject')) {
       const contractorUrl = window.location.href.replace(
         window.location.hostname,
         'contractor.' + window.location.hostname
