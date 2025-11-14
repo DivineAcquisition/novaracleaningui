@@ -8,6 +8,8 @@ import { RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { WebhookTestButton } from "@/components/admin/WebhookTestButton";
 import ZapierDirectTest from "@/components/admin/ZapierDirectTest";
+import { WebhookHistoryProvider } from "@/contexts/WebhookHistoryContext";
+import { WebhookPayloadInspector } from "@/components/admin/WebhookPayloadInspector";
 
 interface WebhookFailure {
   id: string;
@@ -99,22 +101,23 @@ const WebhookMonitor = () => {
   const unresolvedCount = failures.filter((f) => !f.resolved).length;
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold font-jakarta">Webhook Monitor</h1>
-          <p className="text-muted-foreground mt-2">
-            Track and manage Zapier webhook integration status
-          </p>
+    <WebhookHistoryProvider>
+      <div className="container mx-auto py-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold font-jakarta">Webhook Monitor</h1>
+            <p className="text-muted-foreground mt-2">
+              Track and manage Zapier webhook integration status
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <WebhookTestButton />
+            <Button onClick={fetchFailures} variant="outline">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <WebhookTestButton />
-          <Button onClick={fetchFailures} variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
-      </div>
 
       {/* Test Dispatch Webhook Section */}
       <Card className="mb-6">
@@ -157,6 +160,9 @@ const WebhookMonitor = () => {
           <ZapierDirectTest />
         </CardContent>
       </Card>
+
+      {/* Webhook Payload Inspector */}
+      <WebhookPayloadInspector />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -265,7 +271,8 @@ const WebhookMonitor = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </WebhookHistoryProvider>
   );
 };
 

@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Send } from "lucide-react";
+import { useWebhookHistory } from "@/contexts/WebhookHistoryContext";
 
 export const WebhookTestButton = () => {
   const [loading, setLoading] = useState(false);
+  const { addEntry } = useWebhookHistory();
 
   const handleTest = async () => {
     setLoading(true);
@@ -13,6 +15,16 @@ export const WebhookTestButton = () => {
       const { data, error } = await supabase.functions.invoke("test-zapier-webhook");
 
       if (error) throw error;
+
+      // Add to history if webhook data is available
+      if (data?.webhookData) {
+        addEntry({
+          type: "test",
+          payload: data.webhookData.payload || {},
+          response: data.webhookData.response || { status: 200, body: "" },
+          webhookUrl: data.webhookData.webhookUrl || "",
+        });
+      }
 
       toast.success("Test webhook sent successfully", {
         description: `Job ID: ${data.jobId}. Check your Zapier dashboard.`,

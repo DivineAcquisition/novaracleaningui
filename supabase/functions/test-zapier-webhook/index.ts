@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         jobId,
-        message: 'Test dispatch webhook sent with cleaner team metrics. Check your Zapier dashboard.' 
+        message: 'Test dispatch webhook sent with cleaner team metrics. Check your Zapier dashboard.',
+        webhookData: data
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
