@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin } from "lucide-react";
+import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -46,6 +47,36 @@ export default function CleanerOnboarding() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate all fields
+    const nameValidation = validateName(formData.firstName, "First name");
+    if (!nameValidation.isValid) {
+      toast({ title: "Error", description: nameValidation.error, variant: "destructive" });
+      return;
+    }
+
+    const lastNameValidation = validateName(formData.lastName, "Last name");
+    if (!lastNameValidation.isValid) {
+      toast({ title: "Error", description: lastNameValidation.error, variant: "destructive" });
+      return;
+    }
+
+    const emailValidation = validateEmail(formData.email);
+    if (!emailValidation.isValid) {
+      toast({ title: "Error", description: emailValidation.error, variant: "destructive" });
+      return;
+    }
+
+    const phoneValidation = validatePhone(formData.phone);
+    if (!phoneValidation.isValid) {
+      toast({ title: "Error", description: phoneValidation.error, variant: "destructive" });
+      return;
+    }
+
+    if (!formData.state) {
+      toast({ title: "Error", description: "Please select a state", variant: "destructive" });
+      return;
+    }
+
     if (formData.preferredWorkDays.length === 0) {
       toast({
         title: "Error",

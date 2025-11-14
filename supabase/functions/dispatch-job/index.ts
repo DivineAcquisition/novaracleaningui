@@ -209,13 +209,61 @@ serve(async (req) => {
       status: "Offered"
     }));
 
-    const { error: assignError } = await supabase
+    const { data: createdAssignments, error: assignError } = await supabase
       .from("job_assignments")
-      .insert(assignments);
+      .insert(assignments)
+      .select("*, cleaners(*)");
 
     if (assignError) {
       throw new Error(`Error creating assignments: ${assignError.message}`);
     }
+
+    // Send SMS notifications to cleaners
+    logStep("Sending SMS notifications");
+    const smsPromises = createdAssignments.map(async (assignment: any) => {
+      if (!assignment.cleaners.sms_notifications_enabled) {
+        console.log(`[SMS] Skipping ${assignment.cleaners.first_name} - SMS disabled`);
+        return;
+      }
+
+      const jobDate = new Date(job.start_datetime).toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
+      const token = btoa(assignment.id).substring(0, 10);
+      const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
+      
+      const message = `🧹 New Job Offer!
+
+Date: ${jobDate}
+Location: ${job.city}, ${job.zip}
+Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
+Distance: ${assignment.distance_miles.toFixed(1)} miles
+
+Respond within 15 min:
+Accept: ${baseUrl}?id=${assignment.id}&action=accept&token=${token}
+Decline: ${baseUrl}?id=${assignment.id}&action=decline&token=${token}
+
+Or open app to view details.`;
+
+      try {
+        await supabase.functions.invoke("send-sms-notification", {
+          body: {
+            toPhone: assignment.cleaners.phone,
+            message,
+            type: "job_offer",
+            jobAssignmentId: assignment.id
+          }
+        });
+      } catch (smsError) {
+        console.error(`[SMS] Failed to send to ${assignment.cleaners.first_name}:`, smsError);
+      }
+    });
+
+    await Promise.all(smsPromises);
+    logStep("SMS notifications sent");
 
     // Update job status
     await supabase
