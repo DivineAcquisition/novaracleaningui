@@ -1,21 +1,37 @@
 # Zapier Integration Documentation
 
 ## Overview
-The Novara Cleaning booking system integrates with Zapier to automatically sync booking data with external systems like Jobber, Notion, or Google Sheets. When a booking is confirmed, the system sends comprehensive booking details via webhook.
+The Novara Cleaning booking system integrates with Zapier to automatically sync booking data with external systems like Jobber, Notion, or Google Sheets. Webhooks are triggered on key booking lifecycle events:
+- ✅ **Booking Confirmation** - When customer completes payment
+- ✅ **Cleaner Assignment** - When a cleaner is assigned to the booking
+- ✅ **Booking Completion** - When service is marked complete
+- ✅ **Booking Modification** - When booking details are changed
+- ✅ **Booking Reschedule** - When service date/time is changed
+- ✅ **Booking Cancellation** - When booking is cancelled
 
 ## Architecture
 
 ### Flow Diagram
 ```
 Customer Payment → Stripe Webhook → Booking Confirmation → Send Zapier Webhook → External System
+Cleaner Assignment → assign-cleaner → Send Zapier Webhook → External System
+Booking Completion → complete-booking → Send Zapier Webhook → External System
+Booking Modification → modify-booking → Send Zapier Webhook → External System
+Booking Reschedule → reschedule-booking → Send Zapier Webhook → External System
+Booking Cancellation → cancel-booking → Send Zapier Webhook → External System
 ```
 
 ### Components
 1. **send-zapier-webhook** - Edge function that formats and sends booking data
 2. **stripe-webhook** - Triggers Zapier webhook on successful payment
-3. **webhook_failures** - Database table tracking failed webhook attempts
-4. **retry-webhook** - Edge function for manual retry of failed webhooks
-5. **test-zapier-webhook** - Testing utility for validation
+3. **assign-cleaner** - Triggers webhook when cleaner is assigned
+4. **complete-booking** - Triggers webhook when booking is completed
+5. **modify-booking** - Triggers webhook when booking is modified
+6. **reschedule-booking** - Triggers webhook when booking is rescheduled
+7. **cancel-booking** - NEW: Handles cancellation with refund logic and webhook trigger
+8. **webhook_failures** - Database table tracking failed webhook attempts
+9. **retry-webhook** - Edge function for manual retry of failed webhooks
+10. **test-zapier-webhook** - Testing utility for validation
 
 ## Setup Instructions
 
@@ -123,6 +139,49 @@ To change this:
 #### For Google Sheets
 Create columns matching the field names above, Zapier will auto-populate rows.
 
+## Cancellation Handling (Phase 7)
+
+### Cancel Booking Function
+The `cancel-booking` edge function handles the complete cancellation workflow:
+
+**Features:**
+- Validates booking can be cancelled (not already completed/cancelled)
+- Processes refunds via Stripe (full, partial, or none)
+- Implements refund policy:
+  - Full refund: If cancelled >24 hours before service
+  - Partial refund (50%): If cancelled <24 hours before service
+  - No refund: Admin configurable
+- Updates booking status to 'cancelled' with reason
+- Releases availability slot for rebooking
+- Updates cleaner stats if assigned
+- Sends cancellation confirmation email
+- Triggers Zapier webhook with cancellation details
+
+**Usage:**
+```typescript
+const { data, error } = await supabase.functions.invoke("cancel-booking", {
+  body: {
+    bookingId: "uuid",
+    cancelReason: "Customer requested",
+    refundType: "full" // or "partial" or "none"
+  }
+});
+```
+
+**Admin UI Component:**
+The `CancelBookingDialog` component provides an admin interface for cancelling bookings with:
+- Refund type selection (Full/Partial/None)
+- Required cancellation reason input
+- Confirmation workflow
+- Automatic webhook notification
+
+### Webhook Payload for Cancellations
+When a booking is cancelled, the webhook includes:
+- `Status` field updates to "Canceled"
+- `Cancel Reason` field populated with reason
+- `Payment Status` updates to "Refunded" (if refund processed)
+- All other booking details remain for record-keeping
+
 ## Testing the Integration
 
 ### Using the Test Function
@@ -220,6 +279,16 @@ const { error } = await supabase.functions.invoke("retry-webhook", {
 **"Permission denied"**
 - Ensure proper RLS policies on webhook_failures table
 - Check admin role is set correctly
+
+**"Booking already cancelled"**
+- Check booking status before cancellation
+- Verify the booking hasn't been previously cancelled
+- Use the admin dashboard to check booking history
+
+**"Cannot cancel completed bookings"**
+- Completed bookings cannot be cancelled
+- Consider issuing a manual refund instead
+- Contact customer directly for post-service issues
 
 ## Maintenance
 
