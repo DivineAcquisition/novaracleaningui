@@ -245,6 +245,17 @@ serve(async (req) => {
         console.error("Failed to send email:", emailError);
         // Don't fail the whole operation if email fails
       }
+
+      // Trigger Zapier webhook for modified booking
+      try {
+        await supabaseAdmin.functions.invoke('send-zapier-webhook', {
+          body: { bookingId }
+        });
+        logStep("Zapier webhook triggered");
+      } catch (webhookError) {
+        // Log but don't fail the modification if webhook fails
+        logStep("Zapier webhook failed (non-critical)", { error: webhookError });
+      }
     }
 
     return new Response(
