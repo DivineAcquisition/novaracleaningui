@@ -241,6 +241,41 @@ serve(async (req) => {
           } catch (zapierError) {
             logStep("Error sending Zapier webhook (non-blocking)", { error: zapierError });
           }
+
+          // Track referral if referral code was used
+          if (booking.metadata && (booking.metadata as any).referral_code) {
+            try {
+              const referralCode = (booking.metadata as any).referral_code;
+              logStep("Processing referral", { code: referralCode });
+
+              // Find the referrer
+              const { data: referrer } = await supabase
+                .from('customers')
+                .select('id')
+                .eq('referral_code', referralCode)
+                .single();
+
+              if (referrer && referrer.id) {
+                // Create referral record
+                const { error: referralError } = await supabase
+                  .from('referrals')
+                  .insert({
+                    customer_id: referrer.id,
+                    code: referralCode,
+                    status: 'pending',
+                    credit_cents: 5000, // $50 credit
+                  });
+
+                if (referralError) {
+                  logStep("Error creating referral record", referralError);
+                } else {
+                  logStep("Referral tracked successfully", { referrerId: referrer.id });
+                }
+              }
+            } catch (referralError) {
+              logStep("Error processing referral (non-blocking)", { error: referralError });
+            }
+          }
         break;
       }
 
@@ -312,6 +347,58 @@ serve(async (req) => {
           logStep("Error creating membership credits", creditsError);
         } else {
           logStep("Membership credits created", { customerId, plan, credits: creditsPerMonth });
+          
+          // Create or get customer record and generate referral code
+          try {
+            const { data: existingCustomer } = await supabase
+              .from('customers')
+              .select('id, referral_code')
+              .eq('email', email)
+              .maybeSingle();
+
+            let customerRecord = existingCustomer;
+
+            if (!existingCustomer) {
+              // Create customer record
+              const { data: newCustomer, error: customerError } = await supabase
+                .from('customers')
+                .insert({
+                  email,
+                  first_name: name.split(' ')[0] || '',
+                  last_name: name.split(' ').slice(1).join(' ') || '',
+                })
+                .select()
+                .single();
+
+              if (customerError) {
+                logStep("Error creating customer", customerError);
+              } else {
+                customerRecord = newCustomer;
+              }
+            }
+
+            // Generate referral code if customer doesn't have one
+            if (customerRecord && !customerRecord.referral_code) {
+              const referralResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-referral-code`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                },
+                body: JSON.stringify({
+                  customerId: customerRecord.id,
+                  email,
+                }),
+              });
+
+              if (referralResponse.ok) {
+                const { code } = await referralResponse.json();
+                logStep("Referral code generated", { code, customerId: customerRecord.id });
+              }
+            }
+          } catch (referralError) {
+            logStep("Error handling referral code (non-blocking)", { error: referralError });
+          }
           
           // Send welcome email
           await sendMembershipEmail('welcome', email, {
