@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { ArrowLeft, Calendar, Clock, Home, MapPin, User, Mail, Phone, Sparkles, TrendingDown, DollarSign, ChevronDown } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -299,7 +299,9 @@ export default function BookingSummary() {
                   <div className="space-y-3 pt-2">
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs md:text-sm">
-                        <span className="text-muted-foreground">Base Price</span>
+                        <span className="text-muted-foreground">
+                          Base Service ({getEstimatedHours(bookingData.homeSizeId)} hrs @ ${HOURLY_RATE}/hr)
+                        </span>
                         <span className="font-medium">${pricing.basePrice.toFixed(2)}</span>
                       </div>
                       {pricing.serviceAddition > 0 && (
