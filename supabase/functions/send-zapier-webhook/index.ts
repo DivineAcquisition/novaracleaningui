@@ -246,7 +246,14 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         cleaners:cleaner_id (
           first_name,
           last_name,
-          email
+          email,
+          phone,
+          pay_rate_hr,
+          average_rating,
+          total_ratings,
+          completed_bookings,
+          acceptance_rate,
+          on_time_rate
         )
       `)
       .eq('id', bookingId)
@@ -317,7 +324,16 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       // Status & Operations
       "Status": mapBookingStatus(booking.status),
       "Cancel Reason": booking.cancel_reason || "",
-      "Assigned Cleaner(s)": booking.cleaners ? `${booking.cleaners.first_name} ${booking.cleaners.last_name}` : "",
+      "Assigned Cleaner(s)": booking.cleaners ? `${booking.cleaners.first_name} ${booking.cleaners.last_name}` : "Not Assigned Yet",
+      "Assigned Cleaner Name": booking.cleaners ? `${booking.cleaners.first_name} ${booking.cleaners.last_name}` : "",
+      "Assigned Cleaner Email": booking.cleaners?.email || "",
+      "Assigned Cleaner Phone": booking.cleaners?.phone || "",
+      "Assigned Cleaner Pay Rate": booking.cleaners ? `$${(booking.cleaners.pay_rate_hr || 18).toFixed(2)}/hr` : "",
+      "Assigned Cleaner Total Pay": booking.cleaners ? formatCurrency(estimatedHours * ((booking.cleaners.pay_rate_hr || 18) * 100)) : "",
+      "Assigned Cleaner Avg Rating": booking.cleaners?.average_rating ? `${booking.cleaners.average_rating.toFixed(1)} (${booking.cleaners.total_ratings || 0} reviews)` : "",
+      "Assigned Cleaner Completed Jobs": booking.cleaners?.completed_bookings || 0,
+      "Assigned Cleaner Acceptance Rate": booking.cleaners?.acceptance_rate ? `${(booking.cleaners.acceptance_rate * 100).toFixed(0)}%` : "",
+      "Assigned Cleaner On-Time Rate": booking.cleaners?.on_time_rate ? `${(booking.cleaners.on_time_rate * 100).toFixed(0)}%` : "",
       "Dispatch Notes": booking.dispatch_notes || "",
       "Check-in Time": booking.check_in_time || "",
       "Check-out Time": booking.check_out_time || "",
