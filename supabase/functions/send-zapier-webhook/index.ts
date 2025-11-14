@@ -118,8 +118,124 @@ serve(async (req) => {
   );
 
   try {
-    const { bookingId } = await req.json();
-    logStep("Processing booking", { bookingId });
+    const { bookingId, jobId } = await req.json();
+    
+    // Determine webhook type
+    if (jobId) {
+      return await handleJobDispatchWebhook(supabase, jobId);
+    } else if (bookingId) {
+      return await handleBookingWebhook(supabase, bookingId);
+    } else {
+      throw new Error("Either bookingId or jobId is required");
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logStep("ERROR", { message: errorMessage });
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+    );
+  }
+});
+
+async function handleJobDispatchWebhook(supabase: any, jobId: string) {
+  logStep("Processing job dispatch", { jobId });
+
+  // Fetch job details
+  const { data: job, error: jobError } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('id', jobId)
+    .single();
+
+  if (jobError || !job) {
+    throw new Error(`Job not found: ${jobError?.message}`);
+  }
+
+  // Fetch job assignments with cleaner details
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from('job_assignments')
+    .select(`
+      *,
+      cleaners (
+        id, first_name, last_name, email, phone,
+        workload_score, weighted_score, acceptance_rate,
+        on_time_rate, average_rating, total_ratings, completed_bookings
+      )
+    `)
+    .eq('job_id', jobId)
+    .in('status', ['Offered', 'Confirmed']);
+
+  if (assignmentsError) {
+    throw new Error(`Error fetching assignments: ${assignmentsError.message}`);
+  }
+
+  const cleaners = assignments || [];
+  const confirmedCleaners = cleaners.filter((a: any) => a.status === 'Confirmed');
+
+  // Build base payload
+  const payload: any = {
+    "Job Type": "Dispatch",
+    "Job ID": job.id,
+    "External Job Ref": `JOB-${String(job.id).substring(0, 8).toUpperCase()}`,
+    "Number of Cleaners Assigned": confirmedCleaners.length,
+    "Number of Cleaners Offered": cleaners.length,
+    
+    // Job details
+    "Service Address": `${job.address}, ${job.city}, ${job.state} ${job.zip}`,
+    "City": job.city,
+    "State": job.state,
+    "Zip Code": job.zip,
+    "Service Type": mapServiceType(job.service_type),
+    "Scheduled Date": new Date(job.start_datetime).toLocaleDateString(),
+    "Start Time": job.start_datetime,
+    "Estimated Duration": job.duration_est_hours,
+    "Sq Ft": job.sq_ft,
+    "Bedrooms": job.bedrooms || 0,
+    "Bathrooms": job.bathrooms || 0,
+    "Min Cleaners Required": job.min_cleaners_required,
+    "Status": job.status,
+    "Notes": job.notes || ""
+  };
+
+  // Add cleaner details (up to 3 cleaners)
+  confirmedCleaners.forEach((assignment: any, index: number) => {
+    const cleaner = assignment.cleaners;
+    const num = index + 1;
+    
+    payload[`Cleaner ${num} Name`] = `${cleaner.first_name} ${cleaner.last_name}`;
+    payload[`Cleaner ${num} Role`] = assignment.role;
+    payload[`Cleaner ${num} Phone`] = cleaner.phone;
+    payload[`Cleaner ${num} Email`] = cleaner.email;
+    payload[`Cleaner ${num} Distance`] = assignment.distance_miles ? `${assignment.distance_miles.toFixed(1)} miles` : 'N/A';
+    payload[`Cleaner ${num} Workload Score`] = cleaner.workload_score || 0;
+    payload[`Cleaner ${num} Weighted Score`] = cleaner.weighted_score || 0;
+    payload[`Cleaner ${num} Acceptance Rate`] = `${cleaner.acceptance_rate || 0}%`;
+    payload[`Cleaner ${num} On-Time Rate`] = `${cleaner.on_time_rate || 0}%`;
+    payload[`Cleaner ${num} Avg Rating`] = cleaner.average_rating || 0;
+    payload[`Cleaner ${num} Total Jobs`] = cleaner.completed_bookings || 0;
+  });
+
+  // Add team summary
+  if (confirmedCleaners.length > 0) {
+    payload["All Cleaners Summary"] = confirmedCleaners
+      .map((a: any) => `${a.cleaners.first_name} ${a.cleaners.last_name} (${a.role})`)
+      .join(', ');
+    
+    const avgAcceptance = confirmedCleaners.reduce((sum: number, a: any) => sum + (a.cleaners.acceptance_rate || 0), 0) / confirmedCleaners.length;
+    const avgOnTime = confirmedCleaners.reduce((sum: number, a: any) => sum + (a.cleaners.on_time_rate || 0), 0) / confirmedCleaners.length;
+    const avgRating = confirmedCleaners.reduce((sum: number, a: any) => sum + (a.cleaners.average_rating || 0), 0) / confirmedCleaners.length;
+    
+    payload["Team Average Acceptance Rate"] = `${avgAcceptance.toFixed(1)}%`;
+    payload["Team Average On-Time Rate"] = `${avgOnTime.toFixed(1)}%`;
+    payload["Team Average Rating"] = avgRating.toFixed(2);
+  }
+
+  return await sendWebhook(supabase, payload, jobId, 'job');
+}
+
+async function handleBookingWebhook(supabase: any, bookingId: string) {
+  logStep("Processing booking", { bookingId });
 
     // Fetch booking with cleaner details
     const { data: booking, error } = await supabase
@@ -222,65 +338,62 @@ serve(async (req) => {
       "Tip": formatCurrency(booking.tip_cents || 0)
     };
 
-    logStep("Payload constructed", { jobId: payload["Job ID"] });
+  return await sendWebhook(supabase, payload, bookingId, 'booking');
+}
 
-    // Send to Zapier with retry logic
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
+async function sendWebhook(supabase: any, payload: any, id: string, type: string) {
+  logStep("Payload constructed", { id, type });
 
-    while (retryCount < MAX_RETRIES) {
-      try {
-        const response = await fetch(ZAPIER_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+  // Send to Zapier with retry logic
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
+
+  while (retryCount < MAX_RETRIES) {
+    try {
+      const response = await fetch(ZAPIER_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        logStep("Webhook sent successfully", { 
+          id, 
+          type,
+          status: response.status 
         });
-
-        if (response.ok) {
-          logStep("Webhook sent successfully", { 
-            bookingId, 
-            status: response.status 
-          });
-          return new Response(
-            JSON.stringify({ success: true, bookingId }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-          );
-        }
-
-        throw new Error(`Webhook failed with status ${response.status}`);
-      } catch (err) {
-        retryCount++;
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        logStep(`Webhook attempt ${retryCount} failed`, { error: errorMessage });
-        
-        if (retryCount >= MAX_RETRIES) {
-          // Log failure to database
-          await supabase.from('webhook_failures').insert({
-            booking_id: bookingId,
-            webhook_url: ZAPIER_WEBHOOK_URL,
-            payload: payload,
-            error_message: errorMessage,
-            retry_count: retryCount
-          });
-          throw new Error(errorMessage);
-        }
-        
-        // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+        return new Response(
+          JSON.stringify({ success: true, id, type }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
       }
-    }
 
-    // Fallback response if all retries failed
-    return new Response(
-      JSON.stringify({ error: "All retry attempts failed" }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-    );
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-    );
+      throw new Error(`Webhook failed with status ${response.status}`);
+    } catch (err) {
+      retryCount++;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logStep(`Webhook attempt ${retryCount} failed`, { error: errorMessage });
+      
+      if (retryCount >= MAX_RETRIES) {
+        // Log failure to database
+        await supabase.from('webhook_failures').insert({
+          booking_id: type === 'booking' ? id : null,
+          webhook_url: ZAPIER_WEBHOOK_URL,
+          payload: payload,
+          error_message: errorMessage,
+          retry_count: retryCount
+        });
+        throw new Error(errorMessage);
+      }
+      
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+    }
   }
-});
+
+  // Fallback response if all retries failed
+  return new Response(
+    JSON.stringify({ error: "All retry attempts failed" }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+  );
+}

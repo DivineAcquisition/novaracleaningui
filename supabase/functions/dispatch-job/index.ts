@@ -271,6 +271,17 @@ Or open app to view details.`;
       .update({ status: "Assigned" })
       .eq("id", jobId);
 
+    // Trigger Zapier webhook for job dispatch
+    try {
+      logStep("Triggering Zapier webhook");
+      await supabase.functions.invoke("send-zapier-webhook", {
+        body: { jobId: jobId }
+      });
+    } catch (webhookError) {
+      console.error("[WEBHOOK] Failed to send:", webhookError);
+      // Don't fail the dispatch if webhook fails
+    }
+
     logStep("Dispatch complete", { assignmentCount: assignments.length });
 
     return new Response(

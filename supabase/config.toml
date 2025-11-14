@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.respond-to-offer]
 verify_jwt = false
+
+[functions.update-cleaner-performance]
+verify_jwt = false
