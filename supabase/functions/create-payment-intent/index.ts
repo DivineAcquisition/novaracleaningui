@@ -132,19 +132,103 @@ serve(async (req) => {
       }
     }
 
-    logStep("Customer booking history", { bookingNumber, isNewCustomer, previousBookings: previousBookings?.length || 0, newCustomerDiscount, referralDiscountCents });
-
-    // Credit coverage covers up to $150 of base price
+    // Calculate credit coverage and cleaner costs BEFORE promo validation
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
-
-    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents;
-    if (totalAmount < 0) totalAmount = 0;
-    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, totalAmount });
-
-    // Calculate cleaner payout using hourly rate ($20/hr default)
     const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
     const cleanerHourlyRateCents = DEFAULT_CLEANER_HOURLY_RATE_CENTS;
     const cleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
+
+    // Validate promo code if provided
+    let promoDiscountCents = 0;
+    let promoCode = '';
+    if (bookingData.promoCode) {
+      logStep("Validating promo code", { code: bookingData.promoCode });
+      
+      const { data: promo, error: promoError } = await supabaseClient
+        .from('promo_codes')
+        .select('*')
+        .eq('code', bookingData.promoCode.toUpperCase())
+        .eq('active', true)
+        .single();
+
+      if (!promoError && promo) {
+        // Check expiration
+        const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+        
+        // Check customer eligibility
+        const eligibleForPromo = 
+          promo.applies_to === 'all' ||
+          (promo.applies_to === 'new_customers' && isNewCustomer) ||
+          (promo.applies_to === 'returning_customers' && !isNewCustomer);
+
+        // Check usage limits
+        const withinTotalLimit = !promo.max_total_uses || promo.total_uses < promo.max_total_uses;
+        
+        // Check per-customer usage
+        let withinCustomerLimit = true;
+        if (promo.max_uses_per_customer) {
+          const { data: customerUsage } = await supabaseClient
+            .from('bookings')
+            .select('id')
+            .eq('email', bookingData.email)
+            .ilike('team_notes', `%PROMO:${bookingData.promoCode.toUpperCase()}%`);
+          
+          withinCustomerLimit = !customerUsage || customerUsage.length < promo.max_uses_per_customer;
+        }
+
+        if (!isExpired && eligibleForPromo && withinTotalLimit && withinCustomerLimit) {
+          // Calculate discount
+          if (promo.type === 'percent') {
+            promoDiscountCents = Math.round((subtotal * promo.value) / 100);
+          } else {
+            promoDiscountCents = promo.value * 100; // Convert dollars to cents
+          }
+
+          // Validate profit margin
+          const tempTotal = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents;
+          const profitMargin = (tempTotal - cleanerPayoutCents) / tempTotal;
+          const minMargin = (promo.min_profit_margin_percent || 20) / 100;
+
+          if (profitMargin >= minMargin) {
+            promoCode = bookingData.promoCode.toUpperCase();
+            logStep("Valid promo code applied", { 
+              discount: promoDiscountCents, 
+              promoCode,
+              profitMargin: Math.round(profitMargin * 100) + '%'
+            });
+          } else {
+            logStep("Promo code rejected - insufficient profit margin", { 
+              requiredMargin: minMargin,
+              actualMargin: profitMargin 
+            });
+            promoDiscountCents = 0;
+          }
+        } else {
+          logStep("Promo code not eligible", { 
+            isExpired, 
+            eligibleForPromo, 
+            withinTotalLimit, 
+            withinCustomerLimit 
+          });
+        }
+      } else {
+        logStep("Invalid promo code");
+      }
+    }
+
+    logStep("Customer booking history", { 
+      bookingNumber, 
+      isNewCustomer, 
+      previousBookings: previousBookings?.length || 0, 
+      newCustomerDiscount, 
+      referralDiscountCents,
+      promoDiscountCents 
+    });
+
+    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents;
+    if (totalAmount < 0) totalAmount = 0;
+    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, promoDiscountCents, totalAmount });
+
     const platformFeeCents = totalAmount - cleanerPayoutCents;
     
     logStep("Payout calculation (hourly-based)", { 
@@ -212,6 +296,7 @@ serve(async (req) => {
         bookingNumber: String(bookingNumber),
         isNewCustomer: String(isNewCustomer),
         referralCode: referralCode || '',
+        promoCode: promoCode || '',
       },
     });
 
@@ -252,6 +337,9 @@ serve(async (req) => {
         booking_number: bookingNumber,
         estimated_duration_hours: estimatedHours,
         cleaner_hourly_rate_cents: cleanerHourlyRateCents,
+        team_notes: referralCode 
+          ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}`
+          : (promoCode ? `Promo code: PROMO:${promoCode}` : null),
       })
       .select()
       .single();

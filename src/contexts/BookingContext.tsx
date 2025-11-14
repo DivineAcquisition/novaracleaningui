@@ -25,6 +25,7 @@ export interface BookingData {
   dwellingType?: string;
   bookingId?: string;
   referralCode?: string;
+  promoCode?: string;
 }
 
 interface BookingContextType {
