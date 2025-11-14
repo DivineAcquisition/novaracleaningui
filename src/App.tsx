@@ -33,7 +33,7 @@ import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerProfile from "./pages/cleaner/Profile";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import OnboardingLanding from "./pages/cleaner/OnboardingLanding";
-import CleanerJobOffers from "./pages/cleaner/JobOffers";
+import CleanerDashboard from "./pages/cleaner/Dashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -72,11 +72,10 @@ const App = () => (
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
-              <Route path="/cleaner/dashboard" element={<CleanerJobOffers />} />
+              <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
               <Route path="/cleaner/profile" element={<CleanerProfile />} />
               <Route path="/cleaner/onboard" element={<OnboardingLanding />} />
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
-              <Route path="/cleaner/offers" element={<CleanerJobOffers />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

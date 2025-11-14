@@ -405,6 +405,9 @@ export type Database = {
           pay_rate_hr: number
           payouts_enabled: boolean | null
           phone: string
+          phone_verification_code: string | null
+          phone_verification_sent_at: string | null
+          phone_verified: boolean | null
           preferred_work_days: string[] | null
           service_zip_codes: string[] | null
           skillset: string[] | null
@@ -451,6 +454,9 @@ export type Database = {
           pay_rate_hr?: number
           payouts_enabled?: boolean | null
           phone: string
+          phone_verification_code?: string | null
+          phone_verification_sent_at?: string | null
+          phone_verified?: boolean | null
           preferred_work_days?: string[] | null
           service_zip_codes?: string[] | null
           skillset?: string[] | null
@@ -497,6 +503,9 @@ export type Database = {
           pay_rate_hr?: number
           payouts_enabled?: boolean | null
           phone?: string
+          phone_verification_code?: string | null
+          phone_verification_sent_at?: string | null
+          phone_verified?: boolean | null
           preferred_work_days?: string[] | null
           service_zip_codes?: string[] | null
           skillset?: string[] | null
