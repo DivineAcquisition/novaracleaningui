@@ -8,11 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MembershipBanner } from "@/components/booking/MembershipBanner";
-import { Sparkles, Zap, Package, ArrowRight, ArrowLeft } from "lucide-react";
+import { Sparkles, Zap, Package, ArrowRight, ArrowLeft, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
+import { getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -134,6 +135,14 @@ export default function BookingService() {
                 ? 'Select a service to use your membership credit'
                 : 'Select the cleaning tier that fits your needs'}
             </CardDescription>
+            {bookingData.homeSizeId && (
+              <div className="flex items-center justify-center gap-2 pt-2 text-sm font-medium text-primary">
+                <Clock className="w-4 h-4" />
+                <span>
+                  Estimated {getEstimatedHours(bookingData.homeSizeId)} hours @ ${HOURLY_RATE}/hr
+                </span>
+              </div>
+            )}
           </CardHeader>
           
           <CardContent className="space-y-4 md:space-y-8 px-3 md:px-6">
