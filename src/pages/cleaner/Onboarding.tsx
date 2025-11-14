@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ const SKILLSET_OPTIONS = [
 export default function CleanerOnboarding() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -50,6 +52,53 @@ export default function CleanerOnboarding() {
     avatarFile: null as File | null
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
+
+  // Check authentication and existing profile
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+          toast({
+            title: "Authentication Required",
+            description: "Please sign in to complete your profile.",
+            variant: "destructive",
+          });
+          navigate("/cleaner/auth");
+          return;
+        }
+
+        setUserId(session.user.id);
+
+        // Check if cleaner profile already exists
+        const { data: existingCleaner, error: checkError } = await supabase
+          .from("cleaners")
+          .select("id, onboarding_complete")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+
+        if (checkError) {
+          console.error("Error checking cleaner profile:", checkError);
+        }
+
+        if (existingCleaner) {
+          if (existingCleaner.onboarding_complete) {
+            // Already completed onboarding, redirect to dashboard
+            navigate("/cleaner/dashboard");
+            return;
+          }
+        }
+
+        setCheckingAuth(false);
+      } catch (error) {
+        console.error("Auth check error:", error);
+        navigate("/cleaner/auth");
+      }
+    };
+
+    checkAuth();
+  }, [navigate, toast]);
 
   const handleDayToggle = (day: string) => {
     setFormData(prev => ({
@@ -87,6 +136,16 @@ export default function CleanerOnboarding() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!userId) {
+      toast({
+        title: "Authentication Error",
+        description: "Please sign in again to continue.",
+        variant: "destructive",
+      });
+      navigate("/cleaner/auth");
+      return;
+    }
     
     // Validate all fields
     const nameValidation = validateName(formData.firstName, "First name");
@@ -174,10 +233,11 @@ export default function CleanerOnboarding() {
 
       if (geoError) throw geoError;
 
-      // Insert cleaner record
-      const { error: insertError } = await supabase
+      // Insert cleaner record with user_id
+      const { data: cleanerData, error: insertError } = await supabase
         .from("cleaners")
         .insert({
+          user_id: userId,
           first_name: formData.firstName,
           last_name: formData.lastName,
           phone: formData.phone,
@@ -191,16 +251,64 @@ export default function CleanerOnboarding() {
           avatar_url: avatarUrl,
           skillset: formData.skillset,
           pay_rate_hr: 18.00,
+          status: "active",
+          approved: true,
+          onboarding_complete: true,
+          activated_at: new Date().toISOString(),
           status_today: formData.preferredWorkDays.includes(new Date().toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3))
             ? "Available"
             : "Unavailable"
-        });
+        })
+        .select()
+        .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        // Check if it's a unique constraint violation
+        if (insertError.code === '23505') {
+          toast({
+            title: "Profile Already Exists",
+            description: "You already have a cleaner profile. Redirecting to dashboard...",
+          });
+          navigate("/cleaner/dashboard");
+          return;
+        }
+        throw insertError;
+      }
+
+      // Trigger Stripe Connect onboarding
+      try {
+        const { data: onboardingData, error: onboardingError } = await supabase.functions.invoke(
+          "onboard-cleaner",
+          { body: { cleanerId: cleanerData.id } }
+        );
+
+        if (onboardingError) {
+          console.error("Failed to start Stripe onboarding:", onboardingError);
+          toast({
+            title: "Profile Created",
+            description: "Please contact admin to complete payment setup.",
+          });
+          navigate("/cleaner/dashboard");
+          return;
+        }
+        
+        if (onboardingData?.url) {
+          toast({
+            title: "Profile Created!",
+            description: "Redirecting to payment setup...",
+          });
+          setTimeout(() => {
+            window.location.href = onboardingData.url;
+          }, 1500);
+          return;
+        }
+      } catch (onboardingError) {
+        console.error("Stripe onboarding error:", onboardingError);
+      }
 
       toast({
-        title: "Success!",
-        description: "Your profile has been created. You'll be notified when approved."
+        title: "Profile Created!",
+        description: "Your cleaner profile has been successfully created.",
       });
 
       navigate("/cleaner/dashboard");
@@ -216,6 +324,17 @@ export default function CleanerOnboarding() {
       setIsLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4">
