@@ -12,7 +12,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/25149972/us79bxw/";
+const ZAPIER_WEBHOOK_URL = Deno.env.get("ZAPIER_WEBHOOK_URL") || "";
 
 const logStep = (step: string, details?: any) => {
   console.log(`[SEND-ZAPIER-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');

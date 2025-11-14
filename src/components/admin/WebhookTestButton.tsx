@@ -15,7 +15,7 @@ export const WebhookTestButton = () => {
       if (error) throw error;
 
       toast.success("Test webhook sent successfully", {
-        description: `Booking ID: ${data.bookingId}. Check your Zapier dashboard.`,
+        description: `Job ID: ${data.jobId}. Check your Zapier dashboard.`,
       });
     } catch (error: any) {
       toast.error("Failed to send test webhook", {
