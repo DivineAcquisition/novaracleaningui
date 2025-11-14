@@ -12,7 +12,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ZAPIER_WEBHOOK_URL = Deno.env.get("ZAPIER_WEBHOOK_URL") || "";
+const ZAPIER_BOOKING_WEBHOOK_URL = Deno.env.get("ZAPIER_WEBHOOK_URL") || "";
+const ZAPIER_DISPATCH_WEBHOOK_URL = Deno.env.get("ZAPIER_DISPATCH_WEBHOOK_URL") || "";
 
 const logStep = (step: string, details?: any) => {
   console.log(`[SEND-ZAPIER-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
@@ -231,7 +232,7 @@ async function handleJobDispatchWebhook(supabase: any, jobId: string) {
     payload["Team Average Rating"] = avgRating.toFixed(2);
   }
 
-  return await sendWebhook(supabase, payload, jobId, 'job');
+  return await sendWebhook(supabase, payload, jobId, 'job', ZAPIER_DISPATCH_WEBHOOK_URL);
 }
 
 async function handleBookingWebhook(supabase: any, bookingId: string) {
@@ -338,27 +339,27 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Tip": formatCurrency(booking.tip_cents || 0)
     };
 
-  return await sendWebhook(supabase, payload, bookingId, 'booking');
+  return await sendWebhook(supabase, payload, bookingId, 'booking', ZAPIER_BOOKING_WEBHOOK_URL);
 }
 
-async function sendWebhook(supabase: any, payload: any, id: string, type: string) {
+async function sendWebhook(supabase: any, payload: any, id: string, type: string, webhookUrl: string) {
   logStep("Payload constructed", { id, type });
 
   // Ensure Zapier URL is configured
-  if (!ZAPIER_WEBHOOK_URL) {
-    logStep("Missing ZAPIER_WEBHOOK_URL secret");
+  if (!webhookUrl) {
+    logStep(`Missing webhook URL for type: ${type}`);
     return new Response(
-      JSON.stringify({ error: "ZAPIER_WEBHOOK_URL not set in environment" }),
+      JSON.stringify({ error: `Webhook URL not configured for ${type} events` }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }
 
   // Log destination host for verification without leaking full URL
   try {
-    const urlHost = new URL(ZAPIER_WEBHOOK_URL).host;
-    logStep("Sending to Zapier", { urlHost });
+    const urlHost = new URL(webhookUrl).host;
+    logStep("Sending to Zapier", { urlHost, type });
   } catch (_) {
-    logStep("Invalid ZAPIER_WEBHOOK_URL format");
+    logStep("Invalid webhook URL format");
   }
 
   // Send to Zapier with retry logic
@@ -367,7 +368,7 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
 
   while (retryCount < MAX_RETRIES) {
     try {
-      const response = await fetch(ZAPIER_WEBHOOK_URL, {
+      const response = await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -392,7 +393,7 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
               status: response.status,
               body: respText
             },
-            webhookUrl: ZAPIER_WEBHOOK_URL
+            webhookUrl: webhookUrl
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
@@ -408,7 +409,7 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
         // Log failure to database
         await supabase.from('webhook_failures').insert({
           booking_id: type === 'booking' ? id : null,
-          webhook_url: ZAPIER_WEBHOOK_URL,
+          webhook_url: webhookUrl,
           payload: payload,
           error_message: errorMessage,
           retry_count: retryCount
