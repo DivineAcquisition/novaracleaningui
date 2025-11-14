@@ -37,9 +37,9 @@ export default function Demo() {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight lg:text-6xl">
+            <h1 className="text-3xl md:text-4xl font-bold font-jakarta tracking-tight lg:text-6xl">
               Get Your Booking Interface Today
-              <span className="block text-primary mt-2 text-2xl font-bold md:text-3xl">Example: Book Your Cleaning With Only $39 Today</span>
+              <span className="block text-primary mt-2 text-2xl font-bold font-jakarta md:text-3xl">Example: Book Your Cleaning With Only $39 Today</span>
             </h1>
             
             <p className="text-lg text-[#2c2c2c] font-normal md:text-sm">

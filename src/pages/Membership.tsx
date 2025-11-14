@@ -118,7 +118,7 @@ export default function Membership() {
             <Sparkles className="w-4 h-4 mr-1" />
             Membership Plans
           </Badge>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold font-jakarta">
             Choose Your Perfect Plan
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
