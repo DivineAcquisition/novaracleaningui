@@ -120,7 +120,7 @@ export default function CleanerDirectory() {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Cleaner Directory</h1>
+          <h1 className="text-3xl font-bold font-jakarta">Cleaner Directory</h1>
           <p className="text-muted-foreground">
             View and manage all cleaners in your network
           </p>

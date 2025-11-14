@@ -222,7 +222,7 @@ export default function AdminCleaners() {
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-bold">Cleaner Management</h1>
+          <h1 className="text-4xl font-bold font-jakarta">Cleaner Management</h1>
           <p className="text-muted-foreground mt-2">
             Manage your cleaning team and track their performance
           </p>

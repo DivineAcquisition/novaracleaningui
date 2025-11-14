@@ -219,7 +219,7 @@ export default function BookingDetails() {
           <CardContent className="p-4 md:p-8">
             <div className="space-y-4 md:space-y-6">
               <div>
-                <h2 className="text-lg md:text-2xl font-bold">Contact & Address Information</h2>
+                <h2 className="text-lg md:text-2xl font-bold font-jakarta">Contact & Address Information</h2>
                 <p className="text-muted-foreground mt-1 md:mt-2 text-xs md:text-sm">
                   We'll need these details to confirm your booking
                 </p>

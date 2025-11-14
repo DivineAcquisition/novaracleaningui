@@ -239,7 +239,7 @@ export default function Account() {
       <div className="container max-w-7xl mx-auto px-4 py-12">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">My Account</h1>
+            <h1 className="text-2xl md:text-3xl font-bold font-jakarta mb-2">My Account</h1>
             <p className="text-muted-foreground">Manage your profile, bookings, and subscriptions</p>
           </div>
           <Button variant="outline" onClick={() => navigate("/")}>
