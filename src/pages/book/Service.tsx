@@ -113,7 +113,7 @@ export default function BookingService() {
                   <Sparkles className="w-5 h-5 md:w-7 md:h-7 text-success" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-sm md:text-lg font-semibold text-success">New Customer Special!</h3>
+                  <h3 className="text-sm md:text-lg font-semibold text-success font-jakarta">New Customer Special!</h3>
                   <p className="text-xs md:text-sm text-foreground mt-0.5 md:mt-1">
                     Save <span className="font-bold text-success">$60</span> on your first cleaning service. No membership required!
                   </p>
@@ -128,7 +128,7 @@ export default function BookingService() {
         
         <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-1.5 pb-4 px-3 md:px-6 md:pb-8">
-            <CardTitle className="text-base md:text-xl font-semibold">Choose your service</CardTitle>
+            <CardTitle className="text-base md:text-xl font-semibold font-jakarta">Choose your service</CardTitle>
             <CardDescription className="text-xs md:text-sm">
               {hasCredits 
                 ? 'Select a service to use your membership credit'

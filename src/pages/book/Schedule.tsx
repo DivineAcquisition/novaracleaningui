@@ -160,7 +160,7 @@ export default function BookingSchedule() {
       <div className="container max-w-4xl mx-auto px-3 md:px-6 py-4 md:py-8">
         <Card variant="outlined" className="animate-slide-in-right">
           <CardHeader className="text-center space-y-1.5 pb-4 px-3 md:px-6 md:pb-8">
-            <CardTitle className="text-base md:text-xl font-semibold">Schedule your service</CardTitle>
+            <CardTitle className="text-base md:text-xl font-semibold font-jakarta">Schedule your service</CardTitle>
             <CardDescription className="text-xs md:text-sm">
               Select your preferred date and time window
             </CardDescription>

@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift, ChevronLeft, ChevronRight } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode } from "@/lib/pricing-system";
+import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +63,8 @@ export default function BookingCheckout() {
   const [isValidatingPromo, setIsValidatingPromo] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [autoAppliedPromo, setAutoAppliedPromo] = useState<EligiblePromo | null>(null);
+  const [isAutoApplying, setIsAutoApplying] = useState(false);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
 
   useEffect(() => {
@@ -96,11 +99,57 @@ export default function BookingCheckout() {
         .limit(1);
       
       // Only truly first-time customers (no confirmed/completed bookings) get the discount
-      setIsNewCustomer(!data || data.length === 0);
+      const isNew = !data || data.length === 0;
+      setIsNewCustomer(isNew);
+
+      // Auto-apply best promo code for this customer
+      await autoApplyBestPromo(isNew);
     };
     
     checkNewCustomer();
   }, [bookingData.email]);
+
+  // Auto-apply the best eligible promo code
+  const autoApplyBestPromo = async (isNew: boolean) => {
+    if (!bookingData.email || isAutoApplying) return;
+    
+    setIsAutoApplying(true);
+    try {
+      const subtotal = calculatePrice(
+        bookingData.homeSizeId,
+        bookingData.serviceType,
+        bookingData.addOns,
+        bookingData.membershipPlan,
+        bookingData.useCredit,
+        isNew,
+        0
+      ).subtotal;
+
+      const bestPromo = await findBestPromoCode(
+        supabase,
+        bookingData.email,
+        isNew,
+        subtotal
+      );
+
+      if (bestPromo) {
+        setAutoAppliedPromo(bestPromo);
+        setPromoCode(bestPromo.code);
+        setPromoDiscount(bestPromo.discount);
+        setPromoMessage(formatPromoSavings(bestPromo));
+        updateBookingData({ promoCode: bestPromo.code });
+        
+        toast.success(
+          `${bestPromo.description} - You're saving $${bestPromo.discount.toFixed(2)}!`,
+          { duration: 5000 }
+        );
+      }
+    } catch (error) {
+      console.error('Error auto-applying promo:', error);
+    } finally {
+      setIsAutoApplying(false);
+    }
+  };
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
@@ -139,6 +188,7 @@ export default function BookingCheckout() {
     
     setIsValidatingPromo(true);
     setPromoMessage(null);
+    setAutoAppliedPromo(null); // Clear auto-applied promo when manually validating
     
     try {
       const { data: promo, error } = await supabase
@@ -200,6 +250,15 @@ export default function BookingCheckout() {
     } finally {
       setIsValidatingPromo(false);
     }
+  };
+
+  const handleRemovePromo = () => {
+    setPromoCode('');
+    setPromoDiscount(0);
+    setPromoMessage(null);
+    setAutoAppliedPromo(null);
+    updateBookingData({ promoCode: undefined });
+    toast.info('Promo code removed');
   };
 
   const handleBack = () => {
@@ -321,9 +380,14 @@ export default function BookingCheckout() {
             <div className="mx-auto w-12 h-12 md:w-16 md:h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-2 md:mb-4 shadow-lavender">
               <CreditCard className="w-6 h-6 md:w-8 md:h-8 text-white" />
             </div>
-            <CardTitle className="text-base md:text-xl font-semibold">Secure Checkout</CardTitle>
+            <CardTitle className="text-base md:text-xl font-semibold font-jakarta">
+              Secure Checkout
+            </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              Review your order and complete your booking
+              {autoAppliedPromo 
+                ? `Best discount applied! Saving you $${autoAppliedPromo.discount.toFixed(2)}`
+                : "Review your order and complete your booking"
+              }
             </CardDescription>
           </CardHeader>
           
@@ -333,19 +397,35 @@ export default function BookingCheckout() {
               <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIi8+PC9zdmc+')] opacity-50"></div>
               <CardContent className="p-4 md:p-6 relative z-10">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg animate-pulse">
                       <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-white" />
                     </div>
-                    <div>
-                      <p className="text-base md:text-lg font-bold text-foreground">🎄 Holiday Special!</p>
-                      <p className="text-xs md:text-sm text-muted-foreground">Save up to 25% on your cleaning</p>
+                    <div className="flex-1">
+                      <p className="text-base md:text-lg font-bold text-foreground font-jakarta">
+                        🎄 Automatic Holiday Savings Applied!
+                      </p>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        {autoAppliedPromo 
+                          ? `${autoAppliedPromo.description} • Save $${autoAppliedPromo.discount.toFixed(2)}`
+                          : "We'll find the best discount for you • Up to 25% off"
+                        }
+                      </p>
                     </div>
                   </div>
-                  <div className="hidden sm:flex flex-col items-end">
-                    <Badge variant="secondary" className="text-xs">Offer ends Jan 5</Badge>
+                  <div className="hidden sm:flex flex-col items-end gap-1">
+                    <Badge variant="secondary" className="text-xs font-semibold">Ends Jan 5</Badge>
+                    {autoAppliedPromo && (
+                      <Badge variant="default" className="text-xs bg-green-600">Auto-Applied</Badge>
+                    )}
                   </div>
                 </div>
+                {isAutoApplying && (
+                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Finding best discount for you...</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -439,7 +519,7 @@ export default function BookingCheckout() {
                 <div className="flex items-center justify-between">
                   <Label htmlFor="promoCode" className="text-sm font-medium flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-primary" />
-                    Holiday Promo Code
+                    {autoAppliedPromo ? 'Promo Applied' : 'Have a Different Promo Code?'}
                   </Label>
                   {promoMessage && (
                     <Badge variant={promoDiscount > 0 ? "default" : "destructive"} className="text-xs">
@@ -447,31 +527,60 @@ export default function BookingCheckout() {
                     </Badge>
                   )}
                 </div>
+
+                {autoAppliedPromo && (
+                  <Alert className="bg-green-50 border-green-200">
+                    <Sparkles className="w-4 h-4 text-green-600" />
+                    <AlertTitle className="text-sm font-semibold text-green-800">
+                      Best discount automatically applied!
+                    </AlertTitle>
+                    <AlertDescription className="text-xs text-green-700">
+                      Code: <strong>{autoAppliedPromo.code}</strong> - {autoAppliedPromo.description}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="flex gap-2">
                   <Input
                     id="promoCode"
-                    placeholder="Enter promo code"
+                    placeholder={autoAppliedPromo ? "Override with different code" : "Enter promo code"}
                     value={promoCode}
                     onChange={(e) => {
                       const code = e.target.value.toUpperCase();
                       setPromoCode(code);
                       setPromoMessage(null);
-                      setPromoDiscount(0);
+                      if (!code) {
+                        setPromoDiscount(0);
+                        setAutoAppliedPromo(null);
+                      }
                     }}
                     maxLength={15}
                     className="font-mono text-sm"
+                    disabled={isAutoApplying}
                   />
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={!promoCode || isValidatingPromo}
-                    onClick={handleValidatePromo}
-                    className="bg-gradient-primary hover:opacity-90"
-                  >
-                    {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                  </Button>
+                  {promoCode && promoDiscount > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemovePromo}
+                      className="shrink-0"
+                    >
+                      Remove
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={!promoCode || isValidatingPromo || isAutoApplying}
+                      onClick={handleValidatePromo}
+                      className="bg-gradient-primary hover:opacity-90 shrink-0"
+                    >
+                      {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                    </Button>
+                  )}
                 </div>
-                {promoMessage && (
+
+                {promoMessage && !autoAppliedPromo && (
                   <p className={cn(
                     "text-xs font-medium",
                     promoDiscount > 0 ? "text-green-600" : "text-destructive"
@@ -479,11 +588,15 @@ export default function BookingCheckout() {
                     {promoMessage}
                   </p>
                 )}
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>• <strong>HOLIDAY25</strong>: 25% off for new customers</p>
-                  <p>• <strong>JOLLY20</strong>: 20% off for returning customers</p>
-                  <p>• <strong>NEWYEAR15</strong>: 15% off any service</p>
-                </div>
+
+                {!autoAppliedPromo && (
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-semibold mb-1.5">Available codes:</p>
+                    <p>• <strong>HOLIDAY25</strong>: 25% off for new customers</p>
+                    <p>• <strong>JOLLY20</strong>: 20% off for returning customers</p>
+                    <p>• <strong>NEWYEAR15</strong>: 15% off any service</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
