@@ -17,9 +17,9 @@ interface Job {
   city: string;
   state: string;
   start_datetime: string;
-  sq_ft: number;
+  sq_ft: number | null;
   min_cleaners_required: number;
-  manual_intervention_required: boolean;
+  manual_intervention_required: boolean | null;
   dispatch_alert_reason: string | null;
   check_in_time: string | null;
   check_out_time: string | null;
@@ -31,13 +31,13 @@ interface JobAssignment {
   status: string;
   role: string;
   cleaner_id: string;
-  pay_rate_hr: number;
-  estimated_pay_cents: number;
+  pay_rate_hr: number | null;
+  estimated_pay_cents: number | null;
   cleaners: {
     first_name: string;
     last_name: string;
-    on_time_rate: number;
-    acceptance_rate: number;
+    on_time_rate: number | null;
+    acceptance_rate: number | null;
   };
 }
 
@@ -50,7 +50,7 @@ export default function DispatchQueue() {
 
   const fetchJobs = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("jobs")
         .select("*")
         .in("status", ["New", "Dispatching", "Assigned"])
@@ -58,12 +58,12 @@ export default function DispatchQueue() {
 
       if (error) throw error;
 
-      setJobs(data || []);
+      setJobs((data as any) || []);
 
       // Fetch assignments for each job
       if (data && data.length > 0) {
-        const jobIds = data.map(j => j.id);
-        const { data: assignmentsData, error: assignmentsError } = await supabase
+        const jobIds = data.map((j: any) => j.id);
+        const { data: assignmentsData, error: assignmentsError } = await (supabase as any)
           .from("job_assignments")
           .select("*, cleaners(first_name, last_name, on_time_rate, acceptance_rate)")
           .in("job_id", jobIds);
@@ -71,7 +71,7 @@ export default function DispatchQueue() {
         if (assignmentsError) throw assignmentsError;
 
         const assignmentsByJob: Record<string, JobAssignment[]> = {};
-        assignmentsData?.forEach((assignment: any) => {
+        (assignmentsData as any)?.forEach((assignment: any) => {
           if (!assignmentsByJob[assignment.job_id]) {
             assignmentsByJob[assignment.job_id] = [];
           }

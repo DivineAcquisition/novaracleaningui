@@ -12,9 +12,10 @@ interface JobOffer {
   id: string;
   status: string;
   role: string;
-  distance_miles: number;
+  distance_miles: number | null;
   assigned_at: string;
   job_id: string;
+  estimated_pay_cents: number | null;
   jobs: {
     service_type: string;
     address: string;
@@ -22,7 +23,7 @@ interface JobOffer {
     state: string;
     start_datetime: string;
     duration_est_hours: number;
-    sq_ft: number;
+    sq_ft: number | null;
   };
 }
 
@@ -49,7 +50,7 @@ export default function JobOffers() {
       }
 
       // Get pending offers
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("job_assignments")
         .select(`
           *,
@@ -69,7 +70,7 @@ export default function JobOffers() {
 
       if (error) throw error;
 
-      setOffers(data || []);
+      setOffers((data as any) || []);
     } catch (error: any) {
       console.error("Error fetching offers:", error);
       toast({
@@ -112,7 +113,7 @@ export default function JobOffers() {
     try {
       const newStatus = accept ? "Confirmed" : "Declined";
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("job_assignments")
         .update({
           status: newStatus,
