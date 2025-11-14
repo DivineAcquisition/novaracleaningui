@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { SavingsComparison } from "@/components/membership/SavingsComparison";
 
 const MEMBERSHIP_TIERS = {
   monthly: {
@@ -233,6 +234,15 @@ export default function Membership() {
               </Card>
             );
           })}
+        </div>
+
+        {/* Savings Comparison */}
+        <div className="mt-12 space-y-6">
+          <SavingsComparison 
+            monthlyPrice={189}
+            regularCleanPrice={225}
+            creditsPerMonth={1}
+          />
         </div>
 
         {/* Benefits Section */}

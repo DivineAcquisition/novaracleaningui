@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
-import { User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown } from "lucide-react";
-import logo from "@/assets/logo.png";
+import { ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown } from "lucide-react";
+import { HeaderNav } from "@/components/HeaderNav";
 const Index = () => {
   const navigate = useNavigate();
   const {
@@ -37,26 +37,7 @@ const Index = () => {
   };
   return <div className="min-h-screen bg-gradient-hero">
       {/* Header */}
-      <header className="container mx-auto px-4 py-4 md:py-6">
-        <div className="flex justify-between items-center gap-2">
-          <div className="flex items-center gap-2 md:gap-3 min-w-0">
-            <img src={logo} alt="NovaraCleaning Logo" className="w-8 h-8 md:w-10 md:h-10 rounded-lg flex-shrink-0" />
-            <span className="text-base md:text-lg font-semibold truncate">NovaraCleaning</span>
-          </div>
-          
-          {user ? <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-              <Button variant="outline" size="sm" onClick={() => navigate("/account")} className="h-9 md:h-10">
-                <User className="w-4 h-4 md:mr-2" />
-                <span className="hidden md:inline">Account</span>
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleSignOut} className="h-9 md:h-10" aria-label="Sign out">
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div> : <Button variant="outline" size="sm" onClick={() => navigate("/auth")} className="h-9 md:h-10 flex-shrink-0">
-              Sign In
-            </Button>}
-        </div>
-      </header>
+      <HeaderNav onSignOut={handleSignOut} />
 
       {/* Promo Banner */}
       <div className="bg-gradient-primary py-3">

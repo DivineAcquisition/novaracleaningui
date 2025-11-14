@@ -82,7 +82,7 @@ export default function BookingHome() {
                       <p className="text-xs md:text-sm text-muted-foreground">{size.bedroomRange}</p>
                       <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/80">
                         <Clock className="w-3.5 h-3.5" />
-                        <span>~{getEstimatedHours(size.id)} hrs @ ${HOURLY_RATE}/hr</span>
+                        <span>~{getEstimatedHours(size.id)} hrs</span>
                       </div>
                     </div>
                   </CardContent>
