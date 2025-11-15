@@ -17,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, code } = await req.json();
+    const { email, code, redirectTo } = await req.json();
     
     if (!email || !code) {
       throw new Error("Email and code are required");
@@ -84,6 +84,7 @@ serve(async (req) => {
       type: 'magiclink',
       email: email,
       options: {
+        redirectTo: redirectTo || `${Deno.env.get("SUPABASE_URL")}`,
         data: {
           onboarding: true,
           is_cleaner: true,
