@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from 'https://esm.sh/resend@4.0.0';
-import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
+import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22?deps=react@18.3.1,react-dom@18.3.1';
 import * as React from 'https://esm.sh/react@18.3.1';
 import { CleanerVerificationCode } from "../_shared/email-templates/CleanerVerificationCode.tsx";
 
@@ -25,7 +25,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, firstName } = await req.json();
+    const { email, firstName, debug } = await req.json();
     
     if (!email) {
       throw new Error("Email is required");
@@ -81,6 +81,24 @@ serve(async (req) => {
     }
 
     const text = `Your Novara verification code is ${code}. It expires in 15 minutes.`;
+
+    // Debug mode: return HTML without sending
+    if (debug) {
+      logStep("Debug mode: returning HTML without sending", { email });
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          debug: true,
+          html,
+          text,
+          htmlLength: html.length
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
 
     const { error: emailError } = await resend.emails.send({
       from: "Novara Cleaning <onboarding@novaracleaning.com>",
