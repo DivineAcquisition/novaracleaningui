@@ -1,5 +1,5 @@
 import * as React from 'https://esm.sh/react@18.3.1';
-import { Text, Section } from 'https://esm.sh/@react-email/components@0.0.22';
+import { Text, Section } from 'https://esm.sh/@react-email/components@0.0.22?deps=react@18.3.1,react-dom@18.3.1';
 import { EmailLayout } from './components/EmailLayout.tsx';
 import { Highlight } from './components/Highlight.tsx';
 import { BRAND } from './brand.ts';
