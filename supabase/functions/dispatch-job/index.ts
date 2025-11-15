@@ -27,11 +27,99 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 /**
- * Auto-dispatch algorithm:
- * 1. Find available cleaners within distance
- * 2. Calculate workload and weighted scores
- * 3. Select best candidates
- * 4. Create job assignments
+ * Calculate location score (0-30 points)
+ */
+function calculateLocationScore(distanceMiles: number, maxTravelMiles: number): number {
+  if (distanceMiles > maxTravelMiles) return 0;
+  if (distanceMiles <= 5) return 30;
+  if (distanceMiles <= 10) return 25;
+  if (distanceMiles <= 15) return 20;
+  if (distanceMiles <= 20) return 15;
+  if (distanceMiles <= 25) return 10;
+  return 5;
+}
+
+/**
+ * Calculate rating score (0-25 points)
+ */
+function calculateRatingScore(averageRating: number | null, totalRatings: number | null): number {
+  // New cleaners get benefit of doubt
+  if (!averageRating || !totalRatings || totalRatings === 0) return 15;
+  
+  if (averageRating >= 5.0) return 25;
+  if (averageRating >= 4.5) return 22;
+  if (averageRating >= 4.0) return 18;
+  if (averageRating >= 3.5) return 12;
+  if (averageRating >= 3.0) return 8;
+  return 4;
+}
+
+/**
+ * Calculate workload score (0-25 points)
+ */
+function calculateWorkloadScore(upcomingJobsCount: number): number {
+  if (upcomingJobsCount === 0) return 25;
+  if (upcomingJobsCount <= 2) return 20;
+  if (upcomingJobsCount <= 4) return 15;
+  if (upcomingJobsCount <= 6) return 10;
+  if (upcomingJobsCount <= 8) return 5;
+  return 2;
+}
+
+/**
+ * Calculate performance score (0-20 points)
+ */
+function calculatePerformanceScore(acceptanceRate: number | null, onTimeRate: number | null): number {
+  const acceptanceScore = (acceptanceRate || 0) * 10; // Max 10 points
+  const onTimeScore = (onTimeRate || 0) * 10; // Max 10 points
+  return Math.round(acceptanceScore + onTimeScore);
+}
+
+/**
+ * Check for scheduling conflicts
+ */
+async function hasSchedulingConflict(
+  supabase: any,
+  cleanerId: string,
+  jobStartDatetime: string,
+  durationHours: number
+): Promise<boolean> {
+  const jobEndDatetime = new Date(
+    new Date(jobStartDatetime).getTime() + durationHours * 60 * 60 * 1000
+  ).toISOString();
+
+  const { data: conflicts } = await supabase
+    .from("job_assignments")
+    .select("id, jobs(start_datetime, duration_est_hours)")
+    .eq("cleaner_id", cleanerId)
+    .in("status", ["Offered", "Confirmed", "In Progress"]);
+
+  if (!conflicts || conflicts.length === 0) return false;
+
+  for (const assignment of conflicts) {
+    const existingStart = new Date(assignment.jobs.start_datetime);
+    const existingEnd = new Date(
+      existingStart.getTime() + assignment.jobs.duration_est_hours * 60 * 60 * 1000
+    );
+    const newStart = new Date(jobStartDatetime);
+    const newEnd = new Date(jobEndDatetime);
+
+    // Check if there's an overlap
+    if (newStart < existingEnd && newEnd > existingStart) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Auto-dispatch algorithm with comprehensive scoring:
+ * 1. Filter by hard requirements
+ * 2. Calculate match scores (location, rating, workload, performance)
+ * 3. Check for conflicts
+ * 4. Select best candidates
+ * 5. Create job assignments and send notifications
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -65,20 +153,23 @@ serve(async (req) => {
     logStep("Job details", { 
       minCleaners: job.min_cleaners_required,
       location: `${job.city}, ${job.state}`,
-      sqft: job.sq_ft 
+      sqft: job.sq_ft,
+      datetime: job.start_datetime
     });
 
-    // Get current day of week (0 = Sunday, 6 = Saturday)
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    const dayAbbrev = today.substring(0, 3); // Mon, Tue, etc.
+    // Get current day of week
+    const jobDate = new Date(job.start_datetime);
+    const dayAbbrev = jobDate.toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3);
 
-    // Find available cleaners
+    // STAGE 1: Hard Requirements Filtering
     const { data: cleaners, error: cleanersError } = await supabase
       .from("cleaners")
       .select("*")
-      .eq("status_today", "Available")
       .eq("approved", true)
-      .eq("available_for_bookings", true);
+      .eq("available_for_bookings", true)
+      .eq("status", "active")
+      .not("home_lat", "is", null)
+      .not("home_lng", "is", null);
 
     if (cleanersError) {
       throw new Error(`Error fetching cleaners: ${cleanersError.message}`);
@@ -87,7 +178,6 @@ serve(async (req) => {
     if (!cleaners || cleaners.length === 0) {
       logStep("No available cleaners found");
       
-      // Create dispatch alert
       await supabase.from("dispatch_alerts").insert({
         job_id: jobId,
         reason: "No available cleaners found",
@@ -106,101 +196,152 @@ serve(async (req) => {
       throw new Error("No available cleaners");
     }
 
-    logStep(`Found ${cleaners.length} available cleaners`);
+    logStep(`Found ${cleaners.length} approved cleaners`);
 
-    // Filter by distance and preferred work days
-    const candidates = cleaners
-      .filter(cleaner => {
-        if (!cleaner.home_lat || !cleaner.home_lng) return false;
-        
-        const distance = haversineDistance(
-          cleaner.home_lat,
-          cleaner.home_lng,
-          job.lat,
-          job.lng
-        );
+    // Get upcoming jobs count for each cleaner
+    const cleanerIds = cleaners.map(c => c.id);
+    const { data: upcomingJobsData } = await supabase
+      .from("job_assignments")
+      .select("cleaner_id, jobs(start_datetime)")
+      .in("cleaner_id", cleanerIds)
+      .in("status", ["Offered", "Confirmed"])
+      .gte("jobs.start_datetime", new Date().toISOString());
 
-        // Check if within max travel distance
-        const withinDistance = distance <= (cleaner.max_travel_miles || 20);
-        
-        // Check preferred work days
-        const worksToday = cleaner.preferred_work_days?.includes(dayAbbrev) ?? false;
+    const upcomingJobsMap = new Map();
+    upcomingJobsData?.forEach((assignment: any) => {
+      const count = upcomingJobsMap.get(assignment.cleaner_id) || 0;
+      upcomingJobsMap.set(assignment.cleaner_id, count + 1);
+    });
 
-        return withinDistance && worksToday;
-      })
-      .map(cleaner => {
-        const distance = haversineDistance(
-          cleaner.home_lat!,
-          cleaner.home_lng!,
-          job.lat!,
-          job.lng!
-        );
+    // STAGE 2: Calculate Scores and Apply Soft Filters
+    const scoredCandidates = [];
 
-        return {
-          ...cleaner,
-          distance_miles: Math.round(distance * 10) / 10
-        };
+    for (const cleaner of cleaners) {
+      // Check preferred work days (soft filter)
+      const worksToday = !cleaner.preferred_work_days || 
+                         cleaner.preferred_work_days.length === 0 ||
+                         cleaner.preferred_work_days.includes(dayAbbrev);
+
+      // Calculate distance
+      const distance = haversineDistance(
+        cleaner.home_lat,
+        cleaner.home_lng,
+        job.lat,
+        job.lng
+      );
+
+      // Check if within max travel distance (hard requirement)
+      const withinDistance = distance <= (cleaner.max_travel_miles || 20);
+      if (!withinDistance) continue;
+
+      // Check max weekly bookings (hard requirement)
+      const upcomingCount = upcomingJobsMap.get(cleaner.id) || 0;
+      if (upcomingCount >= (cleaner.max_weekly_bookings || 10)) {
+        logStep(`Cleaner ${cleaner.first_name} at max capacity`, { upcomingCount });
+        continue;
+      }
+
+      // Check for scheduling conflicts (hard requirement)
+      const hasConflict = await hasSchedulingConflict(
+        supabase,
+        cleaner.id,
+        job.start_datetime,
+        job.duration_est_hours
+      );
+
+      if (hasConflict) {
+        logStep(`Cleaner ${cleaner.first_name} has scheduling conflict`);
+        continue;
+      }
+
+      // Calculate comprehensive match score (0-100 points)
+      const locationScore = calculateLocationScore(distance, cleaner.max_travel_miles || 20);
+      const ratingScore = calculateRatingScore(cleaner.average_rating, cleaner.total_ratings);
+      const workloadScore = calculateWorkloadScore(upcomingCount);
+      const performanceScore = calculatePerformanceScore(cleaner.acceptance_rate, cleaner.on_time_rate);
+      
+      const totalScore = locationScore + ratingScore + workloadScore + performanceScore;
+
+      // Soft penalty for working outside preferred days (reduce score by 10%)
+      const finalScore = worksToday ? totalScore : totalScore * 0.9;
+
+      scoredCandidates.push({
+        ...cleaner,
+        distance_miles: Math.round(distance * 10) / 10,
+        upcoming_jobs_count: upcomingCount,
+        match_score: Math.round(finalScore * 10) / 10,
+        score_breakdown: {
+          location: locationScore,
+          rating: ratingScore,
+          workload: workloadScore,
+          performance: performanceScore,
+          works_today: worksToday
+        }
       });
+    }
 
-    if (candidates.length === 0) {
-      logStep("No candidates within distance and work preferences");
+    if (scoredCandidates.length === 0) {
+      logStep("No qualified candidates found");
       
       await supabase.from("dispatch_alerts").insert({
         job_id: jobId,
-        reason: "No cleaners within travel distance or working today",
-        severity: "warning"
+        reason: "No cleaners meet requirements (distance, availability, conflicts)",
+        severity: "critical"
       });
 
       await supabase
         .from("jobs")
         .update({ 
           status: "Dispatching",
-          dispatch_alert_reason: "No nearby cleaners available"
+          manual_intervention_required: true,
+          dispatch_alert_reason: "No qualified cleaners"
         })
         .eq("id", jobId);
 
-      throw new Error("No candidates found");
+      throw new Error("No qualified candidates found");
     }
 
-    logStep(`${candidates.length} candidates within range`);
+    logStep(`${scoredCandidates.length} qualified candidates found`);
 
-    // Calculate weighted scores and sort
-    const maxWorkload = Math.max(...candidates.map(c => c.workload_score || 0), 1);
-    
-    const scoredCandidates = candidates.map(cleaner => {
-      const normalizedWorkload = (cleaner.workload_score || 0) / maxWorkload;
-      const qualityPenalty = cleaner.average_rating 
-        ? (5 - cleaner.average_rating) / 5
-        : 0.25;
-      const weightedScore = (0.7 * normalizedWorkload) + (0.3 * qualityPenalty);
-      
-      return {
-        ...cleaner,
-        weighted_score: weightedScore
-      };
-    });
+    // STAGE 3: Sort by match score and select top N
+    scoredCandidates.sort((a, b) => b.match_score - a.match_score);
 
-    // Sort by weighted score (lower is better), then distance
-    scoredCandidates.sort((a, b) => {
-      if (Math.abs(a.weighted_score - b.weighted_score) < 0.01) {
-        return a.distance_miles - b.distance_miles;
-      }
-      return a.weighted_score - b.weighted_score;
-    });
-
-    // Select top N candidates
     const selectedCleaners = scoredCandidates.slice(0, job.min_cleaners_required);
+
+    // Check if we have enough cleaners
+    if (selectedCleaners.length < job.min_cleaners_required) {
+      logStep("Insufficient cleaners", {
+        required: job.min_cleaners_required,
+        available: selectedCleaners.length
+      });
+
+      await supabase.from("dispatch_alerts").insert({
+        job_id: jobId,
+        reason: `Only ${selectedCleaners.length} of ${job.min_cleaners_required} required cleaners available`,
+        severity: "warning"
+      });
+
+      // Continue with available cleaners but flag for review
+      await supabase
+        .from("jobs")
+        .update({ 
+          status: "Dispatching",
+          dispatch_alert_reason: `Insufficient cleaners (${selectedCleaners.length}/${job.min_cleaners_required})`
+        })
+        .eq("id", jobId);
+    }
 
     logStep(`Selected ${selectedCleaners.length} cleaners`, {
       cleaners: selectedCleaners.map(c => ({
         id: c.id,
         name: `${c.first_name} ${c.last_name}`,
+        score: c.match_score,
         distance: c.distance_miles,
-        score: c.weighted_score
+        breakdown: c.score_breakdown
       }))
     });
 
-    // Create job assignments with estimated pay
+    // STAGE 4: Create job assignments with estimated pay
     const assignments = selectedCleaners.map((cleaner, index) => {
       const estimatedPayCents = Math.round(
         (cleaner.pay_rate_hr || 18) * job.duration_est_hours * 100
@@ -226,7 +367,7 @@ serve(async (req) => {
       throw new Error(`Error creating assignments: ${assignError.message}`);
     }
 
-    // Send SMS notifications to cleaners
+    // STAGE 5: Send SMS notifications to cleaners
     logStep("Sending SMS notifications");
     const smsPromises = createdAssignments.map(async (assignment: any) => {
       if (!assignment.cleaners.sms_notifications_enabled) {
@@ -234,7 +375,7 @@ serve(async (req) => {
         return;
       }
 
-      const jobDate = new Date(job.start_datetime).toLocaleDateString('en-US', { 
+      const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString('en-US', { 
         weekday: 'short', 
         month: 'short', 
         day: 'numeric' 
@@ -245,7 +386,7 @@ serve(async (req) => {
       
       const message = `🧹 New Job Offer!
 
-Date: ${jobDate}
+Date: ${jobDateFormatted}
 Location: ${job.city}, ${job.zip}
 Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
 Distance: ${assignment.distance_miles.toFixed(1)} miles
@@ -273,13 +414,13 @@ Or open app to view details.`;
     await Promise.all(smsPromises);
     logStep("SMS notifications sent");
 
-    // Update job status
+    // STAGE 6: Update job status
     await supabase
       .from("jobs")
       .update({ status: "Assigned" })
       .eq("id", jobId);
 
-    // Trigger Zapier webhook for job dispatch
+    // Trigger Zapier webhook
     try {
       logStep("Triggering Zapier webhook");
       await supabase.functions.invoke("send-zapier-webhook", {
@@ -287,7 +428,15 @@ Or open app to view details.`;
       });
     } catch (webhookError) {
       console.error("[WEBHOOK] Failed to send:", webhookError);
-      // Don't fail the dispatch if webhook fails
+    }
+
+    // Update cleaner scores in background (non-blocking)
+    try {
+      await supabase.functions.invoke("update-cleaner-scores", {
+        body: { cleanerId: null } // Update all
+      });
+    } catch (scoreError) {
+      console.error("[SCORES] Failed to update:", scoreError);
     }
 
     logStep("Dispatch complete", { assignmentCount: assignments.length });
@@ -301,6 +450,8 @@ Or open app to view details.`;
           id: c.id,
           name: `${c.first_name} ${c.last_name}`,
           distance: c.distance_miles,
+          score: c.match_score,
+          breakdown: c.score_breakdown,
           role: c === selectedCleaners[0] ? "Lead" : "Support"
         }))
       }),
