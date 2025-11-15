@@ -74,7 +74,8 @@ const App = () => (
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
               <Route path="/cleaner/profile" element={<CleanerProfile />} />
-              <Route path="/cleaner/onboard" element={<OnboardingLanding />} />
+              <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
+              <Route path="/cleaner/onboard" element={<OnboardingLanding />} /> {/* Legacy route */}
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
