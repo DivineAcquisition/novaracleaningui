@@ -379,6 +379,33 @@ export type Database = {
           },
         ]
       }
+      cleaner_verification_codes: {
+        Row: {
+          code: string
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          used: boolean | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          email: string
+          expires_at: string
+          id?: string
+          used?: boolean | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          used?: boolean | null
+        }
+        Relationships: []
+      }
       cleaners: {
         Row: {
           acceptance_rate: number | null
@@ -1059,41 +1086,70 @@ export type Database = {
       }
       referrals: {
         Row: {
+          booking_id: string | null
           code: string
           created_at: string
           credit_cents: number | null
           customer_id: string
           id: string
           redeemed_at: string | null
+          referred_booking_id: string | null
           referred_customer_id: string | null
+          referred_email: string | null
+          referrer_email: string | null
           status: Database["public"]["Enums"]["referral_status"]
+          used_at: string | null
         }
         Insert: {
+          booking_id?: string | null
           code: string
           created_at?: string
           credit_cents?: number | null
           customer_id: string
           id?: string
           redeemed_at?: string | null
+          referred_booking_id?: string | null
           referred_customer_id?: string | null
+          referred_email?: string | null
+          referrer_email?: string | null
           status?: Database["public"]["Enums"]["referral_status"]
+          used_at?: string | null
         }
         Update: {
+          booking_id?: string | null
           code?: string
           created_at?: string
           credit_cents?: number | null
           customer_id?: string
           id?: string
           redeemed_at?: string | null
+          referred_booking_id?: string | null
           referred_customer_id?: string | null
+          referred_email?: string | null
+          referrer_email?: string | null
           status?: Database["public"]["Enums"]["referral_status"]
+          used_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "referrals_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "referrals_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referred_booking_id_fkey"
+            columns: ["referred_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
           {
