@@ -1,16 +1,8 @@
 import * as React from 'https://esm.sh/react@18.3.1';
-import {
-  Body,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Preview,
-  Section,
-  Text,
-  Hr,
-} from 'https://esm.sh/@react-email/components@0.0.22';
-import { BRAND } from "./brand.ts";
+import { Text, Section } from 'https://esm.sh/@react-email/components@0.0.22';
+import { EmailLayout } from './components/EmailLayout.tsx';
+import { Highlight } from './components/Highlight.tsx';
+import { BRAND } from './brand.ts';
 
 interface CleanerVerificationCodeProps {
   code: string;
@@ -22,109 +14,119 @@ export const CleanerVerificationCode = ({
   firstName = "there",
 }: CleanerVerificationCodeProps) => {
   return (
-    <Html>
-      <Head />
-      <Preview>Your verification code: {code}</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          <Heading style={h1}>Welcome to {BRAND.name}!</Heading>
-          
-          <Text style={text}>
-            Hi {firstName},
-          </Text>
-          
-          <Text style={text}>
-            Thank you for joining our cleaning team! To complete your onboarding, please use the verification code below:
-          </Text>
+    <EmailLayout
+      title="🧹 Welcome to the Team!"
+      subtitle="Verify your email to get started"
+      previewText={`Your verification code: ${code}`}
+      footerNote="If you didn't request this code, please ignore this email."
+    >
+      <Text style={paragraph}>Hi {firstName},</Text>
+      
+      <Text style={paragraph}>
+        Thank you for joining the <strong>Novara Cleaning team</strong>! We're excited to have you onboard as a professional cleaner.
+      </Text>
 
-          <Section style={codeContainer}>
-            <Text style={codeText}>{code}</Text>
-          </Section>
+      <Text style={paragraph}>
+        To complete your registration and start accepting jobs, please enter this 6-digit verification code:
+      </Text>
 
-          <Text style={text}>
-            This code will expire in 15 minutes.
-          </Text>
+      <Section style={codeContainer}>
+        <Text style={codeText}>{code}</Text>
+      </Section>
 
-          <Hr style={hr} />
+      <Highlight variant="warning">
+        <Text style={expiryText}>
+          ⏰ <strong>This code expires in 15 minutes</strong>
+        </Text>
+        <Text style={expirySubtext}>
+          Enter the code in the app to continue with your onboarding.
+        </Text>
+      </Highlight>
 
-          <Text style={footer}>
-            If you didn't request this code, please ignore this email.
-          </Text>
+      <Text style={paragraph}>
+        Once verified, you'll be able to:
+      </Text>
 
-          <Text style={footer}>
-            Questions? Contact us at{" "}
-            <a href={`mailto:${BRAND.contact.email}`} style={link}>
-              {BRAND.contact.email}
-            </a>
-          </Text>
-        </Container>
-      </Body>
-    </Html>
+      <ul style={listStyle}>
+        <li>Complete your professional profile</li>
+        <li>Set your availability and service area</li>
+        <li>Start accepting cleaning jobs</li>
+        <li>Earn competitive pay with flexible hours</li>
+      </ul>
+
+      <Text style={paragraph}>
+        Questions about getting started? Our team is here to help at{' '}
+        <a href={`mailto:${BRAND.contact.email}`} style={link}>
+          {BRAND.contact.email}
+        </a>
+      </Text>
+
+      <Text style={signature}>
+        Welcome aboard!
+        <br />
+        <strong>The Novara Team</strong>
+      </Text>
+    </EmailLayout>
   );
 };
 
 export default CleanerVerificationCode;
 
-const main = {
-  backgroundColor: BRAND.colors.gray[50],
-  fontFamily:
-    '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
-};
-
-const container = {
-  backgroundColor: "#ffffff",
-  margin: "0 auto",
-  padding: "20px 0 48px",
-  marginBottom: "64px",
-};
-
-const h1 = {
-  color: BRAND.colors.gray[900],
-  fontSize: "24px",
-  fontWeight: "bold",
-  margin: "40px 0",
-  padding: "0",
-  textAlign: "center" as const,
-};
-
-const text = {
+// Styles
+const paragraph = {
+  margin: '16px 0',
+  fontSize: '16px',
+  lineHeight: '1.6',
   color: BRAND.colors.gray[700],
-  fontSize: "16px",
-  lineHeight: "26px",
-  padding: "0 40px",
 };
 
 const codeContainer = {
-  background: `linear-gradient(135deg, ${BRAND.colors.primary} 0%, ${BRAND.colors.secondary} 100%)`,
+  background: BRAND.gradient.primary,
   borderRadius: BRAND.borderRadius.lg,
-  margin: "32px 40px",
-  padding: "24px",
-  textAlign: "center" as const,
+  margin: '32px 0',
+  padding: '32px',
+  textAlign: 'center' as const,
+  boxShadow: '0 4px 12px rgba(139, 92, 246, 0.2)',
 };
 
 const codeText = {
-  color: "#ffffff",
-  fontSize: "32px",
-  fontWeight: "bold",
-  letterSpacing: "8px",
-  margin: "0",
-  fontFamily: "monospace",
+  color: '#ffffff',
+  fontSize: '40px',
+  fontWeight: 'bold',
+  letterSpacing: '12px',
+  margin: '0',
+  fontFamily: 'Courier, monospace',
 };
 
-const hr = {
-  borderColor: BRAND.colors.gray[200],
-  margin: "26px 40px",
+const expiryText = {
+  margin: '0 0 8px 0',
+  fontSize: '16px',
+  color: BRAND.colors.gray[900],
 };
 
-const footer = {
+const expirySubtext = {
+  margin: '0',
+  fontSize: '14px',
   color: BRAND.colors.gray[600],
-  fontSize: "14px",
-  lineHeight: "24px",
-  padding: "0 40px",
-  marginTop: "12px",
+};
+
+const listStyle = {
+  margin: '8px 0 16px 0',
+  paddingLeft: '24px',
+  color: BRAND.colors.gray[700],
+  fontSize: '16px',
+  lineHeight: '1.8',
 };
 
 const link = {
   color: BRAND.colors.primary,
-  textDecoration: "underline",
+  textDecoration: 'none',
+  fontWeight: '600',
+};
+
+const signature = {
+  margin: '32px 0 0 0',
+  fontSize: '16px',
+  color: BRAND.colors.gray[700],
+  lineHeight: '1.6',
 };

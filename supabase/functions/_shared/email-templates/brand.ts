@@ -39,10 +39,14 @@ export const BRAND = {
     phone: '(555) 123-4567',
   },
   urls: {
-    website: 'https://book.novaracleaning.com',
+    website: 'https://novaracleaning.com',
     account: 'https://book.novaracleaning.com/account',
     booking: 'https://book.novaracleaning.com/book/home',
     membership: 'https://book.novaracleaning.com/membership',
+    terms: 'https://novaracleaning.com/terms',
+    privacy: 'https://novaracleaning.com/privacy',
+    cancellation: 'https://novaracleaning.com/cancellation-policy',
+    membershipPolicy: 'https://novaracleaning.com/membership-policy',
   },
   // Logo as base64 or URL - Update this with actual logo
   logo: {
