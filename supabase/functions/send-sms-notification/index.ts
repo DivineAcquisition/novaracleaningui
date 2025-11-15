@@ -56,9 +56,10 @@ serve(async (req) => {
 
     // Send SMS via MessageBird
     const messageBirdUrl = "https://rest.messagebird.com/messages";
+    const recipient = normalizePhone(toPhone);
     const requestBody = {
       originator: messageBirdOriginator,
-      recipients: [toPhone],
+      recipients: [recipient],
       body: message,
     };
 
