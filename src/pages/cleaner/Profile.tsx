@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User } from "lucide-react";
+import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X } from "lucide-react";
 import { processAvatarImage } from "@/lib/image-compression";
 
 interface CleanerProfile {
@@ -30,6 +31,8 @@ export default function CleanerProfile() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -60,15 +63,35 @@ export default function CleanerProfile() {
     }
   };
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !profile) return;
+    if (!file) return;
+
+    try {
+      // Validate and compress image
+      const { file: processedFile, preview } = await processAvatarImage(file);
+      
+      setSelectedFile(processedFile);
+      setAvatarPreview(preview);
+      
+      toast({
+        title: "Photo selected",
+        description: "Click 'Upload Photo' to save your new profile picture.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Image processing failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!selectedFile || !user || !profile) return;
 
     try {
       setUploading(true);
-
-      // Process image (compress and validate)
-      const { file: compressedFile } = await processAvatarImage(file);
 
       // Delete old avatar if exists
       if (profile.avatar_url) {
@@ -81,13 +104,13 @@ export default function CleanerProfile() {
       }
 
       // Upload new avatar
-      const fileExt = compressedFile.name.split('.').pop();
+      const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('cleaner-avatars')
-        .upload(filePath, compressedFile);
+        .upload(filePath, selectedFile);
 
       if (uploadError) throw uploadError;
 
@@ -105,6 +128,9 @@ export default function CleanerProfile() {
       if (updateError) throw updateError;
 
       setProfile({ ...profile, avatar_url: publicUrl });
+      setAvatarPreview("");
+      setSelectedFile(null);
+      
       toast({
         title: "Avatar updated",
         description: "Your profile photo has been updated successfully.",
@@ -118,6 +144,11 @@ export default function CleanerProfile() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleCancelUpload = () => {
+    setAvatarPreview("");
+    setSelectedFile(null);
   };
 
   const handleSaveProfile = async () => {
@@ -190,36 +221,77 @@ export default function CleanerProfile() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Professional Photo Warning */}
+            {!profile.avatar_url && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Professional photo required!</strong> You must upload a clear face photo to receive job assignments. 
+                  This helps customers recognize you. A selfie is acceptable as long as your face is clearly visible.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Avatar Section */}
             <div className="flex flex-col items-center space-y-4">
-              <Avatar className="w-32 h-32">
-                <AvatarImage src={profile.avatar_url || undefined} />
-                <AvatarFallback className="text-2xl">
-                  {profile.first_name[0]}{profile.last_name[0]}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <input
-                  type="file"
-                  id="avatar-upload"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                  disabled={uploading}
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => document.getElementById('avatar-upload')?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Camera className="mr-2 h-4 w-4" />
-                  )}
-                  Change Photo
-                </Button>
+              <div className="relative">
+                <Avatar className="w-32 h-32 border-2 border-border">
+                  <AvatarImage src={avatarPreview || profile.avatar_url || undefined} />
+                  <AvatarFallback className="text-2xl">
+                    {profile.first_name[0]}{profile.last_name[0]}
+                  </AvatarFallback>
+                </Avatar>
+                {avatarPreview && (
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-8 w-8 rounded-full"
+                    onClick={handleCancelUpload}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
+              
+              <div className="flex gap-2">
+                <div>
+                  <input
+                    type="file"
+                    id="avatar-upload"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageChange}
+                    disabled={uploading}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => document.getElementById('avatar-upload')?.click()}
+                    disabled={uploading}
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    {avatarPreview ? "Choose Different" : "Choose Photo"}
+                  </Button>
+                </div>
+                
+                {avatarPreview && (
+                  <Button
+                    onClick={handleAvatarUpload}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Upload Photo
+                  </Button>
+                )}
+              </div>
+
+              <p className="text-xs text-center text-muted-foreground max-w-md">
+                Upload a clear, professional photo showing your face. This helps build trust with customers. 
+                Even a selfie works as long as your face is visible and well-lit.
+              </p>
             </div>
 
             {/* Contact Information */}
