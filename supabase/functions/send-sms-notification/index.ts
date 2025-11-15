@@ -16,6 +16,24 @@ interface SMSRequest {
   jobAssignmentId?: string;
 }
 
+function normalizePhone(phone: string): string {
+  // Remove all non-digits
+  const digits = phone.replace(/\D/g, '');
+  
+  // If it's 10 digits, add +1 for US
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  
+  // If it already has country code, ensure it starts with +
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+  
+  // Return as-is with + prefix if not already there
+  return digits.startsWith('+') ? digits : `+${digits}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
