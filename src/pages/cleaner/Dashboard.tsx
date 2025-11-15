@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { User, Settings } from "lucide-react";
+import { User, Settings, Calendar } from "lucide-react";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
 import JobOffers from "./JobOffers";
@@ -100,7 +100,12 @@ export default function CleanerDashboard() {
         .eq("user_id", user.id)
         .single();
 
-      if (cleanerError) throw cleanerError;
+      if (cleanerError || !cleanerData) {
+        // User is authenticated but not a cleaner - redirect to home
+        navigate("/");
+        return;
+      }
+      
       setCleaner(cleanerData);
 
       // Fetch stats
@@ -190,6 +195,14 @@ export default function CleanerDashboard() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/cleaner/availability")}
+              >
+                <Calendar className="mr-2 w-3.5 h-3.5" />
+                Availability
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

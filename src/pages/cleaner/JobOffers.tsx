@@ -73,11 +73,14 @@ export default function JobOffers() {
       setOffers((data as any) || []);
     } catch (error: any) {
       console.error("Error fetching offers:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load job offers",
-        variant: "destructive"
-      });
+      // Only show error toast for actual errors, not empty results
+      if (error.code !== 'PGRST116') {
+        toast({
+          title: "Error",
+          description: "Failed to load job offers",
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -182,9 +185,9 @@ export default function JobOffers() {
           <Card>
             <CardContent className="py-12 text-center">
               <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-lg font-medium">No pending offers</p>
+              <p className="text-lg font-medium">No job offers at the moment</p>
               <p className="text-sm text-muted-foreground">
-                You'll be notified when new jobs are available
+                Check back soon for new opportunities!
               </p>
             </CardContent>
           </Card>
