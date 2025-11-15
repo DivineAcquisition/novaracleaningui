@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from 'https://esm.sh/resend@2.0.0';
-import { render } from 'https://esm.sh/@react-email/render@1.0.1';
+import { Resend } from 'https://esm.sh/resend@4.0.0';
+import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import * as React from 'https://esm.sh/react@18.3.1';
 import { CleanerVerificationCode } from "../_shared/email-templates/CleanerVerificationCode.tsx";
 
@@ -62,18 +62,32 @@ serve(async (req) => {
     // Send email with verification code
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
     
-    const html = await render(
-      React.createElement(CleanerVerificationCode, {
-        code,
-        firstName: firstName || "there",
-      })
-    );
+    let html = "";
+    try {
+      html = await renderAsync(
+        React.createElement(CleanerVerificationCode, {
+          code,
+          firstName: firstName || "there",
+        })
+      );
+      logStep("Rendered HTML", { 
+        length: html?.length ?? 0, 
+        snippet: html?.slice(0, 200) ?? "" 
+      });
+    } catch (error) {
+      const renderError = error instanceof Error ? error : new Error(String(error));
+      logStep("Render error", { error: renderError.message });
+      throw new Error(`Failed to render email: ${renderError.message}`);
+    }
+
+    const text = `Your Novara verification code is ${code}. It expires in 15 minutes.`;
 
     const { error: emailError } = await resend.emails.send({
       from: "Novara Cleaning <onboarding@novaracleaning.com>",
       to: [email],
       subject: "Your Cleaner Verification Code",
       html,
+      text,
     });
 
     if (emailError) {

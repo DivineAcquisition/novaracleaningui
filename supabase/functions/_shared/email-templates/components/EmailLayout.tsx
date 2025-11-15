@@ -2,11 +2,13 @@ import * as React from 'https://esm.sh/react@18.3.1';
 import {
   Html,
   Head,
+  Preview,
   Body,
   Container,
   Section,
   Text,
   Link,
+  Img,
 } from 'https://esm.sh/@react-email/components@0.0.22';
 import { BRAND } from '../brand.ts';
 
@@ -28,10 +30,20 @@ export const EmailLayout = ({
   return (
     <Html>
       <Head />
+      <Preview>{previewText}</Preview>
       <Body style={main}>
         <Container style={container}>
           {/* Header */}
           <Section style={header}>
+            {BRAND.logo.url && (
+              <Img
+                src={BRAND.logo.url}
+                width={BRAND.logo.width}
+                height={BRAND.logo.height}
+                alt={`${BRAND.name} logo`}
+                style={logo}
+              />
+            )}
             <Text style={headerTitle}>{title}</Text>
             {subtitle && <Text style={headerSubtitle}>{subtitle}</Text>}
           </Section>
@@ -93,6 +105,11 @@ const container = {
   maxWidth: '600px',
   margin: '0 auto',
   padding: '20px',
+};
+
+const logo = {
+  display: 'block',
+  margin: '0 auto 12px',
 };
 
 const header = {
