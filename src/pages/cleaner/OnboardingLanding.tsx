@@ -6,47 +6,54 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Sparkles } from "lucide-react";
+import { Mail, Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function OnboardingLanding() {
   const navigate = useNavigate();
-  const [pin, setPin] = useState("");
-  const [isValidating, setIsValidating] = useState(false);
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (pin.length !== 4) {
-      toast.error("PIN must be 4 digits");
+    if (!email || !email.includes("@")) {
+      toast.error("Please enter a valid email address");
       return;
     }
 
-    setIsValidating(true);
+    setIsLoading(true);
 
     try {
-      // Validate PIN against database
-      const { data, error } = await supabase
-        .from("cleaner_onboarding_pins")
-        .select("*")
-        .eq("pin_code", pin)
-        .eq("is_active", true)
-        .single();
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/cleaner/onboarding`,
+          data: {
+            onboarding: true,
+            is_cleaner: true
+          }
+        }
+      });
 
-      if (error || !data) {
-        toast.error("Invalid PIN code. Please contact admin for access.");
-        setPin("");
+      if (error) {
+        toast.error(error.message);
         return;
       }
 
-      // PIN is valid, navigate to onboarding form
-      toast.success("Access granted! Let's get started.");
-      navigate("/cleaner/onboarding", { state: { pinValidated: true } });
+      setEmailSent(true);
+      toast.success("Check your email for the verification link!");
     } catch (error) {
-      console.error("PIN validation error:", error);
+      console.error("Email verification error:", error);
       toast.error("Something went wrong. Please try again.");
     } finally {
-      setIsValidating(false);
+      setIsLoading(false);
     }
+  };
+
+  const handleResend = async () => {
+    setEmailSent(false);
+    setIsLoading(false);
   };
 
   return (
@@ -54,48 +61,77 @@ export default function OnboardingLanding() {
       <Card className="w-full max-w-md border-border/50 shadow-lg">
         <CardHeader className="text-center space-y-3">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            <Sparkles className="w-8 h-8 text-primary" />
+            {emailSent ? (
+              <CheckCircle2 className="w-8 h-8 text-primary" />
+            ) : (
+              <Sparkles className="w-8 h-8 text-primary" />
+            )}
           </div>
-          <CardTitle className="text-3xl font-bold">Join Our Team</CardTitle>
+          <CardTitle className="text-3xl font-bold">
+            {emailSent ? "Check Your Email" : "Join Our Team"}
+          </CardTitle>
           <CardDescription className="text-base">
-            Enter your access code to begin the onboarding process
+            {emailSent 
+              ? "We've sent you a verification link to continue"
+              : "Enter your email to begin the onboarding process"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handlePinSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="pin" className="text-sm font-medium">
-                4-Digit Access Code
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="pin"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="Enter 4-digit code"
-                  className="pl-10 text-center text-2xl tracking-widest font-semibold h-14"
-                  disabled={isValidating}
-                  autoFocus
-                />
+          {!emailSent ? (
+            <form onSubmit={handleEmailSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium">
+                  Email Address
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your.email@example.com"
+                    className="pl-10 h-12"
+                    disabled={isLoading}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  We'll send you a secure link to verify your email
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Contact your team lead if you need an access code
-              </p>
-            </div>
 
-            <Button
-              type="submit"
-              className="w-full h-12 text-lg"
-              disabled={isValidating || pin.length !== 4}
-            >
-              {isValidating ? "Validating..." : "Continue to Onboarding"}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                className="w-full h-12 text-lg"
+                disabled={isLoading || !email}
+              >
+                {isLoading ? "Sending..." : "Continue to Onboarding"}
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-6">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
+                <p className="text-sm font-medium">📧 Verification link sent to:</p>
+                <p className="text-sm text-muted-foreground break-all">{email}</p>
+              </div>
+              
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>Click the link in your email to continue with onboarding.</p>
+                <p>The link is valid for 1 hour and can only be used once.</p>
+              </div>
+
+              <Button
+                onClick={handleResend}
+                variant="outline"
+                className="w-full"
+              >
+                Use Different Email
+              </Button>
+            </div>
+          )}
 
           <div className="mt-6 pt-6 border-t border-border/50 text-center">
             <p className="text-sm text-muted-foreground">

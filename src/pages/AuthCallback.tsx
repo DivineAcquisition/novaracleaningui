@@ -33,8 +33,20 @@ export default function AuthCallback() {
         if (type === 'recovery') {
           // Password reset flow - redirect to update password
           navigate("/update-password");
+        } else if (type === 'magiclink') {
+          // Magic link authentication - check if it's cleaner onboarding
+          const isCleanerOnboarding = session.user.user_metadata?.onboarding || 
+                                       session.user.user_metadata?.is_cleaner;
+          
+          if (isCleanerOnboarding) {
+            toast.success("Email verified! Complete your profile.");
+            navigate("/cleaner/onboarding");
+          } else {
+            toast.success("Email verified successfully!");
+            navigate("/account");
+          }
         } else {
-          // Email verification or other auth flow - redirect to account
+          // Email verification or other auth flow
           toast.success("Email verified successfully!");
           navigate("/account");
         }

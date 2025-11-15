@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, MapPin } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2 } from "lucide-react";
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
 
@@ -46,7 +46,6 @@ export default function CleanerOnboarding() {
     lastName: "",
     phone: "",
     email: "",
-    password: "", // Add password field for new signups
     state: "",
     homeZip: "",
     maxTravelMiles: 20,
@@ -56,67 +55,54 @@ export default function CleanerOnboarding() {
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
 
-  // Check if PIN was validated or if user is already logged in
+  // Check authentication and pre-fill email
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Try to restore draft if exists
-        const savedDraft = localStorage.getItem('cleanerOnboardingDraft');
-        if (savedDraft) {
-          try {
-            const draft = JSON.parse(savedDraft);
-            setFormData(prev => ({ ...prev, ...draft, avatarFile: null })); // Don't restore file
-            localStorage.removeItem('cleanerOnboardingDraft'); // Clear after loading
-            toast({
-              title: "Draft restored",
-              description: "Your previous form data has been restored.",
-            });
-          } catch (e) {
-            console.error("Failed to parse draft:", e);
-          }
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          // Not authenticated, redirect to landing
+          toast({
+            title: "Email verification required",
+            description: "Please verify your email first",
+            variant: "destructive",
+          });
+          navigate("/cleaner/onboarding-landing");
+          return;
         }
-
-        // Check if user came from PIN landing page
-        const pinValidated = location.state?.pinValidated;
         
-        // Check if user is already authenticated
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // User is authenticated via magic link
+        setUserId(session.user.id);
         
-        if (session) {
-          // User is logged in, set their user ID
-          setUserId(session.user.id);
-          
-          // Check if cleaner profile already exists
-          const { data: existingCleaner, error: checkError } = await supabase
-            .from("cleaners")
-            .select("id, onboarding_complete")
-            .eq("user_id", session.user.id)
-            .maybeSingle();
+        // Pre-fill email from authenticated session
+        setFormData(prev => ({
+          ...prev,
+          email: session.user.email || ""
+        }));
+        
+        // Check if cleaner profile already exists
+        const { data: existingCleaner } = await supabase
+          .from("cleaners")
+          .select("id, onboarding_complete")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
 
-          if (checkError) {
-            console.error("Error checking cleaner profile:", checkError);
-          }
-
-          if (existingCleaner?.onboarding_complete) {
-            // Already completed onboarding, redirect to dashboard
-            navigate("/cleaner/dashboard");
-            return;
-          }
-        } else if (!pinValidated) {
-          // Not logged in and no PIN validation, redirect to PIN page
-          navigate("/cleaner/onboard");
+        if (existingCleaner?.onboarding_complete) {
+          // Already completed onboarding, redirect to dashboard
+          navigate("/cleaner/dashboard");
           return;
         }
 
         setCheckingAuth(false);
       } catch (error) {
         console.error("Auth check error:", error);
-        navigate("/cleaner/onboard");
+        navigate("/cleaner/onboarding-landing");
       }
     };
 
     checkAuth();
-  }, [navigate, toast, location]);
+  }, [navigate, toast]);
 
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,17 +164,6 @@ export default function CleanerOnboarding() {
       return;
     }
 
-    // For new signups (no userId), require password
-    if (!userId && !formData.password) {
-      toast({ title: "Error", description: "Please enter a password (minimum 6 characters)", variant: "destructive" });
-      return;
-    }
-
-    if (!userId && formData.password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
-      return;
-    }
-
     if (formData.preferredWorkDays.length === 0) {
       toast({
         title: "Error",
@@ -210,67 +185,17 @@ export default function CleanerOnboarding() {
     setIsLoading(true);
 
     try {
-      let finalUserId = userId;
-
-      // If no userId, create auth account first
-      if (!userId) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/cleaner/dashboard`,
-            data: {
-              is_cleaner: true,
-              first_name: formData.firstName,
-              last_name: formData.lastName
-            }
-          }
+      // User is already authenticated via magic link
+      const finalUserId = userId;
+      
+      if (!finalUserId) {
+        toast({ 
+          title: "Authentication Error", 
+          description: "Session not found. Please try again.", 
+          variant: "destructive" 
         });
-
-        if (signUpError) {
-          toast({ title: "Signup Error", description: signUpError.message, variant: "destructive" });
-          throw signUpError;
-        }
-
-        if (!signUpData.user) {
-          toast({ title: "Error", description: "Failed to create account", variant: "destructive" });
-          return;
-        }
-
-        finalUserId = signUpData.user.id;
-
-        // Ensure session is fully established before proceeding
-        if (signUpData.session) {
-          await supabase.auth.setSession({
-            access_token: signUpData.session.access_token,
-            refresh_token: signUpData.session.refresh_token
-          });
-
-          // Verify session is active
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-          if (!session || sessionError) {
-            throw new Error("Failed to establish authentication session");
-          }
-
-          console.log("Session established for user:", session.user.id);
-        } else {
-          // No session returned - try password sign-in as fallback
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: formData.email,
-            password: formData.password
-          });
-
-          if (signInError || !signInData.session) {
-            // Email confirmation likely required - save form and prompt user
-            localStorage.setItem('cleanerOnboardingDraft', JSON.stringify(formData));
-            toast({
-              title: "Confirm your email",
-              description: "We sent you a confirmation link. Please verify your email, then return to complete onboarding.",
-            });
-            setIsLoading(false);
-            return;
-          }
-        }
+        navigate("/cleaner/onboarding-landing");
+        return;
       }
     
       // Upload avatar if provided (non-blocking)
@@ -478,30 +403,16 @@ export default function CleanerOnboarding() {
                   <Input
                     id="email"
                     type="email"
-                    required
                     value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-muted"
                   />
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-primary" />
+                    Verified via email link
+                  </p>
                 </div>
-
-                {/* Show password field for new signups */}
-                {!userId && (
-                  <div>
-                    <Label htmlFor="password">Create Password *</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      required
-                      minLength={6}
-                      placeholder="Minimum 6 characters"
-                      value={formData.password}
-                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                    />
-                    <p className="text-sm text-muted-foreground mt-1">
-                      This will be your login password
-                    </p>
-                  </div>
-                )}
 
                 <div>
                   <Label htmlFor="phone">Phone *</Label>
