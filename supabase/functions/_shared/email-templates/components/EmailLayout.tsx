@@ -57,7 +57,24 @@ export const EmailLayout = ({
               </Link>
               {' • '}
               <Link href={`mailto:${BRAND.contact.email}`} style={footerLink}>
-                Contact Us
+                Contact
+              </Link>
+            </Text>
+            <Text style={footerLinks}>
+              <Link href={BRAND.urls.terms} style={footerLink}>
+                Terms of Service
+              </Link>
+              {' • '}
+              <Link href={BRAND.urls.privacy} style={footerLink}>
+                Privacy Policy
+              </Link>
+              {' • '}
+              <Link href={BRAND.urls.cancellation} style={footerLink}>
+                Cancellation Policy
+              </Link>
+              {' • '}
+              <Link href={BRAND.urls.membershipPolicy} style={footerLink}>
+                Membership Terms
               </Link>
             </Text>
           </Section>
