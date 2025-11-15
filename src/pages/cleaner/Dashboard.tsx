@@ -28,6 +28,61 @@ export default function CleanerDashboard() {
 
   useEffect(() => {
     fetchCleanerData();
+
+    // Set up real-time subscriptions
+    const jobAssignmentsChannel = supabase
+      .channel('job_assignments_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'job_assignments'
+        },
+        () => {
+          console.log('Job assignments changed, refreshing data');
+          fetchCleanerData();
+        }
+      )
+      .subscribe();
+
+    const bookingsChannel = supabase
+      .channel('bookings_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings'
+        },
+        () => {
+          console.log('Bookings changed, refreshing data');
+          fetchCleanerData();
+        }
+      )
+      .subscribe();
+
+    const payoutsChannel = supabase
+      .channel('payouts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payouts'
+        },
+        () => {
+          console.log('Payouts changed, refreshing data');
+          fetchCleanerData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(jobAssignmentsChannel);
+      supabase.removeChannel(bookingsChannel);
+      supabase.removeChannel(payoutsChannel);
+    };
   }, []);
 
   const fetchCleanerData = async () => {
