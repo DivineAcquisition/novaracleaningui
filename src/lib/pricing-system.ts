@@ -12,7 +12,7 @@ export const HOURLY_RATE = 75;
 export const DEPOSIT_AMOUNT = 39;
 export const OVERTIME_RATE = 75;
 export const OVERTIME_INCREMENT = 0.5;
-export const NEW_CUSTOMER_DISCOUNT = 60;
+export const NEW_CUSTOMER_DISCOUNT = 30;
 
 export const HOME_SIZE_RANGES: HomeSizeRange[] = [
   {

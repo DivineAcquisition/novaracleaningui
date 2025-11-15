@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift, ChevronLeft, ChevronRight } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode, getEstimatedHours, HOURLY_RATE, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
@@ -96,16 +96,39 @@ export default function BookingCheckout() {
 
     // Fetch publishable key from Edge Function (public)
     const init = async () => {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke('get-stripe-publishable-key');
-      if (error || !data?.key) {
-        console.error('Stripe key missing or error', error || data);
-        toast.error('Payments are temporarily unavailable. Please contact support.');
-        return;
+      try {
+        const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
+        
+        if (error || !data?.key) {
+          console.warn('Primary Stripe key fetch failed, attempting fallback:', error);
+          
+          // Fallback: direct fetch to Edge Function URL
+          const response = await fetch('https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/get-stripe-publishable-key', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch Stripe key');
+          }
+          
+          const fallbackData = await response.json();
+          if (!fallbackData?.key) {
+            throw new Error('No Stripe key in fallback response');
+          }
+          
+          setStripePromise(loadStripe(fallbackData.key));
+          return;
+        }
+        
+        setStripePromise(loadStripe(data.key));
+      } catch (err: any) {
+        console.error('Stripe initialization failed:', err);
+        setInitError('Unable to load payment system. Please try again.');
       }
-      setStripePromise(loadStripe(data.key));
     };
     init();
   }, []);
@@ -314,29 +337,59 @@ export default function BookingCheckout() {
     setIsProcessing(true);
     setInitError(null);
     try {
-      console.log("Creating payment intent with booking data:", bookingData);
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("create-payment-intent", {
-        body: bookingData
-      });
+      console.debug('[PAYMENT] Creating payment intent at', new Date().toISOString());
+      
+      let data, error;
+      
+      try {
+        const result = await supabase.functions.invoke("create-payment-intent", {
+          body: bookingData
+        });
+        data = result.data;
+        error = result.error;
+      } catch (invokeError) {
+        console.warn('[PAYMENT] Primary invoke failed, attempting fallback:', invokeError);
+        
+        // Fallback: direct fetch to Edge Function URL
+        const response = await fetch('https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/create-payment-intent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
+          },
+          body: JSON.stringify(bookingData)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Fallback fetch failed: ${errorText}`);
+        }
+        
+        data = await response.json();
+        error = null;
+      }
+      
       if (error) {
-        console.error("Payment intent error:", error);
+        console.error("[PAYMENT] Payment intent error:", error);
         throw new Error(error.message || "Failed to initialize payment");
       }
+      
       if (!data) {
         throw new Error("No payment intent data received");
       }
-      console.log("Payment intent created:", data);
+      
+      console.debug("[PAYMENT] Payment intent created successfully:", { 
+        amount: data.amount, 
+        bookingId: data.bookingId 
+      });
 
       // CRITICAL: Always require payment verification - no auto-confirmation
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
     } catch (error: any) {
-      console.error("Payment initialization error:", error);
-      const errorMessage = error.message || "Failed to initialize payment. Please try again.";
+      console.error("[PAYMENT] Initialization error:", error);
+      const errorMessage = error.message || "Payment service unavailable. Please try again.";
       setInitError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -423,10 +476,10 @@ export default function BookingCheckout() {
                     </div>
                     <div>
                       <p className="text-sm font-bold md:text-base text-green-700">New Customer Special!</p>
-                      <p className="text-xs md:text-sm text-green-600">You're saving $60 on this booking 🎉</p>
+                      <p className="text-xs md:text-sm text-green-600">You're saving ${NEW_CUSTOMER_DISCOUNT} on this booking 🎉</p>
                     </div>
                   </div>
-                  <div className="text-base md:text-2xl font-bold text-green-700">-$60</div>
+                  <div className="text-base md:text-2xl font-bold text-green-700">-${NEW_CUSTOMER_DISCOUNT}</div>
                 </CardContent>
               </Card>}
 
@@ -709,7 +762,7 @@ export default function BookingCheckout() {
                                   {depositPricing.newCustomerDiscount > 0 && <div className="flex items-center justify-between text-green-600 font-semibold">
                                       <span className="flex items-center gap-1">
                                         <Gift className="w-3 h-3" />
-                                        New Customer $60 Off:
+                                        New Customer ${NEW_CUSTOMER_DISCOUNT} Off:
                                       </span>
                                       <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
                                     </div>}
@@ -753,7 +806,7 @@ export default function BookingCheckout() {
                                 {fullPaymentPricing.newCustomerDiscount > 0 && <div className="flex items-center justify-between text-green-600 font-semibold">
                                     <span className="flex items-center gap-1">
                                       <Gift className="w-3 h-3" />
-                                      New Customer $60 Off:
+                                      New Customer ${NEW_CUSTOMER_DISCOUNT} Off:
                                     </span>
                                     <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
                                   </div>}
