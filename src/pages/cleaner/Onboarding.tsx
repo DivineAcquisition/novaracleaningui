@@ -303,8 +303,8 @@ export default function CleanerOnboarding() {
       // Trigger Stripe Connect onboarding
       try {
         const { data: onboardingData, error: onboardingError } = await supabase.functions.invoke(
-          "onboard-cleaner",
-          { body: { cleanerId: cleanerData.id } }
+          "initiate-cleaner-stripe-connect"
+          // No body needed - function uses JWT token to identify cleaner
         );
 
         if (onboardingError) {

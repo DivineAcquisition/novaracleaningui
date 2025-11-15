@@ -21,7 +21,6 @@ export default function CleanerAuth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
     // If user is already logged in, redirect to cleaner dashboard
@@ -254,130 +253,57 @@ export default function CleanerAuth() {
               Sign in to access your cleaner dashboard
             </CardDescription>
           </CardHeader>
-          <Tabs defaultValue="signin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mx-6">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="signin">
-              <form onSubmit={handleSignIn}>
-                <CardContent className="space-y-4 pt-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
-                    <Input
-                      id="signin-email"
-                      type="email"
-                      placeholder="your.email@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-password">Password</Label>
-                    <Input
-                      id="signin-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="flex items-center space-x-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="remember-me"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      disabled
-                    />
-                    <Label htmlFor="remember-me" className="text-sm font-normal text-muted-foreground cursor-default">
-                      Sessions are automatically saved securely
-                    </Label>
-                  </div>
-                </CardContent>
-                <CardFooter className="flex flex-col gap-4 pb-6">
-                  <Button 
-                    type="submit" 
-                    className="w-full h-11 bg-gradient-primary hover:opacity-90 shadow-lavender" 
-                    disabled={loading}
-                  >
-                    {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                    Sign In
-                  </Button>
-                  <div className="flex items-center justify-between text-sm w-full">
-                    <Link to="/cleaner/reset-password" className="text-primary hover:underline font-medium">
-                      Forgot password?
-                    </Link>
-                    <Link to="/auth" className="text-muted-foreground hover:text-primary font-medium">
-                      Customer Login
-                    </Link>
-                  </div>
-                </CardFooter>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp}>
-                <CardContent className="space-y-4 pt-6">
-                  <div className="bg-primary/10 border border-primary/20 p-4 rounded-lg text-sm">
-                    <p className="font-medium text-foreground">
-                      📋 Admin Invitation Required
-                    </p>
-                    <p className="text-muted-foreground mt-1">
-                      You must be invited by an admin before creating an account.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="your.email@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="h-11"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Must be at least 6 characters long
-                    </p>
-                  </div>
-                </CardContent>
-                <CardFooter className="pb-6">
-                  <Button 
-                    type="submit" 
-                    className="w-full h-11 bg-gradient-primary hover:opacity-90 shadow-lavender" 
-                    disabled={loading}
-                  >
-                    {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                    Create Account
-                  </Button>
-                </CardFooter>
-              </form>
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={handleSignIn}>
+            <CardContent className="space-y-4 pt-6">
+              <div className="space-y-2">
+                <Label htmlFor="signin-email">Email</Label>
+                <Input
+                  id="signin-email"
+                  type="email"
+                  placeholder="your.email@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signin-password">Password</Label>
+                <Input
+                  id="signin-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="h-11"
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-col gap-4 pb-6">
+              <Button 
+                type="submit" 
+                className="w-full h-11 bg-gradient-primary hover:opacity-90 shadow-lavender" 
+                disabled={loading}
+              >
+                {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                Sign In
+              </Button>
+              <div className="flex items-center justify-between text-sm w-full">
+                <Link to="/cleaner/reset-password" className="text-primary hover:underline font-medium">
+                  Forgot password?
+                </Link>
+                <Link to="/auth" className="text-muted-foreground hover:text-primary font-medium">
+                  Customer Login
+                </Link>
+              </div>
+              <div className="text-center text-sm text-muted-foreground">
+                New cleaners must be invited by an administrator
+              </div>
+            </CardFooter>
+          </form>
         </Card>
 
         <div className="text-center mt-6 text-sm text-muted-foreground">
