@@ -126,3 +126,9 @@ verify_jwt = true
 [functions.verify-phone-code]
 verify_jwt = true
 
+[functions.send-cleaner-verification-code]
+verify_jwt = false
+
+[functions.verify-cleaner-code]
+verify_jwt = false
+
