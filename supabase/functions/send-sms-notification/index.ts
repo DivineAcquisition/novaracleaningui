@@ -12,7 +12,7 @@ const messageBirdOriginator = Deno.env.get("MESSAGEBIRD_ORIGINATOR");
 interface SMSRequest {
   toPhone: string;
   message: string;
-  type: "job_offer" | "reminder" | "confirmation";
+  type: "job_offer" | "reminder" | "confirmation" | "verification";
   jobAssignmentId?: string;
 }
 
