@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +32,7 @@ export default function BookingSchedule() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
   const { user } = useAuth();
+  const dateTimeSectionRef = useRef<HTMLDivElement>(null);
   
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate) : undefined
@@ -82,6 +83,18 @@ export default function BookingSchedule() {
     }, 800);
     return () => clearTimeout(timer);
   }, []);
+
+  // Auto-scroll to date/time section when membership is selected
+  useEffect(() => {
+    if (membershipPlan !== 'none' && dateTimeSectionRef.current) {
+      setTimeout(() => {
+        dateTimeSectionRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 300);
+    }
+  }, [membershipPlan]);
 
   // Generate time slots based on service duration
   const timeSlots = generateTimeSlots(serviceDuration, bookingData.serviceType);
@@ -270,7 +283,7 @@ export default function BookingSchedule() {
             {isLoadingDates ? (
               <DateTimeSkeleton />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 animate-slide-in-from-right">
+              <div ref={dateTimeSectionRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 animate-slide-in-from-right">
                 {/* Date Selection */}
                 <div className="space-y-4">
                   <div>
