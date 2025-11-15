@@ -19,10 +19,10 @@ interface EarningsPayoutsProps {
 export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
   if (payouts.length === 0) {
     return (
-      <div className="text-center py-12">
-        <DollarSign className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-        <p className="text-muted-foreground">No payouts yet</p>
-        <p className="text-sm text-muted-foreground mt-1">
+      <div className="text-center py-8">
+        <DollarSign className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+        <p className="text-sm text-muted-foreground">No payouts yet</p>
+        <p className="text-xs text-muted-foreground mt-1">
           Complete jobs to start earning
         </p>
       </div>
@@ -51,20 +51,20 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
     .reduce((sum, p) => sum + p.cleaner_payout_cents, 0);
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="p-6">
-          <div className="text-sm text-muted-foreground mb-1">Total Paid Out</div>
-          <div className="text-3xl font-bold text-green-600">
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card className="p-4">
+          <div className="text-xs text-muted-foreground mb-1">Total Paid Out</div>
+          <div className="text-2xl font-bold text-green-600">
             ${(totalEarnings / 100).toFixed(2)}
           </div>
         </Card>
-        <Card className="p-6">
-          <div className="text-sm text-muted-foreground mb-1">Processing</div>
-          <div className="text-3xl font-bold text-yellow-600">
+        <Card className="p-4">
+          <div className="text-xs text-muted-foreground mb-1">Processing</div>
+          <div className="text-2xl font-bold text-yellow-600">
             ${(processingAmount / 100).toFixed(2)}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-[10px] text-muted-foreground mt-1">
             Usually arrives in 1-2 business days
           </p>
         </Card>
@@ -120,9 +120,9 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
         </Table>
       </Card>
 
-      <Card className="p-6 bg-muted/50">
-        <h4 className="font-semibold mb-2">How Payouts Work</h4>
-        <ul className="text-sm space-y-1 text-muted-foreground">
+      <Card className="p-4 bg-muted/50">
+        <h4 className="text-sm font-semibold mb-2">How Payouts Work</h4>
+        <ul className="text-xs space-y-1 text-muted-foreground">
           <li>• Payouts are processed automatically when jobs are marked complete</li>
           <li>• Money is transferred to your linked bank account via Stripe</li>
           <li>• Transfers typically arrive in 1-2 business days</li>

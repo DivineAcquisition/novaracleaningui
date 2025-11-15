@@ -124,22 +124,23 @@ export default function CleanerDashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold">
+              <h1 className="text-xl font-bold">
                 Welcome back, {cleaner?.first_name}!
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Manage your jobs and track your earnings
               </p>
             </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => navigate("/cleaner/profile")}
               >
-                <User className="mr-2 w-4 h-4" />
+                <User className="mr-2 w-3.5 h-3.5" />
                 Profile
               </Button>
             </div>
@@ -148,7 +149,7 @@ export default function CleanerDashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-4">
         <OnboardingChecklist cleaner={cleaner} onRefresh={fetchCleanerData} />
         
         <DashboardStats stats={stats} />

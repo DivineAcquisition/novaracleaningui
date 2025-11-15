@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin } from "lucide-react";
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
@@ -102,23 +102,6 @@ export default function CleanerOnboarding() {
     checkAuth();
   }, [navigate, toast, location]);
 
-  const handleDayToggle = (day: string) => {
-    setFormData(prev => ({
-      ...prev,
-      preferredWorkDays: prev.preferredWorkDays.includes(day)
-        ? prev.preferredWorkDays.filter(d => d !== day)
-        : [...prev.preferredWorkDays, day]
-    }));
-  };
-
-  const handleSkillToggle = (skill: string) => {
-    setFormData(prev => ({
-      ...prev,
-      skillset: prev.skillset.includes(skill)
-        ? prev.skillset.filter(s => s !== skill)
-        : [...prev.skillset, skill]
-    }));
-  };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -522,15 +505,19 @@ export default function CleanerOnboarding() {
                   <Label htmlFor="maxTravelMiles">
                     Max Travel Distance (miles) *
                   </Label>
-                  <Input
+                  <select
                     id="maxTravelMiles"
-                    type="number"
                     required
-                    min={1}
-                    max={100}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     value={formData.maxTravelMiles}
                     onChange={(e) => setFormData(prev => ({ ...prev, maxTravelMiles: parseInt(e.target.value) }))}
-                  />
+                  >
+                    <option value={10}>10 miles</option>
+                    <option value={15}>15 miles</option>
+                    <option value={20}>20 miles</option>
+                    <option value={25}>25 miles</option>
+                    <option value={30}>30 miles</option>
+                  </select>
                 </div>
               </div>
 
@@ -540,23 +527,25 @@ export default function CleanerOnboarding() {
                 
                 <div>
                   <Label>Preferred Work Days *</Label>
-                  <div className="grid grid-cols-4 gap-3 mt-2">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Select the days you're available to work
+                  </p>
+                  <ToggleGroup 
+                    type="multiple" 
+                    value={formData.preferredWorkDays}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, preferredWorkDays: value }))}
+                    className="justify-start flex-wrap"
+                  >
                     {DAYS_OF_WEEK.map(day => (
-                      <div key={day} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={day}
-                          checked={formData.preferredWorkDays.includes(day)}
-                          onCheckedChange={() => handleDayToggle(day)}
-                        />
-                        <label
-                          htmlFor={day}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {day}
-                        </label>
-                      </div>
+                      <ToggleGroupItem 
+                        key={day} 
+                        value={day}
+                        className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      >
+                        {day}
+                      </ToggleGroupItem>
                     ))}
-                  </div>
+                  </ToggleGroup>
                 </div>
 
                 <div className="p-4 bg-muted rounded-lg">
@@ -573,20 +562,22 @@ export default function CleanerOnboarding() {
                   <p className="text-sm text-muted-foreground">
                     Select all services you're comfortable providing (select at least one)
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <ToggleGroup 
+                    type="multiple" 
+                    value={formData.skillset}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, skillset: value }))}
+                    className="grid grid-cols-1 md:grid-cols-2 gap-2 justify-start"
+                  >
                     {SKILLSET_OPTIONS.map((skill) => (
-                      <div key={skill} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={skill}
-                          checked={formData.skillset.includes(skill)}
-                          onCheckedChange={() => handleSkillToggle(skill)}
-                        />
-                        <Label htmlFor={skill} className="font-normal cursor-pointer">
-                          {skill}
-                        </Label>
-                      </div>
+                      <ToggleGroupItem 
+                        key={skill} 
+                        value={skill}
+                        className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground justify-start"
+                      >
+                        {skill}
+                      </ToggleGroupItem>
                     ))}
-                  </div>
+                  </ToggleGroup>
                 </div>
               </div>
 

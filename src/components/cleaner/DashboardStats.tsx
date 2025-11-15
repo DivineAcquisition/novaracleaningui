@@ -53,27 +53,27 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 mb-4">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <Card key={card.title} className="p-6">
+          <Card key={card.title} className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-xs font-medium text-muted-foreground">
                   {card.title}
                 </p>
-                <div className="flex items-baseline gap-2 mt-2">
-                  <h3 className="text-2xl font-bold">{card.value}</h3>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <h3 className="text-xl font-bold">{card.value}</h3>
                   {card.subtitle && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {card.subtitle}
                     </span>
                   )}
                 </div>
               </div>
-              <div className={`p-3 rounded-full ${card.bgColor}`}>
-                <Icon className={`w-5 h-5 ${card.color}`} />
+              <div className={`p-2 rounded-full ${card.bgColor}`}>
+                <Icon className={`w-4 h-4 ${card.color}`} />
               </div>
             </div>
           </Card>
