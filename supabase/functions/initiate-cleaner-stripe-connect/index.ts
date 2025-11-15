@@ -81,8 +81,8 @@ serve(async (req) => {
     // Create account link for onboarding
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${req.headers.get("origin")}/cleaner/dashboard?stripe=refresh`,
-      return_url: `${req.headers.get("origin")}/cleaner/dashboard?stripe=complete`,
+      refresh_url: `https://book.novaracleaning.com/cleaner/dashboard?stripe=refresh`,
+      return_url: `https://book.novaracleaning.com/cleaner/dashboard?stripe=complete`,
       type: "account_onboarding",
     });
 
