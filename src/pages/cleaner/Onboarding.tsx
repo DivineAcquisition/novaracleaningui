@@ -60,6 +60,22 @@ export default function CleanerOnboarding() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // Try to restore draft if exists
+        const savedDraft = localStorage.getItem('cleanerOnboardingDraft');
+        if (savedDraft) {
+          try {
+            const draft = JSON.parse(savedDraft);
+            setFormData(prev => ({ ...prev, ...draft, avatarFile: null })); // Don't restore file
+            localStorage.removeItem('cleanerOnboardingDraft'); // Clear after loading
+            toast({
+              title: "Draft restored",
+              description: "Your previous form data has been restored.",
+            });
+          } catch (e) {
+            console.error("Failed to parse draft:", e);
+          }
+        }
+
         // Check if user came from PIN landing page
         const pinValidated = location.state?.pinValidated;
         
@@ -238,45 +254,84 @@ export default function CleanerOnboarding() {
 
           console.log("Session established for user:", session.user.id);
         } else {
-          throw new Error("No session returned from signup");
+          // No session returned - try password sign-in as fallback
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: formData.email,
+            password: formData.password
+          });
+
+          if (signInError || !signInData.session) {
+            // Email confirmation likely required - save form and prompt user
+            localStorage.setItem('cleanerOnboardingDraft', JSON.stringify(formData));
+            toast({
+              title: "Confirm your email",
+              description: "We sent you a confirmation link. Please verify your email, then return to complete onboarding.",
+            });
+            setIsLoading(false);
+            return;
+          }
         }
       }
     
-      // Upload avatar if provided
+      // Upload avatar if provided (non-blocking)
       let avatarUrl = null;
       if (formData.avatarFile) {
-        const fileExt = formData.avatarFile.name.split('.').pop();
-        const baseName = `${crypto.randomUUID()}.${fileExt}`;
-        const storagePath = `${finalUserId}/${Date.now()}-${baseName}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('cleaner-avatars')
-          .upload(storagePath, formData.avatarFile, {
-            contentType: formData.avatarFile.type,
-            upsert: false
+        try {
+          const fileExt = formData.avatarFile.name.split('.').pop();
+          const baseName = `${crypto.randomUUID()}.${fileExt}`;
+          const storagePath = `${finalUserId}/${Date.now()}-${baseName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('cleaner-avatars')
+            .upload(storagePath, formData.avatarFile, {
+              contentType: formData.avatarFile.type,
+              upsert: false
+            });
+
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('cleaner-avatars')
+              .getPublicUrl(storagePath);
+            
+            avatarUrl = publicUrl;
+          } else {
+            console.warn("Avatar upload failed:", uploadError);
+            toast({ 
+              title: "Could not upload photo", 
+              description: "You can add your photo later in Profile.",
+            });
+          }
+        } catch (e) {
+          console.warn("Avatar upload exception:", e);
+          toast({ 
+            title: "Could not upload photo", 
+            description: "You can add your photo later in Profile.",
           });
-
-        if (uploadError) {
-          toast({ title: "Error", description: "Failed to upload profile photo", variant: "destructive" });
-          throw uploadError;
         }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('cleaner-avatars')
-          .getPublicUrl(storagePath);
-        
-        avatarUrl = publicUrl;
       }
 
-      // Geocode home address
-      const { data: geoData, error: geoError } = await supabase.functions.invoke("geocode-address", {
-        body: {
-          zip: formData.homeZip,
-          state: formData.state
+      // Geocode home address (non-blocking)
+      let geoLat: number | null = null;
+      let geoLng: number | null = null;
+      try {
+        const { data: geoData, error: geoError } = await supabase.functions.invoke("geocode-address", {
+          body: {
+            zip: formData.homeZip,
+            state: formData.state
+          }
+        });
+        
+        if (!geoError && geoData) {
+          geoLat = geoData.lat ?? null;
+          geoLng = geoData.lng ?? null;
         }
-      });
-
-      if (geoError) throw geoError;
+      } catch {
+        console.warn("Geocoding failed - continuing without location");
+        toast({ 
+          title: "Location lookup skipped", 
+          description: "We couldn't verify your ZIP now. You can update location later.",
+        });
+      }
 
       // Insert cleaner record with user_id
       const { data: cleanerData, error: insertError } = await supabase
@@ -289,8 +344,8 @@ export default function CleanerOnboarding() {
           email: formData.email,
           state: formData.state,
           home_zip: formData.homeZip,
-          home_lat: geoData.lat,
-          home_lng: geoData.lng,
+          home_lat: geoLat,
+          home_lng: geoLng,
           max_travel_miles: formData.maxTravelMiles,
           preferred_work_days: formData.preferredWorkDays,
           avatar_url: avatarUrl,
