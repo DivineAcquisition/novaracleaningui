@@ -222,6 +222,24 @@ export default function CleanerOnboarding() {
         }
 
         finalUserId = signUpData.user.id;
+
+        // Ensure session is fully established before proceeding
+        if (signUpData.session) {
+          await supabase.auth.setSession({
+            access_token: signUpData.session.access_token,
+            refresh_token: signUpData.session.refresh_token
+          });
+
+          // Verify session is active
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          if (!session || sessionError) {
+            throw new Error("Failed to establish authentication session");
+          }
+
+          console.log("Session established for user:", session.user.id);
+        } else {
+          throw new Error("No session returned from signup");
+        }
       }
     
       // Upload avatar if provided
