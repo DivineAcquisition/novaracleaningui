@@ -20,9 +20,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  let lastRequest: SMSRequest | null = null;
+  let logEntryId: string | null = null;
 
   try {
     const { toPhone, message, type, jobAssignmentId }: SMSRequest = await req.json();
+    lastRequest = { toPhone, message, type, jobAssignmentId };
 
     console.log(`[SMS] Sending ${type} to ${toPhone}`);
 
@@ -44,6 +47,9 @@ serve(async (req) => {
       .select()
       .single();
 
+    if (logEntry?.id) {
+      logEntryId = logEntry.id;
+    }
     if (logError) {
       console.error("Failed to create SMS log:", logError);
     }
