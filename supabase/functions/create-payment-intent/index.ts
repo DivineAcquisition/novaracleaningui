@@ -10,6 +10,7 @@ import {
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const logStep = (step: string, details?: any) => {
@@ -45,7 +46,7 @@ const HOME_SIZE_PRICING: Record<string, number> = {
 };
 
 const DEPOSIT_AMOUNT = 3900; // $39
-const NEW_CUSTOMER_DISCOUNT = 6000; // $60
+const NEW_CUSTOMER_DISCOUNT = 3000; // $30
 
 // Membership discount on extras only
 const MEMBERSHIP_DISCOUNTS: Record<string, number> = {

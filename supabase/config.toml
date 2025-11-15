@@ -16,7 +16,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.create-payment-intent]
-verify_jwt = true
+verify_jwt = false
 
 [functions.get-stripe-publishable-key]
 verify_jwt = false
