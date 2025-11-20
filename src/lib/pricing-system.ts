@@ -204,19 +204,14 @@ export function calculateFullPaymentWithDiscount(
   isNewCustomer: boolean = false,
   promoDiscount: number = 0
 ): FullPaymentCalculation {
-  // Get base pricing WITH new customer discount already applied
-  const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer);
+  // Get base pricing WITH new customer discount AND promo discount already applied
+  const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer, promoDiscount);
   
-  // pricing.total already has membership discount and new customer discount applied
-  // So we need to add back the new customer discount to get the true pre-full-payment-discount total
-  const totalBeforeFullPaymentDiscount = pricing.total + pricing.newCustomerDiscount;
+  // Calculate 10% full payment discount on the total AFTER all other discounts
+  const fullPaymentDiscount = Math.round(pricing.total * 0.10 * 100) / 100;
   
-  // Calculate 10% full payment discount on the amount AFTER new customer discount
-  const fullPaymentDiscount = Math.round(totalBeforeFullPaymentDiscount * 0.10 * 100) / 100;
-  
-  // Apply promo discount (already calculated and validated)
-  const finalBeforePromo = totalBeforeFullPaymentDiscount - fullPaymentDiscount;
-  const finalAmount = finalBeforePromo - promoDiscount;
+  // Final amount after all discounts including full payment discount
+  const finalAmount = pricing.total - fullPaymentDiscount;
   
   // originalTotal should be the subtotal (before any discounts) for display purposes
   const originalTotal = pricing.subtotal;
