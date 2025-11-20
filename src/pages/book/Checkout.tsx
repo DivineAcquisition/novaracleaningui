@@ -648,7 +648,7 @@ export default function BookingCheckout() {
               </div>
 
               {/* Savings Visualizer */}
-              <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={isNewCustomer ? 60 : 0} membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0} fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0} promoDiscount={promoDiscount} finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount} />
+              <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0} membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0} fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0} promoDiscount={promoDiscount} finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount} />
 
               {/* Membership Subscription Card - NEW MEMBER SIGNUP */}
               {isNewMembershipSignup && (
