@@ -8,7 +8,7 @@ import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -66,49 +66,39 @@ export default function BookingHome() {
           </CardHeader>
           
           <CardContent className="space-y-4 md:space-y-6 px-3 md:px-6">
-            <div className="space-y-4">
-              <Select value={bookingData.homeSizeId} onValueChange={handleSelect}>
-                <SelectTrigger className="w-full h-12 text-base">
-                  <SelectValue placeholder="Select your home size" />
-                </SelectTrigger>
-                <SelectContent>
-                  {HOME_SIZE_RANGES.map((size) => (
-                    <SelectItem key={size.id} value={size.id} className="text-sm">
-                      {size.label} ({size.bedroomRange}) - ~{getEstimatedHours(size.id)} hrs
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {bookingData.homeSizeId && (() => {
-                const selectedSize = HOME_SIZE_RANGES.find(s => s.id === bookingData.homeSizeId);
-                if (!selectedSize) return null;
-                
+            <div className="grid grid-cols-1 gap-3 md:gap-4">
+              {HOME_SIZE_RANGES.map((size) => {
+                const isSelected = bookingData.homeSizeId === size.id;
                 return (
-                  <Card className="border-primary/60 shadow-lavender animate-fade-in">
+                  <Card
+                    key={size.id}
+                    className={cn(
+                      "cursor-pointer transition-all duration-200 hover:border-primary/60",
+                      isSelected && "border-primary shadow-lavender"
+                    )}
+                    onClick={() => handleSelect(size.id)}
+                  >
                     <CardContent className="p-4 md:p-6">
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="text-base md:text-lg font-semibold text-foreground mb-1">
-                              {selectedSize.label}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedSize.bedroomRange}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-                            <Clock className="w-4 h-4" />
-                            <span className="text-sm font-medium">
-                              ~{getEstimatedHours(selectedSize.id)} hrs
-                            </span>
-                          </div>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-base md:text-lg font-semibold text-foreground mb-1">
+                            {size.label}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {size.bedroomRange}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 text-primary bg-primary/10 px-3 py-1.5 rounded-full">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-sm font-medium">
+                            ~{getEstimatedHours(size.id)} hrs
+                          </span>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 );
-              })()}
+              })}
             </div>
 
             {/* Desktop Navigation - Hidden on Mobile */}
