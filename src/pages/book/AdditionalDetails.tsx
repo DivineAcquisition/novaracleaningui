@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, ArrowRight } from "lucide-react";
+import { CheckCircle2, ArrowRight, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useBooking } from "@/contexts/BookingContext";
+import { US_STATES } from "@/lib/us-states";
 
 const DWELLING_TYPES = [
   { value: 'single_family', label: 'Single Family Home' },
@@ -18,14 +21,27 @@ const DWELLING_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+const PETS_OPTIONS = [
+  { value: 'none', label: 'No Pets' },
+  { value: 'dog', label: 'Dog(s)' },
+  { value: 'cat', label: 'Cat(s)' },
+  { value: 'multiple', label: 'Multiple Pets' },
+  { value: 'other', label: 'Other Pets' },
+];
+
 export default function AdditionalDetails() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const bookingId = searchParams.get("booking_id");
+  const { bookingData } = useBooking();
   
+  const [address, setAddress] = useState<string>("");
+  const [city, setCity] = useState<string>("");
+  const [state, setState] = useState<string>("");
   const [bedrooms, setBedrooms] = useState<string>("");
   const [bathrooms, setBathrooms] = useState<string>("");
   const [dwellingType, setDwellingType] = useState<string>("");
+  const [pets, setPets] = useState<string>("none");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -38,8 +54,8 @@ export default function AdditionalDetails() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!bedrooms || !bathrooms || !dwellingType) {
-      toast.error("Please fill in all property details");
+    if (!address || !city || !state || !bedrooms || !bathrooms || !dwellingType) {
+      toast.error("Please fill in all required fields");
       return;
     }
 
@@ -54,9 +70,13 @@ export default function AdditionalDetails() {
       const { error } = await supabase
         .from("bookings")
         .update({
+          address,
+          city,
+          state,
           bedrooms: parseInt(bedrooms),
           bathrooms: parseFloat(bathrooms),
           dwelling_type: dwellingType,
+          pets,
         })
         .eq("id", bookingId);
 
@@ -79,14 +99,84 @@ export default function AdditionalDetails() {
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10 text-primary" />
           </div>
-          <CardTitle className="text-lg md:text-xl font-semibold">Property Details</CardTitle>
+          <CardTitle className="text-lg md:text-xl font-semibold">Property & Address Details</CardTitle>
           <CardDescription className="text-sm">
-            Help us prepare for your service
+            Complete your booking with property and address information
           </CardDescription>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Service Address */}
+            <div className="space-y-4">
+              <h3 className="text-base md:text-lg font-semibold">Service Address</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="address">
+                  Street Address <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="pl-10 h-12"
+                    placeholder="123 Main St"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city">
+                    City <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="h-12"
+                    placeholder="City"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="state">
+                    State <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={state} onValueChange={setState}>
+                    <SelectTrigger id="state" className="h-12">
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {US_STATES.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="zip">ZIP Code</Label>
+                  <Input
+                    id="zip"
+                    value={bookingData.zipCode}
+                    className="h-12 bg-muted"
+                    disabled
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Property Details */}
+            <div className="space-y-4 border-t pt-6">
+              <h3 className="text-base md:text-lg font-semibold">Property Information</h3>
+            
             <div className="space-y-2">
               <Label htmlFor="bedrooms">
                 Number of Bedrooms <span className="text-destructive">*</span>
@@ -143,10 +233,29 @@ export default function AdditionalDetails() {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="pets">
+                Pets at Property <span className="text-destructive">*</span>
+              </Label>
+              <Select value={pets} onValueChange={setPets}>
+                <SelectTrigger id="pets" className="h-12">
+                  <SelectValue placeholder="Select pets" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PETS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            </div>
+
             <Button
               type="submit"
               size="lg"
-              disabled={isSubmitting || !bedrooms || !bathrooms || !dwellingType}
+              disabled={isSubmitting || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType}
               className="w-full h-12 md:h-14 text-base font-semibold"
             >
               {isSubmitting ? "Saving..." : "Complete Booking"}
