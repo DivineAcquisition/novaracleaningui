@@ -728,109 +728,6 @@ export default function BookingCheckout() {
                     <PaymentComparison depositPricing={depositPricing} fullPaymentPricing={fullPaymentPricing} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
                   </div>
 
-                  {/* Payment Option Selection */}
-                  {!bookingData.useCredit && <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
-                      <CardContent className="p-4 md:p-6">
-                    <div className="flex items-center justify-between mb-3 md:mb-4">
-                      <h4 className="font-semibold text-sm md:text-base flex items-center gap-2">
-                        <Zap className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-                        Choose Your Payment Option
-                      </h4>
-                      <div className="md:hidden flex items-center gap-1 text-xs text-muted-foreground">
-                        <ChevronLeft className="w-3 h-3" />
-                        <span>Swipe</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </div>
-                    </div>
-                    <div {...paymentSwipeHandlers} className={cn("transition-transform duration-150", swipeDirection === 'left' && "md:transform-none -translate-x-2", swipeDirection === 'right' && "md:transform-none translate-x-2")}>
-                      <RadioGroup value={effectivePaymentOption} onValueChange={handlePaymentOptionChange} className="space-y-3 md:space-y-4">
-                        {/* Deposit Option */}
-                        <div className={cn("relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50", bookingData.paymentOption === 'deposit' ? "border-primary bg-primary/5 shadow-md" : "border-border")}>
-                          <RadioGroupItem value="deposit" id="deposit" className="mt-1" />
-                          <Label htmlFor="deposit" className="flex-1 cursor-pointer">
-                            <div className="space-y-1.5 md:space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-semibold text-sm md:text-base">Pay Deposit Now</span>
-                                <span className="text-base md:text-lg font-bold text-primary">
-                                  ${depositPricing.deposit.toFixed(2)}
-                                </span>
-                              </div>
-                              <p className="text-xs md:text-sm text-muted-foreground">
-                                Balance after: ${depositPricing.balanceDue.toFixed(2)}
-                              </p>
-                              {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0 || promoDiscount > 0) && <div className="text-[10px] md:text-xs space-y-0.5 pt-1.5 border-t border-border/50 mt-2">
-                                  {depositPricing.newCustomerDiscount > 0 && <div className="flex items-center justify-between text-green-600 font-semibold">
-                                      <span className="flex items-center gap-1">
-                                        <Gift className="w-3 h-3" />
-                                        New Customer ${NEW_CUSTOMER_DISCOUNT} Off:
-                                      </span>
-                                      <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
-                                    </div>}
-                                  {depositPricing.membershipDiscount > 0 && <div className="flex justify-between text-success">
-                                      <span>Membership discount:</span>
-                                      <span className="font-medium">-${depositPricing.membershipDiscount.toFixed(2)}</span>
-                                    </div>}
-                                  {promoDiscount > 0 && <div className="flex items-center justify-between text-green-600 font-semibold">
-                                      <span className="flex items-center gap-1">
-                                        <Gift className="w-3 h-3" />
-                                        Promo Code:
-                                      </span>
-                                      <span>-${promoDiscount.toFixed(2)}</span>
-                                    </div>}
-                                </div>}
-                            </div>
-                          </Label>
-                        </div>
-
-                        {/* Full Payment Option */}
-                        <div className={cn("relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50", bookingData.paymentOption === 'full' ? "border-primary bg-primary/5 shadow-md" : "border-border")}>
-                          <RadioGroupItem value="full" id="full" className="mt-1" />
-                          <Label htmlFor="full" className="flex-1 cursor-pointer">
-                            <div className="space-y-1.5 md:space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5 md:gap-2">
-                                  <span className="font-semibold text-sm md:text-base">Pay in Full</span>
-                                  <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-1 bg-success/20 text-success rounded-full">
-                                    Save 10%
-                                  </span>
-                                </div>
-                                <span className="text-base md:text-lg font-bold text-primary">
-                                  ${fullPaymentPricing.finalAmount.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="space-y-0.5 md:space-y-1 text-[10px] md:text-xs">
-                                <div className="flex justify-between text-muted-foreground">
-                                  <span>Original Total:</span>
-                                  <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
-                                </div>
-                                {fullPaymentPricing.newCustomerDiscount > 0 && <div className="flex items-center justify-between text-green-600 font-semibold">
-                                    <span className="flex items-center gap-1">
-                                      <Gift className="w-3 h-3" />
-                                      New Customer ${NEW_CUSTOMER_DISCOUNT} Off:
-                                    </span>
-                                    <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
-                                  </div>}
-                                <div className="flex justify-between text-success font-medium">
-                                  <span>10% Full Payment Discount:</span>
-                                  <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
-                                </div>
-                                <Separator className="my-1 md:my-1.5" />
-                                <div className="flex items-center justify-between gap-1 text-success font-bold pt-0.5 md:pt-1">
-                                  <span className="flex items-center gap-1">
-                                    <Zap className="w-3 h-3 md:w-4 md:h-4" />
-                                    Total You Save:
-                                  </span>
-                                  <span className="text-sm md:text-base">${fullPaymentPricing.savings.toFixed(2)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                  </CardContent>
-                </Card>}
-
               {/* Member Credit Info */}
               {bookingData.useCredit && !isNewMembershipSignup && <Card className="border-success/30 bg-success/5">
                   <CardContent className="p-6">
@@ -839,7 +736,7 @@ export default function BookingCheckout() {
                       <h4 className="font-semibold">Using Membership Credit</h4>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Your membership credit covers the base service. No deposit required!
+                      Your membership credit covers the standard cleaning service. No deposit required!
                     </p>
                   </CardContent>
                 </Card>}
