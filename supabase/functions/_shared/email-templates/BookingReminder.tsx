@@ -16,7 +16,7 @@ interface BookingReminderProps {
   depositAmount?: number;
   paymentOption?: string;
   checkoutUrl?: string;
-  reminderType?: '1_hour' | '24_hour';
+  reminderType?: '10_minute' | '24_hour';
 }
 
 const formatTimeSlot = (slot: string) => {
@@ -54,8 +54,9 @@ export const BookingReminder = (props: BookingReminderProps) => {
     : '';
 
   const is24Hour = props.reminderType === '24_hour';
-  const title = is24Hour ? '⏰ Your Booking is Waiting!' : '🧹 Complete Your Booking';
-  const subtitle = "Don't miss out on your cleaning service!";
+  const is10Minute = props.reminderType === '10_minute';
+  const title = is24Hour ? '⏰ Your Booking is Waiting!' : '🧹 Complete Your Booking & Save $30';
+  const subtitle = is10Minute ? "You're almost done - finish your booking now!" : "Don't miss out on your cleaning service!";
 
   return (
     <EmailLayout
@@ -71,6 +72,13 @@ export const BookingReminder = (props: BookingReminderProps) => {
           <Text style={urgentTitle}>⚠️ Your booking will expire soon!</Text>
           <Text style={highlightText}>
             Complete your payment in the next few hours to secure your cleaning appointment.
+          </Text>
+        </Highlight>
+      ) : is10Minute ? (
+        <Highlight variant="info">
+          <Text style={highlightTitle}>✨ Save $30 as a New Customer!</Text>
+          <Text style={highlightText}>
+            You're just one step away from securing your cleaning service. Complete your booking now to take advantage of our new customer discount!
           </Text>
         </Highlight>
       ) : (
@@ -99,7 +107,7 @@ export const BookingReminder = (props: BookingReminderProps) => {
         />
       </Section>
 
-      {!is24Hour && (
+      {is10Minute && (
         <Highlight variant="info">
           <Text style={highlightTitle}>💡 Why Choose Novara?</Text>
           <ul style={listStyle}>
