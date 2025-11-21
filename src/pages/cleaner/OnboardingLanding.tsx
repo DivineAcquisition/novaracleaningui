@@ -58,24 +58,35 @@ export default function OnboardingLanding() {
     setVerifying(true);
 
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
       const { data, error } = await supabase.functions.invoke('verify-cleaner-code', {
-        body: { email, code, redirectTo }
+        body: { email, code }
       });
 
-      if (error) {
-        toast.error(error.message || "Invalid or expired code");
+      if (error || !data?.hashed_token) {
+        toast.error(error?.message || "Invalid or expired code");
         return;
       }
 
-      const actionLink = data?.session?.properties?.action_link;
-      if (!actionLink) {
-        toast.error("Could not complete sign in. Please try again.");
+      // Exchange hashed token for session using verifyOtp
+      const { data: sessionData, error: sessionError } = await supabase.auth.verifyOtp({
+        email: data.email,
+        token: data.hashed_token,
+        type: 'magiclink'
+      });
+
+      if (sessionError || !sessionData.session) {
+        toast.error("Failed to establish session. Please try again.");
+        console.error("Session error:", sessionError);
         return;
       }
 
       toast.success("Email verified! Redirecting to onboarding...");
-      window.location.href = actionLink;
+      
+      // Small delay to ensure session is fully established
+      setTimeout(() => {
+        navigate("/cleaner/onboarding");
+      }, 500);
+      
     } catch (error) {
       console.error("Code verification error:", error);
       toast.error("Something went wrong. Please try again.");

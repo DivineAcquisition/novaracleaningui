@@ -79,30 +79,63 @@ serve(async (req) => {
       throw new Error(`Failed to mark code as used: ${updateError.message}`);
     }
 
-    // Create auth user with a magic link (they won't need to click it)
-    const { data: authData, error: authError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: email,
-      options: {
-        redirectTo: redirectTo || `${Deno.env.get("SUPABASE_URL")}`,
-        data: {
+    // Check if user already exists
+    const { data: existingUser } = await supabase.auth.admin.listUsers();
+    const user = existingUser?.users.find(u => u.email === email);
+
+    let userId: string;
+    
+    if (!user) {
+      // Create new user with auto-generated password
+      const tempPassword = `${Math.random().toString(36).slice(-8)}${Date.now()}`;
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+        email: email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
           onboarding: true,
           is_cleaner: true,
         }
-      }
-    });
+      });
 
-    if (authError || !authData) {
-      throw new Error(`Failed to create auth session: ${authError?.message}`);
+      if (createError || !newUser.user) {
+        throw new Error(`Failed to create user: ${createError?.message}`);
+      }
+      
+      userId = newUser.user.id;
+      logStep("New user created", { email, userId });
+    } else {
+      userId = user.id;
+      
+      // Update metadata for existing user
+      await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          onboarding: true,
+          is_cleaner: true,
+        }
+      });
+      
+      logStep("Existing user found", { email, userId });
     }
 
-    logStep("Auth session created", { email });
+    // Generate session tokens for the user
+    const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: email,
+    });
+
+    if (sessionError || !sessionData) {
+      throw new Error(`Failed to generate session: ${sessionError?.message}`);
+    }
+
+    logStep("Session generated", { email });
 
     return new Response(
       JSON.stringify({ 
         success: true,
         message: "Code verified successfully",
-        session: authData,
+        hashed_token: sessionData.properties.hashed_token,
+        email: email,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
