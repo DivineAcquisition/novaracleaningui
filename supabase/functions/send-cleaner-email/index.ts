@@ -6,6 +6,7 @@ import { CleanerInvitation } from "../_shared/email-templates/CleanerInvitation.
 import { CleanerAssignment } from "../_shared/email-templates/CleanerAssignment.tsx";
 import { BookingCompletion } from "../_shared/email-templates/BookingCompletion.tsx";
 import { PayoutConfirmation } from "../_shared/email-templates/PayoutConfirmation.tsx";
+import { CleanerCredentials } from "../_shared/email-templates/CleanerCredentials.tsx";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,19 @@ serve(async (req) => {
             amount: data.amount,
             transferId: data.transferId,
             transferDate: data.transferDate,
+          })
+        );
+        break;
+
+      case "credentials":
+        subject = "Your Novara Cleaning Account - Login Credentials";
+        html = await renderAsync(
+          React.createElement(CleanerCredentials, {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            email: data.email,
+            password: data.password,
+            loginUrl: data.loginUrl,
           })
         );
         break;
