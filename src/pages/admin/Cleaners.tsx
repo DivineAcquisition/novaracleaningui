@@ -69,38 +69,44 @@ export default function AdminCleaners() {
 
   const handleAddCleaner = async () => {
     try {
-      const { data, error } = await supabase
-        .from("cleaners")
-        .insert({
-          email: newCleaner.email,
-          first_name: newCleaner.firstName,
-          last_name: newCleaner.lastName,
-          phone: newCleaner.phone,
-          status: "pending",
-          invited_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      // Create cleaner account with auto-generated password
+      const { data: createData, error: createError } = await supabase.functions.invoke(
+        "create-cleaner-account",
+        {
+          body: {
+            email: newCleaner.email,
+            firstName: newCleaner.firstName,
+            lastName: newCleaner.lastName,
+            phone: newCleaner.phone,
+          },
+        }
+      );
 
-      if (error) throw error;
+      if (createError) throw createError;
+      if (!createData?.success) throw new Error("Failed to create cleaner account");
 
-      toast({
-        title: "Cleaner added",
-        description: `${newCleaner.firstName} ${newCleaner.lastName} has been invited.`,
-      });
-
-      // Send invitation email
-      await supabase.functions.invoke("send-cleaner-email", {
+      // Send credentials email with auto-generated password
+      const { error: emailError } = await supabase.functions.invoke("send-cleaner-email", {
         body: {
-          type: "invitation",
+          type: "credentials",
           email: newCleaner.email,
           data: {
             firstName: newCleaner.firstName,
             lastName: newCleaner.lastName,
             email: newCleaner.email,
-            onboardingUrl: `${window.location.origin}/cleaner/auth`,
+            password: createData.password,
+            loginUrl: "https://contractor.novaracleaning.com/cleaner/auth",
           },
         },
+      });
+
+      if (emailError) {
+        console.error("Failed to send credentials email:", emailError);
+      }
+
+      toast({
+        title: "Cleaner account created",
+        description: `${newCleaner.firstName} ${newCleaner.lastName}'s credentials have been emailed.`,
       });
 
       setIsAddDialogOpen(false);

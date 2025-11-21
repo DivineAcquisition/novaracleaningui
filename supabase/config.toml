@@ -3,6 +3,9 @@ project_id = "sxdraeptzuamsgjcvfeg"
 [functions.create-checkout]
 verify_jwt = false
 
+[functions.create-cleaner-account]
+verify_jwt = true
+
 [functions.customer-portal]
 verify_jwt = true
 
