@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { User, Settings, Calendar } from "lucide-react";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
+import { ProfileCompletionWizard } from "@/components/cleaner/ProfileCompletionWizard";
 import JobOffers from "./JobOffers";
 import { UpcomingJobs } from "@/components/cleaner/UpcomingJobs";
 import { CompletedJobs } from "@/components/cleaner/CompletedJobs";
@@ -180,8 +181,19 @@ export default function CleanerDashboard() {
     );
   }
 
+  const showWizard = cleaner && !cleaner.onboarding_complete;
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Profile Completion Wizard */}
+      {showWizard && (
+        <ProfileCompletionWizard
+          open={showWizard}
+          cleaner={cleaner}
+          onComplete={fetchCleanerData}
+        />
+      )}
+
       {/* Header */}
       <div className="border-b">
         <div className="container mx-auto px-4 py-3">
