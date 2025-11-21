@@ -17,8 +17,8 @@ serve(async (req) => {
   }
 
   try {
-    const { email, firstName, lastName, phone } = await req.json();
-    logStep("Creating cleaner account", { email, firstName, lastName });
+    const { email, firstName, lastName, phone, state, homeZip, serviceZipCodes, payRateHr } = await req.json();
+    logStep("Creating cleaner account", { email, firstName, lastName, state, homeZip });
 
     // Generate password: firstInitial + fullLastName + nv2025!
     const password = `${firstName[0].toLowerCase()}${lastName}nv2025!`;
@@ -54,7 +54,7 @@ serve(async (req) => {
 
     logStep("Auth user created", { userId: authData.user.id });
 
-    // Create cleaner record with user_id and approved=true
+    // Create cleaner record with user_id, approved=true, and operational fields
     const { data: cleanerData, error: cleanerError } = await supabaseAdmin
       .from("cleaners")
       .insert({
@@ -62,6 +62,10 @@ serve(async (req) => {
         first_name: firstName,
         last_name: lastName,
         phone,
+        state: state || null,
+        home_zip: homeZip || null,
+        service_zip_codes: serviceZipCodes || [],
+        pay_rate_hr: payRateHr || 18,
         user_id: authData.user.id,
         status: "active",
         approved: true,

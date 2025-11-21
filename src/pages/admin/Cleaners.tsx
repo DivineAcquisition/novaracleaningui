@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { Plus, UserCheck, UserX, DollarSign, MapPin, Mail, Phone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { US_STATES } from "@/lib/us-states";
 
 interface Cleaner {
   id: string;
@@ -41,6 +43,10 @@ export default function AdminCleaners() {
     firstName: "",
     lastName: "",
     phone: "",
+    state: "",
+    homeZip: "",
+    serviceZipCodes: "",
+    payRateHr: "18",
   });
 
   useEffect(() => {
@@ -68,6 +74,39 @@ export default function AdminCleaners() {
   };
 
   const handleAddCleaner = async () => {
+    if (!newCleaner.email || !newCleaner.firstName || !newCleaner.lastName || 
+        !newCleaner.phone || !newCleaner.state || !newCleaner.homeZip || 
+        !newCleaner.serviceZipCodes) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate ZIP codes
+    const zipCodes = newCleaner.serviceZipCodes.split(',').map(z => z.trim()).filter(Boolean);
+    if (zipCodes.length === 0) {
+      toast({
+        title: "Invalid ZIP codes",
+        description: "Please enter at least one service ZIP code",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate pay rate
+    const payRate = parseFloat(newCleaner.payRateHr);
+    if (isNaN(payRate) || payRate < 15 || payRate > 50) {
+      toast({
+        title: "Invalid pay rate",
+        description: "Pay rate must be between $15 and $50 per hour",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       // Create cleaner account with auto-generated password
       const { data: createData, error: createError } = await supabase.functions.invoke(
@@ -78,6 +117,10 @@ export default function AdminCleaners() {
             firstName: newCleaner.firstName,
             lastName: newCleaner.lastName,
             phone: newCleaner.phone,
+            state: newCleaner.state,
+            homeZip: newCleaner.homeZip,
+            serviceZipCodes: zipCodes,
+            payRateHr: payRate,
           },
         }
       );
@@ -110,7 +153,16 @@ export default function AdminCleaners() {
       });
 
       setIsAddDialogOpen(false);
-      setNewCleaner({ email: "", firstName: "", lastName: "", phone: "" });
+      setNewCleaner({
+        email: "",
+        firstName: "",
+        lastName: "",
+        phone: "",
+        state: "",
+        homeZip: "",
+        serviceZipCodes: "",
+        payRateHr: "18",
+      });
       fetchCleaners();
     } catch (error: any) {
       toast({
@@ -240,55 +292,138 @@ export default function AdminCleaners() {
               Add Cleaner
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Cleaner</DialogTitle>
+              <DialogDescription>
+                Enter cleaner details. A login account will be created automatically.
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div>
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  value={newCleaner.firstName}
-                  onChange={(e) =>
-                    setNewCleaner({ ...newCleaner, firstName: e.target.value })
-                  }
-                />
+            <div className="grid gap-6 py-4">
+              {/* Personal Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium">Personal Information</h3>
+                <div className="grid gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="cleaner@example.com"
+                      value={newCleaner.email}
+                      onChange={(e) => setNewCleaner({ ...newCleaner, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="firstName">First Name *</Label>
+                      <Input
+                        id="firstName"
+                        placeholder="John"
+                        value={newCleaner.firstName}
+                        onChange={(e) => setNewCleaner({ ...newCleaner, firstName: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="lastName">Last Name *</Label>
+                      <Input
+                        id="lastName"
+                        placeholder="Doe"
+                        value={newCleaner.lastName}
+                        onChange={(e) => setNewCleaner({ ...newCleaner, lastName: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="phone">Phone *</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="(555) 555-5555"
+                      value={newCleaner.phone}
+                      onChange={(e) => setNewCleaner({ ...newCleaner, phone: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  value={newCleaner.lastName}
-                  onChange={(e) =>
-                    setNewCleaner({ ...newCleaner, lastName: e.target.value })
-                  }
-                />
+
+              {/* Location & Service Areas */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium">Location & Service Areas</h3>
+                <div className="grid gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="state">State *</Label>
+                      <Select
+                        value={newCleaner.state}
+                        onValueChange={(value) => setNewCleaner({ ...newCleaner, state: value })}
+                      >
+                        <SelectTrigger id="state">
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {US_STATES.map((state) => (
+                            <SelectItem key={state.value} value={state.value}>
+                              {state.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="homeZip">Home ZIP Code *</Label>
+                      <Input
+                        id="homeZip"
+                        placeholder="12345"
+                        maxLength={5}
+                        value={newCleaner.homeZip}
+                        onChange={(e) => setNewCleaner({ ...newCleaner, homeZip: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="serviceZipCodes">Service ZIP Codes *</Label>
+                    <Input
+                      id="serviceZipCodes"
+                      placeholder="12345, 12346, 12347"
+                      value={newCleaner.serviceZipCodes}
+                      onChange={(e) => setNewCleaner({ ...newCleaner, serviceZipCodes: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter multiple ZIP codes separated by commas
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newCleaner.email}
-                  onChange={(e) =>
-                    setNewCleaner({ ...newCleaner, email: e.target.value })
-                  }
-                />
+
+              {/* Pay Configuration */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium">Pay Configuration</h3>
+                <div className="grid gap-2">
+                  <Label htmlFor="payRateHr">Hourly Pay Rate *</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">$</span>
+                    <Input
+                      id="payRateHr"
+                      type="number"
+                      min="15"
+                      max="50"
+                      step="0.50"
+                      placeholder="18.00"
+                      value={newCleaner.payRateHr}
+                      onChange={(e) => setNewCleaner({ ...newCleaner, payRateHr: e.target.value })}
+                      className="flex-1"
+                    />
+                    <span className="text-sm text-muted-foreground">/hr</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Typical range: $18-22/hour based on experience
+                  </p>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={newCleaner.phone}
-                  onChange={(e) =>
-                    setNewCleaner({ ...newCleaner, phone: e.target.value })
-                  }
-                />
-              </div>
+
               <Button onClick={handleAddCleaner} className="w-full">
-                Add Cleaner
+                Create Cleaner Account
               </Button>
             </div>
           </DialogContent>
