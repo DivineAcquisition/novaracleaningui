@@ -25,16 +25,14 @@ serve(async (req) => {
     );
 
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
     logStep("Time windows calculated", {
-      oneHourAgo: oneHourAgo.toISOString(),
-      twentyFourHoursAgo: twentyFourHoursAgo.toISOString(),
+      now: now.toISOString(),
+      fortyEightHoursAgo: fortyEightHoursAgo.toISOString(),
     });
 
-    // Find bookings that are pending payment and created 1 hour ago or 24 hours ago
+    // Find bookings that are pending payment created within last 48 hours
     const { data: pendingBookings, error: fetchError } = await supabase
       .from("bookings")
       .select("*")
@@ -63,20 +61,21 @@ serve(async (req) => {
     for (const booking of pendingBookings) {
       const createdAt = new Date(booking.created_at);
       const timeSinceCreated = now.getTime() - createdAt.getTime();
-      const hoursSinceCreated = timeSinceCreated / (1000 * 60 * 60);
+      const minutesSinceCreated = timeSinceCreated / (1000 * 60);
+      const hoursSinceCreated = minutesSinceCreated / 60;
 
       logStep("Checking booking", {
         bookingId: booking.id,
-        hoursSinceCreated: hoursSinceCreated.toFixed(2),
+        minutesSinceCreated: minutesSinceCreated.toFixed(2),
       });
 
       let shouldSendReminder = false;
       let reminderType = "";
 
-      // Check if it's been approximately 1 hour (between 55 and 65 minutes to account for cron timing)
-      if (hoursSinceCreated >= 0.92 && hoursSinceCreated <= 1.08) {
+      // Check if it's been approximately 10 minutes (between 8 and 12 minutes to account for cron timing)
+      if (minutesSinceCreated >= 8 && minutesSinceCreated <= 12) {
         shouldSendReminder = true;
-        reminderType = "1_hour";
+        reminderType = "10_minute";
       }
       // Check if it's been approximately 24 hours (between 23.5 and 24.5 hours)
       else if (hoursSinceCreated >= 23.5 && hoursSinceCreated <= 24.5) {
@@ -121,6 +120,35 @@ serve(async (req) => {
           if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Email send failed: ${errorText}`);
+          }
+
+          logStep("Email sent successfully", { bookingId: booking.id, email: booking.email });
+
+          // Send SMS reminder
+          if (booking.phone) {
+            try {
+              const checkoutUrl = `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://book.novaracleaning.com'}/book/checkout`;
+              
+              const smsMessage = reminderType === "24_hour"
+                ? `⚠️ Last chance ${booking.first_name}! Your booking expires soon. Complete now & save $30: ${checkoutUrl}`
+                : `Hi ${booking.first_name}, you're almost done! Complete your Novara cleaning booking and save $30. Finish here: ${checkoutUrl}`;
+
+              const smsResponse = await supabase.functions.invoke('send-sms-notification', {
+                body: {
+                  toPhone: booking.phone,
+                  message: smsMessage,
+                  type: 'reminder'
+                }
+              });
+
+              if (smsResponse.error) {
+                logStep("SMS send failed", { bookingId: booking.id, error: smsResponse.error });
+              } else {
+                logStep("SMS sent successfully", { bookingId: booking.id, phone: booking.phone });
+              }
+            } catch (smsError: any) {
+              logStep("Error sending SMS", { bookingId: booking.id, error: smsError.message });
+            }
           }
 
           remindersSent++;

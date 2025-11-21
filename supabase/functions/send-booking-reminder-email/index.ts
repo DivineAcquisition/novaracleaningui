@@ -34,8 +34,11 @@ Deno.serve(async (req: Request) => {
     const html = await renderAsync(React.createElement(BookingReminder, data));
     
     const is24Hour = data.reminderType === '24_hour';
+    const is10Minute = data.reminderType === '10_minute';
     const subject = is24Hour 
       ? '⚠️ Last Chance: Complete Your Novara Booking'
+      : is10Minute
+      ? '🧹 Complete Your Booking & Save $30!'
       : '🧹 Complete Your Novara Cleaning Booking';
 
     const emailResponse = await resend.emails.send({
