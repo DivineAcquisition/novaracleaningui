@@ -7,7 +7,7 @@ import { CleanerVerificationCode } from "../_shared/email-templates/CleanerVerif
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-expiry",
 };
 
 const logStep = (step: string, details?: any) => {
