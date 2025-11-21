@@ -23,8 +23,8 @@ const MEMBERSHIP_TIERS = {
     icon: Calendar,
     color: 'from-blue-500 to-cyan-500',
     features: [
-      '🎁 First cleaning included ($225 value)',
-      '1 cleaning credit per month',
+      '🎁 First standard cleaning included ($225 value)',
+      '1 standard cleaning credit per month',
       '20% off all add-ons',
       'Flexible scheduling',
       'Cancel anytime',
@@ -43,8 +43,8 @@ const MEMBERSHIP_TIERS = {
     icon: Gift,
     color: 'from-purple-500 to-pink-500',
     features: [
-      '🎁 First cleaning included ($225 value)',
-      '2 cleaning credits per month',
+      '🎁 First standard cleaning included ($225 value)',
+      '2 standard cleaning credits per month',
       '25% off all add-ons',
       'Early booking access',
       'Cancel anytime',
@@ -64,8 +64,8 @@ const MEMBERSHIP_TIERS = {
     icon: Crown,
     color: 'from-amber-500 to-orange-500',
     features: [
-      '🎁 First cleaning included ($225 value)',
-      '4 cleaning credits per month',
+      '🎁 First standard cleaning included ($225 value)',
+      '4 standard cleaning credits per month',
       '30% off all add-ons',
       'Priority scheduling',
       'Cancel anytime',
@@ -128,8 +128,11 @@ export default function Membership() {
             Choose Your Perfect Plan
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-            Subscribe today and get your first cleaning immediately with your membership credit
-            Save time and money with our flexible membership plans. Get credits every month and enjoy exclusive discounts.
+            Subscribe today and get your first standard cleaning immediately with your membership credit.
+            Save time and money with our flexible membership plans.
+          </p>
+          <p className="text-sm text-muted-foreground/80 max-w-2xl mx-auto mt-2">
+            Credits apply to standard cleanings only. Deep cleans and move-in/out cleanings available at member discount rates.
           </p>
         </div>
 
@@ -316,7 +319,7 @@ export default function Membership() {
                 </div>
                 <h3 className="font-semibold">Monthly Credits</h3>
                 <p className="text-sm text-muted-foreground">
-                  Use your credits for any cleaning service, anytime
+                  Use your credits for standard cleaning services, anytime
                 </p>
               </div>
 

@@ -259,8 +259,11 @@ export default function BookingSchedule() {
                         htmlFor="useCredit"
                         className="text-sm md:text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                       >
-                        Use membership credit for this booking
+                        Use membership credit for this standard cleaning
                       </label>
+                      <p className="text-xs text-muted-foreground">
+                        Credits cover standard cleanings only
+                      </p>
                       {useCredit && !creditAvailable && creditAvailableDate && (
                         <div className="flex items-start gap-2 text-xs md:text-sm text-amber-600 dark:text-amber-500">
                           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />

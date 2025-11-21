@@ -132,21 +132,21 @@ export const MEMBERSHIP_PLANS = {
     monthlyPrice: 189, 
     credits: 1, 
     discount: 0.20,
-    description: '1 credit/month • 20% off extras'
+    description: '1 standard cleaning credit/month • 20% off extras'
   },
   biweekly: { 
     label: 'Novara Bi-Weekly', 
     monthlyPrice: 289, 
     credits: 2, 
     discount: 0.25,
-    description: '2 credits/month • 25% off extras • early booking'
+    description: '2 standard cleaning credits/month • 25% off extras'
   },
   weekly: { 
     label: 'Novara Weekly', 
     monthlyPrice: 389, 
     credits: 4, 
     discount: 0.30,
-    description: '4 credits/month • 30% off extras • priority'
+    description: '4 standard cleaning credits/month • 30% off extras'
   },
 };
 
