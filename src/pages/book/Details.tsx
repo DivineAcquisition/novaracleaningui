@@ -35,9 +35,6 @@ export default function BookingDetails() {
     lastName: bookingData.lastName || "",
     email: bookingData.email || "",
     phone: bookingData.phone || "",
-    address: bookingData.address || "",
-    city: bookingData.city || "",
-    state: bookingData.state || "",
   });
 
   const [errors, setErrors] = useState({
@@ -45,9 +42,6 @@ export default function BookingDetails() {
     lastName: "",
     email: "",
     phone: "",
-    address: "",
-    city: "",
-    state: "",
   });
 
   const [touched, setTouched] = useState({
@@ -55,9 +49,6 @@ export default function BookingDetails() {
     lastName: false,
     email: false,
     phone: false,
-    address: false,
-    city: false,
-    state: false,
   });
 
   const validateField = (name: string, value: string) => {
@@ -69,12 +60,6 @@ export default function BookingDetails() {
         return !validateEmail(value) ? "Please enter a valid email address" : "";
       case "phone":
         return !validatePhone(value) ? "Please enter a valid phone number" : "";
-      case "address":
-        return value.trim().length === 0 ? "Street address is required" : "";
-      case "city":
-        return value.trim().length === 0 ? "City is required" : "";
-      case "state":
-        return value.trim().length === 0 ? "State is required" : "";
       default:
         return "";
     }
@@ -113,9 +98,6 @@ export default function BookingDetails() {
       lastName: true,
       email: true,
       phone: true,
-      address: true,
-      city: true,
-      state: true,
     };
     setTouched(allTouched);
 
@@ -125,9 +107,6 @@ export default function BookingDetails() {
       lastName: validateField("lastName", formData.lastName),
       email: validateField("email", formData.email),
       phone: validateField("phone", formData.phone),
-      address: validateField("address", formData.address),
-      city: validateField("city", formData.city),
-      state: validateField("state", formData.state),
     };
     setErrors(newErrors);
 
@@ -138,15 +117,12 @@ export default function BookingDetails() {
       return;
     }
 
-    // Update booking context with all form data including address
+    // Update booking context with contact info only
     updateBookingData({
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
       phone: formData.phone.replace(/\D/g, ""), // Store only digits
-      address: formData.address,
-      city: formData.city,
-      state: formData.state,
     });
 
     setCurrentStep(6);
@@ -159,9 +135,6 @@ export default function BookingDetails() {
       formData.lastName.trim() !== "" &&
       validateEmail(formData.email) &&
       validatePhone(formData.phone) &&
-      formData.address.trim() !== "" &&
-      formData.city.trim() !== "" &&
-      formData.state.trim() !== "" &&
       !Object.values(errors).some(error => error !== "")
     );
   };
@@ -219,16 +192,15 @@ export default function BookingDetails() {
           <CardContent className="p-4 md:p-8">
             <div className="space-y-4 md:space-y-6">
               <div>
-                <h2 className="text-lg md:text-2xl font-bold font-jakarta">Contact & Address Information</h2>
+                <h2 className="text-lg md:text-2xl font-bold font-jakarta">Contact Information</h2>
                 <p className="text-muted-foreground mt-1 md:mt-2 text-xs md:text-sm">
-                  We'll need these details to confirm your booking
+                  Tell us how to reach you. Address details will be collected after payment.
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
                 {/* Contact Information */}
                 <div className="space-y-3 md:space-y-4">
-                  <h3 className="text-base md:text-lg font-semibold">Contact Details</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                     <div className="space-y-1.5 md:space-y-2">
@@ -336,85 +308,6 @@ export default function BookingDetails() {
                       {errors.phone}
                     </p>
                   )}
-                  </div>
-                </div>
-
-                {/* Service Address */}
-                <div className="space-y-4 border-t pt-6">
-                  <h3 className="text-lg font-semibold">Service Address</h3>
-                  
-                  <div className="space-y-2">
-                  <Label htmlFor="address" className="text-sm">
-                    Street Address <span className="text-destructive" aria-label="required">*</span>
-                  </Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) => handleChange("address", e.target.value)}
-                      onBlur={() => handleBlur("address")}
-                      className={cn("pl-10 h-12", errors.address && touched.address && "border-destructive")}
-                      placeholder="123 Main St"
-                      required
-                      aria-required="true"
-                      aria-invalid={!!(errors.address && touched.address)}
-                      aria-describedby={errors.address && touched.address ? "address-error" : undefined}
-                    />
-                  </div>
-                  {errors.address && touched.address && (
-                    <p className="text-sm text-destructive mt-1" id="address-error" role="alert">
-                      {errors.address}
-                    </p>
-                  )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="city" className="text-sm">
-                        City <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => handleChange("city", e.target.value)}
-                        onBlur={() => handleBlur("city")}
-                        className={cn("h-12", errors.city && touched.city && "border-destructive")}
-                        placeholder="City"
-                        required
-                      />
-                      {errors.city && touched.city && (
-                        <p className="text-sm text-destructive mt-1">{errors.city}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="state" className="text-sm">
-                        State <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={formData.state}
-                        onValueChange={(value) => {
-                          setFormData(prev => ({ ...prev, state: value }));
-                          setErrors(prev => ({ ...prev, state: validateField("state", value) }));
-                          setTouched(prev => ({ ...prev, state: true }));
-                        }}
-                      >
-                        <SelectTrigger className={cn("h-12", errors.state && touched.state && "border-destructive")}>
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {US_STATES.map((state) => (
-                            <SelectItem key={state.value} value={state.value}>
-                              {state.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.state && touched.state && (
-                        <p className="text-sm text-destructive mt-1">{errors.state}</p>
-                      )}
-                    </div>
                   </div>
                 </div>
 

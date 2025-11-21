@@ -648,7 +648,15 @@ export default function BookingCheckout() {
               </div>
 
               {/* Savings Visualizer */}
-              <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0} membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0} fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0} promoDiscount={promoDiscount} finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount} />
+              <SavingsVisualizer 
+                originalPrice={depositPricing.subtotal} 
+                newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0} 
+                membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0} 
+                fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0} 
+                promoDiscount={promoDiscount} 
+                finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount}
+                isMembershipSignup={isNewMembershipSignup}
+              />
 
               {/* Membership Subscription Card - NEW MEMBER SIGNUP */}
               {isNewMembershipSignup && (
@@ -713,7 +721,7 @@ export default function BookingCheckout() {
                     <h3 className="text-2xl font-bold">Using Membership Credit</h3>
                     <div className="text-4xl font-bold text-success">$0.00</div>
                     <p className="text-sm text-muted-foreground">
-                      Your membership credit covers this booking
+                      Your membership credit covers the standard cleaning service
                     </p>
                   </CardContent>
                 </Card>

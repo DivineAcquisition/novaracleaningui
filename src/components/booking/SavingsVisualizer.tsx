@@ -8,6 +8,7 @@ interface SavingsVisualizerProps {
   fullPaymentDiscount: number;
   promoDiscount?: number;
   finalPrice: number;
+  isMembershipSignup?: boolean;
 }
 
 export const SavingsVisualizer = ({
@@ -17,6 +18,7 @@ export const SavingsVisualizer = ({
   fullPaymentDiscount,
   promoDiscount = 0,
   finalPrice,
+  isMembershipSignup = false,
 }: SavingsVisualizerProps) => {
   const totalSavings = newCustomerDiscount + membershipDiscount + fullPaymentDiscount + promoDiscount;
   const savingsPercentage = (totalSavings / originalPrice) * 100;
@@ -55,8 +57,17 @@ export const SavingsVisualizer = ({
           </div>
         )}
 
-        {/* Membership Discount Bar */}
-        {membershipDiscount > 0 && (
+        {/* Membership Discount Bar or Clarification */}
+        {isMembershipSignup && membershipDiscount === 0 ? (
+          <div className="bg-primary/5 border border-primary/20 rounded-md p-3">
+            <div className="flex items-center gap-2 text-xs md:text-sm">
+              <span className="text-primary font-medium">💡 Your membership includes this standard cleaning!</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Membership discounts apply to extras (add-ons, deep cleans) and future bookings
+            </p>
+          </div>
+        ) : membershipDiscount > 0 ? (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-foreground/80">Membership Discount</span>
@@ -67,7 +78,7 @@ export const SavingsVisualizer = ({
               className="h-2 bg-muted"
             />
           </div>
-        )}
+        ) : null}
 
         {/* Full Payment Discount Bar */}
         {fullPaymentDiscount > 0 && (

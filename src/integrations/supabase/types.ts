@@ -142,6 +142,7 @@ export type Database = {
           payment_method: string | null
           payment_option: string | null
           payout_status: string | null
+          pets: string | null
           phone: string
           platform_fee_cents: number | null
           rating_submitted: boolean | null
@@ -207,6 +208,7 @@ export type Database = {
           payment_method?: string | null
           payment_option?: string | null
           payout_status?: string | null
+          pets?: string | null
           phone: string
           platform_fee_cents?: number | null
           rating_submitted?: boolean | null
@@ -272,6 +274,7 @@ export type Database = {
           payment_method?: string | null
           payment_option?: string | null
           payout_status?: string | null
+          pets?: string | null
           phone?: string
           platform_fee_cents?: number | null
           rating_submitted?: boolean | null
