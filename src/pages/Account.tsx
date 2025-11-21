@@ -213,12 +213,14 @@ export default function Account() {
   };
 
   // Only show incomplete bookings from last 24 hours
-  const incompleteBookings = bookings.filter(b => {
-    if (b.status !== 'pending_payment') return false;
-    const bookingCreatedAt = new Date(b.created_at);
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return bookingCreatedAt > twentyFourHoursAgo;
-  });
+  const incompleteBookings = bookings
+    .filter(b => {
+      if (b.status !== 'pending_payment') return false;
+      const bookingCreatedAt = new Date(b.created_at);
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      return bookingCreatedAt > twentyFourHoursAgo;
+    })
+    .slice(0, 1); // Limit to only 1 most recent incomplete booking
   
   const upcomingBookings = bookings.filter(b => 
     isFuture(new Date(b.service_date)) && 
