@@ -35,6 +35,8 @@ import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import OnboardingLanding from "./pages/cleaner/OnboardingLanding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerAvailability from "./pages/cleaner/Availability";
+import MobileDashboard from "./pages/cleaner/MobileDashboard";
+import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -74,6 +76,8 @@ const App = () => (
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+              <Route path="/cleaner/mobile-dashboard" element={<MobileDashboard />} />
+              <Route path="/cleaner/job-offers" element={<MobileJobOffers />} />
               <Route path="/cleaner/availability" element={<CleanerAvailability />} />
               <Route path="/cleaner/profile" element={<CleanerProfile />} />
               <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
