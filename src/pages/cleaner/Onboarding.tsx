@@ -73,18 +73,30 @@ export default function CleanerOnboarding() {
   }, [formData, avatarPreview, currentStep, checkingAuth]);
 
   const checkAuth = async () => {
+    console.log("[ONBOARDING] Starting auth check...");
+    
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log("[ONBOARDING] Session check result:", {
+        hasSession: !!session,
+        userId: session?.user?.id,
+        email: session?.user?.email,
+        error: sessionError
+      });
       
       if (!session) {
+        console.warn("[ONBOARDING] No session found - redirecting to landing");
         toast({
-          title: "Email verification required",
-          description: "Please verify your email first",
+          title: "Session Required",
+          description: "Please verify your email to continue",
           variant: "destructive",
         });
         navigate("/cleaner/onboarding-landing");
         return;
       }
+      
+      console.log("[ONBOARDING] Session established for user:", session.user.id);
       
       setUserId(session.user.id);
       setFormData(prev => ({
@@ -93,21 +105,35 @@ export default function CleanerOnboarding() {
       }));
       
       // Check if cleaner profile already exists
-      const { data: existingCleaner } = await supabase
+      console.log("[ONBOARDING] Checking for existing cleaner profile...");
+      const { data: existingCleaner, error: profileError } = await supabase
         .from("cleaners")
         .select("id, onboarding_complete")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
+      console.log("[ONBOARDING] Existing profile check:", {
+        profileExists: !!existingCleaner,
+        onboardingComplete: existingCleaner?.onboarding_complete,
+        error: profileError
+      });
+
       if (existingCleaner?.onboarding_complete) {
+        console.log("[ONBOARDING] Profile already complete - redirecting to dashboard");
         clearSavedData();
         navigate("/cleaner/dashboard");
         return;
       }
 
+      console.log("[ONBOARDING] Auth check complete - ready for onboarding");
       setCheckingAuth(false);
     } catch (error) {
-      console.error("Auth check error:", error);
+      console.error("[ONBOARDING] Auth check error:", error);
+      toast({
+        title: "Authentication Error",
+        description: "Unable to verify session. Please try again.",
+        variant: "destructive"
+      });
       navigate("/cleaner/onboarding-landing");
     }
   };
@@ -263,7 +289,10 @@ export default function CleanerOnboarding() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log("[ONBOARDING] Starting submission...");
+    
     if (!validateCurrentStep()) {
+      console.warn("[ONBOARDING] Validation failed for step", currentStep);
       return;
     }
 
@@ -272,10 +301,18 @@ export default function CleanerOnboarding() {
     try {
       const finalUserId = userId;
       
+      console.log("[ONBOARDING] Submission data:", {
+        userId: finalUserId,
+        email: formData.email,
+        name: `${formData.firstName} ${formData.lastName}`,
+        hasAvatar: !!formData.avatarFile
+      });
+      
       if (!finalUserId) {
+        console.error("[ONBOARDING] No user ID - session lost");
         toast({ 
-          title: "Authentication Error", 
-          description: "Session not found. Please try again.", 
+          title: "Session Lost", 
+          description: "Your session expired. Please verify your email again.", 
           variant: "destructive" 
         });
         navigate("/cleaner/onboarding-landing");
@@ -335,6 +372,7 @@ export default function CleanerOnboarding() {
       }
 
       // Insert cleaner record with user_id
+      console.log("[ONBOARDING] Creating cleaner profile in database...");
       const { data: cleanerData, error: insertError } = await supabase
         .from("cleaners")
         .insert({
@@ -364,7 +402,10 @@ export default function CleanerOnboarding() {
         .single();
 
       if (insertError) {
+        console.error("[ONBOARDING] Database insert error:", insertError);
+        
         if (insertError.code === '23505') {
+          console.warn("[ONBOARDING] Duplicate profile detected");
           toast({
             title: "Profile Already Exists",
             description: "You already have a cleaner profile. Redirecting to dashboard...",
@@ -373,20 +414,34 @@ export default function CleanerOnboarding() {
           navigate("/cleaner/dashboard");
           return;
         }
+        
+        toast({
+          title: "Database Error",
+          description: `Failed to create profile: ${insertError.message}`,
+          variant: "destructive"
+        });
         throw insertError;
       }
+      
+      console.log("[ONBOARDING] Cleaner profile created successfully:", cleanerData?.id);
 
       // Trigger Stripe Connect onboarding
+      console.log("[ONBOARDING] Initiating Stripe Connect onboarding...");
       try {
         const { data: onboardingData, error: onboardingError } = await supabase.functions.invoke(
           "initiate-cleaner-stripe-connect"
         );
 
+        console.log("[ONBOARDING] Stripe Connect response:", {
+          hasUrl: !!onboardingData?.url,
+          error: onboardingError
+        });
+
         if (onboardingError) {
-          console.error("Failed to start Stripe onboarding:", onboardingError);
+          console.error("[ONBOARDING] Stripe onboarding failed:", onboardingError);
           toast({
             title: "Profile Created",
-            description: "Please contact admin to complete payment setup.",
+            description: "Payment setup unavailable. Contact admin to complete setup.",
           });
           clearSavedData();
           navigate("/cleaner/dashboard");
@@ -394,6 +449,7 @@ export default function CleanerOnboarding() {
         }
         
         if (onboardingData?.url) {
+          console.log("[ONBOARDING] Redirecting to Stripe Connect:", onboardingData.url);
           toast({
             title: "Profile Created!",
             description: "Redirecting to payment setup...",
@@ -405,9 +461,14 @@ export default function CleanerOnboarding() {
           return;
         }
       } catch (onboardingError) {
-        console.error("Stripe onboarding error:", onboardingError);
+        console.error("[ONBOARDING] Stripe onboarding exception:", onboardingError);
+        toast({
+          title: "Payment Setup Error",
+          description: "Unable to initiate payment setup. You can complete this later in your profile.",
+        });
       }
 
+      console.log("[ONBOARDING] Onboarding complete - redirecting to dashboard");
       toast({
         title: "Profile Created!",
         description: "Your cleaner profile has been successfully created.",
@@ -417,10 +478,10 @@ export default function CleanerOnboarding() {
       navigate("/cleaner/dashboard");
 
     } catch (error: any) {
-      console.error("Onboarding error:", error);
+      console.error("[ONBOARDING] Fatal error:", error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to complete onboarding",
+        title: "Onboarding Failed",
+        description: error.message || "An unexpected error occurred. Please try again or contact support.",
         variant: "destructive"
       });
     } finally {
