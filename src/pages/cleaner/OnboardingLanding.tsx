@@ -26,22 +26,32 @@ export default function OnboardingLanding() {
     }
 
     setIsLoading(true);
+    console.log("[LANDING] Sending verification code to:", email);
 
     try {
       const { error } = await supabase.functions.invoke('send-cleaner-verification-code', {
         body: { email, firstName: "" }
       });
 
+      console.log("[LANDING] Send code response:", { error });
+
       if (error) {
-        toast.error(error.message || "Failed to send verification code");
+        console.error("[LANDING] Failed to send code:", error);
+        
+        if (error.message?.includes("email")) {
+          toast.error("Invalid email address. Please check and try again.");
+        } else {
+          toast.error(error.message || "Failed to send verification code");
+        }
         return;
       }
 
+      console.log("[LANDING] Verification code sent successfully");
       setStep('code');
       toast.success("Check your email for the 6-digit code!");
     } catch (error) {
-      console.error("Email verification error:", error);
-      toast.error("Something went wrong. Please try again.");
+      console.error("[LANDING] Email verification exception:", error);
+      toast.error("Connection error. Please check your internet and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -56,19 +66,32 @@ export default function OnboardingLanding() {
     }
 
     setVerifying(true);
+    console.log("[LANDING] Verifying code for email:", email);
 
     try {
       const { data, error } = await supabase.functions.invoke('verify-cleaner-code', {
         body: { email, code }
       });
 
+      console.log("[LANDING] Verification response:", {
+        hasTokens: !!data?.access_token && !!data?.refresh_token,
+        error: error
+      });
+
       if (error || !data?.access_token || !data?.refresh_token) {
-        toast.error(error?.message || "Invalid or expired code");
-        console.error("Verification error:", error);
+        console.error("[LANDING] Verification failed:", error);
+        
+        if (error?.message?.includes("expired")) {
+          toast.error("Code expired. Please request a new one.");
+        } else if (error?.message?.includes("already used")) {
+          toast.error("Code already used. Please request a new one.");
+        } else {
+          toast.error(error?.message || "Invalid code. Please try again.");
+        }
         return;
       }
 
-      console.log("Code verified, establishing session...");
+      console.log("[LANDING] Code verified, establishing session...");
 
       // Establish session directly with the tokens
       const { error: sessionError } = await supabase.auth.setSession({
@@ -77,22 +100,23 @@ export default function OnboardingLanding() {
       });
 
       if (sessionError) {
-        toast.error("Failed to establish session. Please try again.");
-        console.error("Session error:", sessionError);
+        console.error("[LANDING] Session establishment error:", sessionError);
+        toast.error("Failed to establish session. Please request a new code.");
         return;
       }
 
-      console.log("Session established successfully");
+      console.log("[LANDING] Session established successfully");
       toast.success("Email verified! Redirecting to onboarding...");
       
       // Small delay to ensure session is fully established
       setTimeout(() => {
+        console.log("[LANDING] Navigating to /cleaner/onboarding");
         navigate("/cleaner/onboarding");
       }, 500);
       
     } catch (error) {
-      console.error("Code verification error:", error);
-      toast.error("Something went wrong. Please try again.");
+      console.error("[LANDING] Code verification exception:", error);
+      toast.error("Connection error. Please check your internet and try again.");
     } finally {
       setVerifying(false);
     }
