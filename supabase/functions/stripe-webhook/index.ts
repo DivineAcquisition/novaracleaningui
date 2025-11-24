@@ -327,6 +327,22 @@ serve(async (req) => {
             logStep("Error sending Zapier webhook (non-blocking)", { error: zapierError });
           }
 
+          // Sync booking to Anything App Platform
+          try {
+            logStep("Syncing to Anything App Platform");
+            const anythingResponse = await supabase.functions.invoke('sync-to-anything', {
+              body: { bookingId: booking.id },
+            });
+            
+            if (anythingResponse.error) {
+              logStep("Anything sync failed (non-blocking)", { error: anythingResponse.error });
+            } else {
+              logStep("Anything sync successful", anythingResponse.data);
+            }
+          } catch (anythingError) {
+            logStep("Error syncing to Anything (non-blocking)", { error: anythingError });
+          }
+
           // Track referral if referral code was used
           if (booking.metadata && (booking.metadata as any).referral_code) {
             try {
