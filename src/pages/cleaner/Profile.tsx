@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X } from "lucide-react";
+import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X, MessageSquare, Bell } from "lucide-react";
 import { processAvatarImage } from "@/lib/image-compression";
 
 interface CleanerProfile {
@@ -22,6 +22,9 @@ interface CleanerProfile {
   avatar_url: string | null;
   available_for_bookings: boolean;
   max_weekly_bookings: number;
+  sms_notifications_enabled: boolean | null;
+  sms_quiet_hours_start: string | null;
+  sms_quiet_hours_end: string | null;
 }
 
 export default function CleanerProfile() {
@@ -393,6 +396,51 @@ export default function CleanerProfile() {
                   Maximum number of bookings you can accept per week
                 </p>
               </div>
+            </div>
+
+            {/* SMS Notification Settings */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-primary" />
+                  SMS Notifications
+                </h3>
+                <Link to="/sms-consent">
+                  <Button variant="outline" size="sm">
+                    <Bell className="mr-2 h-4 w-4" />
+                    Manage Consent
+                  </Button>
+                </Link>
+              </div>
+              
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="space-y-1">
+                  <Label htmlFor="smsEnabled">SMS Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {profile.sms_notifications_enabled 
+                      ? "You'll receive SMS updates for jobs and bookings" 
+                      : "SMS notifications are currently disabled"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {profile.sms_notifications_enabled ? (
+                    <span className="text-success text-sm font-medium">Enabled</span>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Disabled</span>
+                  )}
+                </div>
+              </div>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  To change your SMS preferences or view consent details, visit the{" "}
+                  <Link to="/sms-consent" className="text-primary hover:underline font-medium">
+                    SMS Consent page
+                  </Link>
+                  . Reply STOP to any message to opt out.
+                </AlertDescription>
+              </Alert>
             </div>
 
             {/* Save Button */}

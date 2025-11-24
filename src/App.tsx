@@ -37,6 +37,7 @@ import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerAvailability from "./pages/cleaner/Availability";
 import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
+import SmsConsent from "./pages/SmsConsent";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
               <Route path="/cleaner/onboard" element={<OnboardingLanding />} /> {/* Legacy route */}
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
+              <Route path="/sms-consent" element={<SmsConsent />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
