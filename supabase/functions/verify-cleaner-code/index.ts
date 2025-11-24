@@ -118,23 +118,44 @@ serve(async (req) => {
       logStep("Existing user found", { email, userId });
     }
 
-    // Generate session tokens for the user
-    const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: email,
+    // Generate a secure temporary password for session creation
+    const tempPassword = `${crypto.randomUUID()}-${Date.now()}`;
+    
+    logStep("Generated temp password for session creation");
+
+    // Update user with temporary password to enable sign-in
+    const { error: passwordUpdateError } = await supabase.auth.admin.updateUserById(userId, {
+      password: tempPassword,
+      user_metadata: {
+        onboarding: true,
+        is_cleaner: true,
+      }
     });
 
-    if (sessionError || !sessionData) {
-      throw new Error(`Failed to generate session: ${sessionError?.message}`);
+    if (passwordUpdateError) {
+      throw new Error(`Failed to update user password: ${passwordUpdateError.message}`);
     }
 
-    logStep("Session generated", { email });
+    logStep("User password updated");
+
+    // Sign in programmatically to get real session tokens
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: tempPassword,
+    });
+
+    if (signInError || !signInData.session) {
+      throw new Error(`Failed to create session: ${signInError?.message}`);
+    }
+
+    logStep("Session created successfully", { email });
 
     return new Response(
       JSON.stringify({ 
         success: true,
         message: "Code verified successfully",
-        hashed_token: sessionData.properties.hashed_token,
+        access_token: signInData.session.access_token,
+        refresh_token: signInData.session.refresh_token,
         email: email,
       }),
       {

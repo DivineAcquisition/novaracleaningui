@@ -62,24 +62,27 @@ export default function OnboardingLanding() {
         body: { email, code }
       });
 
-      if (error || !data?.hashed_token) {
+      if (error || !data?.access_token || !data?.refresh_token) {
         toast.error(error?.message || "Invalid or expired code");
+        console.error("Verification error:", error);
         return;
       }
 
-      // Exchange hashed token for session using verifyOtp
-      const { data: sessionData, error: sessionError } = await supabase.auth.verifyOtp({
-        email: data.email,
-        token: data.hashed_token,
-        type: 'magiclink'
+      console.log("Code verified, establishing session...");
+
+      // Establish session directly with the tokens
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
       });
 
-      if (sessionError || !sessionData.session) {
+      if (sessionError) {
         toast.error("Failed to establish session. Please try again.");
         console.error("Session error:", sessionError);
         return;
       }
 
+      console.log("Session established successfully");
       toast.success("Email verified! Redirecting to onboarding...");
       
       // Small delay to ensure session is fully established
