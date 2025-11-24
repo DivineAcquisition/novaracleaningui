@@ -1206,6 +1206,48 @@ export type Database = {
           },
         ]
       }
+      service_coverage_zones: {
+        Row: {
+          city: string
+          county: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          pricing_multiplier: number | null
+          state: string
+          tier: string
+          tier_label: string
+          updated_at: string
+          zip_code: string
+        }
+        Insert: {
+          city: string
+          county?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          pricing_multiplier?: number | null
+          state?: string
+          tier: string
+          tier_label: string
+          updated_at?: string
+          zip_code: string
+        }
+        Update: {
+          city?: string
+          county?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          pricing_multiplier?: number | null
+          state?: string
+          tier?: string
+          tier_label?: string
+          updated_at?: string
+          zip_code?: string
+        }
+        Relationships: []
+      }
       sms_logs: {
         Row: {
           cost: number | null
