@@ -135,3 +135,6 @@ verify_jwt = false
 [functions.verify-cleaner-code]
 verify_jwt = false
 
+[functions.sync-to-anything]
+verify_jwt = false
+
