@@ -101,7 +101,7 @@ serve(async (req) => {
     }
 
     const { error: emailError } = await resend.emails.send({
-      from: "Novara Cleaning <onboarding@novaracleaning.com>",
+      from: "Novara Cleaning <hello@notify.novaracleaning.com>",
       to: [email],
       subject: "Your Cleaner Verification Code",
       html,
