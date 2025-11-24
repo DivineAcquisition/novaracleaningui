@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-expiry",
 };
 
 const logStep = (step: string, details?: any) => {
@@ -81,8 +81,8 @@ serve(async (req) => {
     // Create account link for onboarding
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `https://book.novaracleaning.com/cleaner/dashboard?stripe=refresh`,
-      return_url: `https://book.novaracleaning.com/cleaner/dashboard?stripe=complete`,
+      refresh_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=refresh`,
+      return_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=complete`,
       type: "account_onboarding",
     });
 
