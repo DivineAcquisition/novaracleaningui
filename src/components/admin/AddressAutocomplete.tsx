@@ -37,7 +37,7 @@ interface AddressAutocompleteProps {
 function loadGoogleMapsScript(apiKey: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // Check if already loaded
-    if (window.google && window.google.maps && window.google.maps.places) {
+    if ((window as any).google?.maps?.places) {
       resolve();
       return;
     }
@@ -62,7 +62,7 @@ export function AddressAutocomplete({
   placeholder = "Start typing address...",
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
@@ -88,6 +88,7 @@ export function AddressAutocomplete({
         if (!inputRef.current) return;
 
         // Initialize autocomplete
+        const google = (window as any).google;
         autocompleteRef.current = new google.maps.places.Autocomplete(
           inputRef.current,
           {
@@ -111,7 +112,8 @@ export function AddressAutocomplete({
     initAutocomplete();
 
     return () => {
-      if (autocompleteRef.current && window.google) {
+      if (autocompleteRef.current && (window as any).google) {
+        const google = (window as any).google;
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
     };
