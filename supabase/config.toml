@@ -138,3 +138,12 @@ verify_jwt = false
 [functions.sync-to-anything]
 verify_jwt = false
 
+[functions.sync-google-calendar]
+verify_jwt = false
+
+[functions.create-google-calendar-event]
+verify_jwt = false
+
+[functions.update-google-calendar-event]
+verify_jwt = false
+

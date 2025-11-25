@@ -22,7 +22,7 @@ export function AvailabilityCalendar({
   minDate = addDays(new Date(), 3)
 }: AvailabilityCalendarProps) {
   const endDate = addDays(minDate, 30);
-  const { availability, loading } = useAvailability(minDate, endDate);
+  const { availability, loading, syncing, lastSyncTime } = useAvailability(minDate, endDate);
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
 
   // Group availability by date
@@ -40,6 +40,7 @@ export function AvailabilityCalendar({
   }).filter(Boolean) as Date[];
 
   const getCapacityColor = (slot: typeof availability[0]) => {
+    if (slot.blocked_by_google) return "text-muted-foreground";
     if (!slot.is_available) return "text-muted-foreground";
     const percentage = (slot.max_capacity - slot.current_bookings) / slot.max_capacity;
     if (percentage > 0.5) return "text-success";
@@ -48,6 +49,7 @@ export function AvailabilityCalendar({
   };
 
   const getCapacityBadge = (slot: typeof availability[0]) => {
+    if (slot.blocked_by_google) return "🔒 Calendar Block";
     if (!slot.is_available) return "Sold Out";
     const remaining = slot.max_capacity - slot.current_bookings;
     if (remaining > 3) return null;

@@ -145,6 +145,16 @@ serve(async (req) => {
       console.error('Zapier webhook failed (non-critical):', webhookError);
     }
 
+    // Update Google Calendar event with new date/time
+    try {
+      await supabase.functions.invoke('update-google-calendar-event', {
+        body: { bookingId, action: 'reschedule' }
+      });
+      console.log('Google Calendar event updated for rescheduled booking');
+    } catch (calendarError) {
+      console.error('Google Calendar update failed (non-critical):', calendarError);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,

@@ -96,11 +96,14 @@ export type Database = {
       }
       availability_slots: {
         Row: {
+          blocked_by_google: boolean | null
           created_at: string
           current_bookings: number
           end_time: string
+          google_calendar_event_id: string | null
           id: string
           is_available: boolean | null
+          last_synced_at: string | null
           max_capacity: number
           service_date: string
           start_time: string
@@ -108,11 +111,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          blocked_by_google?: boolean | null
           created_at?: string
           current_bookings?: number
           end_time: string
+          google_calendar_event_id?: string | null
           id?: string
           is_available?: boolean | null
+          last_synced_at?: string | null
           max_capacity?: number
           service_date: string
           start_time: string
@@ -120,11 +126,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          blocked_by_google?: boolean | null
           created_at?: string
           current_bookings?: number
           end_time?: string
+          google_calendar_event_id?: string | null
           id?: string
           is_available?: boolean | null
+          last_synced_at?: string | null
           max_capacity?: number
           service_date?: string
           start_time?: string
@@ -170,6 +179,7 @@ export type Database = {
           first_name: string
           frequency: string | null
           full_payment_discount: number | null
+          google_calendar_event_id: string | null
           home_size_id: string
           id: string
           issues_flag: boolean | null
@@ -236,6 +246,7 @@ export type Database = {
           first_name: string
           frequency?: string | null
           full_payment_discount?: number | null
+          google_calendar_event_id?: string | null
           home_size_id: string
           id?: string
           issues_flag?: boolean | null
@@ -302,6 +313,7 @@ export type Database = {
           first_name?: string
           frequency?: string | null
           full_payment_discount?: number | null
+          google_calendar_event_id?: string | null
           home_size_id?: string
           id?: string
           issues_flag?: boolean | null
