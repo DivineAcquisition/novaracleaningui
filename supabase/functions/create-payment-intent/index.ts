@@ -313,6 +313,21 @@ serve(async (req) => {
         endTime: bookingData.endTime 
       });
 
+      // Ensure the time slot exists (upsert)
+      await supabaseClient
+        .from('availability_slots')
+        .upsert({
+          service_date: bookingData.serviceDate,
+          time_slot: bookingData.timeSlot,
+          start_time: bookingData.startTime,
+          end_time: bookingData.endTime,
+          max_capacity: 5,
+          current_bookings: 0
+        }, { 
+          onConflict: 'service_date,start_time',
+          ignoreDuplicates: true 
+        });
+
       const { data: reserved, error: reserveError } = await supabaseClient
         .rpc('reserve_time_slot', {
           _date: bookingData.serviceDate,
