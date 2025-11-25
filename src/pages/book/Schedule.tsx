@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { CalendarDays } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { MembershipBanner } from "@/components/booking/MembershipBanner";
@@ -11,7 +10,8 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { getEstimatedHours } from "@/lib/pricing-system";
-import { calculateServiceDuration, generateTimeSlots, isWeekend } from "@/lib/time-slots";
+import { calculateServiceDuration } from "@/lib/time-slots";
+import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
 import { addDays } from "date-fns";
 
 const BOOKING_STEPS = [
@@ -27,9 +27,7 @@ export default function BookingSchedule() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData } = useBooking();
   const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    bookingData.serviceDate ? new Date(bookingData.serviceDate) : undefined
-  );
+  const [selectedDate, setSelectedDate] = useState<string>(bookingData.serviceDate || "");
   const [selectedTime, setSelectedTime] = useState<string>(bookingData.timeSlot || "");
 
   useBookingSwipe({
@@ -43,25 +41,20 @@ export default function BookingSchedule() {
     getEstimatedHours(bookingData.homeSizeId)
   );
 
-  const timeSlots = generateTimeSlots(serviceDuration, bookingData.serviceType);
+  const minDate = addDays(new Date(), 3);
 
-  const isDateDisabled = (date: Date) => {
-    const today = new Date();
-    const minDate = addDays(today, 3);
-    return date < minDate || isWeekend(date);
+  const handleSelectSlot = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
+    const dateStr = date.toISOString().split('T')[0];
+    setSelectedDate(dateStr);
+    setSelectedTime(timeSlot);
   };
 
   const handleContinue = () => {
     if (!selectedDate || !selectedTime) return;
     
-    const dateStr = selectedDate.toISOString().split('T')[0];
-    const selectedSlot = timeSlots.find(slot => slot.id === selectedTime);
-    
     updateBookingData({
-      serviceDate: dateStr,
+      serviceDate: selectedDate,
       timeSlot: selectedTime,
-      startTime: selectedSlot?.startTime,
-      endTime: selectedSlot?.endTime,
       serviceDuration,
     });
     navigate("/book/details");
@@ -102,40 +95,13 @@ export default function BookingSchedule() {
                 </h3>
                 <p className="text-muted-foreground">Choose your preferred date and time (closed on weekends)</p>
               </div>
-
-              {/* Date Selection */}
-              <div>
-                <h4 className="font-medium mb-3">Select Date</h4>
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={isDateDisabled}
-                  className="rounded-md border"
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  We require at least 3 days advance notice
-                </p>
-              </div>
-
-              {/* Time Selection */}
-              {selectedDate && (
-                <div>
-                  <h4 className="font-medium mb-3">Select Time</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {timeSlots.map((slot) => (
-                      <Button
-                        key={slot.id}
-                        variant={selectedTime === slot.id ? "default" : "outline"}
-                        onClick={() => setSelectedTime(slot.id)}
-                        className="h-auto py-3"
-                      >
-                        {slot.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              
+              <AvailabilityCalendar 
+                selectedDate={selectedDate ? new Date(selectedDate) : undefined} 
+                selectedTime={selectedTime} 
+                onSelectSlot={handleSelectSlot} 
+                minDate={minDate} 
+              />
 
               <div className="hidden md:flex gap-4 pt-8 mt-8 border-t">
                 <Button variant="outline" size="lg" onClick={handleBack} className="h-14">
