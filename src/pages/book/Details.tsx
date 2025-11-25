@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { ArrowRight, User, Mail, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 
 const BOOKING_STEPS = [
   { id: 1, name: "ZIP Code" },
@@ -462,6 +463,8 @@ export default function BookingDetails() {
         continueDisabled={!isFormValid()}
         continueText="Continue to Payment"
       />
+
+      <BookingFooter />
     </div>
   );
 }

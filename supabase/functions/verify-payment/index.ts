@@ -142,11 +142,53 @@ serve(async (req) => {
       case "requires_action":
         newStatus = "pending_payment";
         message = "Payment requires additional action";
+        
+        // Release time slot on payment failure
+        if (booking.service_date && booking.time_slot) {
+          logStep("Releasing time slot due to failed payment", { 
+            date: booking.service_date, 
+            timeSlot: booking.time_slot 
+          });
+          
+          // Extract start time from time_slot (format: "8:00 AM - 10:00 AM")
+          const startTime = booking.time_slot.split(' - ')[0];
+          
+          try {
+            await supabase.rpc('release_time_slot', {
+              _date: booking.service_date,
+              _start_time: startTime
+            });
+            logStep("Time slot released successfully");
+          } catch (releaseError) {
+            logStep("Error releasing time slot (non-blocking)", { error: releaseError });
+          }
+        }
         break;
 
       case "canceled":
         newStatus = "cancelled";
         message = "Payment was cancelled";
+        
+        // Release time slot on payment failure
+        if (booking.service_date && booking.time_slot) {
+          logStep("Releasing time slot due to cancelled payment", { 
+            date: booking.service_date, 
+            timeSlot: booking.time_slot 
+          });
+          
+          // Extract start time from time_slot (format: "8:00 AM - 10:00 AM")
+          const startTime = booking.time_slot.split(' - ')[0];
+          
+          try {
+            await supabase.rpc('release_time_slot', {
+              _date: booking.service_date,
+              _start_time: startTime
+            });
+            logStep("Time slot released successfully");
+          } catch (releaseError) {
+            logStep("Error releasing time slot (non-blocking)", { error: releaseError });
+          }
+        }
         break;
 
       default:
