@@ -13,6 +13,8 @@ import Membership from "./pages/Membership";
 import ResetPassword from "./pages/ResetPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import BookingZip from "./pages/book/Zip";
 import BookingHome from "./pages/book/Home";
 import BookingService from "./pages/book/Service";
@@ -61,6 +63,8 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
               <Route path="/book/zip" element={<BookingZip />} />
               <Route path="/book/home" element={<BookingHome />} />
               <Route path="/book/service" element={<BookingService />} />

@@ -94,6 +94,45 @@ export type Database = {
         }
         Relationships: []
       }
+      availability_slots: {
+        Row: {
+          created_at: string
+          current_bookings: number
+          end_time: string
+          id: string
+          is_available: boolean | null
+          max_capacity: number
+          service_date: string
+          start_time: string
+          time_slot: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_bookings?: number
+          end_time: string
+          id?: string
+          is_available?: boolean | null
+          max_capacity?: number
+          service_date: string
+          start_time: string
+          time_slot: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_bookings?: number
+          end_time?: string
+          id?: string
+          is_available?: boolean | null
+          max_capacity?: number
+          service_date?: string
+          start_time?: string
+          time_slot?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           access_notes: string | null
@@ -1408,8 +1447,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      release_time_slot: {
+        Args: { _date: string; _start_time: string }
+        Returns: undefined
+      }
       reserve_availability: {
         Args: { _date: string; _time_window: string }
+        Returns: boolean
+      }
+      reserve_time_slot: {
+        Args: { _date: string; _end_time: string; _start_time: string }
         Returns: boolean
       }
     }
