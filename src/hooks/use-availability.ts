@@ -24,6 +24,10 @@ export function useAvailability(startDate: Date, endDate: Date) {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const isFetchingRef = useRef(false);
 
+  // Stable keys so effect doesn't re-run just because Date object identity changes
+  const startKey = startDate.toISOString().split("T")[0];
+  const endKey = endDate.toISOString().split("T")[0];
+
   const syncWithGoogleCalendar = async () => {
     try {
       setSyncing(true);
@@ -60,14 +64,11 @@ export function useAvailability(startDate: Date, endDate: Date) {
       setLoading(true);
       setError(null);
 
-      const startDateStr = startDate.toISOString().split("T")[0];
-      const endDateStr = endDate.toISOString().split("T")[0];
-
       const { data, error: fetchError } = await supabase
         .from("availability_slots")
         .select("*")
-        .gte("service_date", startDateStr)
-        .lte("service_date", endDateStr)
+        .gte("service_date", startKey)
+        .lte("service_date", endKey)
         .order("service_date", { ascending: true })
         .order("start_time", { ascending: true });
 
@@ -91,9 +92,6 @@ export function useAvailability(startDate: Date, endDate: Date) {
     // Subscribe to real-time updates
     let channel: RealtimeChannel;
 
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = endDate.toISOString().split("T")[0];
-
     channel = supabase
       .channel("availability-changes")
       .on(
@@ -102,7 +100,7 @@ export function useAvailability(startDate: Date, endDate: Date) {
           event: "*",
           schema: "public",
           table: "availability_slots",
-          filter: `service_date=gte.${startDateStr},service_date=lte.${endDateStr}`,
+          filter: `service_date=gte.${startKey},service_date=lte.${endKey}`,
         },
         (payload) => {
           console.log("Availability change detected:", payload);
@@ -116,7 +114,7 @@ export function useAvailability(startDate: Date, endDate: Date) {
         supabase.removeChannel(channel);
       }
     };
-  }, [startDate, endDate]);
+  }, [startKey, endKey]);
 
   return { 
     availability, 
