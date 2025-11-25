@@ -19,6 +19,7 @@ import { calculateServiceDuration } from "@/lib/time-slots";
 import { CleanerMultiSelect, SelectedCleaner } from "@/components/admin/CleanerMultiSelect";
 import { CustomerRecognitionCard, CustomerStatus } from "@/components/admin/CustomerRecognitionCard";
 import { calculateDistance } from "@/lib/distance-calculator";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 
 interface Cleaner {
   id: string;
@@ -175,15 +176,12 @@ export default function BookingIntake() {
     }
   }, [email]);
 
-  // Geocode address when complete
+  // Update cleaner distances when address changes (autocomplete provides lat/lng directly)
   useEffect(() => {
-    if (street && city && state && zipCode) {
-      const debounce = setTimeout(() => {
-        geocodeAddress();
-      }, 500);
-      return () => clearTimeout(debounce);
+    if (customerLocation) {
+      calculateCleanerDistances();
     }
-  }, [street, city, state, zipCode]);
+  }, [customerLocation]);
 
   // Update cleaner distances when location changes
   useEffect(() => {
@@ -296,27 +294,24 @@ export default function BookingIntake() {
     }
   };
 
-  const geocodeAddress = async () => {
-    setGeocoding(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("geocode-address", {
-        body: { address: street, city, state, zip: zipCode },
-      });
+  const handleAddressSelect = (addressData: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    lat: number;
+    lng: number;
+  }) => {
+    setStreet(addressData.street);
+    setCity(addressData.city);
+    setState(addressData.state);
+    setZipCode(addressData.zipCode);
+    setCustomerLocation({ lat: addressData.lat, lng: addressData.lng });
 
-      if (error) throw error;
-      if (data?.lat && data?.lng) {
-        setCustomerLocation({ lat: data.lat, lng: data.lng });
-      }
-    } catch (error) {
-      console.error("Geocoding error:", error);
-      toast({
-        title: "Could not geocode address",
-        description: "Cleaners will be shown without distance sorting",
-        variant: "destructive",
-      });
-    } finally {
-      setGeocoding(false);
-    }
+    toast({
+      title: "Address selected",
+      description: "Calculating cleaner distances...",
+    });
   };
 
   const calculateCleanerDistances = () => {
@@ -763,14 +758,15 @@ export default function BookingIntake() {
                 <CardTitle>Service Address</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="street">Street Address *</Label>
-                  <Input
-                    id="street"
-                    value={street}
-                    onChange={(e) => setStreet(e.target.value)}
-                    placeholder="123 Main St"
-                  />
+                {/* Google Places Autocomplete */}
+                <AddressAutocomplete
+                  onAddressSelect={handleAddressSelect}
+                  initialValue={street}
+                />
+                
+                {/* Manual inputs (auto-filled by autocomplete) */}
+                <div className="text-xs text-muted-foreground">
+                  The fields below are auto-filled when you select an address above
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
@@ -780,20 +776,18 @@ export default function BookingIntake() {
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       placeholder="Baltimore"
+                      readOnly
+                      className="bg-muted"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="state">State *</Label>
-                    <Select value={state} onValueChange={setState}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {US_STATES.map(s => (
-                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      value={state}
+                      readOnly
+                      className="bg-muted"
+                      placeholder="MD"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="zipCode">ZIP Code *</Label>
@@ -803,6 +797,8 @@ export default function BookingIntake() {
                       onChange={(e) => setZipCode(e.target.value)}
                       placeholder="21201"
                       maxLength={5}
+                      readOnly
+                      className="bg-muted"
                     />
                   </div>
                 </div>
