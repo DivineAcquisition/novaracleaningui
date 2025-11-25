@@ -11,12 +11,42 @@ export interface AvailabilitySlot {
   max_capacity: number;
   current_bookings: number;
   is_available: boolean;
+  google_calendar_event_id?: string | null;
+  blocked_by_google?: boolean | null;
+  last_synced_at?: string | null;
 }
 
 export function useAvailability(startDate: Date, endDate: Date) {
   const [availability, setAvailability] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
+  const syncWithGoogleCalendar = async () => {
+    try {
+      setSyncing(true);
+      console.log('Triggering Google Calendar sync...');
+
+      const { data, error: syncError } = await supabase.functions.invoke('sync-google-calendar');
+
+      if (syncError) {
+        console.error('Sync error:', syncError);
+        throw syncError;
+      }
+
+      console.log('Sync result:', data);
+      setLastSyncTime(new Date());
+      
+      // Refresh availability after sync
+      await fetchAvailability();
+    } catch (err) {
+      console.error('Error syncing with Google Calendar:', err);
+      setError(err as Error);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchAvailability = async () => {
     try {
@@ -47,6 +77,7 @@ export function useAvailability(startDate: Date, endDate: Date) {
 
   useEffect(() => {
     fetchAvailability();
+    syncWithGoogleCalendar(); // Sync on mount
 
     // Subscribe to real-time updates
     let channel: RealtimeChannel;
@@ -82,6 +113,9 @@ export function useAvailability(startDate: Date, endDate: Date) {
     availability, 
     loading, 
     error,
-    refetch: fetchAvailability 
+    refetch: fetchAvailability,
+    syncWithGoogleCalendar,
+    syncing,
+    lastSyncTime
   };
 }

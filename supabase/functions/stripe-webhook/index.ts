@@ -193,6 +193,18 @@ serve(async (req) => {
           // Don't fail the webhook - booking is still confirmed
         }
 
+        // Create Google Calendar event for the booking
+        logStep("Creating Google Calendar event for booking");
+        try {
+          await supabase.functions.invoke('create-google-calendar-event', {
+            body: { bookingId: booking.id }
+          });
+          logStep("Google Calendar event created successfully");
+        } catch (calendarError) {
+          logStep("Google Calendar event creation failed (non-critical)", { error: calendarError });
+          // Don't fail the webhook - booking is still confirmed
+        }
+
         // Deduct membership credit if booking uses credit (with idempotency and race condition checks)
         if (booking.uses_credit && booking.customer_id) {
           logStep("Attempting to deduct membership credit", { customerId: booking.customer_id });
