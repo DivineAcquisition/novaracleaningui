@@ -18,7 +18,6 @@ const TIME_SLOTS: TimeSlot[] = [
   { label: "12:00 PM - 2:00 PM", startTime: "12:00", endTime: "14:00" },
   { label: "2:00 PM - 4:00 PM", startTime: "14:00", endTime: "16:00" },
   { label: "4:00 PM - 6:00 PM", startTime: "16:00", endTime: "18:00" },
-  { label: "6:00 PM - 8:00 PM", startTime: "18:00", endTime: "20:00" },
 ];
 
 serve(async (req) => {
@@ -59,7 +58,7 @@ serve(async (req) => {
       throw new Error("Admin access required");
     }
 
-    const { days = 90, maxCapacity = 5 } = await req.json();
+    const { days = 60, maxCapacity = 3 } = await req.json();
 
     console.log(`Seeding availability for ${days} days with capacity ${maxCapacity}`);
 

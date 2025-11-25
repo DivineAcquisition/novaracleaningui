@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -22,6 +22,7 @@ export function useAvailability(startDate: Date, endDate: Date) {
   const [error, setError] = useState<Error | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const isFetchingRef = useRef(false);
 
   const syncWithGoogleCalendar = async () => {
     try {
@@ -49,7 +50,13 @@ export function useAvailability(startDate: Date, endDate: Date) {
   };
 
   const fetchAvailability = async () => {
+    if (isFetchingRef.current) {
+      console.log('Fetch already in progress, skipping...');
+      return;
+    }
+
     try {
+      isFetchingRef.current = true;
       setLoading(true);
       setError(null);
 
@@ -72,12 +79,14 @@ export function useAvailability(startDate: Date, endDate: Date) {
       setError(err as Error);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     fetchAvailability();
-    syncWithGoogleCalendar(); // Sync on mount
+    // Remove automatic sync on mount to prevent flickering
+    // syncWithGoogleCalendar can be called manually when needed
 
     // Subscribe to real-time updates
     let channel: RealtimeChannel;
