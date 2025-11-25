@@ -13,14 +13,17 @@ interface AvailabilityCalendarProps {
   selectedDate?: Date;
   selectedTime?: string;
   minDate?: Date;
+  onDateSelect?: (date: Date) => void;
 }
 
 export function AvailabilityCalendar({ 
   onSelectSlot, 
   selectedDate, 
   selectedTime,
-  minDate = addDays(new Date(), 3)
+  minDate = addDays(new Date(), 3),
+  onDateSelect
 }: AvailabilityCalendarProps) {
+  const [internalSelectedDate, setInternalSelectedDate] = useState<Date | undefined>(selectedDate);
   const endDate = addDays(minDate, 30);
   const { availability, loading, syncing, lastSyncTime } = useAvailability(minDate, endDate);
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
@@ -94,7 +97,12 @@ export function AvailabilityCalendar({
                   return (
                     <button
                       key={dateString}
-                      onClick={() => !hasAvailability ? null : null}
+                      onClick={() => {
+                        if (hasAvailability) {
+                          setInternalSelectedDate(date);
+                          onDateSelect?.(date);
+                        }
+                      }}
                       disabled={!hasAvailability}
                       role="radio"
                       aria-checked={isSelected}
@@ -164,9 +172,11 @@ export function AvailabilityCalendar({
           <CardContent className="p-3 md:p-4">
             <ScrollArea className="h-[320px] md:h-[400px] pr-2 md:pr-4">
               <div className="space-y-2" role="radiogroup" aria-labelledby="time-selection-label">
-                {selectedDate ? (
+                {(selectedDate || internalSelectedDate) ? (
                   (() => {
-                    const dateString = format(selectedDate, 'yyyy-MM-dd');
+                    const dateToShow = selectedDate || internalSelectedDate;
+                    if (!dateToShow) return null;
+                    const dateString = format(dateToShow, 'yyyy-MM-dd');
                     const daySlots = availabilityByDate[dateString] || [];
                     
                     if (daySlots.length === 0) {
@@ -187,7 +197,12 @@ export function AvailabilityCalendar({
                       return (
                         <button
                           key={slot.id}
-                          onClick={() => slot.is_available && onSelectSlot(selectedDate, slot.time_slot, slot.start_time, slot.end_time)}
+                          onClick={() => {
+                            const dateToUse = selectedDate || internalSelectedDate;
+                            if (slot.is_available && dateToUse) {
+                              onSelectSlot(dateToUse, slot.time_slot, slot.start_time, slot.end_time);
+                            }
+                          }}
                           onMouseEnter={() => setHoveredSlot(slot.id)}
                           onMouseLeave={() => setHoveredSlot(null)}
                           disabled={!slot.is_available}
