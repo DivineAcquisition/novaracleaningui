@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Clock, DollarSign } from "lucide-react";
+import { ArrowLeft, Save, Clock, DollarSign, Lock } from "lucide-react";
+
+const ACCESS_PIN = "1234"; // Change this to your desired 4-digit PIN
 import { US_STATES } from "@/lib/us-states";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, calculatePrice, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
@@ -26,6 +28,11 @@ export default function BookingIntake() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
+
+  // PIN Authentication
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pinCode, setPinCode] = useState(["", "", "", ""]);
+  const [pinError, setPinError] = useState(false);
 
   // Section 1: Customer Information
   const [firstName, setFirstName] = useState("");
@@ -69,9 +76,19 @@ export default function BookingIntake() {
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [assignedCleanerId, setAssignedCleanerId] = useState("");
 
+  // Check authentication on mount
   useEffect(() => {
-    fetchCleaners();
+    const hasAccess = sessionStorage.getItem("intake_access");
+    if (hasAccess === "true") {
+      setIsAuthenticated(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCleaners();
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (homeSizeId && serviceType) {
@@ -104,6 +121,35 @@ export default function BookingIntake() {
         ? prev.filter(id => id !== addonId)
         : [...prev, addonId]
     );
+  };
+
+  const handlePinChange = (index: number, value: string) => {
+    if (value.length > 1) return;
+    if (value && !/^\d$/.test(value)) return;
+
+    const newPin = [...pinCode];
+    newPin[index] = value;
+    setPinCode(newPin);
+    setPinError(false);
+
+    // Auto-focus next input
+    if (value && index < 3) {
+      const nextInput = document.getElementById(`pin-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  const handlePinSubmit = () => {
+    const enteredPin = pinCode.join("");
+    if (enteredPin === ACCESS_PIN) {
+      sessionStorage.setItem("intake_access", "true");
+      setIsAuthenticated(true);
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinCode(["", "", "", ""]);
+      document.getElementById("pin-0")?.focus();
+    }
   };
 
   const validateForm = () => {
@@ -235,6 +281,69 @@ export default function BookingIntake() {
       setLoading(false);
     }
   };
+
+  // Show PIN entry screen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md p-8">
+          <div className="flex flex-col items-center space-y-6">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <Lock className="w-8 h-8 text-primary" />
+            </div>
+            
+            <div className="text-center">
+              <h1 className="text-2xl font-semibold text-foreground mb-2">
+                Enter Access Code
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Enter the 4-digit PIN to access the booking intake form
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              {pinCode.map((digit, index) => (
+                <Input
+                  key={index}
+                  id={`pin-${index}`}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handlePinChange(index, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Backspace" && !digit && index > 0) {
+                      document.getElementById(`pin-${index - 1}`)?.focus();
+                    }
+                    if (e.key === "Enter" && pinCode.every(d => d)) {
+                      handlePinSubmit();
+                    }
+                  }}
+                  className="w-14 h-14 text-center text-2xl font-semibold"
+                  autoFocus={index === 0}
+                />
+              ))}
+            </div>
+
+            {pinError && (
+              <p className="text-sm text-destructive">
+                Incorrect PIN. Please try again.
+              </p>
+            )}
+
+            <Button
+              onClick={handlePinSubmit}
+              disabled={!pinCode.every(d => d)}
+              className="w-full"
+              size="lg"
+            >
+              Access Intake Form
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
