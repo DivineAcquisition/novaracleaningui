@@ -7,8 +7,6 @@ import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, addDays, isWeekend as checkIsWeekend } from "date-fns";
 import { useAvailability } from "@/hooks/use-availability";
-import { generateTimeSlots } from "@/lib/time-slots";
-import { useBooking } from "@/contexts/BookingContext";
 
 interface AvailabilityCalendarProps {
   onSelectSlot: (date: Date, timeSlot: string, startTime: string, endTime: string) => void;
@@ -29,7 +27,6 @@ export function AvailabilityCalendar({
   const endDate = addDays(minDate, 30);
   const { availability, loading, syncing, lastSyncTime } = useAvailability(minDate, endDate);
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
-  const { bookingData } = useBooking();
 
   // Group availability by date
   const availabilityByDate = availability.reduce((acc, slot) => {
@@ -182,27 +179,8 @@ export function AvailabilityCalendar({
                     const dateString = format(dateToShow, 'yyyy-MM-dd');
                     const daySlots = availabilityByDate[dateString] || [];
                     
-                    // Generate default slots if no database records exist
-                    const slotsToDisplay = daySlots.length === 0 
-                      ? generateTimeSlots(
-                          bookingData.serviceDuration || 2,
-                          bookingData.serviceType
-                        ).map((slot, idx) => ({
-                          id: `default-${idx}`,
-                          service_date: dateString,
-                          time_slot: slot.label,
-                          start_time: slot.startTime,
-                          end_time: slot.endTime,
-                          max_capacity: 5,
-                          current_bookings: 0,
-                          is_available: true,
-                          blocked_by_google: false,
-                          created_at: new Date().toISOString(),
-                          updated_at: new Date().toISOString(),
-                          google_calendar_event_id: null,
-                          last_synced_at: null
-                        }))
-                      : daySlots;
+                    // Use actual database slots
+                    const slotsToDisplay = daySlots;
 
                     return slotsToDisplay.map((slot) => {
                       const isSelected = selectedTime === slot.time_slot;
