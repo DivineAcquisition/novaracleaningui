@@ -43,6 +43,12 @@ export default function BookingSchedule() {
 
   const minDate = addDays(new Date(), 3);
 
+  const handleDateSelect = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    setSelectedDate(dateStr);
+    setSelectedTime(""); // Clear time when date changes
+  };
+
   const handleSelectSlot = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
     const dateStr = date.toISOString().split('T')[0];
     setSelectedDate(dateStr);
@@ -99,7 +105,8 @@ export default function BookingSchedule() {
               <AvailabilityCalendar 
                 selectedDate={selectedDate ? new Date(selectedDate) : undefined} 
                 selectedTime={selectedTime} 
-                onSelectSlot={handleSelectSlot} 
+                onSelectSlot={handleSelectSlot}
+                onDateSelect={handleDateSelect}
                 minDate={minDate} 
               />
 
