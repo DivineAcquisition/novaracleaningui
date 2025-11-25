@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -113,6 +114,9 @@ export default function BookingZip() {
         continueDisabled={zipCode.length !== 5 || isValidating}
         continueText={isValidating ? "Checking..." : "Continue"}
       />
+
+      {/* Footer */}
+      <BookingFooter />
     </div>
   );
 }
