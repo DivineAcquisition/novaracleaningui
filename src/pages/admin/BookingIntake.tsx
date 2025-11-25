@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,19 +9,27 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Clock, DollarSign, Lock } from "lucide-react";
+import { ArrowLeft, Save, Clock, DollarSign, Lock, RefreshCw, Trash2 } from "lucide-react";
 
 const ACCESS_PIN = "1234"; // Change this to your desired 4-digit PIN
 import { US_STATES } from "@/lib/us-states";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, calculatePrice, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
 import { calculateServiceDuration } from "@/lib/time-slots";
+import { CleanerMultiSelect, SelectedCleaner } from "@/components/admin/CleanerMultiSelect";
+import { CustomerRecognitionCard, CustomerStatus } from "@/components/admin/CustomerRecognitionCard";
+import { calculateDistance } from "@/lib/distance-calculator";
 
 interface Cleaner {
   id: string;
   first_name: string;
   last_name: string;
   status: string;
+  home_lat?: number;
+  home_lng?: number;
+  pay_rate_hr: number;
+  max_travel_miles?: number;
+  distance?: number;
 }
 
 export default function BookingIntake() {
@@ -33,6 +41,18 @@ export default function BookingIntake() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinCode, setPinCode] = useState(["", "", "", ""]);
   const [pinError, setPinError] = useState(false);
+
+  // Customer Recognition
+  const [customerStatus, setCustomerStatus] = useState<CustomerStatus | null>(null);
+  const [checkingCustomer, setCheckingCustomer] = useState(false);
+
+  // Multi-Cleaner Assignment
+  const [selectedCleaners, setSelectedCleaners] = useState<SelectedCleaner[]>([]);
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
+
+  // Auto-save timestamp
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   // Section 1: Customer Information
   const [firstName, setFirstName] = useState("");
@@ -70,17 +90,48 @@ export default function BookingIntake() {
   const [membershipPlan, setMembershipPlan] = useState("none");
   const [applyNewCustomerDiscount, setApplyNewCustomerDiscount] = useState(true);
 
-  // Section 6: Notes & Assignment
+  // Section 6: Notes
   const [accessNotes, setAccessNotes] = useState("");
   const [teamNotes, setTeamNotes] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
-  const [assignedCleanerId, setAssignedCleanerId] = useState("unassigned");
 
-  // Check authentication on mount
+  // Check authentication and restore autosave on mount
   useEffect(() => {
     const hasAccess = sessionStorage.getItem("intake_access");
     if (hasAccess === "true") {
       setIsAuthenticated(true);
+      
+      // Check for autosaved data
+      const autosaved = localStorage.getItem("admin_intake_autosave");
+      if (autosaved) {
+        try {
+          const { timestamp, formData } = JSON.parse(autosaved);
+          const savedDate = new Date(timestamp);
+          const hoursSinceAutosave = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);
+          
+          if (hoursSinceAutosave < 24) {
+            toast({
+              title: "Unsaved data found",
+              description: `Found form data from ${savedDate.toLocaleTimeString()}. Click below to restore.`,
+              action: (
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => restoreAutosave(formData)}>
+                    Restore
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => clearAutosave()}>
+                    Discard
+                  </Button>
+                </div>
+              ),
+              duration: 10000,
+            });
+          } else {
+            clearAutosave();
+          }
+        } catch (error) {
+          console.error("Error parsing autosave:", error);
+        }
+      }
     }
   }, []);
 
@@ -100,11 +151,211 @@ export default function BookingIntake() {
     }
   }, [homeSizeId, serviceType]);
 
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      saveToLocalStorage();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, firstName, lastName, email, phone, customerSource, street, city, state, zipCode, 
+      bedrooms, bathrooms, dwellingType, pets, homeSizeId, serviceType, addOns, frequency, serviceDate, 
+      timeSlot, estimatedDuration, arrivalWindow, bookingChannel, paymentStatus, paymentMethod, 
+      membershipPlan, applyNewCustomerDiscount, accessNotes, teamNotes, dispatchNotes, selectedCleaners]);
+
+  // Customer recognition on email change
+  useEffect(() => {
+    if (email && email.includes('@')) {
+      const debounce = setTimeout(() => {
+        checkCustomerStatus(email);
+      }, 500);
+      return () => clearTimeout(debounce);
+    }
+  }, [email]);
+
+  // Geocode address when complete
+  useEffect(() => {
+    if (street && city && state && zipCode) {
+      const debounce = setTimeout(() => {
+        geocodeAddress();
+      }, 500);
+      return () => clearTimeout(debounce);
+    }
+  }, [street, city, state, zipCode]);
+
+  // Update cleaner distances when location changes
+  useEffect(() => {
+    if (customerLocation && cleaners.length > 0) {
+      calculateCleanerDistances();
+    }
+  }, [customerLocation, cleaners]);
+
+  const saveToLocalStorage = () => {
+    const formData = {
+      firstName, lastName, email, phone, customerSource,
+      street, city, state, zipCode, bedrooms, bathrooms, dwellingType, pets,
+      homeSizeId, serviceType, addOns, frequency,
+      serviceDate, timeSlot, estimatedDuration, arrivalWindow,
+      bookingChannel, paymentStatus, paymentMethod, membershipPlan, applyNewCustomerDiscount,
+      accessNotes, teamNotes, dispatchNotes,
+      selectedCleaners,
+    };
+
+    localStorage.setItem("admin_intake_autosave", JSON.stringify({
+      timestamp: Date.now(),
+      formData,
+    }));
+
+    setLastSaved(new Date());
+  };
+
+  const restoreAutosave = (formData: any) => {
+    setFirstName(formData.firstName || "");
+    setLastName(formData.lastName || "");
+    setEmail(formData.email || "");
+    setPhone(formData.phone || "");
+    setCustomerSource(formData.customerSource || "New Lead");
+    setStreet(formData.street || "");
+    setCity(formData.city || "");
+    setState(formData.state || "MD");
+    setZipCode(formData.zipCode || "");
+    setBedrooms(formData.bedrooms || "");
+    setBathrooms(formData.bathrooms || "");
+    setDwellingType(formData.dwellingType || "");
+    setPets(formData.pets || "None");
+    setHomeSizeId(formData.homeSizeId || "");
+    setServiceType(formData.serviceType || "standard");
+    setAddOns(formData.addOns || []);
+    setFrequency(formData.frequency || "One-Time");
+    setServiceDate(formData.serviceDate || "");
+    setTimeSlot(formData.timeSlot || "");
+    setEstimatedDuration(formData.estimatedDuration || "");
+    setArrivalWindow(formData.arrivalWindow || "");
+    setBookingChannel(formData.bookingChannel || "Phone");
+    setPaymentStatus(formData.paymentStatus || "Deposit Paid");
+    setPaymentMethod(formData.paymentMethod || "Card");
+    setMembershipPlan(formData.membershipPlan || "none");
+    setApplyNewCustomerDiscount(formData.applyNewCustomerDiscount !== false);
+    setAccessNotes(formData.accessNotes || "");
+    setTeamNotes(formData.teamNotes || "");
+    setDispatchNotes(formData.dispatchNotes || "");
+    setSelectedCleaners(formData.selectedCleaners || []);
+
+    toast({ title: "Data restored", description: "Form data has been restored from autosave" });
+  };
+
+  const clearAutosave = () => {
+    localStorage.removeItem("admin_intake_autosave");
+    setLastSaved(null);
+    toast({ title: "Autosave cleared", description: "Autosaved data has been discarded" });
+  };
+
+  const checkCustomerStatus = async (emailToCheck: string) => {
+    setCheckingCustomer(true);
+    try {
+      // Check if customer exists
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("email", emailToCheck)
+        .maybeSingle();
+
+      // Check for active membership
+      const { data: membership } = await supabase
+        .from("membership_credits")
+        .select("*")
+        .eq("email", emailToCheck)
+        .gt("current_period_end", new Date().toISOString())
+        .order("current_period_end", { ascending: false })
+        .maybeSingle();
+
+      if (!customer) {
+        setCustomerStatus({ isNew: true, hasMembership: false });
+        setApplyNewCustomerDiscount(true);
+      } else if (membership) {
+        setCustomerStatus({
+          isNew: false,
+          hasMembership: true,
+          membershipPlan: membership.membership_plan,
+          creditsRemaining: membership.credits_remaining,
+          creditsPerMonth: membership.credits_per_month,
+          currentPeriodEnd: membership.current_period_end,
+        });
+        setMembershipPlan(membership.membership_plan);
+        setApplyNewCustomerDiscount(false);
+      } else {
+        setCustomerStatus({ isNew: false, hasMembership: false });
+        setApplyNewCustomerDiscount(false);
+      }
+    } catch (error) {
+      console.error("Error checking customer status:", error);
+    } finally {
+      setCheckingCustomer(false);
+    }
+  };
+
+  const geocodeAddress = async () => {
+    setGeocoding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("geocode-address", {
+        body: { address: street, city, state, zip: zipCode },
+      });
+
+      if (error) throw error;
+      if (data?.lat && data?.lng) {
+        setCustomerLocation({ lat: data.lat, lng: data.lng });
+      }
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      toast({
+        title: "Could not geocode address",
+        description: "Cleaners will be shown without distance sorting",
+        variant: "destructive",
+      });
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const calculateCleanerDistances = () => {
+    if (!customerLocation) return;
+
+    const updated = cleaners.map(cleaner => {
+      if (cleaner.home_lat && cleaner.home_lng) {
+        const distance = calculateDistance(
+          customerLocation.lat,
+          customerLocation.lng,
+          cleaner.home_lat,
+          cleaner.home_lng
+        );
+
+        // Filter out cleaners beyond max travel distance
+        if (cleaner.max_travel_miles && distance > cleaner.max_travel_miles) {
+          return null;
+        }
+
+        return { ...cleaner, distance };
+      }
+      return cleaner;
+    }).filter(Boolean) as Cleaner[];
+
+    // Sort by distance (closest first)
+    updated.sort((a, b) => {
+      const distA = a.distance || 9999;
+      const distB = b.distance || 9999;
+      return distA - distB;
+    });
+
+    setCleaners(updated);
+  };
+
   const fetchCleaners = async () => {
     try {
       const { data, error } = await supabase
         .from("cleaners")
-        .select("id, first_name, last_name, status")
+        .select("id, first_name, last_name, status, home_lat, home_lng, pay_rate_hr, max_travel_miles")
         .eq("approved", true)
         .order("first_name");
 
@@ -194,10 +445,9 @@ export default function BookingIntake() {
         bookingStatus = "confirmed";
       }
 
-      // Calculate cleaner payout
+      // Calculate estimated hours
       const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
       const estimatedHours = homeSize?.baseHours || 0;
-      const cleanerPayoutCents = estimatedHours * 2000; // $20/hour in cents
 
       // Insert booking
       const { data: booking, error: bookingError } = await supabase
@@ -208,7 +458,7 @@ export default function BookingIntake() {
           last_name: lastName,
           email: email,
           phone: phone,
-          customer_id: null, // Admin intake doesn't link to customer accounts
+          customer_id: null,
 
           // Address
           address: street,
@@ -239,7 +489,6 @@ export default function BookingIntake() {
           deposit_cents: DEPOSIT_AMOUNT,
           total_estimate_cents: pricing.total,
           full_payment_discount: 0,
-          cleaner_payout_cents: cleanerPayoutCents,
 
           // Configuration
           booking_channel: bookingChannel,
@@ -253,22 +502,70 @@ export default function BookingIntake() {
           access_notes: accessNotes || null,
           team_notes: teamNotes || null,
           dispatch_notes: dispatchNotes || null,
-
-          // Assignment
-          cleaner_id: assignedCleanerId !== "unassigned" ? assignedCleanerId : null,
-          assigned_at: assignedCleanerId !== "unassigned" ? new Date().toISOString() : null,
         })
         .select()
         .single();
 
       if (bookingError) throw bookingError;
 
+      // Create job and assign cleaners if any selected
+      if (selectedCleaners.length > 0 && customerLocation) {
+        const { data: job, error: jobError } = await supabase
+          .from("jobs")
+          .insert({
+            address: street,
+            city: city,
+            state: state,
+            zip: zipCode,
+            lat: customerLocation.lat,
+            lng: customerLocation.lng,
+            service_type: serviceType,
+            start_datetime: `${serviceDate} ${timeSlot.split(' - ')[0]}`,
+            duration_est_hours: estimatedHours,
+            min_cleaners_required: selectedCleaners.length,
+            status: "Assigned",
+            sq_ft: homeSize?.minSqft || null,
+            bedrooms: bedrooms ? parseInt(bedrooms) : null,
+            bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+            customer_id: null,
+          })
+          .select()
+          .single();
+
+        if (jobError) throw jobError;
+
+        // Link booking to job
+        await supabase
+          .from("bookings")
+          .update({ job_id: job.id })
+          .eq("id", booking.id);
+
+        // Create job assignments
+        const assignments = selectedCleaners.map(cleaner => ({
+          job_id: job.id,
+          cleaner_id: cleaner.id,
+          role: cleaner.role,
+          distance_miles: cleaner.distance,
+          pay_rate_hr: cleaner.hourlyRate,
+          estimated_pay_cents: cleaner.hourlyRate * estimatedHours * 100,
+          status: "Assigned",
+        }));
+
+        const { error: assignmentError } = await supabase
+          .from("job_assignments")
+          .insert(assignments);
+
+        if (assignmentError) throw assignmentError;
+      }
+
+      // Clear autosave on success
+      clearAutosave();
+
       toast({
         title: "Booking created successfully",
         description: `Booking ID: ${booking.id}`,
       });
 
-      // Navigate to dispatch queue
       navigate("/admin/dispatch");
     } catch (error: any) {
       console.error("Error creating booking:", error);
@@ -357,13 +654,26 @@ export default function BookingIntake() {
               </Button>
               <div>
                 <h1 className="text-2xl font-bold">Phone Booking Intake</h1>
-                <p className="text-sm text-muted-foreground">Create booking for CTS Care Team</p>
+                <p className="text-sm text-muted-foreground">
+                  Create booking for CTS Care Team
+                  {lastSaved && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      • Last saved: {lastSaved.toLocaleTimeString()}
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
-            <Button onClick={handleSubmit} disabled={loading} size="lg">
-              <Save className="w-4 h-4 mr-2" />
-              {loading ? "Saving..." : "Create Booking"}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="lg" onClick={clearAutosave}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear Form
+              </Button>
+              <Button onClick={handleSubmit} disabled={loading} size="lg">
+                <Save className="w-4 h-4 mr-2" />
+                {loading ? "Saving..." : "Create Booking"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -421,6 +731,15 @@ export default function BookingIntake() {
                     />
                   </div>
                 </div>
+
+                {/* Customer Recognition */}
+                {checkingCustomer && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Checking customer status...
+                  </div>
+                )}
+                <CustomerRecognitionCard status={customerStatus} />
                 <div className="space-y-2">
                   <Label htmlFor="customerSource">Customer Source</Label>
                   <Select value={customerSource} onValueChange={setCustomerSource}>
@@ -763,10 +1082,10 @@ export default function BookingIntake() {
               </CardContent>
             </Card>
 
-            {/* Section 6: Notes & Assignment */}
+            {/* Section 6: Notes */}
             <Card>
               <CardHeader>
-                <CardTitle>Notes & Cleaner Assignment</CardTitle>
+                <CardTitle>Notes</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -799,22 +1118,26 @@ export default function BookingIntake() {
                     rows={3}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="assignCleaner">Assign Cleaner (Optional)</Label>
-                  <Select value={assignedCleanerId} onValueChange={setAssignedCleanerId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select cleaner or leave unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {cleaners.map(cleaner => (
-                        <SelectItem key={cleaner.id} value={cleaner.id}>
-                          {cleaner.first_name} {cleaner.last_name} ({cleaner.status})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 7: Cleaner Assignment */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Cleaner Assignment (Optional)</CardTitle>
+                {geocoding && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Calculating distances...
+                  </p>
+                )}
+              </CardHeader>
+              <CardContent>
+                <CleanerMultiSelect
+                  cleaners={cleaners}
+                  selectedCleaners={selectedCleaners}
+                  onSelectionChange={setSelectedCleaners}
+                />
               </CardContent>
             </Card>
           </div>
@@ -827,6 +1150,8 @@ export default function BookingIntake() {
               addOns={addOns}
               membershipPlan={membershipPlan}
               applyNewCustomerDiscount={applyNewCustomerDiscount}
+              selectedCleaners={selectedCleaners}
+              estimatedHours={parseFloat(estimatedDuration || "0")}
             />
           </div>
         </div>

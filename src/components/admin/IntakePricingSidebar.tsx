@@ -4,12 +4,22 @@ import { Separator } from "@/components/ui/separator";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { DollarSign, TrendingDown, User } from "lucide-react";
 
+interface SelectedCleaner {
+  id: string;
+  name: string;
+  role: 'Lead' | 'Support';
+  hourlyRate: number;
+  distance: number;
+}
+
 interface IntakePricingSidebarProps {
   homeSizeId: string;
   serviceType: string;
   addOns: string[];
   membershipPlan: string;
   applyNewCustomerDiscount: boolean;
+  selectedCleaners: SelectedCleaner[];
+  estimatedHours: number;
 }
 
 export function IntakePricingSidebar({
@@ -18,6 +28,8 @@ export function IntakePricingSidebar({
   addOns,
   membershipPlan,
   applyNewCustomerDiscount,
+  selectedCleaners,
+  estimatedHours,
 }: IntakePricingSidebarProps) {
   const pricing = calculatePrice(
     homeSizeId,
@@ -28,9 +40,12 @@ export function IntakePricingSidebar({
     applyNewCustomerDiscount
   );
 
-  const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
-  const estimatedHours = homeSize?.baseHours || 0;
-  const cleanerPayout = estimatedHours * 20; // $20/hour
+  // Calculate total cleaner payout from selected cleaners
+  const totalCleanerPayout = selectedCleaners.reduce((sum, cleaner) => {
+    return sum + (cleaner.hourlyRate * estimatedHours);
+  }, 0);
+  
+  const companyProfit = (pricing.total / 100) - totalCleanerPayout;
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
@@ -139,18 +154,45 @@ export function IntakePricingSidebar({
 
         <Separator />
 
-        {/* Cleaner Payout Estimate */}
+        {/* Cleaner Payout Breakdown */}
         <div className="bg-primary/5 p-3 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
             <User className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Est. Cleaner Payout</span>
+            <span className="text-sm font-medium">Cleaner Payout Breakdown</span>
           </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{estimatedHours} hours × $20/hr</span>
-              <span className="font-bold text-primary">${cleanerPayout.toFixed(2)}</span>
+          
+          {selectedCleaners.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No cleaners assigned yet
             </div>
-          </div>
+          ) : (
+            <div className="space-y-2">
+              {selectedCleaners.map((cleaner, index) => (
+                <div key={cleaner.id} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {cleaner.name} ({cleaner.role}): ${cleaner.hourlyRate}/hr × {estimatedHours}h
+                  </span>
+                  <span className="font-medium">
+                    ${(cleaner.hourlyRate * estimatedHours).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+              
+              <Separator className="my-1" />
+              
+              <div className="flex justify-between text-sm font-bold">
+                <span>Total Cleaner Payout</span>
+                <span className="text-primary">${totalCleanerPayout.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Company Profit</span>
+                <span className="font-semibold text-green-600">
+                  ${companyProfit.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
