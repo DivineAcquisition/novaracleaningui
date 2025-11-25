@@ -150,3 +150,9 @@ verify_jwt = false
 [functions.update-google-calendar-event]
 verify_jwt = false
 
+[functions.send-capacity-alert]
+verify_jwt = false
+
+[functions.cleanup-old-slots]
+verify_jwt = false
+
