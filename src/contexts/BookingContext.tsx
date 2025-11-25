@@ -9,6 +9,8 @@ export interface BookingData {
   useCredit: boolean;
   serviceDate: string;
   timeSlot: string;
+  startTime?: string;
+  endTime?: string;
   firstName: string;
   lastName: string;
   email: string;

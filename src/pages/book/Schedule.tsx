@@ -5,14 +5,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Clock, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { DateTimeSkeleton } from "@/components/booking/DateTimeSkeleton";
+import { ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { generateTimeSlots, calculateServiceDuration, isWeekend } from "@/lib/time-slots";
+import { BookingFooter } from "@/components/booking/BookingFooter";
+import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
+import { calculateServiceDuration } from "@/lib/time-slots";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { HOME_SIZE_RANGES, MEMBERSHIP_PLANS, SERVICE_TIER_PRICING, ADD_ONS } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,13 +38,14 @@ export default function BookingSchedule() {
     bookingData.serviceDate ? new Date(bookingData.serviceDate) : undefined
   );
   const [selectedTime, setSelectedTime] = useState(bookingData.timeSlot || "");
+  const [selectedStartTime, setSelectedStartTime] = useState("");
+  const [selectedEndTime, setSelectedEndTime] = useState("");
   const [membershipPlan, setMembershipPlan] = useState(bookingData.membershipPlan || "none");
   const [useCredit, setUseCredit] = useState(bookingData.useCredit || false);
   const [creditAvailable, setCreditAvailable] = useState(false);
   const [creditAvailableDate, setCreditAvailableDate] = useState<string>("");
   const [checkingCredit, setCheckingCredit] = useState(false);
   const [serviceDuration, setServiceDuration] = useState(2);
-  const [isLoadingDates, setIsLoadingDates] = useState(true);
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
@@ -75,15 +76,6 @@ export default function BookingSchedule() {
     }
   }, [bookingData.homeSizeId, bookingData.serviceType]);
 
-  // Simulate loading dates
-  useEffect(() => {
-    setIsLoadingDates(true);
-    const timer = setTimeout(() => {
-      setIsLoadingDates(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
-
   // Auto-scroll to date/time section when membership is selected
   useEffect(() => {
     if (membershipPlan !== 'none' && dateTimeSectionRef.current) {
@@ -96,10 +88,6 @@ export default function BookingSchedule() {
     }
   }, [membershipPlan]);
 
-  // Generate time slots based on service duration
-  const timeSlots = generateTimeSlots(serviceDuration, bookingData.serviceType);
-
-  // Minimum date is 3 days from now, and we don't work weekends
   const minDate = addDays(new Date(), 3);
 
   // Check credit availability
@@ -156,9 +144,18 @@ export default function BookingSchedule() {
       timeSlot: selectedTime,
       membershipPlan,
       useCredit,
+      startTime: selectedStartTime,
+      endTime: selectedEndTime,
     });
     setCurrentStep(5);
     navigate("/book/details");
+  };
+
+  const handleSelectSlot = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
+    setSelectedDate(date);
+    setSelectedTime(timeSlot);
+    setSelectedStartTime(startTime);
+    setSelectedEndTime(endTime);
   };
 
   const handleBack = () => {
@@ -282,222 +279,15 @@ export default function BookingSchedule() {
               </Card>
             )}
 
-            {/* Date & Time Selection - Side by Side Layout */}
-            {isLoadingDates ? (
-              <DateTimeSkeleton />
-            ) : (
-              <div ref={dateTimeSectionRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 animate-slide-in-from-right">
-                {/* Date Selection */}
-                <div className="space-y-4">
-                  <div>
-                    <h3 
-                      className="text-base md:text-lg font-semibold"
-                      id="date-selection-label"
-                    >
-                      Select Date
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Choose your preferred service day
-                    </p>
-                  </div>
-                  
-                  <Card className="border-2 border-border/50 shadow-md">
-                    <CardContent className="p-3 md:p-4">
-                      <ScrollArea className="h-[320px] md:h-[400px] pr-2 md:pr-4">
-                        <div 
-                          className="space-y-2"
-                          role="radiogroup"
-                          aria-labelledby="date-selection-label"
-                          aria-describedby="date-selection-description"
-                        >
-                          {Array.from({ length: 30 }, (_, i) => {
-                            const date = addDays(minDate, i);
-                            
-                            // Skip weekends - we're closed Saturday and Sunday
-                            if (isWeekend(date)) {
-                              return null;
-                            }
-                            
-                            const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-                            const dateString = format(date, 'EEEE, MMMM d, yyyy');
-                            
-                            return (
-                              <button
-                                key={i}
-                                onClick={() => setSelectedDate(date)}
-                                role="radio"
-                                aria-checked={isSelected}
-                                aria-label={`Select ${dateString} for your cleaning service`}
-                                className={cn(
-                                  "w-full p-3 md:p-4 rounded-lg border-2 transition-all duration-200 text-left touch-manipulation",
-                                  "hover:border-primary/40 hover:shadow-md active:scale-[0.98]",
-                                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                                  isSelected 
-                                    ? "bg-primary text-primary-foreground border-primary shadow-md" 
-                                    : "border-border/60 bg-background hover:bg-accent/30"
-                                )}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3 md:gap-4">
-                                    <div className={cn(
-                                      "text-center min-w-[44px] md:min-w-[48px]",
-                                      isSelected && "text-primary-foreground"
-                                    )}>
-                                      <p className="text-xs font-medium uppercase tracking-wide opacity-80">
-                                        {format(date, 'EEE')}
-                                      </p>
-                                      <p className="text-xl md:text-2xl font-bold leading-none mt-1">
-                                        {format(date, 'd')}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <p className={cn(
-                                        "font-semibold text-sm md:text-base",
-                                        isSelected && "text-primary-foreground"
-                                      )}>
-                                        {format(date, 'MMMM d, yyyy')}
-                                      </p>
-                                      <p className={cn(
-                                        "text-xs md:text-sm mt-0.5",
-                                        isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-                                      )}>
-                                        {format(date, 'EEEE')}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {isSelected && (
-                                    <CheckCircle2 
-                                      className="w-5 h-5 text-primary-foreground flex-shrink-0" 
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </ScrollArea>
-                      
-                      <div 
-                        className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-border/50"
-                        id="date-selection-description"
-                      >
-                        <p className="text-xs text-muted-foreground flex items-center gap-2" role="note">
-                          <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-                          <span>We're closed on weekends. Book at least 3 days in advance.</span>
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Time Selection */}
-                <div className="space-y-4">
-                  <div>
-                    <h3 
-                      className="text-base md:text-lg font-semibold"
-                      id="time-selection-label"
-                    >
-                      Select Time
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {selectedDate 
-                        ? `Available times for ${format(selectedDate, 'MMM d')}`
-                        : 'Choose a date first'}
-                    </p>
-                  </div>
-                  
-                  {selectedDate ? (
-                    <Card className="border-2 border-border/50 shadow-md">
-                      <CardContent className="p-3 md:p-4">
-                        <div 
-                          className="space-y-2 md:space-y-3"
-                          role="radiogroup"
-                          aria-labelledby="time-selection-label"
-                          aria-describedby="time-selection-description"
-                        >
-                          {timeSlots.map((slot) => {
-                            const isSelected = selectedTime === slot.id;
-                            
-                            return (
-                              <button
-                                key={slot.id}
-                                onClick={() => setSelectedTime(slot.id)}
-                                role="radio"
-                                aria-checked={isSelected}
-                                aria-label={`Select ${slot.label} time window, estimated ${slot.estimatedDuration} ${slot.estimatedDuration === 1 ? 'hour' : 'hours'} service`}
-                                className={cn(
-                                  "w-full p-3 md:p-4 rounded-lg border-2 transition-all duration-200 text-left touch-manipulation",
-                                  "hover:border-primary/40 hover:shadow-md active:scale-[0.98]",
-                                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                                  isSelected 
-                                    ? "bg-primary text-primary-foreground border-primary shadow-md" 
-                                    : "border-border/60 bg-background hover:bg-accent/30"
-                                )}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className={cn(
-                                      "w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center flex-shrink-0",
-                                      isSelected 
-                                        ? "bg-primary-foreground/20" 
-                                        : "bg-primary/10"
-                                    )}>
-                                      <Clock className={cn(
-                                        "w-5 h-5 md:w-6 md:h-6",
-                                        isSelected ? "text-primary-foreground" : "text-primary"
-                                      )} aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                      <p className={cn(
-                                        "font-semibold text-sm md:text-base",
-                                        isSelected && "text-primary-foreground"
-                                      )}>
-                                        {slot.label}
-                                      </p>
-                                      <p className={cn(
-                                        "text-xs md:text-sm mt-0.5",
-                                        isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-                                      )}>
-                                        {slot.estimatedDuration} {slot.estimatedDuration === 1 ? 'hour' : 'hours'} service
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {isSelected && (
-                                    <CheckCircle2 
-                                      className="w-5 h-5 text-primary-foreground flex-shrink-0" 
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <p 
-                          id="time-selection-description" 
-                          className="sr-only"
-                        >
-                          Select your preferred time window for the cleaning service
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <Card className="border-2 border-dashed border-border/50">
-                      <CardContent className="p-6 md:p-8 text-center">
-                        <Clock 
-                          className="w-10 h-10 md:w-12 md:h-12 text-muted-foreground/50 mx-auto mb-3" 
-                          aria-hidden="true"
-                        />
-                        <p className="text-sm md:text-base text-muted-foreground" role="status">
-                          Please select a date to view available time slots
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Date & Time Selection with Live Availability */}
+            <div ref={dateTimeSectionRef} className="space-y-4 md:space-y-6">
+              <AvailabilityCalendar
+                onSelectSlot={handleSelectSlot}
+                selectedDate={selectedDate}
+                selectedTime={selectedTime}
+                minDate={minDate}
+              />
+            </div>
 
             {/* Desktop Navigation - Hidden on Mobile */}
             <div className="hidden md:flex gap-4 pt-6">
@@ -552,6 +342,8 @@ export default function BookingSchedule() {
         continueDisabled={!selectedDate || !selectedTime || checkingCredit || (useCredit && !creditAvailable)}
         continueText={checkingCredit ? "Checking Credit..." : "Continue"}
       />
+
+      <BookingFooter />
     </div>
   );
 }

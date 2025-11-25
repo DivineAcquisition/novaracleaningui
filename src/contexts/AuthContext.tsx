@@ -22,6 +22,7 @@ interface AuthContextType {
   subscription: SubscriptionData | null;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   checkSubscription: () => Promise<void>;
   openCustomerPortal: () => Promise<void>;
@@ -123,6 +124,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
+  const signInWithGoogle = async () => {
+    const redirectUrl = `${window.location.origin}/auth/callback`;
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
+  };
+
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/update-password`,
@@ -143,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         subscription,
         signIn,
         signUp,
+        signInWithGoogle,
         signOut,
         checkSubscription,
         openCustomerPortal,
