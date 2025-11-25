@@ -46,9 +46,10 @@ export default function BookingSchedule() {
   const minDate = new Date();
   minDate.setDate(minDate.getDate() + 3);
 
-  const handleSelectSlot = (date: string, time: string) => {
-    setSelectedDate(date);
-    setSelectedTime(time);
+  const handleSelectSlot = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
+    const dateStr = date.toISOString().split('T')[0];
+    setSelectedDate(dateStr);
+    setSelectedTime(timeSlot);
   };
 
   const handleContinue = () => {
@@ -86,7 +87,7 @@ export default function BookingSchedule() {
               </div>
               <p className="text-muted-foreground">Choose your preferred date and time (closed on weekends)</p>
             </div>
-            <AvailabilityCalendar selectedDate={selectedDate} selectedTime={selectedTime} onSelectSlot={handleSelectSlot} minDate={minDate} />
+            <AvailabilityCalendar selectedDate={selectedDate ? new Date(selectedDate) : undefined} selectedTime={selectedTime} onSelectSlot={handleSelectSlot} minDate={minDate} />
 
             <div className="hidden md:flex gap-4 pt-8 mt-8 border-t">
               <Button variant="outline" size="lg" onClick={handleBack} className="h-14">
@@ -100,7 +101,14 @@ export default function BookingSchedule() {
         </Card>
       </div>
 
-      <BottomNavigation onBack={handleBack} onNext={handleContinue} nextDisabled={!selectedDate || !selectedTime} />
+      <BottomNavigation 
+        currentStep={4} 
+        totalSteps={6} 
+        onBack={handleBack} 
+        onContinue={handleContinue} 
+        continueDisabled={!selectedDate || !selectedTime}
+        steps={BOOKING_STEPS}
+      />
     </div>
   );
 }
