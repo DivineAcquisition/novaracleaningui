@@ -120,34 +120,50 @@ export const ADD_ONS = {
 };
 
 export const MEMBERSHIP_PLANS = {
-  none: { 
-    label: 'Pay Per Clean', 
-    monthlyPrice: 0, 
-    credits: 0, 
+  none: {
+    id: 'none',
+    label: 'Pay Per Clean',
+    monthlyPrice: 0,
+    cleansPerMonth: 0,
+    includedHours: 0,
+    overtimeDiscount: 0,
     discount: 0,
-    description: 'No commitment, pay as you go'
+    description: 'No commitment, pay as you go',
+    features: ['Flexible scheduling', 'No monthly fees', 'Cancel anytime']
   },
-  monthly: { 
-    label: 'Novara Monthly', 
-    monthlyPrice: 189, 
-    credits: 1, 
+  essential: {
+    id: 'essential',
+    label: 'Essential',
+    monthlyPrice: 189,
+    cleansPerMonth: 1,
+    includedHours: 2,
+    overtimeDiscount: 0.15,
+    discount: 0.10,
+    description: '1 clean/month • 2 hrs included • 15% off overtime',
+    features: ['1 clean per month', '2 hours included', '15% off overtime', 'Priority scheduling']
+  },
+  standard: {
+    id: 'standard',
+    label: 'Standard',
+    monthlyPrice: 289,
+    cleansPerMonth: 2,
+    includedHours: 3,
+    overtimeDiscount: 0.25,
     discount: 0.20,
-    description: '1 standard cleaning credit/month • 20% off extras'
+    description: '2 cleans/month • 3 hrs included • 25% off overtime',
+    features: ['2 cleans per month', '3 hours included', '25% off overtime', 'Priority scheduling', 'Free add-ons']
   },
-  biweekly: { 
-    label: 'Novara Bi-Weekly', 
-    monthlyPrice: 289, 
-    credits: 2, 
-    discount: 0.25,
-    description: '2 standard cleaning credits/month • 25% off extras'
-  },
-  weekly: { 
-    label: 'Novara Weekly', 
-    monthlyPrice: 389, 
-    credits: 4, 
+  premium: {
+    id: 'premium',
+    label: 'Premium',
+    monthlyPrice: 389,
+    cleansPerMonth: 4,
+    includedHours: 3,
+    overtimeDiscount: 0.35,
     discount: 0.30,
-    description: '4 standard cleaning credits/month • 30% off extras'
-  },
+    description: '4 cleans/month • 3 hrs included • 35% off overtime',
+    features: ['4 cleans per month', '3 hours included per clean', '35% off overtime', 'VIP scheduling', 'Free add-ons', 'Dedicated team']
+  }
 };
 
 export interface PricingCalculation {
