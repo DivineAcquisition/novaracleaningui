@@ -139,7 +139,7 @@ export default function BookingService() {
               <div className="flex items-center justify-center gap-2 pt-2 text-sm font-medium text-primary">
                 <Clock className="w-4 h-4" />
                 <span>
-                  Estimated {getEstimatedHours(bookingData.homeSizeId)} hours @ ${HOURLY_RATE}/hr
+                  Estimated {getEstimatedHours(bookingData.homeSizeId)} hours
                 </span>
               </div>
             )}
