@@ -75,7 +75,7 @@ const App = () => (
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
-              <Route path="/admin/intake" element={<ProtectedRoute requiredRole="admin"><BookingIntake /></ProtectedRoute>} />
+              <Route path="/admin/intake" element={<BookingIntake />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
