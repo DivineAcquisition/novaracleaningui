@@ -8,6 +8,7 @@ import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 
 
 const BOOKING_STEPS = [
@@ -126,6 +127,8 @@ export default function BookingHome() {
         continueDisabled={!bookingData.homeSizeId}
         continueText="Continue"
       />
+
+      <BookingFooter />
     </div>
   );
 }

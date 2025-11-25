@@ -305,6 +305,40 @@ serve(async (req) => {
     const clientSecret = paymentIntent.client_secret;
     logStep("Created payment intent", { paymentIntentId, amount: amountToCharge, bookingNumber });
 
+    // Reserve the time slot before creating booking
+    if (bookingData.startTime && bookingData.endTime) {
+      logStep("Attempting to reserve time slot", { 
+        date: bookingData.serviceDate, 
+        startTime: bookingData.startTime,
+        endTime: bookingData.endTime 
+      });
+
+      const { data: reserved, error: reserveError } = await supabaseClient
+        .rpc('reserve_time_slot', {
+          _date: bookingData.serviceDate,
+          _start_time: bookingData.startTime,
+          _end_time: bookingData.endTime
+        });
+
+      if (reserveError || !reserved) {
+        logStep("Time slot reservation failed", { error: reserveError });
+        return new Response(
+          JSON.stringify({ 
+            error: "This time slot just filled up. Please select another time.",
+            code: "SLOT_UNAVAILABLE"
+          }),
+          { 
+            status: 409, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+
+      logStep("Time slot reserved successfully");
+    } else {
+      logStep("Warning: startTime/endTime not provided, skipping slot reservation");
+    }
+
     // Store provisional booking in database - ALWAYS as pending_payment
     const { data: booking, error: bookingError } = await supabaseClient
       .from("bookings")

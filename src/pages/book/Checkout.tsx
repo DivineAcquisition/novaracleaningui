@@ -26,6 +26,7 @@ import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { useSwipeable } from "react-swipeable";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 
 // Stripe publishable key will be loaded from an Edge Function at runtime
 
@@ -857,5 +858,7 @@ export default function BookingCheckout() {
 
       {/* Mobile Navigation */}
       <BottomNavigation currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} onBack={handleBack} showPrice={true} price={currentAmount} continueDisabled={true} />
+
+      <BookingFooter />
     </div>;
 }

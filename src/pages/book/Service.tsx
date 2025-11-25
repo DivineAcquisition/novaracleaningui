@@ -14,6 +14,7 @@ import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -251,6 +252,8 @@ export default function BookingService() {
           </CardContent>
         </Card>
       </div>
+
+      <BookingFooter />
     </div>
   );
 }
