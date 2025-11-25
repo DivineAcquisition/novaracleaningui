@@ -128,17 +128,16 @@ export default function AdminCleaners() {
       if (createError) throw createError;
       if (!createData?.success) throw new Error("Failed to create cleaner account");
 
-      // Send credentials email with auto-generated password
+      // Send invitation email directing to onboarding landing
       const { error: emailError } = await supabase.functions.invoke("send-cleaner-email", {
         body: {
-          type: "credentials",
+          type: "invitation",
           email: newCleaner.email,
           data: {
             firstName: newCleaner.firstName,
             lastName: newCleaner.lastName,
             email: newCleaner.email,
-            password: createData.password,
-            loginUrl: "https://contractor.novaracleaning.com/cleaner/auth",
+            onboardingUrl: "https://book.novaracleaning.com/cleaner/onboarding-landing",
           },
         },
       });
@@ -148,8 +147,8 @@ export default function AdminCleaners() {
       }
 
       toast({
-        title: "Cleaner account created",
-        description: `${newCleaner.firstName} ${newCleaner.lastName}'s credentials have been emailed.`,
+        title: "Cleaner invited",
+        description: `Invitation email sent to ${newCleaner.firstName} ${newCleaner.lastName}.`,
       });
 
       setIsAddDialogOpen(false);
