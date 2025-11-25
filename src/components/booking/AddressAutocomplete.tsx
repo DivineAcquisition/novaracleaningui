@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Clock, X } from "lucide-react";
+import { MapPin, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +22,6 @@ interface AddressComponents {
   city: string;
   state: string;
   zipCode: string;
-  lat: number;
-  lng: number;
 }
 
 interface AddressAutocompleteProps {
@@ -31,6 +29,7 @@ interface AddressAutocompleteProps {
   initialValue?: string;
   label?: string;
   placeholder?: string;
+  error?: string;
 }
 
 // Helper function to load Google Maps script
@@ -60,11 +59,12 @@ export function AddressAutocomplete({
   initialValue = "",
   label = "Street Address *",
   placeholder = "Start typing address...",
+  error,
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -103,7 +103,7 @@ export function AddressAutocomplete({
         setLoading(false);
       } catch (err) {
         console.error("Error initializing Google Places:", err);
-        setError("Failed to load address autocomplete. You can still enter the address manually.");
+        setApiError("Failed to load address autocomplete. You can still enter the address manually.");
         setLoading(false);
       }
     };
@@ -119,7 +119,7 @@ export function AddressAutocomplete({
 
   const handlePlaceSelect = () => {
     const place = autocompleteRef.current?.getPlace();
-    if (!place || !place.address_components || !place.geometry?.location) {
+    if (!place || !place.address_components) {
       return;
     }
 
@@ -149,9 +149,6 @@ export function AddressAutocomplete({
       }
     });
 
-    const lat = place.geometry.location.lat();
-    const lng = place.geometry.location.lng();
-
     // Format address before saving
     const formattedAddress = formatAddress({
       street,
@@ -160,21 +157,13 @@ export function AddressAutocomplete({
       zipCode,
     });
 
-    // Save to history
-    saveAddressToHistory({
-      ...formattedAddress,
-      lat,
-      lng,
-    });
+    // Save to history (without lat/lng for customer bookings)
+    saveAddressToHistory(formattedAddress);
 
     // Update history state
     setAddressHistory(getAddressHistory());
 
-    onAddressSelect({
-      ...formattedAddress,
-      lat,
-      lng,
-    });
+    onAddressSelect(formattedAddress);
   };
 
   const handleHistorySelect = (item: AddressHistoryItem) => {
@@ -187,8 +176,6 @@ export function AddressAutocomplete({
       city: item.city,
       state: item.state,
       zipCode: item.zipCode,
-      lat: item.lat || 0,
-      lng: item.lng || 0,
     });
 
     setShowHistory(false);
@@ -197,7 +184,7 @@ export function AddressAutocomplete({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label htmlFor="address-autocomplete">{label}</Label>
+        <Label htmlFor="customer-address-autocomplete">{label}</Label>
         {addressHistory.length > 0 && (
           <Popover open={showHistory} onOpenChange={setShowHistory}>
             <PopoverTrigger asChild>
@@ -235,7 +222,7 @@ export function AddressAutocomplete({
       <div className="relative">
         <Input
           ref={inputRef}
-          id="address-autocomplete"
+          id="customer-address-autocomplete"
           type="text"
           placeholder={loading ? "Loading..." : placeholder}
           defaultValue={initialValue}
@@ -247,11 +234,16 @@ export function AddressAutocomplete({
       </div>
       {loading && (
         <p className="text-xs text-muted-foreground">
-          Loading Google Places autocomplete...
+          Loading address autocomplete...
+        </p>
+      )}
+      {apiError && (
+        <p className="text-xs text-amber-600">
+          {apiError}
         </p>
       )}
       {error && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-destructive">
           {error}
         </p>
       )}
