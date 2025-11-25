@@ -30,26 +30,34 @@ const SERVICES = [
   {
     id: 'standard',
     icon: Sparkles,
-    name: 'Standard',
-    description: 'Base hourly cleaning service',
-    features: ['All rooms cleaned', 'Dusting & vacuuming', 'Bathroom & kitchen cleaning', 'Trash removal'],
+    name: 'Standard Clean',
+    description: 'Perfect for regular maintenance',
+    features: ['Dusting and vacuuming', 'Kitchen and bathroom cleaning', 'Mopping floors', 'Making beds'],
     badge: 'Most Popular',
   },
   {
     id: 'deep',
     icon: Zap,
     name: 'Deep Clean',
-    description: '+$50 on Standard',
-    features: ['Everything in Standard', 'Baseboards & trim', 'Window sills', 'Extra attention to detail'],
+    description: 'Thorough top-to-bottom cleaning',
+    features: ['Everything in Standard', 'Baseboards and window sills', 'Inside appliances', 'Detailed bathroom scrubbing'],
     badge: null,
   },
   {
     id: 'moveInOut',
     icon: Package,
-    name: 'Move-In/Out Cleaning',
-    description: '+$120 (includes fridge & oven)',
-    features: ['Everything in Deep', 'Inside Fridge ✓ Included', 'Inside Oven ✓ Included', 'Cabinet interiors', 'Interior Windows (optional)'],
-    badge: 'Moving Special',
+    name: 'Move-In/Out',
+    description: 'Complete empty home cleaning',
+    features: ['Everything in Deep Clean', 'Inside all cabinets', 'Interior windows', 'All surfaces sanitized'],
+    badge: null,
+  },
+  {
+    id: 'membership',
+    icon: Crown,
+    name: 'Membership Plans',
+    description: 'Save with monthly plans',
+    features: ['Included hours each clean', 'Overtime discounts up to 35%', 'Priority scheduling'],
+    badge: 'Save More',
   },
 ];
 
@@ -79,6 +87,11 @@ export default function BookingService() {
   });
 
   const handleSelect = (serviceType: string) => {
+    if (serviceType === 'membership') {
+      setDialogOpen(true);
+      return;
+    }
+    
     // For moveInOut, filter out fridge & oven from add-ons (they're included)
     const filteredAddOns = serviceType === 'moveInOut' 
       ? selectedAddOns.filter(addon => addon === 'windows')
@@ -93,17 +106,9 @@ export default function BookingService() {
     navigate("/book/schedule");
   };
 
-  const handleMembershipClick = (membershipId: keyof typeof MEMBERSHIP_PLANS) => {
-    if (membershipId === 'none') {
-      setSelectedMembership('none');
-    } else {
-      setDialogMembershipId(membershipId);
-      setDialogOpen(true);
-    }
-  };
-
-  const handleMembershipSelect = () => {
-    setSelectedMembership(dialogMembershipId);
+  const handleMembershipSelect = (membershipId: keyof typeof MEMBERSHIP_PLANS) => {
+    setSelectedMembership(membershipId);
+    setDialogOpen(false);
   };
 
   const handleAddOnToggle = (addonId: string) => {
@@ -145,121 +150,6 @@ export default function BookingService() {
         
         {/* Membership Banner */}
         {user && credits && <MembershipBanner />}
-
-        {/* Membership Selection */}
-        <Card>
-          <CardContent className="p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Crown className="w-5 h-5 text-primary" />
-              Choose Your Membership (Optional)
-            </h2>
-            <p className="text-sm text-muted-foreground mb-6">
-              Save time and money with a membership plan that includes hours and overtime discounts
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Pay Per Clean */}
-              <Card
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedMembership === 'none'
-                    ? 'ring-2 ring-primary bg-primary/5'
-                    : 'hover:border-primary/50'
-                }`}
-                onClick={() => handleMembershipClick('none')}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-lg">Pay Per Clean</h3>
-                      <p className="text-sm text-muted-foreground">No commitment</p>
-                    </div>
-                    {selectedMembership === 'none' && (
-                      <Badge variant="default">Selected</Badge>
-                    )}
-                  </div>
-                  <div className="text-2xl font-bold mb-2">$0/month</div>
-                  <p className="text-sm text-muted-foreground">Pay as you go, cancel anytime</p>
-                </CardContent>
-              </Card>
-
-              {/* Essential */}
-              <Card
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedMembership === 'essential'
-                    ? 'ring-2 ring-primary bg-primary/5'
-                    : 'hover:border-primary/50'
-                }`}
-                onClick={() => handleMembershipClick('essential')}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-lg">Essential</h3>
-                      <p className="text-sm text-muted-foreground">Best for small homes</p>
-                    </div>
-                    {selectedMembership === 'essential' && (
-                      <Badge variant="default">Selected</Badge>
-                    )}
-                  </div>
-                  <div className="text-2xl font-bold mb-2">$189/month</div>
-                  <p className="text-sm text-muted-foreground">1 clean • 2 hrs • 15% off overtime</p>
-                </CardContent>
-              </Card>
-
-              {/* Standard */}
-              <Card
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedMembership === 'standard'
-                    ? 'ring-2 ring-primary bg-primary/5'
-                    : 'hover:border-primary/50'
-                }`}
-                onClick={() => handleMembershipClick('standard')}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-lg">Standard</h3>
-                      <p className="text-sm text-muted-foreground">Most popular</p>
-                    </div>
-                    {selectedMembership === 'standard' ? (
-                      <Badge variant="default">Selected</Badge>
-                    ) : (
-                      <Badge variant="secondary">Popular</Badge>
-                    )}
-                  </div>
-                  <div className="text-2xl font-bold mb-2">$289/month</div>
-                  <p className="text-sm text-muted-foreground">2 cleans • 3 hrs • 25% off overtime</p>
-                </CardContent>
-              </Card>
-
-              {/* Premium */}
-              <Card
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedMembership === 'premium'
-                    ? 'ring-2 ring-primary bg-primary/5'
-                    : 'hover:border-primary/50'
-                }`}
-                onClick={() => handleMembershipClick('premium')}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-lg">Premium</h3>
-                      <p className="text-sm text-muted-foreground">Best value</p>
-                    </div>
-                    {selectedMembership === 'premium' ? (
-                      <Badge variant="default">Selected</Badge>
-                    ) : (
-                      <Badge variant="secondary">Best Value</Badge>
-                    )}
-                  </div>
-                  <div className="text-2xl font-bold mb-2">$389/month</div>
-                  <p className="text-sm text-muted-foreground">4 cleans • 3 hrs • 35% off overtime</p>
-                </CardContent>
-              </Card>
-            </div>
-          </CardContent>
-        </Card>
         
         {/* Service Selection */}
         <Card variant="outlined" className="animate-slide-in-right">
@@ -281,7 +171,7 @@ export default function BookingService() {
           </CardHeader>
           
           <CardContent className="space-y-4 md:space-y-8 px-3 md:px-6">
-            <div className="grid gap-2.5 md:gap-6 grid-cols-1 md:grid-cols-3">
+            <div className="grid gap-2.5 md:gap-6 grid-cols-1 md:grid-cols-4">
               {SERVICES.map((service) => (
                 <Card
                   key={service.id}
@@ -393,7 +283,7 @@ export default function BookingService() {
       <MembershipDetailsDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        membershipId={dialogMembershipId}
+        selectedMembership={selectedMembership}
         onSelect={handleMembershipSelect}
       />
     </div>
