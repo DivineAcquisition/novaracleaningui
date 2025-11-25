@@ -10,8 +10,8 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { getEstimatedHours } from "@/lib/pricing-system";
-import { calculateServiceDuration } from "@/lib/time-slots";
-import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
+import { calculateServiceDuration, generateTimeSlots, isWeekend } from "@/lib/time-slots";
+import { Calendar } from "@/components/ui/calendar";
 import { addDays } from "date-fns";
 
 const BOOKING_STEPS = [
@@ -42,18 +42,7 @@ export default function BookingSchedule() {
   );
 
   const minDate = addDays(new Date(), 3);
-
-  const handleDateSelect = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    setSelectedDate(dateStr);
-    setSelectedTime(""); // Clear time when date changes
-  };
-
-  const handleSelectSlot = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
-    const dateStr = date.toISOString().split('T')[0];
-    setSelectedDate(dateStr);
-    setSelectedTime(timeSlot);
-  };
+  const timeSlots = generateTimeSlots(serviceDuration, bookingData.serviceType);
 
   const handleContinue = () => {
     if (!selectedDate || !selectedTime) return;
@@ -101,20 +90,83 @@ export default function BookingSchedule() {
                 </h3>
                 <p className="text-muted-foreground">Choose your preferred date and time (closed on weekends)</p>
               </div>
-              
-              <AvailabilityCalendar 
-                selectedDate={selectedDate ? new Date(selectedDate) : undefined} 
-                selectedTime={selectedTime} 
-                onSelectSlot={handleSelectSlot}
-                onDateSelect={handleDateSelect}
-                minDate={minDate} 
-              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                {/* Date Selection */}
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-base md:text-lg font-semibold">Select Date</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Book at least 3 days in advance. We&apos;re closed on weekends.
+                    </p>
+                  </div>
+
+                  <Card className="border-2 border-border/50 shadow-md">
+                    <div className="p-3 md:p-4">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate ? new Date(selectedDate) : undefined}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          if (isWeekend(date) || date < minDate) return;
+                          const dateStr = date.toISOString().split("T")[0];
+                          setSelectedDate(dateStr);
+                          setSelectedTime("");
+                        }}
+                        disabled={(date) => isWeekend(date) || date < minDate}
+                      />
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Earliest available date is {minDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}.
+                      </p>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Time Selection */}
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-base md:text-lg font-semibold">Select Time</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Pick a convenient time window that works best for you.
+                    </p>
+                  </div>
+
+                  <Card className="border-2 border-border/50 shadow-md">
+                    <div className="p-3 md:p-4 space-y-3">
+                      {selectedDate ? (
+                        <div className="grid grid-cols-1 gap-2">
+                          {timeSlots.map((slot) => (
+                            <Button
+                              key={slot.id}
+                              type="button"
+                              variant={selectedTime === slot.label ? "default" : "outline"}
+                              className="w-full justify-between h-12"
+                              onClick={() => setSelectedTime(slot.label)}
+                            >
+                              <span className="text-sm font-medium">{slot.label}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-sm">
+                          Select a date first to see available time windows.
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              </div>
 
               <div className="hidden md:flex gap-4 pt-8 mt-8 border-t">
                 <Button variant="outline" size="lg" onClick={handleBack} className="h-14">
                   Back
                 </Button>
-                <Button size="lg" onClick={handleContinue} disabled={!selectedDate || !selectedTime} className="flex-1 h-14">
+                <Button
+                  size="lg"
+                  onClick={handleContinue}
+                  disabled={!selectedDate || !selectedTime}
+                  className="flex-1 h-14"
+                >
                   Continue
                 </Button>
               </div>
