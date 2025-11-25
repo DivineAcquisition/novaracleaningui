@@ -74,7 +74,7 @@ export default function BookingIntake() {
   const [accessNotes, setAccessNotes] = useState("");
   const [teamNotes, setTeamNotes] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
-  const [assignedCleanerId, setAssignedCleanerId] = useState("");
+  const [assignedCleanerId, setAssignedCleanerId] = useState("unassigned");
 
   // Check authentication on mount
   useEffect(() => {
@@ -255,8 +255,8 @@ export default function BookingIntake() {
           dispatch_notes: dispatchNotes || null,
 
           // Assignment
-          cleaner_id: assignedCleanerId || null,
-          assigned_at: assignedCleanerId ? new Date().toISOString() : null,
+          cleaner_id: assignedCleanerId !== "unassigned" ? assignedCleanerId : null,
+          assigned_at: assignedCleanerId !== "unassigned" ? new Date().toISOString() : null,
         })
         .select()
         .single();
@@ -806,7 +806,7 @@ export default function BookingIntake() {
                       <SelectValue placeholder="Select cleaner or leave unassigned" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Unassigned</SelectItem>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
                       {cleaners.map(cleaner => (
                         <SelectItem key={cleaner.id} value={cleaner.id}>
                           {cleaner.first_name} {cleaner.last_name} ({cleaner.status})
