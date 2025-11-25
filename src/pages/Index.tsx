@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 import { ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown } from "lucide-react";
 import { HeaderNav } from "@/components/HeaderNav";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 const Index = () => {
   const navigate = useNavigate();
   const {
@@ -114,6 +115,9 @@ const Index = () => {
           </Card>
         </div>
       </section>
+
+      {/* Footer */}
+      <BookingFooter />
     </div>;
 };
 export default Index;
