@@ -176,7 +176,7 @@ export default function BookingService() {
                 <Card
                   key={service.id}
                   className={cn(
-                    "card-interactive relative",
+                    "card-interactive relative touch-manipulation min-h-[220px]",
                     bookingData.serviceType === service.id && "ring-2 ring-primary border-primary/60 shadow-lavender"
                   )}
                   onClick={() => handleSelect(service.id)}

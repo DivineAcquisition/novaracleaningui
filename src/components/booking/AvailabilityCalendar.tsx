@@ -108,9 +108,9 @@ export function AvailabilityCalendar({
                       aria-checked={isSelected}
                       aria-label={`${format(date, 'EEEE, MMMM d, yyyy')} - ${hasAvailability ? 'Available' : 'Fully booked'}`}
                       className={cn(
-                        "w-full p-3 md:p-4 rounded-lg border-2 transition-all duration-200 text-left touch-manipulation",
+                        "w-full p-3 md:p-4 rounded-lg border-2 transition-all duration-200 text-left touch-manipulation min-h-[52px] md:min-h-[60px]",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        hasAvailability && "hover:border-primary/40 hover:shadow-md active:scale-[0.98]",
+                        hasAvailability && "hover:border-primary/50 hover:shadow-md cursor-pointer",
                         isSelected 
                           ? "bg-primary text-primary-foreground border-primary shadow-md" 
                           : hasAvailability
@@ -204,9 +204,9 @@ export function AvailabilityCalendar({
                           aria-checked={isSelected}
                           aria-label={`${slot.time_slot} - ${slot.is_available ? `${slot.max_capacity - slot.current_bookings} spots available` : 'Sold out'}`}
                           className={cn(
-                            "w-full p-4 rounded-lg border-2 transition-all duration-200 text-left touch-manipulation",
+                            "w-full p-4 rounded-lg border-2 transition-all duration-200 text-left touch-manipulation min-h-[60px] md:min-h-[68px]",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                            slot.is_available && "hover:border-primary/40 hover:shadow-md active:scale-[0.98]",
+                            slot.is_available && "hover:border-primary/50 hover:shadow-md cursor-pointer",
                             isSelected
                               ? "bg-primary text-primary-foreground border-primary shadow-md"
                               : slot.is_available
