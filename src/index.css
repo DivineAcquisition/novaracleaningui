@@ -227,9 +227,10 @@ All colors MUST be HSL.
   }
   
   .card-interactive {
-    @apply border-2 border-border/40 shadow-card transition-all duration-200;
-    @apply hover:border-primary/40 hover:shadow-lg hover:scale-[1.01];
-    @apply active:scale-[0.99];
+    @apply border-2 border-border/40 shadow-card transition-all duration-200 cursor-pointer;
+    @apply hover:border-primary/50 hover:shadow-lg;
+    @apply active:border-primary active:shadow-md;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 

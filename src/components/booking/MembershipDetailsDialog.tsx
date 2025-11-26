@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
-import { Check, Clock, Sparkles, Crown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Check, Clock, Sparkles, Crown, X } from "lucide-react";
 import { MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { cn } from "@/lib/utils";
 
@@ -18,119 +19,163 @@ export function MembershipDetailsDialog({
   onSelect,
 }: MembershipDetailsDialogProps) {
 
+  const handleSelect = (membershipId: keyof typeof MEMBERSHIP_PLANS) => {
+    onSelect(membershipId);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
-            <Crown className="w-6 h-6 text-primary" />
-            Choose Your Membership Plan
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+        {/* Header */}
+        <DialogHeader className="p-4 md:p-6 pb-3 md:pb-4 border-b sticky top-0 bg-background z-10">
+          <DialogTitle className="text-xl md:text-2xl font-bold flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <Crown className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+              Choose Your Plan
+            </span>
           </DialogTitle>
-          <p className="text-sm text-muted-foreground text-center mt-2">
+          <p className="text-xs md:text-sm text-muted-foreground mt-2">
             Save more with monthly plans or pay as you go
           </p>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div className="p-4 md:p-6 space-y-3 md:space-y-4">
           {/* Pay Per Clean */}
           <Card
             className={cn(
-              "p-6 cursor-pointer transition-all hover:shadow-lg",
-              selectedMembership === 'none' && "ring-2 ring-primary"
+              "p-4 md:p-5 cursor-pointer transition-all duration-200 touch-manipulation border-2",
+              "hover:border-primary/50 hover:shadow-lg",
+              selectedMembership === 'none' && "ring-2 ring-primary border-primary shadow-lg bg-primary/5"
             )}
-            onClick={() => onSelect('none')}
+            onClick={() => handleSelect('none')}
           >
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-xl font-bold">Pay Per Clean</h3>
-                <p className="text-sm text-muted-foreground">No commitment</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-base md:text-lg font-bold">Pay Per Clean</h3>
+                  {selectedMembership === 'none' && (
+                    <div className="flex-shrink-0 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                      <Check className="w-3 h-3 text-primary-foreground" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs md:text-sm text-muted-foreground mb-3">No commitment required</p>
+                <div className="text-2xl md:text-3xl font-bold mb-3">
+                  $0<span className="text-base md:text-lg text-muted-foreground font-normal">/month</span>
+                </div>
+                <ul className="space-y-1.5">
+                  <li className="flex items-start gap-2 text-xs md:text-sm">
+                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <span>Pay only for services you book</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-xs md:text-sm">
+                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <span>No monthly fees or obligations</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-xs md:text-sm">
+                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <span>Cancel anytime, no hassle</span>
+                  </li>
+                </ul>
               </div>
-              {selectedMembership === 'none' && (
-                <Check className="w-6 h-6 text-primary" />
-              )}
             </div>
-            <div className="text-3xl font-bold mb-4">
-              $0<span className="text-lg text-muted-foreground">/month</span>
-            </div>
-            <ul className="space-y-2">
-              <li className="flex items-start gap-2 text-sm">
-                <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                <span>Pay only for services you book</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm">
-                <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                <span>No monthly fees</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm">
-                <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                <span>Cancel anytime</span>
-              </li>
-            </ul>
           </Card>
 
-          {/* Essential Plan */}
-          {(Object.keys(MEMBERSHIP_PLANS) as Array<keyof typeof MEMBERSHIP_PLANS>)
-            .filter(key => key !== 'none')
-            .map((planId) => {
-              const plan = MEMBERSHIP_PLANS[planId];
-              return (
-                <Card
-                  key={planId}
-                  className={cn(
-                    "p-6 cursor-pointer transition-all hover:shadow-lg relative",
-                    selectedMembership === planId && "ring-2 ring-primary"
-                  )}
-                  onClick={() => onSelect(planId)}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-xl font-bold">{plan.label}</h3>
-                      <p className="text-sm text-muted-foreground">{plan.description}</p>
-                    </div>
-                    {selectedMembership === planId && (
-                      <Check className="w-6 h-6 text-primary" />
+          {/* Membership Plans */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+            {(Object.keys(MEMBERSHIP_PLANS) as Array<keyof typeof MEMBERSHIP_PLANS>)
+              .filter(key => key !== 'none')
+              .map((planId) => {
+                const plan = MEMBERSHIP_PLANS[planId];
+                const isRecommended = planId === 'standard';
+                const isSelected = selectedMembership === planId;
+                
+                return (
+                  <Card
+                    key={planId}
+                    className={cn(
+                      "p-4 md:p-5 cursor-pointer transition-all duration-200 touch-manipulation border-2 relative",
+                      "hover:border-primary/50 hover:shadow-lg",
+                      isSelected && "ring-2 ring-primary border-primary shadow-lg bg-primary/5",
+                      isRecommended && !isSelected && "border-primary/30"
                     )}
-                  </div>
-                  <div className="text-3xl font-bold mb-4">
-                    ${plan.monthlyPrice}
-                    <span className="text-lg text-muted-foreground">/month</span>
-                  </div>
+                    onClick={() => handleSelect(planId)}
+                  >
+                    {isRecommended && (
+                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10">
+                        <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full shadow-md">
+                          Popular
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-base md:text-lg font-bold leading-tight">{plan.label}</h3>
+                        {isSelected && (
+                          <div className="flex-shrink-0 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                            <Check className="w-3 h-3 text-primary-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <div className="text-2xl md:text-3xl font-bold">
+                          ${plan.monthlyPrice}
+                        </div>
+                        <p className="text-xs text-muted-foreground">/month</p>
+                      </div>
 
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center gap-3 bg-accent/50 rounded-lg p-3">
-                      <Sparkles className="w-5 h-5 text-primary flex-shrink-0" />
-                      <div>
-                        <div className="font-semibold text-sm">
-                          {plan.cleansPerMonth} {plan.cleansPerMonth === 1 ? 'Clean' : 'Cleans'}/Month
+                      <div className="space-y-2 pt-2 border-t">
+                        <div className="flex items-center gap-2 bg-accent/30 rounded-lg p-2">
+                          <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                          <div className="text-xs md:text-sm">
+                            <span className="font-semibold">{plan.cleansPerMonth}</span> {plan.cleansPerMonth === 1 ? 'clean' : 'cleans'}/mo
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 bg-accent/30 rounded-lg p-2">
+                          <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+                          <div className="text-xs md:text-sm">
+                            <span className="font-semibold">{plan.includedHours}</span> hrs included
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 bg-accent/30 rounded-lg p-2">
+                          <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                          <div className="text-xs md:text-sm">
+                            <span className="font-semibold">{Math.round(plan.overtimeDiscount * 100)}%</span> off overtime
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 bg-accent/50 rounded-lg p-3">
-                      <Clock className="w-5 h-5 text-primary flex-shrink-0" />
-                      <div>
-                        <div className="font-semibold text-sm">
-                          {plan.includedHours} Hours Included
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 bg-accent/50 rounded-lg p-3">
-                      <Check className="w-5 h-5 text-primary flex-shrink-0" />
-                      <div>
-                        <div className="font-semibold text-sm">
-                          {Math.round(plan.overtimeDiscount * 100)}% Off Overtime
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="border-t pt-4">
-                    <p className="text-xs text-muted-foreground">
-                      💰 Example: 4-hour clean = First {plan.includedHours}hrs included + {4 - plan.includedHours}hr at {Math.round(plan.overtimeDiscount * 100)}% off
-                    </p>
-                  </div>
-                </Card>
-              );
-            })}
+                      <div className="pt-2 border-t">
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Perfect for {planId === 'essential' ? 'monthly' : planId === 'standard' ? 'bi-weekly' : 'weekly'} cleaning schedules
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* Footer with action buttons */}
+        <div className="sticky bottom-0 bg-background border-t p-4 md:p-6 flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onOpenChange(false)}
+            className="flex-1"
+          >
+            Continue
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
