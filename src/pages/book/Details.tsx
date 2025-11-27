@@ -445,8 +445,9 @@ export default function BookingDetails() {
                       <Select
                         value={formData.state}
                         onValueChange={(value) => {
-                          handleChange("state", value);
-                          handleBlur("state");
+                          setFormData(prev => ({ ...prev, state: value }));
+                          setTouched(prev => ({ ...prev, state: true }));
+                          setErrors(prev => ({ ...prev, state: "" }));
                         }}
                       >
                         <SelectTrigger
