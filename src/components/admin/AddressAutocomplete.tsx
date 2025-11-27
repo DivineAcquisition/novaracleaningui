@@ -328,7 +328,7 @@ export function AddressAutocomplete({
         />
         <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         {scriptLoading && (
-          <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] flex items-center justify-center rounded-md">
+          <div className="absolute inset-0 bg-background/30 flex items-center justify-center rounded-md pointer-events-none">
             <div className="text-xs text-muted-foreground">Loading...</div>
           </div>
         )}
