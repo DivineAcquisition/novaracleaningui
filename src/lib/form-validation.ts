@@ -70,3 +70,77 @@ export const validateZipCode = (zipCode: string): ValidationResult => {
   
   return { isValid: true };
 };
+
+export const validateAddress = (address: string): ValidationResult => {
+  if (!address) {
+    return { isValid: false, error: "Street address is required" };
+  }
+  
+  if (address.trim().length < 5) {
+    return { isValid: false, error: "Please enter a complete street address" };
+  }
+  
+  if (address.length > 200) {
+    return { isValid: false, error: "Address must be less than 200 characters" };
+  }
+  
+  // Check for basic street address components (number + street name)
+  const hasNumber = /\d+/.test(address);
+  if (!hasNumber) {
+    return { isValid: false, error: "Address must include a street number" };
+  }
+  
+  return { isValid: true };
+};
+
+export const validateCity = (city: string): ValidationResult => {
+  if (!city) {
+    return { isValid: false, error: "City is required" };
+  }
+  
+  if (city.trim().length < 2) {
+    return { isValid: false, error: "Please enter a valid city name" };
+  }
+  
+  if (city.length > 100) {
+    return { isValid: false, error: "City name must be less than 100 characters" };
+  }
+  
+  return { isValid: true };
+};
+
+export const validateState = (state: string): ValidationResult => {
+  if (!state) {
+    return { isValid: false, error: "State is required" };
+  }
+  
+  // US state abbreviation (2 letters)
+  if (!/^[A-Z]{2}$/.test(state.toUpperCase())) {
+    return { isValid: false, error: "Please enter a valid 2-letter state code" };
+  }
+  
+  return { isValid: true };
+};
+
+export interface CompleteAddress {
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+export const validateCompleteAddress = (addressData: CompleteAddress): ValidationResult => {
+  const addressCheck = validateAddress(addressData.address);
+  if (!addressCheck.isValid) return addressCheck;
+  
+  const cityCheck = validateCity(addressData.city);
+  if (!cityCheck.isValid) return cityCheck;
+  
+  const stateCheck = validateState(addressData.state);
+  if (!stateCheck.isValid) return stateCheck;
+  
+  const zipCheck = validateZipCode(addressData.zipCode);
+  if (!zipCheck.isValid) return zipCheck;
+  
+  return { isValid: true };
+};
