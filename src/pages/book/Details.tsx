@@ -181,8 +181,6 @@ export default function BookingDetails() {
     const cityValid = validateCity(formData.city).isValid;
     const stateValid = validateState(formData.state).isValid;
     
-    const noErrors = !Object.values(errors).some(error => error !== "");
-    
     return (
       firstNameValid &&
       lastNameValid &&
@@ -190,8 +188,7 @@ export default function BookingDetails() {
       phoneValid &&
       addressValid &&
       cityValid &&
-      stateValid &&
-      noErrors
+      stateValid
     );
   };
 
