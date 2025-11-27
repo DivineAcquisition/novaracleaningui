@@ -23,6 +23,8 @@ interface AddressComponents {
   city: string;
   state: string;
   zipCode: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface AddressAutocompleteProps {
@@ -274,19 +276,56 @@ export function AddressAutocomplete({
     setValidationError(null);
   };
 
-  const handleInputBlur = () => {
+  const handleInputBlur = async () => {
     const value = inputRef.current?.value?.trim();
     // Only trigger manual entry if:
     // 1. There's a value
     // 2. Autocomplete isn't active
     // 3. No API is available (apiError set)
     if (value && !autocompleteRef.current && apiError) {
-      onAddressSelect({
-        street: value,
-        city: "",
-        state: "",
-        zipCode: "",
-      });
+      try {
+        // Try to geocode the manually entered address
+        console.log('[AddressAutocomplete] Attempting geocode fallback for:', value);
+        
+        const { data, error } = await supabase.functions.invoke('geocode-address', {
+          body: { 
+            address: value,
+            city: "",
+            state: "",
+            zip: ""
+          }
+        });
+
+        if (error) {
+          console.error('[AddressAutocomplete] Geocode error:', error);
+          // Still accept the address without coordinates
+          onAddressSelect({
+            street: value,
+            city: "",
+            state: "",
+            zipCode: "",
+          });
+        } else if (data) {
+          console.log('[AddressAutocomplete] Geocode success:', data);
+          onAddressSelect({
+            street: value,
+            city: "",
+            state: "",
+            zipCode: "",
+            lat: data.lat,
+            lng: data.lng,
+          });
+        }
+      } catch (error) {
+        console.error('[AddressAutocomplete] Geocode fallback failed:', error);
+        // Still accept the address without coordinates
+        onAddressSelect({
+          street: value,
+          city: "",
+          state: "",
+          zipCode: "",
+        });
+      }
     }
   };
 
