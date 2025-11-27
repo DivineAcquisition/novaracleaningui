@@ -64,13 +64,11 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<any>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [inputValue, setInputValue] = useState(initialValue);
 
   // Load address history
   useEffect(() => {
@@ -225,8 +223,10 @@ export function AddressAutocomplete({
     // Clear validation error when selecting from history
     setValidationError(null);
     
-    // Update controlled input value
-    setInputValue(item.street);
+    // Update input via ref for uncontrolled input
+    if (inputRef.current) {
+      inputRef.current.value = item.street;
+    }
     
     onAddressSelect({
       street: item.street,
@@ -238,33 +238,10 @@ export function AddressAutocomplete({
     setShowHistory(false);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    
-    // Update controlled input value
-    setInputValue(value);
-    
+  const handleInputChange = () => {
     // Clear validation error on input change
     setValidationError(null);
-    
-    // Debounce to reduce unnecessary processing
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    
-    debounceTimerRef.current = setTimeout(() => {
-      // Additional validation can be added here if needed
-    }, 300);
   };
-
-  // Cleanup debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div className="space-y-2">
@@ -318,7 +295,7 @@ export function AddressAutocomplete({
               id="customer-address-autocomplete"
               type="text"
               placeholder={placeholder}
-              value={inputValue}
+              defaultValue={initialValue}
               className="pr-10"
               onChange={handleInputChange}
               onFocus={() => {
