@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Clock, AlertCircle } from "lucide-react";
+import { MapPin, Clock, AlertCircle, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +69,7 @@ export function AddressAutocomplete({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [geocodedLocation, setGeocodedLocation] = useState<string | null>(null);
 
   // Load address history
   useEffect(() => {
@@ -159,6 +160,9 @@ export function AddressAutocomplete({
 
     // Clear previous validation error
     setValidationError(null);
+    
+    // Set geocoded location display
+    setGeocodedLocation(place.formatted_address || null);
 
     // Parse address components
     let street = "";
@@ -231,6 +235,7 @@ export function AddressAutocomplete({
   const handleHistorySelect = (item: AddressHistoryItem) => {
     // Clear validation error when selecting from history
     setValidationError(null);
+    setGeocodedLocation(null);
     
     // Update input via ref for uncontrolled input
     if (inputRef.current) {
@@ -252,6 +257,7 @@ export function AddressAutocomplete({
   const handleInputChange = () => {
     // Clear validation error on input change
     setValidationError(null);
+    setGeocodedLocation(null);
   };
 
   const handleInputBlur = async () => {
@@ -287,6 +293,7 @@ export function AddressAutocomplete({
           });
         } else if (data) {
           console.log('[AddressAutocomplete] Geocode success:', data);
+          setGeocodedLocation(data.display_name || null);
           onAddressSelect({
             street: value,
             city: "",
@@ -384,6 +391,13 @@ export function AddressAutocomplete({
         <div className="flex items-start gap-2 text-xs text-destructive">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{validationError}</span>
+        </div>
+      )}
+      
+      {geocodedLocation && !validationError && (
+        <div className="flex items-start gap-2 text-xs text-muted-foreground">
+          <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-green-600" />
+          <span>Confirmed: {geocodedLocation}</span>
         </div>
       )}
     </div>
