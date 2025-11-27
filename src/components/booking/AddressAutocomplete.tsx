@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Clock } from "lucide-react";
+import { MapPin, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
   type AddressHistoryItem,
 } from "@/lib/address-history";
 import { formatAddress } from "@/lib/address-formatter";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AddressComponents {
   street: string;
@@ -65,6 +66,7 @@ export function AddressAutocomplete({
   const autocompleteRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -157,6 +159,9 @@ export function AddressAutocomplete({
       return;
     }
 
+    // Clear previous validation error
+    setValidationError(null);
+
     // Parse address components
     let street = "";
     let city = "";
@@ -183,6 +188,20 @@ export function AddressAutocomplete({
       }
     });
 
+    // Validate that all required fields are present
+    const missingFields: string[] = [];
+    if (!street) missingFields.push("street address");
+    if (!city) missingFields.push("city");
+    if (!state) missingFields.push("state");
+    if (!zipCode) missingFields.push("ZIP code");
+
+    if (missingFields.length > 0) {
+      setValidationError(
+        `Incomplete address: missing ${missingFields.join(", ")}. Please select a complete address from the suggestions.`
+      );
+      return;
+    }
+
     // Format address before saving
     const formattedAddress = formatAddress({
       street,
@@ -201,6 +220,9 @@ export function AddressAutocomplete({
   };
 
   const handleHistorySelect = (item: AddressHistoryItem) => {
+    // Clear validation error when selecting from history
+    setValidationError(null);
+    
     if (inputRef.current) {
       inputRef.current.value = item.street;
     }
@@ -253,33 +275,51 @@ export function AddressAutocomplete({
           </Popover>
         )}
       </div>
-      <div className="relative">
-        <Input
-          ref={inputRef}
-          id="customer-address-autocomplete"
-          type="text"
-          placeholder={loading ? "Loading..." : placeholder}
-          defaultValue={initialValue}
-          disabled={loading}
-          className="pr-10"
-          onFocus={() => setShowHistory(false)}
-        />
-        <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-      </div>
-      {loading && (
-        <p className="text-xs text-muted-foreground">
-          Loading address autocomplete...
-        </p>
-      )}
-      {apiError && (
-        <p className="text-xs text-amber-600">
-          {apiError}
-        </p>
-      )}
-      {error && (
-        <p className="text-xs text-destructive">
-          {error}
-        </p>
+      
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-3 w-48" />
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Input
+              ref={inputRef}
+              id="customer-address-autocomplete"
+              type="text"
+              placeholder={placeholder}
+              defaultValue={initialValue}
+              className="pr-10"
+              onFocus={() => {
+                setShowHistory(false);
+                setValidationError(null);
+              }}
+            />
+            <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          </div>
+          
+          {apiError && (
+            <div className="flex items-start gap-2 text-xs text-amber-600">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{apiError}</span>
+            </div>
+          )}
+          
+          {validationError && (
+            <div className="flex items-start gap-2 text-xs text-destructive">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{validationError}</span>
+            </div>
+          )}
+          
+          {error && (
+            <div className="flex items-start gap-2 text-xs text-destructive">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
