@@ -76,14 +76,39 @@ export function AddressAutocomplete({
   useEffect(() => {
     const initAutocomplete = async () => {
       try {
-        // Fetch the API key from edge function
-        const { data, error: keyError } = await supabase.functions.invoke("google-places-key");
+        // Fetch the API key from edge function with fallback
+        let apiKey: string | null = null;
         
-        if (keyError) throw keyError;
-        if (!data?.apiKey) throw new Error("No API key received");
+        try {
+          const { data, error: keyError } = await supabase.functions.invoke("google-places-key");
+          if (keyError) throw keyError;
+          apiKey = data?.apiKey;
+        } catch (invokeError) {
+          console.warn("Function invoke failed, trying direct fetch:", invokeError);
+          
+          // Fallback to direct fetch
+          const response = await fetch(
+            "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/google-places-key",
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I",
+              },
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          apiKey = data?.apiKey;
+        }
+        
+        if (!apiKey) throw new Error("No API key received");
 
         // Load Google Maps API
-        await loadGoogleMapsScript(data.apiKey);
+        await loadGoogleMapsScript(apiKey);
 
         if (!inputRef.current) return;
 

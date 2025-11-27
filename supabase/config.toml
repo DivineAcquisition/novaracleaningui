@@ -156,3 +156,6 @@ verify_jwt = false
 [functions.cleanup-old-slots]
 verify_jwt = false
 
+[functions.google-places-key]
+verify_jwt = false
+
