@@ -9,6 +9,7 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { PageTransition } from "@/components/booking/PageTransition";
 
 
 const BOOKING_STEPS = [
@@ -51,8 +52,9 @@ export default function BookingHome() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
-      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+        <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
         <Card variant="outlined" className="animate-slide-in-right">
@@ -128,7 +130,8 @@ export default function BookingHome() {
         continueText="Continue"
       />
 
-      <BookingFooter />
-    </div>
+        <BookingFooter />
+      </div>
+    </PageTransition>
   );
 }

@@ -19,6 +19,7 @@ import { BookingFooter } from "@/components/booking/BookingFooter";
 import { MembershipDetailsDialog } from "@/components/booking/MembershipDetailsDialog";
 import { MembershipBottomSheet } from "@/components/booking/MembershipBottomSheet";
 import { ServiceSkeleton } from "@/components/booking/ServiceSkeleton";
+import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -136,8 +137,9 @@ export default function BookingService() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
-      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+        <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       {isLoading ? (
         <div className="container max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
@@ -315,5 +317,6 @@ export default function BookingService() {
         </>
       )}
     </div>
+    </PageTransition>
   );
 }
