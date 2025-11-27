@@ -86,13 +86,20 @@ export function AddressAutocomplete({
         } catch (invokeError) {
           console.warn("Function invoke failed, trying direct fetch:", invokeError);
           
-          // Fallback to direct fetch
+          // Get session token for authorization
+          const { data: { session } } = await supabase.auth.getSession();
+          const authHeader = session?.access_token 
+            ? `Bearer ${session.access_token}` 
+            : '';
+          
+          // Fallback to direct fetch with authorization
           const response = await fetch(
             "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/google-places-key",
             {
               headers: {
                 "Content-Type": "application/json",
                 "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I",
+                ...(authHeader && { "authorization": authHeader }),
               },
             }
           );
