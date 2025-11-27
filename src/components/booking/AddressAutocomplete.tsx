@@ -64,7 +64,8 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [scriptLoading, setScriptLoading] = useState(true);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
@@ -75,8 +76,9 @@ export function AddressAutocomplete({
     setAddressHistory(getAddressHistory());
   }, []);
 
+  // Effect 1: Load Google Maps script
   useEffect(() => {
-    const initAutocomplete = async () => {
+    const loadScript = async () => {
       try {
         // Fetch the API key from edge function with fallback
         let apiKey: string | null = null;
@@ -118,32 +120,42 @@ export function AddressAutocomplete({
 
         // Load Google Maps API
         await loadGoogleMapsScript(apiKey);
-
-        if (!inputRef.current) return;
-
-        // Initialize autocomplete
-        const google = (window as any).google;
-        autocompleteRef.current = new google.maps.places.Autocomplete(
-          inputRef.current,
-          {
-            componentRestrictions: { country: "us" },
-            fields: ["address_components", "geometry", "formatted_address"],
-            types: ["address"],
-          }
-        );
-
-        // Listen for place selection
-        autocompleteRef.current.addListener("place_changed", handlePlaceSelect);
-
-        setLoading(false);
+        
+        setScriptLoaded(true);
+        setScriptLoading(false);
       } catch (err) {
-        console.error("Error initializing Google Places:", err);
+        console.error("Error loading Google Maps script:", err);
         setApiError("Failed to load address autocomplete. You can still enter the address manually.");
-        setLoading(false);
+        setScriptLoading(false);
       }
     };
 
-    initAutocomplete();
+    loadScript();
+  }, []);
+
+  // Effect 2: Initialize autocomplete when script is ready AND input exists
+  useEffect(() => {
+    if (!scriptLoaded || !inputRef.current || autocompleteRef.current) {
+      return;
+    }
+
+    try {
+      const google = (window as any).google;
+      autocompleteRef.current = new google.maps.places.Autocomplete(
+        inputRef.current,
+        {
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "geometry", "formatted_address"],
+          types: ["address"],
+        }
+      );
+
+      // Listen for place selection
+      autocompleteRef.current.addListener("place_changed", handlePlaceSelect);
+    } catch (err) {
+      console.error("Error initializing autocomplete:", err);
+      setApiError("Failed to initialize address autocomplete. You can still enter the address manually.");
+    }
 
     return () => {
       if (autocompleteRef.current && (window as any).google) {
@@ -151,7 +163,7 @@ export function AddressAutocomplete({
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
     };
-  }, []);
+  }, [scriptLoaded]);
 
   const handlePlaceSelect = () => {
     const place = autocompleteRef.current?.getPlace();
@@ -282,51 +294,48 @@ export function AddressAutocomplete({
         )}
       </div>
       
-      {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-3 w-48" />
-        </div>
-      ) : (
-        <>
-          <div className="relative">
-            <Input
-              ref={inputRef}
-              id="customer-address-autocomplete"
-              type="text"
-              placeholder={placeholder}
-              defaultValue={initialValue}
-              className="pr-10"
-              onChange={handleInputChange}
-              onFocus={() => {
-                setShowHistory(false);
-                setValidationError(null);
-              }}
-            />
-            <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          id="customer-address-autocomplete"
+          type="text"
+          placeholder={placeholder}
+          defaultValue={initialValue}
+          className="pr-10"
+          disabled={scriptLoading}
+          onChange={handleInputChange}
+          onFocus={() => {
+            setShowHistory(false);
+            setValidationError(null);
+          }}
+        />
+        <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        {scriptLoading && (
+          <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] flex items-center justify-center rounded-md">
+            <div className="text-xs text-muted-foreground">Loading...</div>
           </div>
-          
-          {apiError && (
-            <div className="flex items-start gap-2 text-xs text-amber-600">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{apiError}</span>
-            </div>
-          )}
-          
-          {validationError && (
-            <div className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{validationError}</span>
-            </div>
-          )}
-          
-          {error && (
-            <div className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-        </>
+        )}
+      </div>
+      
+      {apiError && (
+        <div className="flex items-start gap-2 text-xs text-amber-600">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{apiError}</span>
+        </div>
+      )}
+      
+      {validationError && (
+        <div className="flex items-start gap-2 text-xs text-destructive">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{validationError}</span>
+        </div>
+      )}
+      
+      {error && (
+        <div className="flex items-start gap-2 text-xs text-destructive">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
       )}
     </div>
   );
