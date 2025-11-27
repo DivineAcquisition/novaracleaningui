@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Clock, X } from "lucide-react";
+import { MapPin, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,8 +63,10 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [scriptLoading, setScriptLoading] = useState(true);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -73,8 +75,9 @@ export function AddressAutocomplete({
     setAddressHistory(getAddressHistory());
   }, []);
 
+  // Effect 1: Load Google Maps script
   useEffect(() => {
-    const initAutocomplete = async () => {
+    const loadScript = async () => {
       try {
         // Fetch the API key from edge function
         const { data, error: keyError } = await supabase.functions.invoke("google-places-key");
@@ -84,32 +87,42 @@ export function AddressAutocomplete({
 
         // Load Google Maps API
         await loadGoogleMapsScript(data.apiKey);
-
-        if (!inputRef.current) return;
-
-        // Initialize autocomplete
-        const google = (window as any).google;
-        autocompleteRef.current = new google.maps.places.Autocomplete(
-          inputRef.current,
-          {
-            componentRestrictions: { country: "us" },
-            fields: ["address_components", "geometry", "formatted_address"],
-            types: ["address"],
-          }
-        );
-
-        // Listen for place selection
-        autocompleteRef.current.addListener("place_changed", handlePlaceSelect);
-
-        setLoading(false);
+        
+        setScriptLoaded(true);
+        setScriptLoading(false);
       } catch (err) {
-        console.error("Error initializing Google Places:", err);
-        setError("Failed to load address autocomplete. You can still enter the address manually.");
-        setLoading(false);
+        console.error("Error loading Google Maps script:", err);
+        setApiError("Failed to load address autocomplete. You can still enter the address manually.");
+        setScriptLoading(false);
       }
     };
 
-    initAutocomplete();
+    loadScript();
+  }, []);
+
+  // Effect 2: Initialize autocomplete when script is ready AND input exists
+  useEffect(() => {
+    if (!scriptLoaded || !inputRef.current || autocompleteRef.current) {
+      return;
+    }
+
+    try {
+      const google = (window as any).google;
+      autocompleteRef.current = new google.maps.places.Autocomplete(
+        inputRef.current,
+        {
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "geometry", "formatted_address"],
+          types: ["address"],
+        }
+      );
+
+      // Listen for place selection
+      autocompleteRef.current.addListener("place_changed", handlePlaceSelect);
+    } catch (err) {
+      console.error("Error initializing autocomplete:", err);
+      setApiError("Failed to initialize address autocomplete. You can still enter the address manually.");
+    }
 
     return () => {
       if (autocompleteRef.current && (window as any).google) {
@@ -117,13 +130,16 @@ export function AddressAutocomplete({
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
     };
-  }, []);
+  }, [scriptLoaded]);
 
   const handlePlaceSelect = () => {
     const place = autocompleteRef.current?.getPlace();
     if (!place || !place.address_components || !place.geometry?.location) {
       return;
     }
+
+    // Clear previous validation error
+    setValidationError(null);
 
     // Parse address components
     let street = "";
@@ -151,6 +167,20 @@ export function AddressAutocomplete({
       }
     });
 
+    // Validate that all required fields are present
+    const missingFields: string[] = [];
+    if (!street) missingFields.push("street address");
+    if (!city) missingFields.push("city");
+    if (!state) missingFields.push("state");
+    if (!zipCode) missingFields.push("ZIP code");
+
+    if (missingFields.length > 0) {
+      setValidationError(
+        `Incomplete address: missing ${missingFields.join(", ")}. Please select a complete address from the suggestions.`
+      );
+      return;
+    }
+
     const lat = place.geometry.location.lat();
     const lng = place.geometry.location.lng();
 
@@ -162,7 +192,7 @@ export function AddressAutocomplete({
       zipCode,
     });
 
-    // Save to history
+    // Save to history with lat/lng for admin
     saveAddressToHistory({
       ...formattedAddress,
       lat,
@@ -180,6 +210,10 @@ export function AddressAutocomplete({
   };
 
   const handleHistorySelect = (item: AddressHistoryItem) => {
+    // Clear validation error when selecting from history
+    setValidationError(null);
+    
+    // Update input via ref for uncontrolled input
     if (inputRef.current) {
       inputRef.current.value = item.street;
     }
@@ -194,6 +228,11 @@ export function AddressAutocomplete({
     });
 
     setShowHistory(false);
+  };
+
+  const handleInputChange = () => {
+    // Clear validation error on input change
+    setValidationError(null);
   };
 
   return (
@@ -234,28 +273,42 @@ export function AddressAutocomplete({
           </Popover>
         )}
       </div>
+      
       <div className="relative">
         <Input
           ref={inputRef}
           id="address-autocomplete"
           type="text"
-          placeholder={loading ? "Loading..." : placeholder}
+          placeholder={placeholder}
           defaultValue={initialValue}
-          disabled={loading}
           className="pr-10"
-          onFocus={() => setShowHistory(false)}
+          disabled={scriptLoading}
+          onChange={handleInputChange}
+          onFocus={() => {
+            setShowHistory(false);
+            setValidationError(null);
+          }}
         />
         <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        {scriptLoading && (
+          <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] flex items-center justify-center rounded-md">
+            <div className="text-xs text-muted-foreground">Loading...</div>
+          </div>
+        )}
       </div>
-      {loading && (
-        <p className="text-xs text-muted-foreground">
-          Loading Google Places autocomplete...
-        </p>
+      
+      {apiError && (
+        <div className="flex items-start gap-2 text-xs text-amber-600">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{apiError}</span>
+        </div>
       )}
-      {error && (
-        <p className="text-xs text-amber-600">
-          {error}
-        </p>
+      
+      {validationError && (
+        <div className="flex items-start gap-2 text-xs text-destructive">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{validationError}</span>
+        </div>
       )}
     </div>
   );
