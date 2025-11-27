@@ -70,6 +70,7 @@ export function AddressAutocomplete({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [inputValue, setInputValue] = useState(initialValue);
 
   // Load address history
   useEffect(() => {
@@ -224,9 +225,8 @@ export function AddressAutocomplete({
     // Clear validation error when selecting from history
     setValidationError(null);
     
-    if (inputRef.current) {
-      inputRef.current.value = item.street;
-    }
+    // Update controlled input value
+    setInputValue(item.street);
     
     onAddressSelect({
       street: item.street,
@@ -238,7 +238,12 @@ export function AddressAutocomplete({
     setShowHistory(false);
   };
 
-  const handleInputChange = () => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    
+    // Update controlled input value
+    setInputValue(value);
+    
     // Clear validation error on input change
     setValidationError(null);
     
@@ -313,7 +318,7 @@ export function AddressAutocomplete({
               id="customer-address-autocomplete"
               type="text"
               placeholder={placeholder}
-              defaultValue={initialValue}
+              value={inputValue}
               className="pr-10"
               onChange={handleInputChange}
               onFocus={() => {
