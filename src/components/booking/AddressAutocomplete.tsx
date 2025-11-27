@@ -130,7 +130,26 @@ export function AddressAutocomplete({
       }
     };
 
+    // Listen for Google Maps API errors
+    const handleGoogleError = () => {
+      setApiError("Google Maps unavailable. Please enter your address manually.");
+      setScriptLoading(false);
+      if (autocompleteRef.current) {
+        const google = (window as any).google;
+        if (google?.maps?.event) {
+          google.maps.event.clearInstanceListeners(autocompleteRef.current);
+        }
+        autocompleteRef.current = null;
+      }
+    };
+    
+    (window as any).gm_authFailure = handleGoogleError;
+
     loadScript();
+
+    return () => {
+      (window as any).gm_authFailure = undefined;
+    };
   }, []);
 
   // Effect 2: Initialize autocomplete when script is ready AND input exists
@@ -255,6 +274,22 @@ export function AddressAutocomplete({
     setValidationError(null);
   };
 
+  const handleInputBlur = () => {
+    const value = inputRef.current?.value?.trim();
+    // Only trigger manual entry if:
+    // 1. There's a value
+    // 2. Autocomplete isn't active
+    // 3. No API is available (apiError set)
+    if (value && !autocompleteRef.current && apiError) {
+      onAddressSelect({
+        street: value,
+        city: "",
+        state: "",
+        zipCode: "",
+      });
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -302,8 +337,8 @@ export function AddressAutocomplete({
           placeholder={placeholder}
           defaultValue={initialValue}
           className="pr-10"
-          disabled={scriptLoading}
           onChange={handleInputChange}
+          onBlur={handleInputBlur}
           onFocus={() => {
             setShowHistory(false);
             setValidationError(null);
