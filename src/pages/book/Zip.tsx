@@ -11,6 +11,7 @@ import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -53,8 +54,9 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in" {...swipeHandlers}>
-      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+        <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-8">
         <Card variant="outlined" className="animate-slide-in-right">
@@ -115,8 +117,9 @@ export default function BookingZip() {
         continueText={isValidating ? "Checking..." : "Continue"}
       />
 
-      {/* Footer */}
-      <BookingFooter />
-    </div>
+        {/* Footer */}
+        <BookingFooter />
+      </div>
+    </PageTransition>
   );
 }

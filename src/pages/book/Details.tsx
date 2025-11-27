@@ -18,6 +18,7 @@ import { ArrowRight, User, Mail, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
   { id: 1, name: "ZIP Code" },
@@ -234,9 +235,10 @@ export default function BookingDetails() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-8" {...handlers}>
-      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        <ProgressBar currentStep={currentStep} totalSteps={6} steps={PROGRESS_STEPS} />
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-background pb-24 md:pb-8" {...handlers}>
+        <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
+          <ProgressBar currentStep={currentStep} totalSteps={6} steps={PROGRESS_STEPS} />
 
         {totalSavings > 0 && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-3 md:p-4 mb-4 md:mb-6">
@@ -464,7 +466,8 @@ export default function BookingDetails() {
         continueText="Continue to Payment"
       />
 
-      <BookingFooter />
-    </div>
+        <BookingFooter />
+      </div>
+    </PageTransition>
   );
 }

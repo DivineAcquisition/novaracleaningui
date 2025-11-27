@@ -13,6 +13,7 @@ import { getEstimatedHours } from "@/lib/pricing-system";
 import { calculateServiceDuration } from "@/lib/time-slots";
 import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
 import { addDays } from "date-fns";
+import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -71,8 +72,9 @@ export default function BookingSchedule() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8 animate-fade-in">
-      <ProgressBar currentStep={4} totalSteps={6} steps={BOOKING_STEPS} />
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+        <ProgressBar currentStep={4} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8 space-y-3 md:space-y-4">
         {!user && (
@@ -123,14 +125,15 @@ export default function BookingSchedule() {
         </Card>
       </div>
 
-      <BottomNavigation 
-        currentStep={4} 
-        totalSteps={6} 
-        onBack={handleBack} 
-        onContinue={handleContinue} 
-        continueDisabled={!selectedDate || !selectedTime}
-        steps={BOOKING_STEPS}
-      />
-    </div>
+        <BottomNavigation 
+          currentStep={4} 
+          totalSteps={6} 
+          onBack={handleBack} 
+          onContinue={handleContinue} 
+          continueDisabled={!selectedDate || !selectedTime}
+          steps={BOOKING_STEPS}
+        />
+      </div>
+    </PageTransition>
   );
 }

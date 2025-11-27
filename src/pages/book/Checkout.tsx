@@ -27,6 +27,7 @@ import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { useSwipeable } from "react-swipeable";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { PageTransition } from "@/components/booking/PageTransition";
 
 // Stripe publishable key will be loaded from an Edge Function at runtime
 
@@ -422,8 +423,10 @@ export default function BookingCheckout() {
     }
   }, [bookingData.paymentOption]);
   const currentAmount = bookingData.paymentOption === 'full' ? fullPaymentPricing.finalAmount : depositPricing.deposit;
-  return <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
-      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+  return (
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+        <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
       <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
         <Card variant="outlined" className="border-primary/30 shadow-card animate-fade-in">
@@ -860,5 +863,7 @@ export default function BookingCheckout() {
       <BottomNavigation currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} onBack={handleBack} showPrice={true} price={currentAmount} continueDisabled={true} />
 
       <BookingFooter />
-    </div>;
+    </div>
+    </PageTransition>
+  );
 }
