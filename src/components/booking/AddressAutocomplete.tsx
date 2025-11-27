@@ -64,6 +64,7 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<any>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -237,6 +238,29 @@ export function AddressAutocomplete({
     setShowHistory(false);
   };
 
+  const handleInputChange = () => {
+    // Clear validation error on input change
+    setValidationError(null);
+    
+    // Debounce to reduce unnecessary processing
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      // Additional validation can be added here if needed
+    }, 300);
+  };
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -291,6 +315,7 @@ export function AddressAutocomplete({
               placeholder={placeholder}
               defaultValue={initialValue}
               className="pr-10"
+              onChange={handleInputChange}
               onFocus={() => {
                 setShowHistory(false);
                 setValidationError(null);

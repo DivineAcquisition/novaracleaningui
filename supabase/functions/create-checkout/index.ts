@@ -78,6 +78,70 @@ serve(async (req) => {
       timeSlot
     } = bookingData;
 
+    // === SERVER-SIDE VALIDATION ===
+    const validationErrors: string[] = [];
+    
+    // Validate contact information
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      validationErrors.push("Valid email is required");
+    }
+    if (!firstName || firstName.trim().length < 2) {
+      validationErrors.push("First name must be at least 2 characters");
+    }
+    if (!lastName || lastName.trim().length < 2) {
+      validationErrors.push("Last name must be at least 2 characters");
+    }
+    if (!phone || !/^\d{10}$/.test(phone.replace(/\D/g, ''))) {
+      validationErrors.push("Valid 10-digit phone number is required");
+    }
+    
+    // Validate address components
+    if (!address || address.trim().length < 5) {
+      validationErrors.push("Complete street address is required");
+    }
+    if (address && !/\d+/.test(address)) {
+      validationErrors.push("Address must include a street number");
+    }
+    if (!city || city.trim().length < 2) {
+      validationErrors.push("Valid city name is required");
+    }
+    if (!state || !/^[A-Z]{2}$/i.test(state)) {
+      validationErrors.push("Valid 2-letter state code is required");
+    }
+    if (!zipCode || !/^\d{5}$/.test(zipCode)) {
+      validationErrors.push("Valid 5-digit ZIP code is required");
+    }
+    
+    // Validate booking details
+    if (!homeSizeId) {
+      validationErrors.push("Home size selection is required");
+    }
+    if (!serviceType) {
+      validationErrors.push("Service type is required");
+    }
+    if (!serviceDate) {
+      validationErrors.push("Service date is required");
+    }
+    if (!timeSlot) {
+      validationErrors.push("Time slot is required");
+    }
+    
+    if (validationErrors.length > 0) {
+      logStep("Validation failed", { errors: validationErrors });
+      return new Response(
+        JSON.stringify({ 
+          error: "Validation failed", 
+          details: validationErrors 
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        }
+      );
+    }
+    
+    logStep("Validation passed");
+
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
     });
