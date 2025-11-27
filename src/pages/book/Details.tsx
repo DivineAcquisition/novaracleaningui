@@ -7,7 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { validateEmail, validatePhone } from "@/lib/form-validation";
+import { 
+  validateEmail, 
+  validatePhone, 
+  validateName,
+  validateAddress,
+  validateCity,
+  validateState
+} from "@/lib/form-validation";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { calculatePrice } from "@/lib/pricing-system";
 import { ProgressBar } from "@/components/booking/ProgressBar";
@@ -66,18 +73,26 @@ export default function BookingDetails() {
   const validateField = (name: string, value: string) => {
     switch (name) {
       case "firstName":
+        const firstNameResult = validateName(value, "First name");
+        return firstNameResult.isValid ? "" : firstNameResult.error || "";
       case "lastName":
-        return value.trim().length === 0 ? `${name === "firstName" ? "First" : "Last"} name is required` : "";
+        const lastNameResult = validateName(value, "Last name");
+        return lastNameResult.isValid ? "" : lastNameResult.error || "";
       case "email":
-        return !validateEmail(value) ? "Please enter a valid email address" : "";
+        const emailResult = validateEmail(value);
+        return emailResult.isValid ? "" : emailResult.error || "";
       case "phone":
-        return !validatePhone(value) ? "Please enter a valid phone number" : "";
+        const phoneResult = validatePhone(value);
+        return phoneResult.isValid ? "" : phoneResult.error || "";
       case "address":
-        return value.trim().length === 0 ? "Street address is required" : "";
+        const addressResult = validateAddress(value);
+        return addressResult.isValid ? "" : addressResult.error || "";
       case "city":
-        return value.trim().length === 0 ? "City is required" : "";
+        const cityResult = validateCity(value);
+        return cityResult.isValid ? "" : cityResult.error || "";
       case "state":
-        return value.trim().length === 0 ? "State is required" : "";
+        const stateResult = validateState(value);
+        return stateResult.isValid ? "" : stateResult.error || "";
       default:
         return "";
     }
@@ -157,15 +172,26 @@ export default function BookingDetails() {
   };
 
   const isFormValid = () => {
+    // Validate all required fields using validation utilities
+    const firstNameValid = validateName(formData.firstName, "First name").isValid;
+    const lastNameValid = validateName(formData.lastName, "Last name").isValid;
+    const emailValid = validateEmail(formData.email).isValid;
+    const phoneValid = validatePhone(formData.phone).isValid;
+    const addressValid = validateAddress(formData.address).isValid;
+    const cityValid = validateCity(formData.city).isValid;
+    const stateValid = validateState(formData.state).isValid;
+    
+    const noErrors = !Object.values(errors).some(error => error !== "");
+    
     return (
-      formData.firstName.trim() !== "" &&
-      formData.lastName.trim() !== "" &&
-      validateEmail(formData.email) &&
-      validatePhone(formData.phone) &&
-      formData.address.trim() !== "" &&
-      formData.city.trim() !== "" &&
-      formData.state.trim() !== "" &&
-      !Object.values(errors).some(error => error !== "")
+      firstNameValid &&
+      lastNameValid &&
+      emailValid &&
+      phoneValid &&
+      addressValid &&
+      cityValid &&
+      stateValid &&
+      noErrors
     );
   };
 
@@ -175,6 +201,11 @@ export default function BookingDetails() {
     state: string;
     zipCode: string;
   }) => {
+    // Validate the selected address components
+    const addressValid = validateAddress(addressComponents.street);
+    const cityValid = validateCity(addressComponents.city);
+    const stateValid = validateState(addressComponents.state);
+    
     setFormData(prev => ({
       ...prev,
       address: addressComponents.street,
@@ -182,7 +213,7 @@ export default function BookingDetails() {
       state: addressComponents.state,
     }));
 
-    // Mark fields as touched and clear errors
+    // Mark fields as touched and set validation results
     setTouched(prev => ({
       ...prev,
       address: true,
@@ -192,10 +223,15 @@ export default function BookingDetails() {
 
     setErrors(prev => ({
       ...prev,
-      address: "",
-      city: "",
-      state: "",
+      address: addressValid.isValid ? "" : (addressValid.error || ""),
+      city: cityValid.isValid ? "" : (cityValid.error || ""),
+      state: stateValid.isValid ? "" : (stateValid.error || ""),
     }));
+    
+    // Show toast if address is incomplete or invalid
+    if (!addressValid.isValid || !cityValid.isValid || !stateValid.isValid) {
+      toast.error("Please ensure the address is complete and valid");
+    }
   };
 
   const handleBack = () => {
