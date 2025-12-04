@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -86,7 +85,7 @@ export function AvailabilityCalendar({
         
         <Card className="border-2 border-border/50 shadow-md">
           <CardContent className="p-3 md:p-4">
-            <ScrollArea className="h-[320px] md:h-[400px] pr-2 md:pr-4">
+            <div className="h-[320px] md:h-[400px] overflow-y-auto pr-2 md:pr-4">
               <div className="space-y-2" role="radiogroup" aria-labelledby="date-selection-label">
                 {dates.map((date) => {
                   const dateString = format(date, 'yyyy-MM-dd');
@@ -145,7 +144,7 @@ export function AvailabilityCalendar({
                   );
                 })}
               </div>
-            </ScrollArea>
+            </div>
             
             <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-border/50">
               <p className="text-xs text-muted-foreground flex items-center gap-2" role="note">
@@ -170,7 +169,7 @@ export function AvailabilityCalendar({
         
         <Card className="border-2 border-border/50 shadow-md">
           <CardContent className="p-3 md:p-4">
-            <ScrollArea className="h-[320px] md:h-[400px] pr-2 md:pr-4">
+            <div className="h-[320px] md:h-[400px] overflow-y-auto pr-2 md:pr-4">
               <div className="space-y-2" role="radiogroup" aria-labelledby="time-selection-label">
                 {(selectedDate || internalSelectedDate) ? (
                   (() => {
@@ -254,7 +253,7 @@ export function AvailabilityCalendar({
                   </div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </div>
