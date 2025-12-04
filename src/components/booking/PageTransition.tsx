@@ -10,22 +10,19 @@ export function PageTransition({ children, direction = "forward" }: PageTransiti
   const variants = {
     initial: {
       opacity: 0,
-      x: direction === "forward" ? 20 : -20,
     },
     animate: {
       opacity: 1,
-      x: 0,
       transition: {
-        duration: 0.35,
-        ease: [0.25, 0.1, 0.25, 1] as const,
+        duration: 0.2,
+        ease: "easeOut" as const,
       },
     },
     exit: {
       opacity: 0,
-      x: direction === "forward" ? -20 : 20,
       transition: {
-        duration: 0.25,
-        ease: [0.25, 0.1, 0.25, 1] as const,
+        duration: 0.15,
+        ease: "easeIn" as const,
       },
     },
   };
