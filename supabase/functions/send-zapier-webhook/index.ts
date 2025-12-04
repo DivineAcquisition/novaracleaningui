@@ -14,6 +14,8 @@ const corsHeaders = {
 
 const ZAPIER_BOOKING_WEBHOOK_URL = Deno.env.get("ZAPIER_WEBHOOK_URL") || "";
 const ZAPIER_DISPATCH_WEBHOOK_URL = Deno.env.get("ZAPIER_DISPATCH_WEBHOOK_URL") || "";
+const GHL_BOOKING_WEBHOOK_URL = Deno.env.get("GHL_BOOKING_WEBHOOK_URL") || "";
+const ZAPIER_BOOKING_WEBHOOK_URL_2 = Deno.env.get("ZAPIER_BOOKING_WEBHOOK_URL_2") || "";
 
 const logStep = (step: string, details?: any) => {
   console.log(`[SEND-ZAPIER-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
@@ -392,30 +394,55 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Tip": formatCurrency(booking.tip_cents || 0)
     };
 
-  return await sendWebhook(supabase, payload, bookingId, 'booking', ZAPIER_BOOKING_WEBHOOK_URL);
+  // Send to all configured booking webhooks in parallel
+  const webhookUrls = [
+    { url: ZAPIER_BOOKING_WEBHOOK_URL, name: 'Zapier Primary' },
+    { url: GHL_BOOKING_WEBHOOK_URL, name: 'GoHighLevel' },
+    { url: ZAPIER_BOOKING_WEBHOOK_URL_2, name: 'Zapier Secondary' }
+  ].filter(w => w.url); // Only include configured webhooks
+
+  logStep("Sending to multiple webhooks", { count: webhookUrls.length, targets: webhookUrls.map(w => w.name) });
+
+  const results = await Promise.allSettled(
+    webhookUrls.map(webhook => sendSingleWebhook(supabase, payload, bookingId, 'booking', webhook.url, webhook.name))
+  );
+
+  const successful = results.filter(r => r.status === 'fulfilled').length;
+  const failed = results.filter(r => r.status === 'rejected').length;
+
+  logStep("Webhook results", { successful, failed, total: webhookUrls.length });
+
+  return new Response(
+    JSON.stringify({ 
+      success: successful > 0, 
+      bookingId, 
+      webhooksAttempted: webhookUrls.length,
+      webhooksSuccessful: successful,
+      webhooksFailed: failed,
+      payload 
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: successful > 0 ? 200 : 500 }
+  );
 }
 
-async function sendWebhook(supabase: any, payload: any, id: string, type: string, webhookUrl: string) {
-  logStep("Payload constructed", { id, type });
+async function sendSingleWebhook(supabase: any, payload: any, id: string, type: string, webhookUrl: string, webhookName: string) {
+  logStep(`Sending to ${webhookName}`, { id, type });
 
-  // Ensure Zapier URL is configured
+  // Ensure webhook URL is configured
   if (!webhookUrl) {
-    logStep(`Missing webhook URL for type: ${type}`);
-    return new Response(
-      JSON.stringify({ error: `Webhook URL not configured for ${type} events` }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-    );
+    logStep(`Missing webhook URL for ${webhookName}`);
+    throw new Error(`Webhook URL not configured for ${webhookName}`);
   }
 
   // Log destination host for verification without leaking full URL
   try {
     const urlHost = new URL(webhookUrl).host;
-    logStep("Sending to Zapier", { urlHost, type });
+    logStep(`Destination: ${urlHost}`, { webhookName });
   } catch (_) {
-    logStep("Invalid webhook URL format");
+    logStep(`Invalid webhook URL format for ${webhookName}`);
   }
 
-  // Send to Zapier with retry logic
+  // Send with retry logic
   let retryCount = 0;
   const MAX_RETRIES = 3;
 
@@ -427,36 +454,22 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
         body: JSON.stringify(payload)
       });
 
-      // Capture response body for debugging (Zapier often returns empty string)
       const respText = await response.text().catch(() => "");
-      logStep("Zapier response", {
+      logStep(`${webhookName} response`, {
         status: response.status,
         bodyPreview: respText ? respText.slice(0, 200) : ""
       });
 
       if (response.ok) {
-        logStep("Webhook sent successfully", { id, type, status: response.status });
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            id, 
-            type,
-            payload,
-            response: {
-              status: response.status,
-              body: respText
-            },
-            webhookUrl: webhookUrl
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-        );
+        logStep(`${webhookName} sent successfully`, { id, status: response.status });
+        return { success: true, webhookName, status: response.status };
       }
 
-      throw new Error(`Webhook failed with status ${response.status}`);
+      throw new Error(`${webhookName} failed with status ${response.status}`);
     } catch (err) {
       retryCount++;
       const errorMessage = err instanceof Error ? err.message : String(err);
-      logStep(`Webhook attempt ${retryCount} failed`, { error: errorMessage });
+      logStep(`${webhookName} attempt ${retryCount} failed`, { error: errorMessage });
       
       if (retryCount >= MAX_RETRIES) {
         // Log failure to database
@@ -464,10 +477,10 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
           booking_id: type === 'booking' ? id : null,
           webhook_url: webhookUrl,
           payload: payload,
-          error_message: errorMessage,
+          error_message: `${webhookName}: ${errorMessage}`,
           retry_count: retryCount
         });
-        throw new Error(errorMessage);
+        throw new Error(`${webhookName}: ${errorMessage}`);
       }
       
       // Exponential backoff
@@ -475,9 +488,22 @@ async function sendWebhook(supabase: any, payload: any, id: string, type: string
     }
   }
 
-  // Fallback response if all retries failed
-  return new Response(
-    JSON.stringify({ error: "All retry attempts failed" }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-  );
+  throw new Error(`${webhookName}: All retry attempts failed`);
+}
+
+// Legacy single webhook function for dispatch webhooks
+async function sendWebhook(supabase: any, payload: any, id: string, type: string, webhookUrl: string) {
+  return sendSingleWebhook(supabase, payload, id, type, webhookUrl, 'Zapier Dispatch')
+    .then(result => {
+      return new Response(
+        JSON.stringify({ success: true, id, type, payload }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    })
+    .catch(err => {
+      return new Response(
+        JSON.stringify({ error: err.message }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
+    });
 }
