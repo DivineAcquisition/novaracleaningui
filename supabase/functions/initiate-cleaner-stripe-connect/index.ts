@@ -83,6 +83,7 @@ serve(async (req) => {
         country: "US",
         email: cleaner.email,
         capabilities: {
+          card_payments: { requested: true },
           transfers: { requested: true },
         },
         business_type: "individual",
