@@ -12,7 +12,7 @@ import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { getEstimatedHours } from "@/lib/pricing-system";
 import { calculateServiceDuration } from "@/lib/time-slots";
 import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
-import { addDays } from "date-fns";
+import { addDays, format } from "date-fns";
 import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
@@ -28,7 +28,9 @@ export default function BookingSchedule() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData } = useBooking();
   const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState<string>(bookingData.serviceDate || "");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
+  );
   const [selectedTime, setSelectedTime] = useState<string>(bookingData.timeSlot || "");
 
   useBookingSwipe({
@@ -45,22 +47,26 @@ export default function BookingSchedule() {
   const minDate = addDays(new Date(), 3);
 
   const handleDateSelect = (date: Date) => {
-    const dateStr = date.toISOString().split("T")[0];
-    setSelectedDate(dateStr);
+    console.log('Schedule page received date:', format(date, 'yyyy-MM-dd EEEE'));
+    setSelectedDate(date);
     setSelectedTime(""); // Clear time when date changes
   };
 
   const handleSelectSlot = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
-    const dateStr = date.toISOString().split("T")[0];
-    setSelectedDate(dateStr);
+    console.log('Schedule page received slot:', format(date, 'yyyy-MM-dd'), timeSlot);
+    setSelectedDate(date);
     setSelectedTime(timeSlot);
   };
 
   const handleContinue = () => {
     if (!selectedDate || !selectedTime) return;
     
+    // Use date-fns format to prevent timezone issues
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    console.log('Saving date to booking:', dateStr);
+    
     updateBookingData({
-      serviceDate: selectedDate,
+      serviceDate: dateStr,
       timeSlot: selectedTime,
       serviceDuration,
     });
@@ -105,7 +111,7 @@ export default function BookingSchedule() {
               </div>
               
               <AvailabilityCalendar 
-                selectedDate={selectedDate ? new Date(selectedDate) : undefined} 
+                selectedDate={selectedDate} 
                 selectedTime={selectedTime} 
                 onSelectSlot={handleSelectSlot}
                 onDateSelect={handleDateSelect}
