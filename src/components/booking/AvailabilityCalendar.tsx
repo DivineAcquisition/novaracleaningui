@@ -189,8 +189,8 @@ export function AvailabilityCalendar({
         </div>
       </div>
 
-      {/* Day Cards for Selected Week */}
-      <div className="grid grid-cols-5 gap-2">
+      {/* Full-Width Vertical Date List */}
+      <div className="flex flex-col gap-2">
         {currentWeek.map((day) => {
           const isSelected = currentSelectedDate && isSameDay(day, currentSelectedDate);
           const dayAvail = getDateAvailability(day);
@@ -203,41 +203,70 @@ export function AvailabilityCalendar({
               onClick={() => !isDisabled && handleDateSelect(day)}
               disabled={isDisabled}
               className={cn(
-                "p-2 md:p-3 rounded-lg border-2 text-center",
-                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-                "transition-colors min-h-[80px] md:min-h-[100px] flex flex-col justify-center",
+                "w-full min-h-[64px] p-4 rounded-lg border-2",
+                "flex items-center justify-between",
+                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                "transition-colors touch-manipulation",
+                "-webkit-tap-highlight-color: transparent",
                 isSelected
-                  ? "bg-primary text-primary-foreground border-primary shadow-md"
+                  ? "bg-primary text-primary-foreground border-primary"
                   : isDisabled
                   ? "bg-muted/30 border-border/30 opacity-50 cursor-not-allowed"
-                  : "bg-background border-border/60 hover:border-primary/50 hover:bg-accent/30 cursor-pointer"
+                  : "bg-background border-border/60 hover:border-primary hover:bg-accent/20 cursor-pointer"
               )}
             >
-              <span className={cn(
-                "text-[10px] md:text-xs uppercase font-medium",
-                isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-              )}>
-                {format(day, 'EEE')}
-              </span>
-              <span className={cn(
-                "text-lg md:text-2xl font-bold",
-                isSelected ? "text-primary-foreground" : "text-foreground"
-              )}>
-                {format(day, 'd')}
-              </span>
-              <span className={cn(
-                "text-[10px] md:text-xs",
-                isSelected 
-                  ? "text-primary-foreground/80" 
-                  : dayAvail.availableCount > 0 
-                  ? "text-success" 
-                  : "text-muted-foreground"
-              )}>
-                {dayAvail.availableCount > 0 
-                  ? `${dayAvail.availableCount} slots`
-                  : 'No slots'
-                }
-              </span>
+              {/* Left: Day name and date */}
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg",
+                  isSelected 
+                    ? "bg-primary-foreground/20 text-primary-foreground" 
+                    : "bg-muted text-foreground"
+                )}>
+                  {format(day, 'd')}
+                </div>
+                <div className="text-left">
+                  <p className={cn(
+                    "font-semibold text-base",
+                    isSelected ? "text-primary-foreground" : "text-foreground"
+                  )}>
+                    {format(day, 'EEEE')}
+                  </p>
+                  <p className={cn(
+                    "text-sm",
+                    isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+                  )}>
+                    {format(day, 'MMMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Right: Availability + Selection indicator */}
+              <div className="flex items-center gap-3">
+                <span className={cn(
+                  "text-sm font-medium",
+                  isSelected 
+                    ? "text-primary-foreground/80" 
+                    : dayAvail.availableCount > 0 
+                    ? "text-success" 
+                    : "text-muted-foreground"
+                )}>
+                  {dayAvail.availableCount > 0 
+                    ? `${dayAvail.availableCount} slots`
+                    : 'No slots'
+                  }
+                </span>
+                <div className={cn(
+                  "w-6 h-6 rounded-full border-2 flex items-center justify-center",
+                  isSelected 
+                    ? "border-primary-foreground bg-primary-foreground" 
+                    : "border-muted-foreground/50"
+                )}>
+                  {isSelected && (
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                  )}
+                </div>
+              </div>
             </button>
           );
         })}
