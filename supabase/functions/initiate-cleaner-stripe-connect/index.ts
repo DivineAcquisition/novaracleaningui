@@ -55,6 +55,28 @@ serve(async (req) => {
     // Create or retrieve Stripe Connect account
     let accountId = cleaner.stripe_account_id;
     
+    // Verify existing account if we have one
+    if (accountId) {
+      try {
+        await stripe.accounts.retrieve(accountId);
+        logStep("Verified existing Stripe account", { accountId });
+      } catch (verifyError) {
+        // Account doesn't exist or isn't connected - clear it and create new
+        logStep("Existing account invalid, will create new", { 
+          accountId, 
+          error: verifyError instanceof Error ? verifyError.message : String(verifyError) 
+        });
+        accountId = null;
+        
+        // Clear the invalid account ID from database
+        await supabase
+          .from("cleaners")
+          .update({ stripe_account_id: null })
+          .eq("id", cleaner.id);
+      }
+    }
+    
+    // Create new account if needed
     if (!accountId) {
       const account = await stripe.accounts.create({
         type: "express",
@@ -74,8 +96,6 @@ serve(async (req) => {
         .from("cleaners")
         .update({ stripe_account_id: accountId })
         .eq("id", cleaner.id);
-    } else {
-      logStep("Using existing Stripe account", { accountId });
     }
 
     // Create account link for onboarding
