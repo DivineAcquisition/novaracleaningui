@@ -43,11 +43,12 @@ const SERVICES = [
 ];
 
 const DWELLING_TYPES = [
+  { value: 'house', label: 'House' },
   { value: 'apartment', label: 'Apartment' },
   { value: 'condo', label: 'Condo' },
+  { value: 'office_space', label: 'Office Space' },
   { value: 'townhouse', label: 'Townhouse' },
-  { value: 'house', label: 'House' },
-  { value: 'other', label: 'Other' },
+  { value: 'mansion', label: 'Mansion' },
 ];
 
 export function ModifyBookingDialog({ booking, open, onOpenChange, onSuccess }: ModifyBookingDialogProps) {

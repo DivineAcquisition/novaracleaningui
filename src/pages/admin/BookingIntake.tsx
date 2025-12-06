@@ -852,11 +852,12 @@ export default function BookingIntake() {
                       <SelectValue placeholder="Select dwelling type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Single Family">Single Family</SelectItem>
-                      <SelectItem value="Townhouse">Townhouse</SelectItem>
-                      <SelectItem value="Apartment">Apartment</SelectItem>
-                      <SelectItem value="Condo">Condo</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      <SelectItem value="house">House</SelectItem>
+                      <SelectItem value="apartment">Apartment</SelectItem>
+                      <SelectItem value="condo">Condo</SelectItem>
+                      <SelectItem value="office_space">Office Space</SelectItem>
+                      <SelectItem value="townhouse">Townhouse</SelectItem>
+                      <SelectItem value="mansion">Mansion</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

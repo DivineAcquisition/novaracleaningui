@@ -4,6 +4,7 @@ import {
   getEstimatedHours, 
   calculateCleanerPayout,
   getSqftRange,
+  getTeamSize,
   DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
 
@@ -94,14 +95,34 @@ function mapBookingStatus(status: string): string {
 
 // Map dwelling_type to formatted string
 function mapDwellingType(dwellingType: string | null): string {
-  if (!dwellingType) return 'Not Specified';
+  if (!dwellingType) return 'House';
   const mapping: Record<string, string> = {
     'house': 'House',
+    'single_family': 'House',
     'apartment': 'Apartment',
     'condo': 'Condo',
-    'townhouse': 'Townhouse'
+    'office_space': 'Office Space',
+    'townhouse': 'Townhouse',
+    'mansion': 'Mansion',
+    // Fallback old values
+    'mobile_home': 'House',
+    'other': 'House'
   };
-  return mapping[dwellingType] || dwellingType;
+  return mapping[dwellingType.toLowerCase()] || 'House';
+}
+
+// Map deposit type based on payment option and amounts
+function mapDepositType(paymentOption: string, depositCents: number, totalCents: number): string {
+  if (paymentOption === 'full') return 'Paid In Full';
+  if (depositCents === 0) return 'Pay After Service';
+  if (depositCents === 3900) return '$39 Only';
+  if (depositCents === 5000) return '$50 Only';
+  
+  const depositPercent = Math.round((depositCents / totalCents) * 100);
+  if (depositPercent >= 23 && depositPercent <= 27) return '25% Down';
+  if (depositPercent >= 48 && depositPercent <= 52) return '50% Down';
+  
+  return '$39 Only'; // Default
 }
 
 // Map membership_plan to formatted string
@@ -303,15 +324,17 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       .eq('customer_id', booking.customer_id)
       .maybeSingle();
 
-    // Calculate estimated hours and payout
+    // Calculate estimated hours and payout with team size
     const estimatedHours = booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
     const cleanerHourlyRateCents = booking.cleaner_hourly_rate_cents || DEFAULT_CLEANER_HOURLY_RATE_CENTS;
-    const cleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
+    const perCleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
+    const teamSize = getTeamSize(booking.home_size_id);
+    const totalTeamPayoutCents = perCleanerPayoutCents * teamSize;
     const totalChargedCents = booking.final_charge_cents || booking.total_estimate_cents;
-    const companyNetCents = totalChargedCents - cleanerPayoutCents;
+    const companyNetCents = totalChargedCents - totalTeamPayoutCents;
 
     // Calculate total discounts
-    const newCustomerDiscount = booking.booking_number === 1 ? 6000 : 0; // $60 for first booking
+    const newCustomerDiscount = booking.booking_number === 1 ? 3000 : 0; // $30 for first booking
     const creditDiscount = booking.uses_credit ? booking.base_price_cents : 0;
     const fullPaymentDiscount = booking.full_payment_discount || 0;
     const totalDiscountCents = newCustomerDiscount + creditDiscount + fullPaymentDiscount;
@@ -399,6 +422,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Price": formatCurrency(booking.base_price_cents),
       "Deposit": formatCurrency(booking.deposit_cents),
       "Discount/Credit": formatCurrency(totalDiscountCents),
+      "Discounted Amount": formatCurrency(totalDiscountCents),
       "Tax": formatCurrency(booking.tax_cents || 0),
       "Total Charged": formatCurrency(totalChargedCents),
       "Remaining Balance": booking.payment_option === 'deposit' 
@@ -409,11 +433,14 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         : "",
       "Invoice Status": booking.stripe_invoice_id ? "Sent" : "N/A",
       "Payment Status": getPaymentStatus(booking.status, booking.payment_option),
-      "Payment Option": booking.payment_option || "deposit",
+      "Deposit Type": mapDepositType(booking.payment_option, booking.deposit_cents, booking.total_estimate_cents),
       "Paid in Full": booking.payment_option === 'full',
       "Payment Method": booking.payment_method || "Card",
-      "Cleaner Split %": Math.round((cleanerPayoutCents / totalChargedCents) * 100),
-      "Cleaner Payout": formatCurrency(cleanerPayoutCents),
+      
+      // Team & Payout Information
+      "Team Size": teamSize,
+      "Cleaner Payout Per Cleaner": formatCurrency(perCleanerPayoutCents),
+      "Total Team Payout": formatCurrency(totalTeamPayoutCents),
       "Company Net": formatCurrency(companyNetCents),
       "Tip": formatCurrency(booking.tip_cents || 0)
     };

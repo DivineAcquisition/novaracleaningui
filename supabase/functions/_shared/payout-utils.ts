@@ -16,6 +16,16 @@ export const HOME_SIZE_HOURS: Record<string, number> = {
   "5000_plus": 12,
 };
 
+// Home sizes that require 3 cleaners (above 2500 sq ft)
+const LARGE_HOME_SIZES = ['2501_3000', '3001_3500', '3501_4000', '4001_4500', '4501_5000', '5000_plus'];
+
+/**
+ * Get team size based on home size (3 for >2500 sqft, 2 otherwise)
+ */
+export function getTeamSize(homeSizeId: string): number {
+  return LARGE_HOME_SIZES.includes(homeSizeId) ? 3 : 2;
+}
+
 // Map home size IDs to square footage ranges for Zapier
 export const HOME_SIZE_SQFT_RANGES: Record<string, string> = {
   "0_999": "0-999",
