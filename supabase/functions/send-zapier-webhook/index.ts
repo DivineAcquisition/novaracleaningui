@@ -62,6 +62,25 @@ function mapArrivalWindow(timeSlot: string): string {
   return mapping[timeSlot] || '8–10a';
 }
 
+// Get start time for time slot in HH:MM A format
+function getStartTimeForSlot(timeSlot: string): string {
+  const mapping: Record<string, string> = {
+    '8-12': '08:00 AM',
+    '12-16': '12:00 PM',
+    '16-20': '04:00 PM'
+  };
+  return mapping[timeSlot] || '08:00 AM';
+}
+
+// Format date as MM-DD-YYYY
+function formatDateMMDDYYYY(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${month}-${day}-${year}`;
+}
+
 // Map booking status to Zapier status enum
 function mapBookingStatus(status: string): string {
   const mapping: Record<string, string> = {
@@ -270,11 +289,11 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       status: booking.status 
     });
 
-    // Fetch customer referral code
+    // Fetch customer referral code by email (customer_id is Stripe ID, not UUID)
     const { data: customerData } = await supabase
       .from('customers')
-      .select('referral_code')
-      .eq('id', booking.customer_id)
+      .select('id, referral_code')
+      .eq('email', booking.email)
       .maybeSingle();
 
     // Fetch subscription ID if exists
@@ -340,6 +359,9 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       
       // Scheduling
       "Scheduled Date": booking.service_date,
+      "Service Start Date Formatted": formatDateMMDDYYYY(booking.service_date),
+      "Service Start Time Formatted": getStartTimeForSlot(booking.time_slot),
+      "Service Start DateTime": `${formatDateMMDDYYYY(booking.service_date)} ${getStartTimeForSlot(booking.time_slot)}`,
       "Start Time": `${booking.service_date}T08:00:00Z`,
       "End Time": `${booking.service_date}T${String(8 + estimatedHours).padStart(2, '0')}:00:00Z`,
       "Arrival Window": mapArrivalWindow(booking.time_slot),
@@ -387,6 +409,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         : "",
       "Invoice Status": booking.stripe_invoice_id ? "Sent" : "N/A",
       "Payment Status": getPaymentStatus(booking.status, booking.payment_option),
+      "Payment Option": booking.payment_option || "deposit",
+      "Paid in Full": booking.payment_option === 'full',
       "Payment Method": booking.payment_method || "Card",
       "Cleaner Split %": Math.round((cleanerPayoutCents / totalChargedCents) * 100),
       "Cleaner Payout": formatCurrency(cleanerPayoutCents),
