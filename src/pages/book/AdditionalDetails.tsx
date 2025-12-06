@@ -12,13 +12,12 @@ import { useBooking } from "@/contexts/BookingContext";
 import { US_STATES } from "@/lib/us-states";
 
 const DWELLING_TYPES = [
-  { value: 'single_family', label: 'Single Family Home' },
-  { value: 'townhouse', label: 'Townhouse' },
+  { value: 'house', label: 'House' },
   { value: 'apartment', label: 'Apartment' },
   { value: 'condo', label: 'Condo' },
-  { value: 'mansion', label: 'Mansion/Estate' },
-  { value: 'mobile_home', label: 'Mobile Home' },
-  { value: 'other', label: 'Other' },
+  { value: 'office_space', label: 'Office Space' },
+  { value: 'townhouse', label: 'Townhouse' },
+  { value: 'mansion', label: 'Mansion' },
 ];
 
 const PETS_OPTIONS = [
