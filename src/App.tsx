@@ -26,6 +26,7 @@ import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
 import AdminWebhooks from "./pages/admin/WebhookMonitor";
+import WebhookTester from "./pages/admin/WebhookTester";
 import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
@@ -73,6 +74,7 @@ const App = () => (
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
+              <Route path="/admin/webhook-tester" element={<ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>} />
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin/intake" element={<BookingIntake />} />

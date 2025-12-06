@@ -6,7 +6,7 @@
 import { getEstimatedHours } from "./pricing-system";
 
 // Constants
-const DEFAULT_CLEANER_HOURLY_RATE = 20; // $20/hour
+const DEFAULT_CLEANER_HOURLY_RATE = 18; // $18/hour base rate for all cleaners
 const PLATFORM_FEE_PERCENT = 0.03; // 3% payment processing
 const MINIMUM_PROFIT_MARGIN = 0.20; // 20% minimum
 

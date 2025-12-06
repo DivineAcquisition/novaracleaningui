@@ -40,8 +40,8 @@ export const HOME_SIZE_SQFT_RANGES: Record<string, string> = {
   "5000_plus": "5001+",
 };
 
-// Default cleaner hourly rate in cents ($20/hr)
-export const DEFAULT_CLEANER_HOURLY_RATE_CENTS = 2000;
+// Default cleaner hourly rate in cents ($18/hr base rate for all cleaners)
+export const DEFAULT_CLEANER_HOURLY_RATE_CENTS = 1800;
 
 /**
  * Get estimated hours for a given home size
