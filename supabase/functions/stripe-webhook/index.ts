@@ -323,6 +323,65 @@ serve(async (req) => {
             }
           }
 
+          // Generate referral code for customer if they don't have one
+          try {
+            logStep("Checking/generating customer referral code", { email: booking.email });
+            
+            // Find or create customer record
+            const { data: existingCustomer } = await supabase
+              .from('customers')
+              .select('id, referral_code')
+              .eq('email', booking.email)
+              .maybeSingle();
+            
+            if (existingCustomer && !existingCustomer.referral_code) {
+              // Generate referral code for existing customer without one
+              const referralResponse = await supabase.functions.invoke('generate-referral-code', {
+                body: { customerId: existingCustomer.id, email: booking.email },
+              });
+              
+              if (referralResponse.error) {
+                logStep("Referral code generation failed (non-blocking)", { error: referralResponse.error });
+              } else {
+                logStep("Referral code generated successfully", referralResponse.data);
+              }
+            } else if (!existingCustomer) {
+              // Create new customer with referral code generation
+              const { data: newCustomer, error: insertError } = await supabase
+                .from('customers')
+                .insert({
+                  email: booking.email,
+                  first_name: booking.first_name,
+                  last_name: booking.last_name,
+                  phone: booking.phone,
+                  address: booking.address,
+                  city: booking.city,
+                  state: booking.state,
+                  zip: booking.zip_code,
+                })
+                .select('id')
+                .single();
+              
+              if (insertError) {
+                logStep("Customer creation failed (non-blocking)", { error: insertError.message });
+              } else if (newCustomer) {
+                const referralResponse = await supabase.functions.invoke('generate-referral-code', {
+                  body: { customerId: newCustomer.id, email: booking.email },
+                });
+                
+                if (referralResponse.error) {
+                  logStep("Referral code generation failed (non-blocking)", { error: referralResponse.error });
+                } else {
+                  logStep("New customer created with referral code", referralResponse.data);
+                }
+              }
+            } else {
+              logStep("Customer already has referral code", { code: existingCustomer.referral_code });
+            }
+          } catch (referralGenError) {
+            logStep("Error generating referral code (non-blocking)", { error: referralGenError });
+          }
+
           // Send booking data to Zapier webhook
           try {
             logStep("Triggering Zapier webhook");
