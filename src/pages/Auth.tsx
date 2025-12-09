@@ -79,7 +79,7 @@ export default function Auth() {
     
     setIsLoading(true);
     
-    const { error } = await signUp(email, password);
+    const { data, error } = await signUp(email, password);
     
     if (error) {
       if (error.message.includes("already registered")) {
@@ -87,8 +87,16 @@ export default function Auth() {
       } else {
         toast.error(error.message || "Failed to sign up");
       }
-    } else {
+    } else if (data?.user?.identities?.length === 0) {
+      // User already exists - identities array is empty
+      toast.error("This email is already registered. Please sign in or reset your password.");
+    } else if (data?.user && !data?.session) {
+      // New user created, email confirmation required
       toast.success("Account created! Please check your email to verify your account.");
+    } else if (data?.session) {
+      // User created and auto-signed in (email confirmation disabled)
+      toast.success("Account created successfully!");
+      navigate("/account");
     }
     
     setIsLoading(false);
