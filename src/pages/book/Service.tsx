@@ -109,8 +109,23 @@ export default function BookingService() {
       ? selectedAddOns.filter(addon => addon === 'windows')
       : selectedAddOns;
     
+    // Just select the service, don't auto-navigate
     updateBookingData({ 
       serviceType,
+      addOns: filteredAddOns,
+      membershipPlan: selectedMembership
+    });
+  };
+
+  const handleContinue = () => {
+    if (!bookingData.serviceType) return;
+    
+    // For moveInOut, filter out fridge & oven from add-ons (they're included)
+    const filteredAddOns = bookingData.serviceType === 'moveInOut' 
+      ? selectedAddOns.filter(addon => addon === 'windows')
+      : selectedAddOns;
+    
+    updateBookingData({ 
       addOns: filteredAddOns,
       membershipPlan: selectedMembership
     });
@@ -346,10 +361,30 @@ export default function BookingService() {
                     <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" />
                     Back
                   </Button>
+                  <Button
+                    size="lg"
+                    onClick={handleContinue}
+                    disabled={!bookingData.serviceType}
+                    className="flex-1 h-12 md:h-14"
+                  >
+                    Continue
+                    <ArrowRight className="ml-2 w-4 h-4 md:w-5 md:h-5" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Mobile Bottom Navigation */}
+          <BottomNavigation
+            currentStep={currentStep}
+            totalSteps={6}
+            steps={BOOKING_STEPS}
+            onBack={handleBack}
+            onContinue={handleContinue}
+            continueDisabled={!bookingData.serviceType}
+            continueText="Continue"
+          />
 
           <BookingFooter />
 
