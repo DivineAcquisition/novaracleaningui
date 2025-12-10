@@ -680,7 +680,7 @@ export default function BookingCheckout() {
                       <div className="flex items-center justify-between">
                         <span className="text-lg font-semibold">Monthly Price:</span>
                         <span className="text-2xl font-bold text-primary">
-                          ${(MEMBERSHIP_PLANS[bookingData.membershipPlan]?.price || 189).toFixed(2)}/mo
+                          ${(MEMBERSHIP_PLANS[bookingData.membershipPlan]?.monthlyPrice || 189).toFixed(2)}/mo
                         </span>
                       </div>
                       <Separator />
@@ -695,7 +695,7 @@ export default function BookingCheckout() {
                       <ul className="text-sm text-muted-foreground space-y-1">
                         <li className="flex items-start gap-2">
                           <span className="text-success">✓</span>
-                          <span>{MEMBERSHIP_PLANS[bookingData.membershipPlan]?.creditsPerMonth || 1} cleaning credit per month</span>
+                          <span>{MEMBERSHIP_PLANS[bookingData.membershipPlan]?.cleansPerMonth || 1} cleaning credit{(MEMBERSHIP_PLANS[bookingData.membershipPlan]?.cleansPerMonth || 1) > 1 ? 's' : ''} per month</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <span className="text-success">✓</span>
