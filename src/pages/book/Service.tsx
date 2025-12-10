@@ -228,6 +228,61 @@ export default function BookingService() {
                   ))}
                 </div>
 
+                {/* Membership Tier Preview Card */}
+                {selectedMembership && selectedMembership !== 'none' && (
+                  <Card className="border-primary/40 bg-gradient-to-br from-primary/5 via-accent/5 to-background shadow-card">
+                    <CardContent className="p-4 md:p-6">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Crown className="w-6 h-6 text-primary" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-base md:text-lg">
+                                {MEMBERSHIP_PLANS[selectedMembership as keyof typeof MEMBERSHIP_PLANS]?.label} Plan
+                              </h4>
+                              <Badge variant="secondary" className="text-xs">Selected</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {MEMBERSHIP_PLANS[selectedMembership as keyof typeof MEMBERSHIP_PLANS]?.description}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-3 md:gap-6">
+                          <div className="text-center px-3 py-2 bg-background/80 rounded-lg border">
+                            <p className="text-lg md:text-xl font-bold text-primary">
+                              ${MEMBERSHIP_PLANS[selectedMembership as keyof typeof MEMBERSHIP_PLANS]?.monthlyPrice}
+                            </p>
+                            <p className="text-xs text-muted-foreground">per month</p>
+                          </div>
+                          <div className="text-center px-3 py-2 bg-background/80 rounded-lg border">
+                            <p className="text-lg md:text-xl font-bold text-primary">
+                              {MEMBERSHIP_PLANS[selectedMembership as keyof typeof MEMBERSHIP_PLANS]?.cleansPerMonth}
+                            </p>
+                            <p className="text-xs text-muted-foreground">cleans/mo</p>
+                          </div>
+                          <div className="text-center px-3 py-2 bg-background/80 rounded-lg border">
+                            <p className="text-lg md:text-xl font-bold text-success">
+                              {(MEMBERSHIP_PLANS[selectedMembership as keyof typeof MEMBERSHIP_PLANS]?.overtimeDiscount || 0) * 100}%
+                            </p>
+                            <p className="text-xs text-muted-foreground">overtime off</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDialogOpen(true)}
+                            className="ml-auto"
+                          >
+                            Change Plan
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {bookingData.serviceType && (
                   <Card className="bg-muted/50 border border-border/60 shadow-md">
                     <CardHeader>
