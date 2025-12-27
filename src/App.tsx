@@ -14,11 +14,14 @@ import ResetPassword from "./pages/ResetPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
 import BookingZip from "./pages/book/Zip";
-import BookingSqft from "./pages/book/Sqft";
-import BookingOffer from "./pages/book/Offer";
-import BookingCheckout from "./pages/book/Checkout";
+import BookingHome from "./pages/book/Home";
+import BookingService from "./pages/book/Service";
+import BookingSchedule from "./pages/book/Schedule";
 import BookingDetails from "./pages/book/Details";
-import BookingConfirmation from "./pages/book/Confirmation";
+import BookingSummary from "./pages/book/Summary";
+import BookingCheckout from "./pages/book/Checkout";
+import BookingSuccess from "./pages/book/Success";
+import AdditionalDetails from "./pages/book/AdditionalDetails";
 import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
@@ -60,11 +63,14 @@ const App = () => (
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/book/zip" element={<BookingZip />} />
-              <Route path="/book/sqft" element={<BookingSqft />} />
-              <Route path="/book/offer" element={<BookingOffer />} />
-              <Route path="/book/checkout" element={<BookingCheckout />} />
+              <Route path="/book/home" element={<BookingHome />} />
+              <Route path="/book/service" element={<BookingService />} />
+              <Route path="/book/schedule" element={<BookingSchedule />} />
               <Route path="/book/details" element={<BookingDetails />} />
-              <Route path="/book/confirmation" element={<BookingConfirmation />} />
+              <Route path="/book/summary" element={<BookingSummary />} />
+              <Route path="/book/checkout" element={<BookingCheckout />} />
+              <Route path="/book/success" element={<BookingSuccess />} />
+              <Route path="/book/additional-details" element={<AdditionalDetails />} />
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />

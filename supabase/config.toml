@@ -159,8 +159,3 @@ verify_jwt = false
 [functions.google-places-key]
 verify_jwt = false
 
-[functions.validate-zip]
-verify_jwt = false
-
-[functions.emit-lead-webhook]
-verify_jwt = false
