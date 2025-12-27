@@ -49,7 +49,7 @@ export default function BookingSqft() {
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <BookingProgressBar currentStep={2} totalSteps={6} />
 
-      <div className="container max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
         <div className="text-center space-y-3">
           <div className="flex justify-center">
