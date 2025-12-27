@@ -6,17 +6,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, ArrowRight, ArrowLeft, Loader2, Phone, Sparkles } from "lucide-react";
+import { MapPin, ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookingProgressBar } from "@/components/booking/BookingProgressBar";
-import { GoogleGuaranteedBadge } from "@/components/booking/GoogleGuaranteedBadge";
-import { CleaningShowcaseCarousel } from "@/components/booking/CleaningShowcaseCarousel";
-import { ReviewsWidget } from "@/components/booking/ReviewsWidget";
-import { BookingFooter } from "@/components/booking/BookingFooter";
 
 // Validation schemas
 const contactSchema = z.object({
@@ -185,32 +181,11 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
+    <div className="min-h-screen bg-background">
       <BookingProgressBar currentStep={1} totalSteps={6} />
 
-      <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Badge */}
-        <div className="flex justify-center">
-          <GoogleGuaranteedBadge />
-        </div>
-
-        {/* Promo headline */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 text-primary">
-            <Sparkles className="h-5 w-5" />
-            <span className="text-sm font-semibold uppercase tracking-wide">New Year Special</span>
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            Book Today & Save $60
-          </h1>
-          <p className="text-muted-foreground">
-            On your first deep clean – limited time only!
-          </p>
-        </div>
-
-        {/* Main form card */}
-        <Card className="border-2 shadow-lg">
+      <div className="container max-w-md mx-auto px-4 py-8">
+        <Card className="shadow-sm">
           <AnimatePresence mode="wait">
             {phase === 1 ? (
               <motion.div
@@ -270,17 +245,6 @@ export default function BookingZip() {
                     </Button>
                   </form>
 
-                  {zipError && (
-                    <div className="mt-4 p-3 bg-muted rounded-lg text-center">
-                      <p className="text-sm text-muted-foreground mb-2">Need help?</p>
-                      <Button variant="outline" size="sm" asChild>
-                        <a href="tel:+14155550123">
-                          <Phone className="mr-2 h-4 w-4" />
-                          Call (415) 555-0123
-                        </a>
-                      </Button>
-                    </div>
-                  )}
                 </CardContent>
               </motion.div>
             ) : (
@@ -296,9 +260,9 @@ export default function BookingZip() {
                     <MapPin className="h-4 w-4" />
                     {cityState?.city}, {cityState?.state} {zipCode}
                   </div>
-                  <CardTitle className="text-xl">Claim Your $60 Discount</CardTitle>
+                  <CardTitle className="text-xl">Your Contact Info</CardTitle>
                   <CardDescription>
-                    Enter your details to lock in your savings
+                    We'll use this to confirm your booking
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -378,7 +342,7 @@ export default function BookingZip() {
                         </>
                       ) : (
                         <>
-                          Claim My Discount
+                          Continue
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </>
                       )}
@@ -399,23 +363,14 @@ export default function BookingZip() {
           </AnimatePresence>
         </Card>
 
-        {/* Showcase carousel */}
-        <CleaningShowcaseCarousel />
-
-        {/* Reviews */}
-        <ReviewsWidget />
-
         {/* Terms notice */}
-        <p className="text-xs text-center text-muted-foreground px-4">
+        <p className="text-xs text-center text-muted-foreground mt-6">
           By continuing, you agree to our{" "}
           <a href="/terms" className="underline hover:text-foreground">Terms of Service</a>
           {" "}and{" "}
           <a href="/privacy" className="underline hover:text-foreground">Privacy Policy</a>.
-          Standard message and data rates may apply.
         </p>
       </div>
-
-      <BookingFooter />
     </div>
   );
 }
