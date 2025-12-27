@@ -14,6 +14,8 @@ import ResetPassword from "./pages/ResetPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
 import BookingZip from "./pages/book/Zip";
+import BookingSqft from "./pages/book/Sqft";
+import BookingOffer from "./pages/book/Offer";
 import BookingHome from "./pages/book/Home";
 import BookingService from "./pages/book/Service";
 import BookingSchedule from "./pages/book/Schedule";
@@ -63,6 +65,8 @@ const App = () => (
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/book/zip" element={<BookingZip />} />
+              <Route path="/book/sqft" element={<BookingSqft />} />
+              <Route path="/book/offer" element={<BookingOffer />} />
               <Route path="/book/home" element={<BookingHome />} />
               <Route path="/book/service" element={<BookingService />} />
               <Route path="/book/schedule" element={<BookingSchedule />} />
