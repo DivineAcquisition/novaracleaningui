@@ -1,16 +1,15 @@
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Home as HomeIcon, ArrowRight, ArrowLeft, Clock } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Home as HomeIcon, ArrowRight, CheckCircle, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { HOME_SIZE_RANGES, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
-
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -48,87 +47,92 @@ export default function BookingHome() {
 
   const handleBack = () => {
     setCurrentStep(1);
-    navigate("/book/zip");
+    navigate("/");
   };
 
   return (
     <PageTransition direction="forward">
-      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+      <div className="min-h-screen bg-muted/30 pb-32 md:pb-8" {...swipeHandlers}>
         <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
-        <Card variant="outlined" className="animate-slide-in-right">
-          <CardHeader className="text-center space-y-1.5 pb-4 px-3 md:px-6 md:pb-8">
-            <div className="mx-auto w-12 h-12 md:w-16 md:h-16 bg-primary/10 rounded-full flex items-center justify-center mb-2 md:mb-4">
-              <HomeIcon className="w-6 h-6 md:w-8 md:h-8 text-primary" />
+        <div className="container max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
+          {/* Header */}
+          <div className="text-center mb-8 md:mb-10">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-muted rounded-full flex items-center justify-center mb-4 md:mb-6">
+              <HomeIcon className="w-7 h-7 md:w-8 md:h-8 text-foreground" />
             </div>
-            <CardTitle className="text-base md:text-xl font-semibold font-jakarta">How big is your home?</CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              Select the size that best matches your space
-            </CardDescription>
-          </CardHeader>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+              How big is your home?
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Select your home size to see instant pricing for a professional deep clean
+            </p>
+            
+            {/* Google Guaranteed Badge */}
+            <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border border-primary/30 rounded-full bg-background">
+              <CheckCircle className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-primary">Google Guaranteed</span>
+            </div>
+          </div>
           
-          <CardContent className="space-y-4 md:space-y-6 px-3 md:px-6">
-            <div className="grid grid-cols-1 gap-3 md:gap-4">
-              {HOME_SIZE_RANGES.map((size) => {
-                const isSelected = bookingData.homeSizeId === size.id;
-                return (
-                  <Card
-                    key={size.id}
-                    className={cn(
-                      "cursor-pointer transition-all duration-200 hover:border-primary/60",
-                      isSelected && "border-primary shadow-lavender"
-                    )}
-                    onClick={() => handleSelect(size.id)}
-                  >
-                    <CardContent className="p-4 md:p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="text-base md:text-lg font-semibold text-foreground mb-1">
-                            {size.label}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {size.bedroomRange}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-                          <Clock className="w-4 h-4" />
-                          <span className="text-sm font-medium">
-                            ~{getEstimatedHours(size.id)} hrs
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+          {/* Size Selection Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
+            {HOME_SIZE_RANGES.filter(size => size.id !== '5000_plus').map((size) => {
+              const isSelected = bookingData.homeSizeId === size.id;
+              return (
+                <Card
+                  key={size.id}
+                  className={cn(
+                    "cursor-pointer transition-all duration-200 hover:border-foreground/40 bg-background relative",
+                    isSelected ? "border-foreground ring-1 ring-foreground" : "border-border"
+                  )}
+                  onClick={() => handleSelect(size.id)}
+                >
+                  {isSelected && (
+                    <div className="absolute -top-2 -right-2 w-6 h-6 bg-foreground rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-4 h-4 text-background" />
+                    </div>
+                  )}
+                  <CardContent className="p-5 md:p-6 text-center">
+                    <h3 className="text-lg md:text-xl font-bold text-foreground mb-1">
+                      {size.label}
+                    </h3>
+                    <p className="text-sm text-primary">
+                      {size.bedroomRange}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
 
-            {/* Desktop Navigation - Hidden on Mobile */}
-            <div className="hidden md:flex gap-4 pt-6">
+          {/* Custom Quote Card */}
+          <Card className="bg-muted/50 border-border">
+            <CardContent className="p-5 md:p-6 text-center">
+              <p className="text-base md:text-lg font-medium text-primary mb-3">
+                Home larger than 5,000 sq ft?
+              </p>
               <Button
                 variant="outline"
-                size="lg"
-                onClick={handleBack}
-                className="h-12 md:h-14"
+                onClick={() => navigate("/book/custom-quote")}
+                className="bg-foreground text-background hover:bg-foreground/90 border-foreground"
               >
-                <ArrowLeft className="mr-2 w-4 h-4 md:w-5 md:h-5" />
-                Back
+                Call for Custom Quote
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* Mobile Navigation */}
-      <BottomNavigation
-        currentStep={currentStep}
-        totalSteps={6}
-        steps={BOOKING_STEPS}
-        onBack={handleBack}
-        continueDisabled={!bookingData.homeSizeId}
-        continueText="Continue"
-      />
+        {/* Mobile Navigation */}
+        <BottomNavigation
+          currentStep={currentStep}
+          totalSteps={6}
+          steps={BOOKING_STEPS}
+          onBack={handleBack}
+          continueDisabled={!bookingData.homeSizeId}
+          continueText="Continue"
+        />
 
         <BookingFooter />
       </div>

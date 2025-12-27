@@ -116,10 +116,10 @@ const Index = () => {
           </div>
 
           {/* ZIP Code Entry or Contact Form */}
-          <Card variant="outlined" className="border-primary/30 shadow-card">
+          <Card variant="outlined" className="border-primary/30 shadow-card overflow-hidden">
             <CardContent className="pt-8 pb-8 space-y-6">
-              {!zipValidated ? (
-                // ZIP Code Form
+              {/* ZIP Code Form */}
+              <div className={`transition-all duration-500 ease-out ${zipValidated ? 'h-0 opacity-0 overflow-hidden' : 'h-auto opacity-100'}`}>
                 <form onSubmit={handleZipSubmit} className="space-y-4">
                   <div className="space-y-2">
                     <label htmlFor="zipCode" className="text-sm font-medium text-left block">
@@ -152,11 +152,13 @@ const Index = () => {
                     <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                   </Button>
                 </form>
-              ) : (
-                // Contact Details Form
+              </div>
+
+              {/* Contact Details Form - Animated */}
+              <div className={`transition-all duration-500 ease-out ${zipValidated ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 h-0 overflow-hidden'}`}>
                 <form onSubmit={handleContactSubmit} className="space-y-5">
                   {/* Success Message */}
-                  <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg animate-fade-in">
                     <CheckCircle className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
                     <div className="text-left">
                       <p className="font-semibold text-foreground">
@@ -251,7 +253,7 @@ const Index = () => {
                     ← Change ZIP code ({zipCode})
                   </button>
                 </form>
-              )}
+              </div>
             </CardContent>
           </Card>
 
