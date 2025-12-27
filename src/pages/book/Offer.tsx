@@ -92,7 +92,7 @@ export default function BookingOffer() {
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       {/* Sticky Promo Banner */}
       <div className="sticky top-0 z-50 bg-primary text-primary-foreground">
-        <div className="container max-w-4xl mx-auto px-4 py-3">
+        <div className="container max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-yellow-300" />
@@ -119,7 +119,7 @@ export default function BookingOffer() {
 
       <BookingProgressBar currentStep={3} totalSteps={6} />
 
-      <div className="container max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
         <div className="text-center space-y-3">
           <Badge variant="outline" className="gap-1.5">
