@@ -168,7 +168,7 @@ export default function BookingZip() {
       // Navigate after short delay
       setTimeout(() => {
         setCurrentStep(2);
-        navigate("/book/home");
+        navigate("/book/sqft");
       }, 500);
     } catch (err) {
       console.error("[BookingZip] Submit error:", err);

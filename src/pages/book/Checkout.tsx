@@ -2,11 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { supabase } from "@/integrations/supabase/client";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING } from "@/lib/pricing-system";
 import { toast } from "sonner";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
-import { cn } from "@/lib/utils";
 import {
   Sparkles,
   MapPin,
@@ -17,6 +16,7 @@ import {
   Lock,
   BadgeCheck,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,18 +46,8 @@ const SERVICE_DETAILS = {
       "Make beds and tidy rooms",
     ],
   },
-  tester: {
-    duration: "90 minutes",
-    features: ["Focus on high-priority areas", "Quick refresh", "Same quality products", "Perfect for try-out"],
-    checklist: [
-      "Kitchen counters and sink",
-      "Bathroom sanitization",
-      "Vacuum main living areas",
-      "Quick dust and tidy",
-    ],
-  },
   deep: {
-    duration: "3-4 hours",
+    duration: "4-5 hours",
     features: ["Top-to-bottom cleaning", "Inside appliances", "Baseboards & details", "Perfect for first cleans"],
     checklist: [
       "Everything in standard PLUS:",
@@ -67,16 +57,6 @@ const SERVICE_DETAILS = {
       "Behind and under furniture",
       "Ceiling fans and fixtures",
       "Deep scrub bathrooms",
-    ],
-  },
-  "90day": {
-    duration: "3-4 hours per visit",
-    features: ["3 sessions over 90 days", "Progressive deep cleaning", "Build lasting cleanliness", "Best value"],
-    checklist: [
-      "Session 1: Deep kitchen + bathrooms",
-      "Session 2: Bedrooms + living areas",
-      "Session 3: Full home refresh",
-      "Rotating focus areas each visit",
     ],
   },
 };
@@ -92,7 +72,6 @@ export default function BookingCheckout() {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const [isNewCustomer, setIsNewCustomer] = useState(true);
 
   // Redirect guard
   useEffect(() => {
@@ -109,18 +88,12 @@ export default function BookingCheckout() {
 
   // Price calculations
   const basePrice = homeSize ? homeSize.standardPrice + (serviceTier?.addition || 0) : 200;
-  const promoDiscount = 50; // New Year Special $50 off
+  const promoDiscount = bookingData.serviceType === "deep" ? 50 : Math.round(basePrice * 0.15); // $50 deep clean or 15% recurring
   const finalPrice = Math.max(0, basePrice - promoDiscount);
 
-  // Deposit calculations
-  const depositPercentage = bookingData.serviceType === "90day" ? 0.0625 : 0.25;
-  const depositAmount = Math.round(finalPrice * depositPercentage * 100) / 100;
+  // Deposit calculations (25%)
+  const depositAmount = Math.round(finalPrice * 0.25 * 100) / 100;
   const balanceDue = finalPrice - depositAmount;
-
-  // 90-day plan specific
-  const monthlyPayment = finalPrice * 0.25;
-  const totalMonthlyPayments = monthlyPayment * 3;
-  const firstCleanBalance = finalPrice - depositAmount - totalMonthlyPayments;
 
   // Initialize Stripe
   useEffect(() => {
@@ -136,21 +109,6 @@ export default function BookingCheckout() {
     };
     init();
   }, []);
-
-  // Check if new customer
-  useEffect(() => {
-    const checkCustomer = async () => {
-      if (!bookingData.email) return;
-      const { data } = await supabase
-        .from("bookings")
-        .select("id")
-        .eq("email", bookingData.email)
-        .in("status", ["confirmed", "completed"])
-        .limit(1);
-      setIsNewCustomer(!data || data.length === 0);
-    };
-    checkCustomer();
-  }, [bookingData.email]);
 
   // Initialize payment
   const handleInitializePayment = async () => {
@@ -214,11 +172,11 @@ export default function BookingCheckout() {
           zip_code: bookingData.zipCode,
           city: bookingData.city || "Unknown",
           state: bookingData.state || "CA",
-          address: bookingData.address || "TBD",
+          address: "TBD",
           home_size_id: bookingData.homeSizeId,
           service_type: bookingData.serviceType,
-          service_date: bookingData.serviceDate,
-          time_slot: bookingData.timeSlot,
+          service_date: new Date().toISOString().split('T')[0],
+          time_slot: "9-12",
           base_price_cents: Math.round(basePrice * 100),
           deposit_cents: Math.round(depositAmount * 100),
           total_estimate_cents: Math.round(finalPrice * 100),
@@ -250,6 +208,10 @@ export default function BookingCheckout() {
     }
   };
 
+  const handleBack = () => {
+    navigate("/book/offer");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5">
       <BookingProgressBar currentStep={4} totalSteps={6} />
@@ -264,7 +226,7 @@ export default function BookingCheckout() {
               <Sparkles className="h-5 w-5" />
             </div>
             <p className="text-white text-sm">
-              $50 off your first deep clean – Discount automatically applied!
+              {bookingData.serviceType === "deep" ? "$50 off your deep clean" : "15% off your recurring service"} – Discount automatically applied!
             </p>
           </CardContent>
         </Card>
@@ -290,6 +252,12 @@ export default function BookingCheckout() {
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Service</span>
               <span className="font-semibold">{serviceTier?.label || "Deep Clean"}</span>
+            </div>
+
+            {/* Home Size */}
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Home Size</span>
+              <span className="font-medium">{homeSize?.label || "Medium"}</span>
             </div>
 
             {/* Location */}
@@ -329,23 +297,10 @@ export default function BookingCheckout() {
                 <span className="font-medium">Today's Deposit (25%)</span>
                 <span className="font-bold text-lg">${depositAmount.toFixed(2)}</span>
               </div>
-              {bookingData.serviceType === "90day" ? (
-                <>
-                  <div className="flex justify-between items-center text-sm text-muted-foreground">
-                    <span>Monthly payments (3x)</span>
-                    <span>${monthlyPayment.toFixed(2)}/mo</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm text-muted-foreground">
-                    <span>Balance after first clean</span>
-                    <span>${firstCleanBalance.toFixed(2)}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between items-center text-sm text-muted-foreground">
-                  <span>Balance due after service</span>
-                  <span>${balanceDue.toFixed(2)}</span>
-                </div>
-              )}
+              <div className="flex justify-between items-center text-sm text-muted-foreground">
+                <span>Balance due after service</span>
+                <span>${balanceDue.toFixed(2)}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -458,24 +413,24 @@ export default function BookingCheckout() {
         </Card>
 
         {/* Trust Badges Card */}
-        <Card className="border border-border">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-2 text-sm">
-                <Shield className="h-5 w-5 text-primary" />
-                <span>Secure Payment</span>
+        <Card className="border-2 border-border">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div className="flex flex-col items-center gap-2">
+                <Shield className="h-6 w-6 text-primary" />
+                <span className="text-xs font-medium">Secure Payment</span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <RefreshCw className="h-5 w-5 text-primary" />
-                <span>48-Hr Re-Clean</span>
+              <div className="flex flex-col items-center gap-2">
+                <RefreshCw className="h-6 w-6 text-primary" />
+                <span className="text-xs font-medium">48-Hr Re-Clean</span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Lock className="h-5 w-5 text-primary" />
-                <span>No Contracts</span>
+              <div className="flex flex-col items-center gap-2">
+                <Lock className="h-6 w-6 text-primary" />
+                <span className="text-xs font-medium">No Contracts</span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <BadgeCheck className="h-5 w-5 text-primary" />
-                <span>Insured & Bonded</span>
+              <div className="flex flex-col items-center gap-2">
+                <BadgeCheck className="h-6 w-6 text-primary" />
+                <span className="text-xs font-medium">Insured & Bonded</span>
               </div>
             </div>
             <div className="flex justify-center mt-4 pt-4 border-t">
@@ -483,6 +438,14 @@ export default function BookingCheckout() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Back Button */}
+        <div className="flex justify-center pb-6">
+          <Button variant="ghost" onClick={handleBack} className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Offers
+          </Button>
+        </div>
       </div>
 
       <BookingFooter />
