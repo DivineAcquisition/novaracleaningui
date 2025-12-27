@@ -1,507 +1,444 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useBooking } from "@/contexts/BookingContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { z } from "zod";
+import { format, addDays } from "date-fns";
+import {
+  MapPin,
+  Calendar,
+  Clock,
+  FileText,
+  Loader2,
+  ArrowRight,
+  Home,
+  CheckCircle,
+} from "lucide-react";
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useNavigate } from "react-router-dom";
-import { useBooking } from "@/contexts/BookingContext";
-import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { 
-  validateEmail, 
-  validatePhone, 
-  validateName,
-  validateAddress,
-  validateCity,
-  validateState
-} from "@/lib/form-validation";
-import { formatPhoneNumber } from "@/lib/input-formatters";
-import { calculatePrice } from "@/lib/pricing-system";
-import { ProgressBar } from "@/components/booking/ProgressBar";
-import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { US_STATES } from "@/lib/us-states";
-import { toast } from "sonner";
-import { ArrowRight, User, Mail, Phone } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
+import { BookingProgressBar } from "@/components/booking/BookingProgressBar";
+import { GoogleGuaranteedBadge } from "@/components/booking/GoogleGuaranteedBadge";
 import { BookingFooter } from "@/components/booking/BookingFooter";
-import { PageTransition } from "@/components/booking/PageTransition";
+import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
+import { US_STATES } from "@/lib/us-states";
 
-const BOOKING_STEPS = [
-  { id: 1, name: "ZIP Code" },
-  { id: 2, name: "Home Size" },
-  { id: 3, name: "Service" },
-  { id: 4, name: "Schedule" },
-  { id: 5, name: "Contact Info" },
-  { id: 6, name: "Payment" },
+// Time blocks
+const TIME_BLOCKS = [
+  { id: "8-12", label: "Morning (8 AM - 12 PM)" },
+  { id: "12-16", label: "Afternoon (12 PM - 4 PM)" },
+  { id: "16-20", label: "Evening (4 PM - 8 PM)" },
 ];
+
+// Validation schema
+const addressSchema = z.object({
+  address: z.string().min(5, "Please enter a valid street address"),
+  address2: z.string().optional(),
+  city: z.string().min(2, "Please enter a valid city"),
+  state: z.string().length(2, "Please select a state"),
+  zipCode: z.string().regex(/^\d{5}$/, "Please enter a valid ZIP code"),
+});
 
 export default function BookingDetails() {
   const navigate = useNavigate();
-  const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
+  const [searchParams] = useSearchParams();
+  const { updateBookingData } = useBooking();
+  const bookingId = searchParams.get("booking_id");
 
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [booking, setBooking] = useState<any>(null);
+
+  // Form state
   const [formData, setFormData] = useState({
-    firstName: bookingData.firstName || "",
-    lastName: bookingData.lastName || "",
-    email: bookingData.email || "",
-    phone: bookingData.phone || "",
-    address: bookingData.address || "",
-    city: bookingData.city || "",
-    state: bookingData.state || "",
-  });
-
-  const [errors, setErrors] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
     address: "",
+    address2: "",
     city: "",
     state: "",
+    zipCode: "",
+    notes: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [touched, setTouched] = useState({
-    firstName: false,
-    lastName: false,
-    email: false,
-    phone: false,
-    address: false,
-    city: false,
-    state: false,
-  });
+  // Date/time state
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState("");
 
-  const validateField = (name: string, value: string) => {
-    switch (name) {
-      case "firstName":
-        const firstNameResult = validateName(value, "First name");
-        return firstNameResult.isValid ? "" : firstNameResult.error || "";
-      case "lastName":
-        const lastNameResult = validateName(value, "Last name");
-        return lastNameResult.isValid ? "" : lastNameResult.error || "";
-      case "email":
-        const emailResult = validateEmail(value);
-        return emailResult.isValid ? "" : emailResult.error || "";
-      case "phone":
-        const phoneResult = validatePhone(value);
-        return phoneResult.isValid ? "" : phoneResult.error || "";
-      case "address":
-        const addressResult = validateAddress(value);
-        return addressResult.isValid ? "" : addressResult.error || "";
-      case "city":
-        const cityResult = validateCity(value);
-        return cityResult.isValid ? "" : cityResult.error || "";
-      case "state":
-        const stateResult = validateState(value);
-        return stateResult.isValid ? "" : stateResult.error || "";
-      default:
-        return "";
-    }
-  };
+  const minDate = addDays(new Date(), 3);
+
+  // Fetch booking on mount
+  useEffect(() => {
+    const fetchBooking = async () => {
+      if (!bookingId) {
+        toast.error("No booking found");
+        navigate("/book/zip");
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("id", bookingId)
+          .single();
+
+        if (error || !data) {
+          toast.error("Booking not found");
+          navigate("/book/zip");
+          return;
+        }
+
+        // Check payment status
+        if (data.status !== "confirmed" && data.status !== "pending_payment") {
+          toast.error("Invalid booking status");
+          navigate("/book/zip");
+          return;
+        }
+
+        setBooking(data);
+
+        // Pre-fill form if data exists
+        if (data.address && data.address !== "TBD") {
+          setFormData({
+            address: data.address || "",
+            address2: "",
+            city: data.city || "",
+            state: data.state || "",
+            zipCode: data.zip_code || "",
+            notes: data.access_notes || "",
+          });
+        } else {
+          // Pre-fill city/state/zip from booking context
+          setFormData(prev => ({
+            ...prev,
+            city: data.city || "",
+            state: data.state || "",
+            zipCode: data.zip_code || "",
+          }));
+        }
+
+        // Pre-fill date/time if exists
+        if (data.service_date) {
+          setSelectedDate(new Date(data.service_date + "T12:00:00"));
+        }
+        if (data.time_slot) {
+          setSelectedTime(data.time_slot);
+        }
+      } catch (err) {
+        console.error("[Details] Fetch error:", err);
+        toast.error("Failed to load booking");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchBooking();
+  }, [bookingId, navigate]);
 
   const handleChange = (field: string, value: string) => {
-    if (field === "phone") {
-      const formatted = formatPhoneNumber(value);
-      setFormData(prev => ({ ...prev, [field]: formatted }));
-      if (touched[field as keyof typeof touched]) {
-        const error = validateField(field, formatted);
-        setErrors(prev => ({ ...prev, [field]: error }));
-      }
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
-      if (touched[field as keyof typeof touched]) {
-        const error = validateField(field, value);
-        setErrors(prev => ({ ...prev, [field]: error }));
-      }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
-  const handleBlur = (field: string) => {
-    setTouched(prev => ({ ...prev, [field]: true }));
-    const value = formData[field as keyof typeof formData];
-    const error = validateField(field, value);
-    setErrors(prev => ({ ...prev, [field]: error }));
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Mark all fields as touched
-    const allTouched = {
-      firstName: true,
-      lastName: true,
-      email: true,
-      phone: true,
-      address: true,
-      city: true,
-      state: true,
-    };
-    setTouched(allTouched);
+  const handleSlotSelect = (date: Date, timeSlot: string) => {
+    setSelectedDate(date);
+    setSelectedTime(timeSlot);
+  };
 
-    // Validate all fields
-    const newErrors = {
-      firstName: validateField("firstName", formData.firstName),
-      lastName: validateField("lastName", formData.lastName),
-      email: validateField("email", formData.email),
-      phone: validateField("phone", formData.phone),
-      address: validateField("address", formData.address),
-      city: validateField("city", formData.city),
-      state: validateField("state", formData.state),
-    };
-    setErrors(newErrors);
-
-    // Check if there are any errors
-    const hasErrors = Object.values(newErrors).some(error => error !== "");
-    if (hasErrors) {
-      toast.error("Please fix the errors before continuing");
-      return;
-    }
-
-    // Update booking context with contact info and address
-    updateBookingData({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
-      phone: formData.phone.replace(/\D/g, ""), // Store only digits
+  const validateForm = () => {
+    const result = addressSchema.safeParse({
       address: formData.address,
+      address2: formData.address2,
       city: formData.city,
       state: formData.state,
+      zipCode: formData.zipCode,
     });
 
-    setCurrentStep(6);
-    navigate("/book/checkout");
+    if (!result.success) {
+      const newErrors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        const field = err.path[0] as string;
+        newErrors[field] = err.message;
+      });
+      setErrors(newErrors);
+      return false;
+    }
+
+    if (!selectedDate) {
+      toast.error("Please select a preferred date");
+      return false;
+    }
+
+    if (!selectedTime) {
+      toast.error("Please select a time block");
+      return false;
+    }
+
+    return true;
   };
 
-  const isFormValid = () => {
-    // Validate all required fields using validation utilities
-    const firstNameValid = validateName(formData.firstName, "First name").isValid;
-    const lastNameValid = validateName(formData.lastName, "Last name").isValid;
-    const emailValid = validateEmail(formData.email).isValid;
-    const phoneValid = validatePhone(formData.phone).isValid;
-    const addressValid = validateAddress(formData.address).isValid;
-    const cityValid = validateCity(formData.city).isValid;
-    const stateValid = validateState(formData.state).isValid;
-    
-    return (
-      firstNameValid &&
-      lastNameValid &&
-      emailValid &&
-      phoneValid &&
-      addressValid &&
-      cityValid &&
-      stateValid
-    );
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleAddressSelect = (addressComponents: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  }) => {
-    // Validate the selected address components
-    const addressValid = validateAddress(addressComponents.street);
-    const cityValid = validateCity(addressComponents.city);
-    const stateValid = validateState(addressComponents.state);
-    
-    setFormData(prev => ({
-      ...prev,
-      address: addressComponents.street,
-      city: addressComponents.city,
-      state: addressComponents.state,
-    }));
+    if (!validateForm()) return;
 
-    // Mark fields as touched and set validation results
-    setTouched(prev => ({
-      ...prev,
-      address: true,
-      city: true,
-      state: true,
-    }));
+    setIsSubmitting(true);
 
-    setErrors(prev => ({
-      ...prev,
-      address: addressValid.isValid ? "" : (addressValid.error || ""),
-      city: cityValid.isValid ? "" : (cityValid.error || ""),
-      state: stateValid.isValid ? "" : (stateValid.error || ""),
-    }));
-    
-    // Show toast if address is incomplete or invalid
-    if (!addressValid.isValid || !cityValid.isValid || !stateValid.isValid) {
-      toast.error("Please ensure the address is complete and valid");
+    try {
+      const dateStr = format(selectedDate!, "yyyy-MM-dd");
+
+      // Update booking
+      const { error: bookingError } = await supabase
+        .from("bookings")
+        .update({
+          address: formData.address + (formData.address2 ? `, ${formData.address2}` : ""),
+          city: formData.city,
+          state: formData.state,
+          zip_code: formData.zipCode,
+          service_date: dateStr,
+          time_slot: selectedTime,
+          access_notes: formData.notes || null,
+          status: "confirmed",
+        })
+        .eq("id", bookingId);
+
+      if (bookingError) throw bookingError;
+
+      // Update customer if exists
+      if (booking?.customer_id) {
+        await supabase
+          .from("customers")
+          .update({
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+            zip: formData.zipCode,
+          })
+          .eq("id", booking.customer_id);
+      }
+
+      // Update booking context
+      updateBookingData({
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        serviceDate: dateStr,
+        timeSlot: selectedTime,
+      });
+
+      toast.success("Details saved successfully!");
+      navigate(`/book/confirmation?booking_id=${bookingId}`);
+    } catch (err: any) {
+      console.error("[Details] Submit error:", err);
+      toast.error("Failed to save details. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleBack = () => {
-    setCurrentStep(4);
-    navigate("/book/schedule");
-  };
-
-  const handlers = useBookingSwipe({
-    onSwipeRight: handleBack,
-    onSwipeLeft: () => {
-      if (isFormValid()) {
-        handleSubmit({ preventDefault: () => {} } as React.FormEvent);
-      }
-    },
-    canSwipeLeft: isFormValid(),
-    canSwipeRight: true,
-  });
-
-  const pricing = calculatePrice(
-    bookingData.serviceType || "standard",
-    bookingData.homeSizeId || "medium",
-    bookingData.addOns || [],
-    bookingData.membershipPlan || "none",
-    false, // useCredit
-    true // isNewCustomer
-  );
-
-  const totalSavings = pricing.membershipDiscount + pricing.newCustomerDiscount;
-
-  const PROGRESS_STEPS = [
-    { number: 1, label: "ZIP Code" },
-    { number: 2, label: "Home Size" },
-    { number: 3, label: "Service" },
-    { number: 4, label: "Schedule" },
-    { number: 5, label: "Contact" },
-    { number: 6, label: "Payment" },
-  ];
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading your booking...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <PageTransition direction="forward">
-      <div className="min-h-screen bg-background pb-24 md:pb-8" {...handlers}>
-        <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
-          <ProgressBar currentStep={currentStep} totalSteps={6} steps={PROGRESS_STEPS} />
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
+      <BookingProgressBar currentStep={5} totalSteps={6} />
 
-        {totalSavings > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 md:p-4 mb-4 md:mb-6">
-            <p className="text-green-800 font-semibold text-center text-sm md:text-base">
-              You're saving ${(totalSavings / 100).toFixed(2)} on this booking! 🎉
-            </p>
+      <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-3">
+          <div className="mx-auto w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center">
+            <Home className="w-7 h-7 text-primary" />
           </div>
-        )}
+          <h1 className="text-2xl font-bold text-foreground">
+            Almost Done! Let's Schedule Your Clean
+          </h1>
+          <p className="text-muted-foreground">
+            Tell us where and when you'd like us to clean
+          </p>
+          <div className="flex justify-center">
+            <GoogleGuaranteedBadge />
+          </div>
+        </div>
 
-        <Card variant="outlined" className="shadow-card">
-          <CardContent className="p-4 md:p-8">
-              <div className="space-y-4 md:space-y-6">
-                <div>
-                  <h2 className="text-lg md:text-2xl font-bold font-jakarta">Contact & Service Address</h2>
-                  <p className="text-muted-foreground mt-1 md:mt-2 text-xs md:text-sm">
-                    We'll need your contact information and service address to proceed with booking.
-                  </p>
-                </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Service Address Card */}
+          <Card className="border-2 border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                Service Address
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address">Street Address *</Label>
+                <Input
+                  id="address"
+                  placeholder="123 Main Street"
+                  value={formData.address}
+                  onChange={(e) => handleChange("address", e.target.value)}
+                  className={errors.address ? "border-destructive" : ""}
+                />
+                {errors.address && (
+                  <p className="text-xs text-destructive">{errors.address}</p>
+                )}
+              </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-                  {/* Contact Information */}
-                  <div className="space-y-3 md:space-y-4">
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                    <div className="space-y-1.5 md:space-y-2">
-                  <Label htmlFor="firstName" className="text-xs md:text-sm">
-                    First Name <span className="text-destructive" aria-label="required">*</span>
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={(e) => handleChange("firstName", e.target.value)}
-                      onBlur={() => handleBlur("firstName")}
-                      className={cn("pl-9 md:pl-10 h-10 md:h-12 text-sm md:text-base", errors.firstName && touched.firstName && "border-destructive")}
-                      placeholder="John"
-                      required
-                      aria-required="true"
-                      aria-invalid={!!(errors.firstName && touched.firstName)}
-                      aria-describedby={errors.firstName && touched.firstName ? "firstName-error" : undefined}
-                    />
-                  </div>
-                  {errors.firstName && touched.firstName && (
-                    <p className="text-xs md:text-sm text-destructive mt-1" id="firstName-error" role="alert">
-                      {errors.firstName}
-                    </p>
-                  )}
-                    </div>
+              <div className="space-y-2">
+                <Label htmlFor="address2">Apt, Suite, Unit (Optional)</Label>
+                <Input
+                  id="address2"
+                  placeholder="Apt 4B"
+                  value={formData.address2}
+                  onChange={(e) => handleChange("address2", e.target.value)}
+                />
+              </div>
 
-                    <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-sm">
-                    Last Name <span className="text-destructive" aria-label="required">*</span>
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      id="lastName"
-                      value={formData.lastName}
-                      onChange={(e) => handleChange("lastName", e.target.value)}
-                      onBlur={() => handleBlur("lastName")}
-                      className={cn("pl-10 h-12", errors.lastName && touched.lastName && "border-destructive")}
-                      placeholder="Doe"
-                      required
-                      aria-required="true"
-                      aria-invalid={!!(errors.lastName && touched.lastName)}
-                      aria-describedby={errors.lastName && touched.lastName ? "lastName-error" : undefined}
-                    />
-                  </div>
-                  {errors.lastName && touched.lastName && (
-                    <p className="text-sm text-destructive mt-1" id="lastName-error" role="alert">
-                      {errors.lastName}
-                    </p>
-                  )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm">
-                    Email Address <span className="text-destructive" aria-label="required">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
-                      onBlur={() => handleBlur("email")}
-                      className={cn("pl-10 h-12", errors.email && touched.email && "border-destructive")}
-                      placeholder="john@example.com"
-                      required
-                      aria-required="true"
-                      aria-invalid={!!(errors.email && touched.email)}
-                      aria-describedby={errors.email && touched.email ? "email-error" : undefined}
-                    />
-                  </div>
-                  {errors.email && touched.email && (
-                    <p className="text-sm text-destructive mt-1" id="email-error" role="alert">
-                      {errors.email}
-                    </p>
-                  )}
-                  </div>
-
-                  <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-sm">
-                    Phone Number <span className="text-destructive" aria-label="required">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => handleChange("phone", e.target.value)}
-                      onBlur={() => handleBlur("phone")}
-                      className={cn("pl-10 h-12", errors.phone && touched.phone && "border-destructive")}
-                      placeholder="(555) 123-4567"
-                      required
-                      aria-required="true"
-                      aria-invalid={!!(errors.phone && touched.phone)}
-                      aria-describedby={errors.phone && touched.phone ? "phone-error" : undefined}
-                    />
-                  </div>
-                  {errors.phone && touched.phone && (
-                    <p className="text-sm text-destructive mt-1" id="phone-error" role="alert">
-                      {errors.phone}
-                    </p>
-                  )}
-                  </div>
-                </div>
-
-                {/* Service Address */}
-                <div className="space-y-3 md:space-y-4">
-                  <h3 className="text-sm md:text-base font-semibold">Service Address</h3>
-                  
-                  <AddressAutocomplete
-                    onAddressSelect={handleAddressSelect}
-                    initialValue={formData.address}
-                    label="Street Address"
-                    placeholder="Start typing your address..."
-                    error={errors.address && touched.address ? errors.address : undefined}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city">City *</Label>
+                  <Input
+                    id="city"
+                    placeholder="City"
+                    value={formData.city}
+                    onChange={(e) => handleChange("city", e.target.value)}
+                    className={errors.city ? "border-destructive" : ""}
                   />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="city" className="text-sm">
-                        City <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => handleChange("city", e.target.value)}
-                        onBlur={() => handleBlur("city")}
-                        className={cn("h-12", errors.city && touched.city && "border-destructive")}
-                        placeholder="Baltimore"
-                        required
-                      />
-                      {errors.city && touched.city && (
-                        <p className="text-sm text-destructive mt-1">{errors.city}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="state" className="text-sm">
-                        State <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={formData.state}
-                        onValueChange={(value) => {
-                          setFormData(prev => ({ ...prev, state: value }));
-                          setTouched(prev => ({ ...prev, state: true }));
-                          setErrors(prev => ({ ...prev, state: "" }));
-                        }}
-                      >
-                        <SelectTrigger
-                          id="state"
-                          className={cn("h-12", errors.state && touched.state && "border-destructive")}
-                        >
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {US_STATES.map((state) => (
-                            <SelectItem key={state.value} value={state.value}>
-                              {state.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.state && touched.state && (
-                        <p className="text-sm text-destructive mt-1">{errors.state}</p>
-                      )}
-                    </div>
-                  </div>
+                  {errors.city && (
+                    <p className="text-xs text-destructive">{errors.city}</p>
+                  )}
                 </div>
 
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full h-12 md:h-14 text-base font-semibold hidden md:flex"
-                  disabled={!isFormValid()}
-                  aria-label={
-                    !isFormValid() 
-                      ? "Please complete all required fields to continue" 
-                      : "Continue to payment"
-                  }
-                  aria-disabled={!isFormValid()}
-                >
-                  Continue to Payment
-                  <ArrowRight className="ml-2 w-5 h-5" aria-hidden="true" />
-                </Button>
-              </form>
-            </div>
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State *</Label>
+                  <Select
+                    value={formData.state}
+                    onValueChange={(value) => handleChange("state", value)}
+                  >
+                    <SelectTrigger className={errors.state ? "border-destructive" : ""}>
+                      <SelectValue placeholder="State" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {US_STATES.map((state) => (
+                        <SelectItem key={state.value} value={state.value}>
+                          {state.value} - {state.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.state && (
+                    <p className="text-xs text-destructive">{errors.state}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="zipCode">ZIP Code *</Label>
+                <Input
+                  id="zipCode"
+                  placeholder="12345"
+                  value={formData.zipCode}
+                  onChange={(e) => handleChange("zipCode", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  className={errors.zipCode ? "border-destructive" : ""}
+                  maxLength={5}
+                />
+                {errors.zipCode && (
+                  <p className="text-xs text-destructive">{errors.zipCode}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Scheduling Card */}
+          <Card className="border-2 border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                Preferred Date & Time
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <AvailabilityCalendar
+                selectedDate={selectedDate}
+                selectedTime={selectedTime}
+                onSelectSlot={handleSlotSelect}
+                onDateSelect={handleDateSelect}
+                minDate={minDate}
+              />
+
+              {selectedDate && selectedTime && (
+                <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
+                  <CheckCircle className="h-5 w-5 text-primary" />
+                  <span className="font-medium">
+                    {format(selectedDate, "EEEE, MMMM d, yyyy")} •{" "}
+                    {TIME_BLOCKS.find((t) => t.id === selectedTime)?.label}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Additional Notes Card */}
+          <Card className="border-2 border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Additional Notes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                placeholder="Gate code, parking instructions, pets, special requests..."
+                value={formData.notes}
+                onChange={(e) => handleChange("notes", e.target.value)}
+                rows={4}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full h-14 text-lg"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                Complete Booking
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </>
+            )}
+          </Button>
+        </form>
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      <BottomNavigation
-        currentStep={currentStep}
-        totalSteps={6}
-        steps={PROGRESS_STEPS}
-        onBack={handleBack}
-        onContinue={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
-        continueDisabled={!isFormValid()}
-        continueText="Continue to Payment"
-      />
-
-        <BookingFooter />
-      </div>
-    </PageTransition>
+      <BookingFooter />
+    </div>
   );
 }

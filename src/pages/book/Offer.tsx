@@ -74,7 +74,7 @@ export default function BookingOffer() {
     // Navigate after brief pause
     setTimeout(() => {
       setCurrentStep(4);
-      navigate("/book/schedule");
+      navigate("/book/checkout");
     }, 200);
   };
 
