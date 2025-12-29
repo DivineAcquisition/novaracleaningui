@@ -42,13 +42,13 @@ const BOOKING_STEPS = [{
   label: "Service"
 }, {
   number: 4,
-  label: "Schedule"
+  label: "Checkout"
 }, {
   number: 5,
   label: "Details"
 }, {
   number: 6,
-  label: "Payment"
+  label: "Confirm"
 }];
 const TIME_SLOT_LABELS: Record<string, string> = {
   "8-12": "8:00 AM - 12:00 PM",
@@ -182,9 +182,9 @@ export default function BookingCheckout() {
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
     onSwipeRight: () => {
-      navigate("/book/details");
+      navigate("/book/offer");
     },
-    step: 6
+    step: 4
   });
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
@@ -265,7 +265,7 @@ export default function BookingCheckout() {
     toast.info('Promo code removed');
   };
   const handleBack = () => {
-    navigate("/book/summary");
+    navigate("/book/offer");
   };
   const handlePaymentOptionChange = (value: 'deposit' | 'full') => {
     updateBookingData({
@@ -405,7 +405,7 @@ export default function BookingCheckout() {
   };
   const handlePaymentSuccess = () => {
     toast.success("Payment successful!");
-    // Store booking ID in booking data for additional details page
+    // Store booking ID in booking data for property details page
     const urlParams = new URLSearchParams(window.location.search);
     const paymentIntent = urlParams.get('payment_intent');
     if (bookingId) {
@@ -413,7 +413,7 @@ export default function BookingCheckout() {
         bookingId
       });
     }
-    navigate("/book/additional-details?booking_id=" + bookingId);
+    navigate("/book/details?booking_id=" + bookingId);
   };
 
   // Auto-initialize payment when component mounts

@@ -125,9 +125,9 @@ export default function BookingSuccess() {
         const missingFields = requiredFields.filter(field => !booking[field]);
         
         if (missingFields.length > 0) {
-          logStep("Missing required fields - redirecting to additional details", { missingFields });
+          logStep("Missing required fields - redirecting to property details", { missingFields });
           toast.info("Please complete your booking details");
-          navigate(`/book/additional-details?booking_id=${bookingId}`);
+          navigate(`/book/details?booking_id=${bookingId}`);
           return;
         }
 

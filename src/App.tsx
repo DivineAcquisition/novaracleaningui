@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
@@ -15,14 +15,10 @@ import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
 import BookingZip from "./pages/book/Zip";
 import BookingHome from "./pages/book/Home";
-import BookingService from "./pages/book/Service";
 import BookingOffer from "./pages/book/Offer";
-import BookingSchedule from "./pages/book/Schedule";
-import BookingDetails from "./pages/book/Details";
-import BookingSummary from "./pages/book/Summary";
 import BookingCheckout from "./pages/book/Checkout";
+import PropertyDetails from "./pages/book/PropertyDetails";
 import BookingSuccess from "./pages/book/Success";
-import AdditionalDetails from "./pages/book/AdditionalDetails";
 import CustomQuote from "./pages/book/CustomQuote";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
@@ -63,16 +59,23 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              
+              {/* New simplified booking flow */}
               <Route path="/book/zip" element={<BookingZip />} />
-              <Route path="/book/home" element={<BookingHome />} />
-              <Route path="/book/service" element={<BookingService />} />
+              <Route path="/book/sqft" element={<BookingHome />} />
               <Route path="/book/offer" element={<BookingOffer />} />
-              <Route path="/book/schedule" element={<BookingSchedule />} />
-              <Route path="/book/details" element={<BookingDetails />} />
-              <Route path="/book/summary" element={<BookingSummary />} />
               <Route path="/book/checkout" element={<BookingCheckout />} />
-              <Route path="/book/success" element={<BookingSuccess />} />
-              <Route path="/book/additional-details" element={<AdditionalDetails />} />
+              <Route path="/book/details" element={<PropertyDetails />} />
+              <Route path="/book/confirmation" element={<BookingSuccess />} />
+              
+              {/* Legacy redirects for backwards compatibility */}
+              <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
+              <Route path="/book/service" element={<Navigate to="/book/offer" replace />} />
+              <Route path="/book/schedule" element={<Navigate to="/book/checkout" replace />} />
+              <Route path="/book/summary" element={<Navigate to="/book/checkout" replace />} />
+              <Route path="/book/success" element={<Navigate to="/book/confirmation" replace />} />
+              <Route path="/book/additional-details" element={<Navigate to="/book/details" replace />} />
+              
               <Route path="/book/custom-quote" element={<CustomQuote />} />
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />

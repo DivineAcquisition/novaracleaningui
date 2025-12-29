@@ -82,7 +82,7 @@ export default function AdditionalDetails() {
       if (error) throw error;
 
       toast.success("Details saved successfully!");
-      navigate("/book/success?booking_id=" + bookingId);
+      navigate("/book/confirmation?booking_id=" + bookingId);
     } catch (error) {
       console.error("Error saving details:", error);
       toast.error("Failed to save details. Please try again.");

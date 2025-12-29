@@ -88,7 +88,7 @@ const Index = () => {
       }
     }).catch(err => console.error('Lead webhook error:', err));
     
-    navigate("/book/home");
+    navigate("/book/sqft");
   };
 
   const handleChangeZip = () => {

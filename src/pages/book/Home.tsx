@@ -15,9 +15,9 @@ const BOOKING_STEPS = [
   { number: 1, label: "Location" },
   { number: 2, label: "Home Size" },
   { number: 3, label: "Service" },
-  { number: 4, label: "Schedule" },
+  { number: 4, label: "Checkout" },
   { number: 5, label: "Details" },
-  { number: 6, label: "Payment" },
+  { number: 6, label: "Confirm" },
 ];
 
 export default function BookingHome() {
@@ -28,7 +28,7 @@ export default function BookingHome() {
   const swipeHandlers = useBookingSwipe({
     onSwipeRight: () => {
       setCurrentStep(1);
-      navigate("/book/zip");
+      navigate("/");
     },
     step: 2,
   });
@@ -42,7 +42,7 @@ export default function BookingHome() {
     
     updateBookingData({ homeSizeId: sizeId });
     setCurrentStep(3);
-    navigate("/book/service");
+    navigate("/book/offer");
   };
 
   const handleBack = () => {
