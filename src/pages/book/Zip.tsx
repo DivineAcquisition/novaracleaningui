@@ -17,9 +17,9 @@ const BOOKING_STEPS = [
   { number: 1, label: "Location" },
   { number: 2, label: "Home Size" },
   { number: 3, label: "Service" },
-  { number: 4, label: "Schedule" },
+  { number: 4, label: "Checkout" },
   { number: 5, label: "Details" },
-  { number: 6, label: "Payment" },
+  { number: 6, label: "Confirm" },
 ];
 
 export default function BookingZip() {
@@ -48,7 +48,7 @@ export default function BookingZip() {
     setTimeout(() => {
       updateBookingData({ zipCode });
       setCurrentStep(2);
-      navigate("/book/home");
+      navigate("/book/sqft");
       setIsValidating(false);
     }, 500);
   };

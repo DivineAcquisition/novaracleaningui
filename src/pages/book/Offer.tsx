@@ -9,15 +9,16 @@ import { Gift, Sparkles, CalendarCheck, Check, ArrowLeft, Phone, ChevronRight } 
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { PageTransition } from "@/components/booking/PageTransition";
+import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
   { number: 2, label: "Home Size" },
-  { number: 3, label: "Offer" },
-  { number: 4, label: "Schedule" },
+  { number: 3, label: "Service" },
+  { number: 4, label: "Checkout" },
   { number: 5, label: "Details" },
-  { number: 6, label: "Payment" },
+  { number: 6, label: "Confirm" },
 ];
 
 // New Year's Special - Ends Jan 7, 2025
@@ -99,7 +100,7 @@ export default function BookingOffer() {
       promoCode: 'NEWYEAR50',
     });
     setCurrentStep(4);
-    navigate("/book/schedule");
+    navigate("/book/checkout");
   };
 
   const handleSelectRecurring = () => {
@@ -109,12 +110,12 @@ export default function BookingOffer() {
       promoCode: 'NEWYEAR15',
     });
     setCurrentStep(4);
-    navigate("/book/schedule");
+    navigate("/book/checkout");
   };
 
   const handleBack = () => {
     setCurrentStep(2);
-    navigate("/book/home");
+    navigate("/book/sqft");
   };
 
   // Custom Quote View
@@ -210,12 +211,7 @@ export default function BookingOffer() {
             </p>
             
             {/* Trust Badge */}
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1 bg-muted/50 px-3 py-1.5 rounded-full">
-                <Check className="w-4 h-4 text-primary" />
-                <span>Google Guaranteed</span>
-              </div>
-            </div>
+            <GoogleGuaranteedBadge variant="compact" />
           </div>
 
           {/* Offer Cards */}
