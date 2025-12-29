@@ -28,7 +28,17 @@ const PETS_OPTIONS = [
   { value: 'other', label: 'Other Pets' },
 ];
 
-export default function AdditionalDetails() {
+const FLOORING_TYPES = [
+  { value: 'hardwood', label: 'Hardwood' },
+  { value: 'carpet', label: 'Carpet' },
+  { value: 'tile', label: 'Tile' },
+  { value: 'laminate', label: 'Laminate' },
+  { value: 'vinyl', label: 'Vinyl/LVP' },
+  { value: 'mixed', label: 'Mixed Flooring' },
+  { value: 'other', label: 'Other' },
+];
+
+export default function PropertyDetails() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const bookingId = searchParams.get("booking_id");
@@ -40,6 +50,7 @@ export default function AdditionalDetails() {
   const [bedrooms, setBedrooms] = useState<string>("");
   const [bathrooms, setBathrooms] = useState<string>("");
   const [dwellingType, setDwellingType] = useState<string>("");
+  const [flooringType, setFlooringType] = useState<string>("");
   const [pets, setPets] = useState<string>("none");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -75,6 +86,7 @@ export default function AdditionalDetails() {
           bedrooms: parseInt(bedrooms),
           bathrooms: parseFloat(bathrooms),
           dwelling_type: dwellingType,
+          flooring_type: flooringType || null,
           pets,
         })
         .eq("id", bookingId);
@@ -176,79 +188,99 @@ export default function AdditionalDetails() {
             <div className="space-y-4 border-t pt-6">
               <h3 className="text-base md:text-lg font-semibold">Property Information</h3>
             
-            <div className="space-y-2">
-              <Label htmlFor="bedrooms">
-                Number of Bedrooms <span className="text-destructive">*</span>
-              </Label>
-              <Select value={bedrooms} onValueChange={setBedrooms}>
-                <SelectTrigger id="bedrooms" className="h-12">
-                  <SelectValue placeholder="Select bedrooms" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                    <SelectItem key={num} value={num.toString()}>
-                      {num} {num === 1 ? 'bedroom' : 'bedrooms'}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="10+">10+ bedrooms</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bedrooms">
+                    Bedrooms <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={bedrooms} onValueChange={setBedrooms}>
+                    <SelectTrigger id="bedrooms" className="h-12">
+                      <SelectValue placeholder="Select bedrooms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                        <SelectItem key={num} value={num.toString()}>
+                          {num} {num === 1 ? 'bedroom' : 'bedrooms'}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="10+">10+ bedrooms</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bathrooms">
-                Number of Bathrooms <span className="text-destructive">*</span>
-              </Label>
-              <Select value={bathrooms} onValueChange={setBathrooms}>
-                <SelectTrigger id="bathrooms" className="h-12">
-                  <SelectValue placeholder="Select bathrooms" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((num) => (
-                    <SelectItem key={num} value={num.toString()}>
-                      {num} {num === 1 ? 'bathroom' : 'bathrooms'}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="5+">5+ bathrooms</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bathrooms">
+                    Bathrooms <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={bathrooms} onValueChange={setBathrooms}>
+                    <SelectTrigger id="bathrooms" className="h-12">
+                      <SelectValue placeholder="Select bathrooms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((num) => (
+                        <SelectItem key={num} value={num.toString()}>
+                          {num} {num === 1 ? 'bathroom' : 'bathrooms'}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="5+">5+ bathrooms</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dwellingType">
-                Dwelling Type <span className="text-destructive">*</span>
-              </Label>
-              <Select value={dwellingType} onValueChange={setDwellingType}>
-                <SelectTrigger id="dwellingType" className="h-12">
-                  <SelectValue placeholder="Select dwelling type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DWELLING_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="dwellingType">
+                  Dwelling Type <span className="text-destructive">*</span>
+                </Label>
+                <Select value={dwellingType} onValueChange={setDwellingType}>
+                  <SelectTrigger id="dwellingType" className="h-12">
+                    <SelectValue placeholder="Select dwelling type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DWELLING_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="pets">
-                Pets at Property <span className="text-destructive">*</span>
-              </Label>
-              <Select value={pets} onValueChange={setPets}>
-                <SelectTrigger id="pets" className="h-12">
-                  <SelectValue placeholder="Select pets" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PETS_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="flooringType">
+                  Primary Flooring Type
+                </Label>
+                <Select value={flooringType} onValueChange={setFlooringType}>
+                  <SelectTrigger id="flooringType" className="h-12">
+                    <SelectValue placeholder="Select flooring type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FLOORING_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pets">
+                  Pets at Property <span className="text-destructive">*</span>
+                </Label>
+                <Select value={pets} onValueChange={setPets}>
+                  <SelectTrigger id="pets" className="h-12">
+                    <SelectValue placeholder="Select pets" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PETS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <Button

@@ -177,6 +177,7 @@ export type Database = {
           estimated_duration_hours: number | null
           final_charge_cents: number | null
           first_name: string
+          flooring_type: string | null
           frequency: string | null
           full_payment_discount: number | null
           google_calendar_event_id: string | null
@@ -244,6 +245,7 @@ export type Database = {
           estimated_duration_hours?: number | null
           final_charge_cents?: number | null
           first_name: string
+          flooring_type?: string | null
           frequency?: string | null
           full_payment_discount?: number | null
           google_calendar_event_id?: string | null
@@ -311,6 +313,7 @@ export type Database = {
           estimated_duration_hours?: number | null
           final_charge_cents?: number | null
           first_name?: string
+          flooring_type?: string | null
           frequency?: string | null
           full_payment_discount?: number | null
           google_calendar_event_id?: string | null
