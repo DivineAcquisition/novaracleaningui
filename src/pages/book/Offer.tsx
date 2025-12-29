@@ -10,7 +10,10 @@ import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
+import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import { format } from "date-fns";
+import { toast } from "sonner";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -49,6 +52,10 @@ export default function BookingOffer() {
   const [showDeepCleanModal, setShowDeepCleanModal] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState(0);
+  const [selectedService, setSelectedService] = useState<'deep' | 'recurring' | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
+  );
 
   // Get home size data
   const selectedHomeSize = useMemo(() => {
@@ -94,21 +101,36 @@ export default function BookingOffer() {
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
 
   const handleSelectDeepClean = () => {
+    setSelectedService('deep');
     updateBookingData({
       serviceType: 'deep',
       membershipPlan: 'none',
       promoCode: 'NEWYEAR50',
     });
-    setCurrentStep(4);
-    navigate("/book/checkout");
+    // Scroll to scheduler
+    setTimeout(() => {
+      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   const handleSelectRecurring = () => {
+    setSelectedService('recurring');
     updateBookingData({
       serviceType: 'standard',
-      membershipPlan: 'biweekly', // Default to biweekly
+      membershipPlan: 'biweekly',
       promoCode: 'NEWYEAR15',
     });
+    // Scroll to scheduler
+    setTimeout(() => {
+      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  const handleContinueToCheckout = () => {
+    if (!bookingData.serviceDate || !bookingData.timeSlot) {
+      toast.error("Please select a date and time");
+      return;
+    }
     setCurrentStep(4);
     navigate("/book/checkout");
   };
@@ -341,6 +363,35 @@ export default function BookingOffer() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Schedule Picker - Shows after service selection */}
+          {selectedService && (
+            <div id="schedule-section" className="scroll-mt-4">
+              <SchedulePicker
+                selectedDate={selectedDate}
+                selectedTime={bookingData.timeSlot}
+                onDateSelect={(date) => {
+                  setSelectedDate(date);
+                  updateBookingData({ 
+                    serviceDate: format(date, 'yyyy-MM-dd'),
+                    timeSlot: '' 
+                  });
+                }}
+                onTimeSelect={(date, timeSlot, startTime, endTime) => {
+                  updateBookingData({ 
+                    serviceDate: format(date, 'yyyy-MM-dd'),
+                    timeSlot,
+                    startTime,
+                    endTime
+                  });
+                  toast.success(`Scheduled for ${format(date, 'MMM d')} at ${timeSlot}`);
+                }}
+                onContinue={handleContinueToCheckout}
+                showContinue={true}
+                continueDisabled={!bookingData.serviceDate || !bookingData.timeSlot}
+              />
+            </div>
+          )}
 
           {/* Back Navigation */}
           <div className="flex justify-center">

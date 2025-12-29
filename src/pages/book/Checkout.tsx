@@ -13,11 +13,11 @@ import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
-import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { format, addDays } from "date-fns";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -70,11 +70,8 @@ export default function BookingCheckout() {
   const [isAutoApplying, setIsAutoApplying] = useState(false);
   const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
   const [discountSectionOpen, setDiscountSectionOpen] = useState(false);
-  
-  // Schedule picker state
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
-  );
+
+  const isScheduleSelected = !!bookingData.serviceDate && !!bookingData.timeSlot;
 
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
@@ -579,62 +576,50 @@ export default function BookingCheckout() {
                     </div>
                   </>
                 ) : (
-                  <p className="text-muted-foreground text-center py-2">Select a date & time below</p>
+                  <div className="text-center py-4 space-y-3">
+                    <p className="text-muted-foreground">No schedule selected</p>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/book/offer')}>
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      Go Back to Select Date & Time
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Inline Schedule Picker */}
-          <Card className="border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                Select Your Appointment
-              </CardTitle>
-              <CardDescription>Choose a convenient date and time for your cleaning</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AvailabilityCalendar
-                selectedDate={selectedDate}
-                selectedTime={bookingData.timeSlot}
-                minDate={addDays(new Date(), 3)}
-                onDateSelect={(date) => {
-                  setSelectedDate(date);
-                  updateBookingData({ 
-                    serviceDate: format(date, 'yyyy-MM-dd'),
-                    timeSlot: '' // Reset time when date changes
-                  });
-                  // Clear payment intent when schedule changes
-                  setClientSecret(null);
-                }}
-                onSelectSlot={(date, timeSlot, startTime, endTime) => {
-                  updateBookingData({ 
-                    serviceDate: format(date, 'yyyy-MM-dd'),
-                    timeSlot,
-                    startTime,
-                    endTime
-                  });
-                  // Clear payment intent when schedule changes
-                  setClientSecret(null);
-                  toast.success(`Scheduled for ${format(date, 'MMM d')} at ${timeSlot}`);
-                }}
+          {/* Gate: Show skeleton/message if schedule not selected */}
+          {!isScheduleSelected && (
+            <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+              <CardContent className="py-8 text-center space-y-4">
+                <Calendar className="w-12 h-12 text-amber-500 mx-auto" />
+                <div>
+                  <h3 className="font-semibold text-lg">Schedule Required</h3>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Please select a date and time for your cleaning before proceeding to payment.
+                  </p>
+                </div>
+                <Button onClick={() => navigate('/book/offer')} className="bg-gradient-primary">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Select Your Appointment
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Show payment sections only when schedule is selected */}
+          {isScheduleSelected && (
+            <>
+              {/* Savings Visualizer */}
+              <SavingsVisualizer
+                originalPrice={depositPricing.subtotal + (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0)}
+                newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0}
+                membershipDiscount={depositPricing.membershipDiscount || 0}
+                fullPaymentDiscount={effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0}
+                promoDiscount={promoDiscount + referralDiscount}
+                finalPrice={currentAmount}
+                isMembershipSignup={isNewMembershipSignup}
               />
-            </CardContent>
-          </Card>
-
-          {/* Savings Visualizer */}
-          <SavingsVisualizer
-            originalPrice={depositPricing.subtotal + (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0)}
-            newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0}
-            membershipDiscount={depositPricing.membershipDiscount || 0}
-            fullPaymentDiscount={effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0}
-            promoDiscount={promoDiscount + referralDiscount}
-            finalPrice={currentAmount}
-            isMembershipSignup={isNewMembershipSignup}
-          />
-
-          {/* Payment Options */}
           <div className="space-y-3">
             <h3 className="font-semibold text-lg">Choose Payment Option</h3>
             <PaymentComparison
@@ -918,6 +903,8 @@ export default function BookingCheckout() {
               </div>
             </CardContent>
           </Card>
+            </>
+          )}
 
           {/* Desktop Back Button */}
           <div className="hidden md:block">
