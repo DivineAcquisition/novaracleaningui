@@ -7,15 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, PartyPopper, Crown, TrendingUp } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, PartyPopper, Crown, TrendingUp, ChevronDown } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
+import { AvailabilityCalendar } from "@/components/booking/AvailabilityCalendar";
 import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,12 @@ export default function BookingCheckout() {
   const [autoAppliedPromo, setAutoAppliedPromo] = useState<EligiblePromo | null>(null);
   const [isAutoApplying, setIsAutoApplying] = useState(false);
   const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
+  const [discountSectionOpen, setDiscountSectionOpen] = useState(false);
+  
+  // Schedule picker state
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
+  );
 
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
@@ -368,16 +376,24 @@ export default function BookingCheckout() {
     navigate("/book/details?booking_id=" + bookingId);
   };
 
-  // Initialize payment on mount and when payment option changes
+  // Initialize payment when all required fields are present
   useEffect(() => {
+    // Gate payment initialization until we have required data
+    const hasRequiredData = bookingData.email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
+    
+    if (!hasRequiredData) {
+      console.log('[Checkout] Waiting for required data before initializing payment');
+      return;
+    }
+    
     const timer = setTimeout(() => {
       if (!clientSecret && !isProcessing && !initError) {
         handleInitializePayment();
       }
-    }, 100); // Small delay to avoid race conditions
+    }, 100);
     
     return () => clearTimeout(timer);
-  }, [bookingData.paymentOption]);
+  }, [bookingData.paymentOption, bookingData.email, bookingData.serviceDate, bookingData.timeSlot]);
 
   const currentAmount = effectivePaymentOption === 'full' 
     ? fullPaymentPricing.finalAmount 
@@ -525,7 +541,7 @@ export default function BookingCheckout() {
               </CardContent>
             </Card>
 
-            {/* Schedule Card */}
+            {/* Schedule Summary Card */}
             <Card className="border-primary/10">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -534,36 +550,78 @@ export default function BookingCheckout() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Date
-                  </span>
-                  <span className="font-medium">
-                    {bookingData.serviceDate 
-                      ? format(new Date(bookingData.serviceDate), "EEEE, MMM d, yyyy")
-                      : "Not selected"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    Time
-                  </span>
-                  <span className="font-medium">
-                    {TIME_SLOT_LABELS[bookingData.timeSlot] || bookingData.timeSlot || "Not selected"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    Location
-                  </span>
-                  <span className="font-medium">ZIP {bookingData.zipCode}</span>
-                </div>
+                {bookingData.serviceDate && bookingData.timeSlot ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Date
+                      </span>
+                      <span className="font-medium">
+                        {format(new Date(bookingData.serviceDate + 'T12:00:00'), "EEEE, MMM d, yyyy")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        Time
+                      </span>
+                      <span className="font-medium">
+                        {bookingData.timeSlot}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                        Location
+                      </span>
+                      <span className="font-medium">ZIP {bookingData.zipCode}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground text-center py-2">Select a date & time below</p>
+                )}
               </CardContent>
             </Card>
           </div>
+
+          {/* Inline Schedule Picker */}
+          <Card className="border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary" />
+                Select Your Appointment
+              </CardTitle>
+              <CardDescription>Choose a convenient date and time for your cleaning</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AvailabilityCalendar
+                selectedDate={selectedDate}
+                selectedTime={bookingData.timeSlot}
+                minDate={addDays(new Date(), 3)}
+                onDateSelect={(date) => {
+                  setSelectedDate(date);
+                  updateBookingData({ 
+                    serviceDate: format(date, 'yyyy-MM-dd'),
+                    timeSlot: '' // Reset time when date changes
+                  });
+                  // Clear payment intent when schedule changes
+                  setClientSecret(null);
+                }}
+                onSelectSlot={(date, timeSlot, startTime, endTime) => {
+                  updateBookingData({ 
+                    serviceDate: format(date, 'yyyy-MM-dd'),
+                    timeSlot,
+                    startTime,
+                    endTime
+                  });
+                  // Clear payment intent when schedule changes
+                  setClientSecret(null);
+                  toast.success(`Scheduled for ${format(date, 'MMM d')} at ${timeSlot}`);
+                }}
+              />
+            </CardContent>
+          </Card>
 
           {/* Savings Visualizer */}
           <SavingsVisualizer
@@ -599,136 +657,154 @@ export default function BookingCheckout() {
             />
           </div>
 
-          {/* Referral Code Section */}
-          <Card className="border-primary/10">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Gift className="w-4 h-4 text-primary" />
-                Referral Code
-              </CardTitle>
-              <CardDescription>Were you referred by a friend?</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {appliedReferralCode ? (
-                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Gift className="w-4 h-4 text-green-600" />
-                    <span className="font-medium text-green-700">{appliedReferralCode}</span>
-                    <Badge variant="secondary" className="bg-green-100 text-green-700">
-                      -${referralDiscount.toFixed(2)}
-                    </Badge>
+          {/* Discount Codes Section - Collapsible */}
+          <Collapsible open={discountSectionOpen} onOpenChange={setDiscountSectionOpen}>
+            <Card className="border-primary/10">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-primary" />
+                      Have a Promo or Referral Code?
+                      {(appliedPromoCode || appliedReferralCode) && (
+                        <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
+                          Applied
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <ChevronDown className={cn(
+                      "w-4 h-4 text-muted-foreground transition-transform",
+                      discountSectionOpen && "rotate-180"
+                    )} />
                   </div>
-                  <Button variant="ghost" size="sm" onClick={handleRemoveReferral}>
-                    Remove
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter referral code"
-                    value={referralInput}
-                    onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
-                    className="font-mono"
-                    maxLength={10}
-                  />
-                  <Button 
-                    onClick={handleApplyReferral} 
-                    disabled={!referralInput || isValidatingReferral}
-                    variant="outline"
-                  >
-                    {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Promo Code Section */}
-          <Card className="border-primary/10">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Tag className="w-4 h-4 text-primary" />
-                Promo Code
-              </CardTitle>
-              <CardDescription>
-                {getPromoRecommendation(isNewCustomer)}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {appliedPromoCode ? (
-                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-green-600" />
-                    <span className="font-medium text-green-700">{appliedPromoCode}</span>
-                    {autoAppliedPromo && (
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">Auto-applied</Badge>
-                    )}
-                    <Badge variant="secondary" className="bg-green-100 text-green-700">
-                      -${promoDiscount.toFixed(2)}
-                    </Badge>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={handleRemovePromo}>
-                    Remove
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Enter promo code"
-                      value={promoInput}
-                      onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                      className="font-mono"
-                      maxLength={15}
-                    />
-                    <Button 
-                      onClick={handleApplyPromo} 
-                      disabled={!promoInput || isValidatingPromo}
-                      variant="outline"
-                    >
-                      {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                    </Button>
-                  </div>
-                  
-                  {isAutoApplying && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Finding best available promo...
-                    </div>
-                  )}
-                  
-                  <button
-                    type="button"
-                    onClick={() => setShowPromoSuggestions(!showPromoSuggestions)}
-                    className="text-sm text-primary hover:underline"
-                  >
-                    {showPromoSuggestions ? 'Hide suggestions' : 'See available promos'}
-                  </button>
-                  
-                  {showPromoSuggestions && (
-                    <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
-                      <p className="text-muted-foreground">Try these codes:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {['HOLIDAY25', 'NEWYEAR', 'WELCOME15'].map(code => (
-                          <Badge 
-                            key={code}
-                            variant="outline" 
-                            className="cursor-pointer hover:bg-primary hover:text-white transition-colors"
-                            onClick={() => {
-                              setPromoInput(code);
-                              setShowPromoSuggestions(false);
-                            }}
-                          >
-                            {code}
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-4 pt-0">
+                  {/* Referral Code */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <Gift className="w-4 h-4 text-primary" />
+                      Referral Code
+                    </p>
+                    {appliedReferralCode ? (
+                      <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Gift className="w-4 h-4 text-green-600" />
+                          <span className="font-medium text-green-700 dark:text-green-400">{appliedReferralCode}</span>
+                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
+                            -${referralDiscount.toFixed(2)}
                           </Badge>
-                        ))}
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={handleRemoveReferral}>
+                          Remove
+                        </Button>
                       </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Enter referral code"
+                          value={referralInput}
+                          onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                          className="font-mono"
+                          maxLength={10}
+                        />
+                        <Button 
+                          onClick={handleApplyReferral} 
+                          disabled={!referralInput || isValidatingReferral}
+                          variant="outline"
+                        >
+                          {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Promo Code */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      Promo Code
+                    </p>
+                    {appliedPromoCode ? (
+                      <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-green-600" />
+                          <span className="font-medium text-green-700 dark:text-green-400">{appliedPromoCode}</span>
+                          {autoAppliedPromo && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400 text-xs">Auto-applied</Badge>
+                          )}
+                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
+                            -${promoDiscount.toFixed(2)}
+                          </Badge>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={handleRemovePromo}>
+                          Remove
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter promo code"
+                            value={promoInput}
+                            onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                            className="font-mono"
+                            maxLength={15}
+                          />
+                          <Button 
+                            onClick={handleApplyPromo} 
+                            disabled={!promoInput || isValidatingPromo}
+                            variant="outline"
+                          >
+                            {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                          </Button>
+                        </div>
+                        
+                        {isAutoApplying && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Finding best available promo...
+                          </div>
+                        )}
+                        
+                        <button
+                          type="button"
+                          onClick={() => setShowPromoSuggestions(!showPromoSuggestions)}
+                          className="text-sm text-primary hover:underline"
+                        >
+                          {showPromoSuggestions ? 'Hide suggestions' : 'See available promos'}
+                        </button>
+                        
+                        {showPromoSuggestions && (
+                          <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
+                            <p className="text-muted-foreground">Try these codes:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {['HOLIDAY25', 'NEWYEAR15'].map(code => (
+                                <Badge 
+                                  key={code}
+                                  variant="outline" 
+                                  className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                                  onClick={() => {
+                                    setPromoInput(code);
+                                    setShowPromoSuggestions(false);
+                                  }}
+                                >
+                                  {code}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           {/* Payment Section */}
           <Card className="border-primary/20 shadow-lg">

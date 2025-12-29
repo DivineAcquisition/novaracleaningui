@@ -46,7 +46,7 @@ const HOME_SIZE_PRICING: Record<string, number> = {
 };
 
 const DEPOSIT_AMOUNT = 3900; // $39
-const NEW_CUSTOMER_DISCOUNT = 3000; // $30
+const NEW_CUSTOMER_DISCOUNT = 6000; // $60
 
 // Membership discount on extras only
 const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
@@ -68,7 +68,26 @@ serve(async (req) => {
       serviceType: bookingData.serviceType,
       paymentOption: bookingData.paymentOption,
       membershipPlan: bookingData.membershipPlan,
+      email: bookingData.email ? 'present' : 'missing',
     });
+
+    // Validate required fields before proceeding
+    if (!bookingData.email || !bookingData.homeSizeId) {
+      logStep("Validation failed - missing required fields", {
+        hasEmail: !!bookingData.email,
+        hasHomeSizeId: !!bookingData.homeSizeId,
+      });
+      return new Response(
+        JSON.stringify({ 
+          error: "Missing required booking data",
+          code: "VALIDATION_ERROR" 
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
