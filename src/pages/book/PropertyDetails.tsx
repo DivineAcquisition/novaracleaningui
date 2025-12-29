@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, ArrowRight, MapPin } from "lucide-react";
@@ -52,6 +53,7 @@ export default function PropertyDetails() {
   const [dwellingType, setDwellingType] = useState<string>("");
   const [flooringType, setFlooringType] = useState<string>("");
   const [pets, setPets] = useState<string>("none");
+  const [accessNotes, setAccessNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -88,6 +90,7 @@ export default function PropertyDetails() {
           dwelling_type: dwellingType,
           flooring_type: flooringType || null,
           pets,
+          access_notes: accessNotes || null,
         })
         .eq("id", bookingId);
 
@@ -280,6 +283,22 @@ export default function PropertyDetails() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="accessNotes">
+                  Access Notes
+                </Label>
+                <Textarea
+                  id="accessNotes"
+                  value={accessNotes}
+                  onChange={(e) => setAccessNotes(e.target.value)}
+                  placeholder="Gate code, key location, parking instructions, or any special entry instructions..."
+                  className="min-h-[80px] resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: Provide entry instructions for our cleaning team
+                </p>
               </div>
             </div>
 
