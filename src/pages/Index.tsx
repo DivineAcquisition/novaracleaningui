@@ -63,12 +63,30 @@ const Index = () => {
     
     setIsSubmitting(true);
     
+    const formattedPhone = phone.replace(/\D/g, '');
+    
+    // Update booking data
     updateBookingData({
       firstName,
       lastName,
       email,
-      phone: phone.replace(/\D/g, ''),
+      phone: formattedPhone,
     });
+    
+    // Send lead capture webhook (fire and forget - don't block navigation)
+    supabase.functions.invoke('send-lead-capture-webhook', {
+      body: {
+        firstName,
+        lastName,
+        email,
+        phone: formattedPhone,
+        zipCode,
+        city: cityState.split(', ')[0] || '',
+        state: cityState.split(', ')[1] || '',
+        source: 'Website',
+        landingPage: '/',
+      }
+    }).catch(err => console.error('Lead webhook error:', err));
     
     navigate("/book/home");
   };
