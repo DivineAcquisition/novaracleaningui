@@ -415,20 +415,6 @@ export default function BookingCheckout() {
             </div>
           )}
 
-          {/* New Customer Welcome Banner */}
-          {isNewCustomer && (
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border border-primary/20 rounded-xl p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Gift className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-semibold text-primary">Welcome! New Customer Discount Applied</p>
-                  <p className="text-sm text-muted-foreground">You're saving ${NEW_CUSTOMER_DISCOUNT.toFixed(2)} on your first clean</p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Membership Upsell Banner - Show when no membership selected */}
           {bookingData.membershipPlan === 'none' && !isMemberUsingCredit && (
@@ -554,7 +540,9 @@ export default function BookingCheckout() {
                     Date
                   </span>
                   <span className="font-medium">
-                    {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "EEEE, MMM d, yyyy")}
+                    {bookingData.serviceDate 
+                      ? format(new Date(bookingData.serviceDate), "EEEE, MMM d, yyyy")
+                      : "Not selected"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -562,7 +550,9 @@ export default function BookingCheckout() {
                     <Clock className="w-3.5 h-3.5" />
                     Time
                   </span>
-                  <span className="font-medium">{TIME_SLOT_LABELS[bookingData.timeSlot] || bookingData.timeSlot}</span>
+                  <span className="font-medium">
+                    {TIME_SLOT_LABELS[bookingData.timeSlot] || bookingData.timeSlot || "Not selected"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground flex items-center gap-1.5">
