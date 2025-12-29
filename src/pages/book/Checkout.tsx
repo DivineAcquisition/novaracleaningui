@@ -3,16 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, ChevronDown } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, PartyPopper } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
-import { findBestPromoCode, formatPromoSavings, type EligiblePromo } from "@/lib/promo-auto-apply";
+import { PaymentComparison } from "@/components/booking/PaymentComparison";
+import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
+import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,14 +53,20 @@ export default function BookingCheckout() {
   const [initError, setInitError] = useState<string | null>(null);
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   
-  // Promo/Referral state
+  // Referral Code state
+  const [referralInput, setReferralInput] = useState('');
+  const [isValidatingReferral, setIsValidatingReferral] = useState(false);
+  const [appliedReferralCode, setAppliedReferralCode] = useState<string | null>(null);
+  const [referralDiscount, setReferralDiscount] = useState(0);
+  
+  // Promo Code state
   const [promoInput, setPromoInput] = useState('');
   const [isValidatingPromo, setIsValidatingPromo] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
-  const [isPromoOpen, setIsPromoOpen] = useState(false);
   const [autoAppliedPromo, setAutoAppliedPromo] = useState<EligiblePromo | null>(null);
   const [isAutoApplying, setIsAutoApplying] = useState(false);
+  const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
 
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
@@ -133,7 +140,7 @@ export default function BookingCheckout() {
         setAppliedPromoCode(bestPromo.code);
         setPromoDiscount(bestPromo.discount);
         updateBookingData({ promoCode: bestPromo.code });
-        toast.success(`${bestPromo.description} auto-applied!`);
+        toast.success(`🎉 ${bestPromo.description} auto-applied! Saving $${bestPromo.discount.toFixed(2)}`);
       }
     } catch (error) {
       console.error('Error auto-applying promo:', error);
@@ -152,15 +159,56 @@ export default function BookingCheckout() {
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
   const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
+  
   const depositPricing = calculatePrice(
     bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns,
-    bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount
+    bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount
   );
+  
   const fullPaymentPricing = calculateFullPaymentWithDiscount(
     bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns,
-    bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount
+    bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount
   );
 
+  // Handle Referral Code
+  const handleApplyReferral = async () => {
+    if (!referralInput.trim()) return;
+    setIsValidatingReferral(true);
+
+    try {
+      const { data: referral, error } = await supabase
+        .from('referrals')
+        .select('*')
+        .eq('code', referralInput.toUpperCase())
+        .eq('status', 'pending')
+        .single();
+
+      if (error || !referral) {
+        toast.error('Invalid or already used referral code');
+        return;
+      }
+
+      const discount = (referral.credit_cents || 2000) / 100;
+      setReferralDiscount(discount);
+      setAppliedReferralCode(referralInput.toUpperCase());
+      updateBookingData({ referralCode: referralInput.toUpperCase() });
+      toast.success(`Referral applied! $${discount.toFixed(2)} off`);
+    } catch (err) {
+      toast.error('Error validating referral code');
+    } finally {
+      setIsValidatingReferral(false);
+    }
+  };
+
+  const handleRemoveReferral = () => {
+    setReferralInput('');
+    setReferralDiscount(0);
+    setAppliedReferralCode(null);
+    updateBookingData({ referralCode: undefined });
+    toast.info('Referral code removed');
+  };
+
+  // Handle Promo Code
   const handleApplyPromo = async () => {
     if (!promoInput.trim()) return;
     setIsValidatingPromo(true);
@@ -197,8 +245,8 @@ export default function BookingCheckout() {
       setAppliedPromoCode(promoInput.toUpperCase());
       setAutoAppliedPromo(null);
       updateBookingData({ promoCode: promoInput.toUpperCase() });
-      toast.success(`Promo applied! Saving $${discount.toFixed(2)}`);
-      setIsPromoOpen(false);
+      toast.success(`🎉 Promo applied! Saving $${discount.toFixed(2)}`);
+      setShowPromoSuggestions(false);
     } catch (err) {
       toast.error('Error validating promo code');
     } finally {
@@ -213,6 +261,11 @@ export default function BookingCheckout() {
     setAutoAppliedPromo(null);
     updateBookingData({ promoCode: undefined });
     toast.info('Promo code removed');
+  };
+
+  const handlePaymentOptionChange = (option: 'deposit' | 'full') => {
+    updateBookingData({ paymentOption: option });
+    setClientSecret(null);
   };
 
   const handleBack = () => navigate("/book/offer");
@@ -309,174 +362,343 @@ export default function BookingCheckout() {
   const totalSavings = (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0) + 
     (depositPricing.membershipDiscount || 0) + 
     (effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0) + 
-    promoDiscount;
+    promoDiscount + referralDiscount;
+
+  const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
 
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
         <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
         
-        <div className="container max-w-lg mx-auto px-4 py-6">
-          <Card className="border-primary/20 shadow-lg">
-            <CardHeader className="text-center pb-4">
-              <div className="mx-auto w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center mb-3">
-                <CreditCard className="w-6 h-6 text-white" />
+        <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
+          
+          {/* Holiday Promotion Banner */}
+          {promoDiscount > 0 && appliedPromoCode && (
+            <div className="relative overflow-hidden bg-gradient-to-r from-red-500 via-green-600 to-red-500 rounded-xl p-4 text-white shadow-lg">
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMiIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIi8+PC9zdmc+')] opacity-30"></div>
+              <div className="relative flex items-center justify-center gap-3">
+                <PartyPopper className="w-6 h-6 animate-bounce" />
+                <div className="text-center">
+                  <p className="font-bold text-lg">🎄 Holiday Savings Applied!</p>
+                  <p className="text-sm opacity-90">
+                    {appliedPromoCode} • Saving ${promoDiscount.toFixed(2)}
+                    {autoAppliedPromo && " (Auto-applied)"}
+                  </p>
+                </div>
+                <PartyPopper className="w-6 h-6 animate-bounce" />
               </div>
-              <CardTitle className="text-lg font-semibold">Secure Checkout</CardTitle>
-            </CardHeader>
-            
-            <CardContent className="space-y-5">
-              {/* Compact Order Summary */}
-              <div className="space-y-2 text-sm">
+            </div>
+          )}
+
+          {/* New Customer Welcome Banner */}
+          {isNewCustomer && (
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border border-primary/20 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Gift className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-primary">Welcome! New Customer Discount Applied</p>
+                  <p className="text-sm text-muted-foreground">You're saving ${NEW_CUSTOMER_DISCOUNT.toFixed(2)} on your first clean</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Header */}
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold">Secure Checkout</h1>
+            <p className="text-muted-foreground mt-1">Review your order and complete payment</p>
+          </div>
+
+          {/* Order Summary Grid */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Service Details Card */}
+            <Card className="border-primary/10">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  Service Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Service</span>
-                  <span className="font-medium">{serviceTier?.label} • {homeSize?.label}</span>
+                  <span className="text-muted-foreground">Service Type</span>
+                  <span className="font-medium">{serviceTier?.label || 'Standard'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Date</span>
-                  <span className="font-medium">
-                    {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "MMM d, yyyy")}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Time</span>
-                  <span className="font-medium">{TIME_SLOT_LABELS[bookingData.timeSlot]}</span>
+                  <span className="text-muted-foreground">Home Size</span>
+                  <span className="font-medium">{homeSize?.label || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Est. Duration</span>
                   <span className="font-medium">{getEstimatedHours(bookingData.homeSizeId)} hours</span>
                 </div>
-              </div>
+                {addOnLabels.length > 0 && (
+                  <div className="pt-2 border-t">
+                    <span className="text-muted-foreground text-xs">Add-ons:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {addOnLabels.map((label, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">{label}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {membership && bookingData.membershipPlan !== 'none' && (
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">Membership</span>
+                      <Badge className="bg-primary/10 text-primary text-xs">{membership.label}</Badge>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-              <Separator />
-
-              {/* Pricing Breakdown */}
-              <div className="space-y-2 text-sm">
+            {/* Schedule Card */}
+            <Card className="border-primary/10">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  Schedule
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>${depositPricing.subtotal.toFixed(2)}</span>
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Date
+                  </span>
+                  <span className="font-medium">
+                    {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "EEEE, MMM d, yyyy")}
+                  </span>
                 </div>
-                
-                {isNewCustomer && (
-                  <div className="flex justify-between text-green-600">
-                    <span>New Customer Discount</span>
-                    <span>-${NEW_CUSTOMER_DISCOUNT.toFixed(2)}</span>
-                  </div>
-                )}
-                
-                {depositPricing.membershipDiscount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Membership Discount</span>
-                    <span>-${depositPricing.membershipDiscount.toFixed(2)}</span>
-                  </div>
-                )}
-                
-                {effectivePaymentOption === 'full' && fullPaymentPricing.discount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Pay in Full Discount (10%)</span>
-                    <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
-                  </div>
-                )}
-                
-                {promoDiscount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span className="flex items-center gap-1">
-                      Promo: {appliedPromoCode}
-                      {autoAppliedPromo && <Badge variant="secondary" className="text-[10px] px-1">Auto</Badge>}
-                    </span>
-                    <span>-${promoDiscount.toFixed(2)}</span>
-                  </div>
-                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" />
+                    Time
+                  </span>
+                  <span className="font-medium">{TIME_SLOT_LABELS[bookingData.timeSlot] || bookingData.timeSlot}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Location
+                  </span>
+                  <span className="font-medium">ZIP {bookingData.zipCode}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-                <Separator className="my-2" />
-                
-                <div className="flex justify-between font-bold text-base">
-                  <span>{effectivePaymentOption === 'deposit' ? 'Deposit Due Today' : 'Total Due Today'}</span>
-                  <span className="text-primary">${currentAmount.toFixed(2)}</span>
-                </div>
-                
-                {effectivePaymentOption === 'deposit' && (
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Balance due after service</span>
-                    <span>${depositPricing.balanceDue.toFixed(2)}</span>
-                  </div>
-                )}
-                
-                {totalSavings > 0 && (
-                  <div className="text-center pt-1">
-                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                      Total Savings: ${totalSavings.toFixed(2)}
+          {/* Savings Visualizer */}
+          <SavingsVisualizer
+            originalPrice={depositPricing.subtotal + (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0)}
+            newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0}
+            membershipDiscount={depositPricing.membershipDiscount || 0}
+            fullPaymentDiscount={effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0}
+            promoDiscount={promoDiscount + referralDiscount}
+            finalPrice={currentAmount}
+            isMembershipSignup={isNewMembershipSignup}
+          />
+
+          {/* Payment Options */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-lg">Choose Payment Option</h3>
+            <PaymentComparison
+              depositPricing={{
+                deposit: depositPricing.deposit,
+                balanceDue: depositPricing.balanceDue,
+                subtotal: depositPricing.subtotal,
+                newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
+                membershipDiscount: depositPricing.membershipDiscount || 0,
+              }}
+              fullPaymentPricing={{
+                originalTotal: fullPaymentPricing.originalTotal,
+                finalAmount: fullPaymentPricing.finalAmount,
+                discount: fullPaymentPricing.discount,
+                savings: fullPaymentPricing.savings,
+                newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
+              }}
+              selectedOption={effectivePaymentOption}
+              onSelect={handlePaymentOptionChange}
+            />
+          </div>
+
+          {/* Referral Code Section */}
+          <Card className="border-primary/10">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Gift className="w-4 h-4 text-primary" />
+                Referral Code
+              </CardTitle>
+              <CardDescription>Were you referred by a friend?</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {appliedReferralCode ? (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Gift className="w-4 h-4 text-green-600" />
+                    <span className="font-medium text-green-700">{appliedReferralCode}</span>
+                    <Badge variant="secondary" className="bg-green-100 text-green-700">
+                      -${referralDiscount.toFixed(2)}
                     </Badge>
                   </div>
-                )}
-              </div>
-
-              {/* Collapsible Promo Code Input */}
-              {!appliedPromoCode && (
-                <Collapsible open={isPromoOpen} onOpenChange={setIsPromoOpen}>
-                  <CollapsibleTrigger className="flex items-center justify-between w-full text-sm text-primary hover:underline">
-                    <span>Have a promo or referral code?</span>
-                    <ChevronDown className={cn("w-4 h-4 transition-transform", isPromoOpen && "rotate-180")} />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-3">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Enter code"
-                        value={promoInput}
-                        onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                        className="font-mono text-sm"
-                        maxLength={15}
-                      />
-                      <Button 
-                        onClick={handleApplyPromo} 
-                        disabled={!promoInput || isValidatingPromo}
-                        size="sm"
-                      >
-                        {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                      </Button>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-              
-              {appliedPromoCode && (
-                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 text-green-700">
-                    <Sparkles className="w-4 h-4" />
-                    <span className="font-medium">{appliedPromoCode}</span>
-                    <span className="text-green-600">-${promoDiscount.toFixed(2)}</span>
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={handleRemovePromo} className="text-xs h-7">
+                  <Button variant="ghost" size="sm" onClick={handleRemoveReferral}>
                     Remove
                   </Button>
                 </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter referral code"
+                    value={referralInput}
+                    onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                    className="font-mono"
+                    maxLength={10}
+                  />
+                  <Button 
+                    onClick={handleApplyReferral} 
+                    disabled={!referralInput || isValidatingReferral}
+                    variant="outline"
+                  >
+                    {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
               )}
+            </CardContent>
+          </Card>
 
-              <Separator />
+          {/* Promo Code Section */}
+          <Card className="border-primary/10">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Tag className="w-4 h-4 text-primary" />
+                Promo Code
+              </CardTitle>
+              <CardDescription>
+                {getPromoRecommendation(isNewCustomer)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {appliedPromoCode ? (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-green-600" />
+                    <span className="font-medium text-green-700">{appliedPromoCode}</span>
+                    {autoAppliedPromo && (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">Auto-applied</Badge>
+                    )}
+                    <Badge variant="secondary" className="bg-green-100 text-green-700">
+                      -${promoDiscount.toFixed(2)}
+                    </Badge>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleRemovePromo}>
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter promo code"
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                      className="font-mono"
+                      maxLength={15}
+                    />
+                    <Button 
+                      onClick={handleApplyPromo} 
+                      disabled={!promoInput || isValidatingPromo}
+                      variant="outline"
+                    >
+                      {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                    </Button>
+                  </div>
+                  
+                  {isAutoApplying && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Finding best available promo...
+                    </div>
+                  )}
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowPromoSuggestions(!showPromoSuggestions)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    {showPromoSuggestions ? 'Hide suggestions' : 'See available promos'}
+                  </button>
+                  
+                  {showPromoSuggestions && (
+                    <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
+                      <p className="text-muted-foreground">Try these codes:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {['HOLIDAY25', 'NEWYEAR', 'WELCOME15'].map(code => (
+                          <Badge 
+                            key={code}
+                            variant="outline" 
+                            className="cursor-pointer hover:bg-primary hover:text-white transition-colors"
+                            onClick={() => {
+                              setPromoInput(code);
+                              setShowPromoSuggestions(false);
+                            }}
+                          >
+                            {code}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
 
+          {/* Payment Section */}
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-primary" />
+                Payment Details
+              </CardTitle>
+              <CardDescription>
+                {effectivePaymentOption === 'deposit' 
+                  ? `Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} after service`
+                  : `Pay $${currentAmount.toFixed(2)} now • No balance due`
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              
               {/* Membership Signup Flow */}
               {isNewMembershipSignup && (
                 <div className="space-y-4">
                   <div className="bg-primary/5 rounded-lg p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold">Membership: {membership?.label}</span>
-                      <Badge>${membership?.monthlyPrice}/mo</Badge>
+                      <Badge className="bg-primary text-white">${membership?.monthlyPrice}/mo</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {membership?.cleansPerMonth} cleaning credit/month • Cancel anytime
+                    <p className="text-sm text-muted-foreground">
+                      {membership?.cleansPerMonth} cleaning credit/month • {membership?.discount}% off extras • Cancel anytime
                     </p>
                   </div>
                   
                   <Button 
                     onClick={handleMembershipCheckout}
                     size="lg"
-                    className="w-full"
+                    className="w-full bg-gradient-primary hover:opacity-90"
                     disabled={isProcessing}
                   >
                     {isProcessing ? (
                       <><Loader2 className="mr-2 w-4 h-4 animate-spin" />Processing...</>
                     ) : (
-                      'Subscribe & Book First Clean'
+                      <>Subscribe & Book First Clean</>
                     )}
                   </Button>
                 </div>
@@ -485,29 +707,29 @@ export default function BookingCheckout() {
               {/* Member Using Credit */}
               {isMemberUsingCredit && (
                 <div className="text-center space-y-4">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <Sparkles className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-green-700">$0.00</p>
-                    <p className="text-sm text-green-600">Covered by membership credit</p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                    <Sparkles className="w-10 h-10 text-green-600 mx-auto mb-3" />
+                    <p className="text-3xl font-bold text-green-700">$0.00</p>
+                    <p className="text-green-600 mt-1">Covered by your membership credit!</p>
                   </div>
                   <Button 
                     onClick={() => navigate("/book/success")}
                     size="lg"
-                    className="w-full"
+                    className="w-full bg-gradient-primary hover:opacity-90"
                   >
                     Confirm Booking
                   </Button>
                 </div>
               )}
 
-              {/* Regular Payment Flow */}
+              {/* Regular Stripe Payment */}
               {!isNewMembershipSignup && !isMemberUsingCredit && (
                 <>
                   {/* Error State */}
                   {initError && !isProcessing && (
                     <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
                       <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-                      <p className="text-sm text-destructive mb-3">{initError}</p>
+                      <p className="text-sm text-destructive font-medium mb-3">{initError}</p>
                       <Button variant="outline" size="sm" onClick={handleRetryPayment}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         Try Again
@@ -537,28 +759,31 @@ export default function BookingCheckout() {
                 </>
               )}
 
-              {/* Security Badge */}
-              <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground pt-2">
-                <span>🔒 Secure</span>
+              {/* Trust Badges */}
+              <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-4 border-t">
+                <span className="flex items-center gap-1">
+                  <Shield className="w-3.5 h-3.5" />
+                  Secure
+                </span>
                 <span>•</span>
-                <span>Encrypted</span>
+                <span>256-bit Encryption</span>
                 <span>•</span>
                 <span>PCI Compliant</span>
               </div>
-
-              {/* Desktop Back Button */}
-              <div className="hidden md:block pt-4">
-                <Button variant="outline" onClick={handleBack} disabled={isProcessing}>
-                  <ArrowLeft className="mr-2 w-4 h-4" />
-                  Back
-                </Button>
-              </div>
-
-              <p className="text-center text-[10px] text-muted-foreground">
-                By completing payment, you agree to our Terms of Service and Privacy Policy
-              </p>
             </CardContent>
           </Card>
+
+          {/* Desktop Back Button */}
+          <div className="hidden md:block">
+            <Button variant="outline" onClick={handleBack} disabled={isProcessing}>
+              <ArrowLeft className="mr-2 w-4 h-4" />
+              Back to Service Selection
+            </Button>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground">
+            By completing payment, you agree to our Terms of Service and Privacy Policy
+          </p>
         </div>
 
         <BottomNavigation 
