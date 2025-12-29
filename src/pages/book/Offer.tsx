@@ -364,9 +364,13 @@ export default function BookingOffer() {
             </Card>
           </div>
 
-          {/* Schedule Picker - Shows after service selection */}
+          {/* Schedule Picker - Shows after service selection with animation */}
           {selectedService && (
-            <div id="schedule-section" className="scroll-mt-4">
+            <div 
+              id="schedule-section" 
+              className="scroll-mt-4 animate-fade-in"
+              style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
+            >
               <SchedulePicker
                 selectedDate={selectedDate}
                 selectedTime={bookingData.timeSlot}
