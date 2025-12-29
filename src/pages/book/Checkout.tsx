@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, PartyPopper } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, PartyPopper, Crown, TrendingUp } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
@@ -295,40 +295,60 @@ export default function BookingCheckout() {
   };
 
   const handleInitializePayment = async () => {
+    if (isProcessing) return; // Prevent duplicate calls
+    
     setIsProcessing(true);
     setInitError(null);
+    
     try {
-      let data, error;
+      console.log('[Checkout] Initializing payment intent...');
       
-      try {
-        const result = await supabase.functions.invoke("create-payment-intent", {
-          body: bookingData
-        });
-        data = result.data;
-        error = result.error;
-      } catch (invokeError) {
+      // Primary: Use supabase.functions.invoke
+      const { data, error } = await supabase.functions.invoke("create-payment-intent", {
+        body: bookingData
+      });
+      
+      if (error) {
+        console.error('[Checkout] Supabase invoke error:', error);
+        
+        // Fallback: Direct fetch with proper headers
+        console.log('[Checkout] Attempting direct fetch fallback...');
         const response = await fetch('https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/create-payment-intent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I',
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
           },
           body: JSON.stringify(bookingData)
         });
         
-        if (!response.ok) throw new Error('Payment initialization failed');
-        data = await response.json();
-        error = null;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[Checkout] Fallback fetch failed:', response.status, errorText);
+          throw new Error(`Payment initialization failed: ${response.status}`);
+        }
+        
+        const fallbackData = await response.json();
+        console.log('[Checkout] Fallback successful:', fallbackData);
+        setClientSecret(fallbackData.clientSecret);
+        setPaymentAmount(fallbackData.amount);
+        setBookingId(fallbackData.bookingId);
+        return;
       }
       
-      if (error || !data) throw new Error(error?.message || "No payment intent data received");
+      if (!data?.clientSecret) {
+        throw new Error("No payment intent data received");
+      }
 
+      console.log('[Checkout] Payment intent created:', data);
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
     } catch (error: any) {
+      console.error('[Checkout] Payment init error:', error);
       setInitError(error.message || "Payment service unavailable. Please try again.");
-      toast.error(error.message || "Payment setup failed");
+      toast.error("Payment setup failed. Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -348,11 +368,15 @@ export default function BookingCheckout() {
     navigate("/book/details?booking_id=" + bookingId);
   };
 
-  // Auto-initialize payment
+  // Initialize payment on mount and when payment option changes
   useEffect(() => {
-    if (!clientSecret && !isProcessing) {
-      handleInitializePayment();
-    }
+    const timer = setTimeout(() => {
+      if (!clientSecret && !isProcessing && !initError) {
+        handleInitializePayment();
+      }
+    }, 100); // Small delay to avoid race conditions
+    
+    return () => clearTimeout(timer);
   }, [bookingData.paymentOption]);
 
   const currentAmount = effectivePaymentOption === 'full' 
@@ -406,7 +430,63 @@ export default function BookingCheckout() {
             </div>
           )}
 
-          {/* Header */}
+          {/* Membership Upsell Banner - Show when no membership selected */}
+          {bookingData.membershipPlan === 'none' && !isMemberUsingCredit && (
+            <Card className="border-amber-300 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-amber-950/30 overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center shadow-lg">
+                      <Crown className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-bold text-amber-900 dark:text-amber-100">Become a Member & Save More!</h4>
+                      <Badge className="bg-amber-500 text-white text-[10px]">Popular</Badge>
+                    </div>
+                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                      Join thousands of happy members saving up to <span className="font-bold">30% on every clean</span>
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-2 text-center">
+                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">$189</p>
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Essential</p>
+                        <p className="text-[10px] text-muted-foreground">1 clean/mo</p>
+                      </div>
+                      <div className="bg-white/80 dark:bg-black/30 rounded-lg p-2 text-center border-2 border-amber-400 relative">
+                        <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                          <Badge className="bg-primary text-[8px] px-1.5 py-0">Best Value</Badge>
+                        </div>
+                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">$289</p>
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Standard</p>
+                        <p className="text-[10px] text-muted-foreground">2 cleans/mo</p>
+                      </div>
+                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-2 text-center">
+                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">$389</p>
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Premium</p>
+                        <p className="text-[10px] text-muted-foreground">4 cleans/mo</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300 mb-3">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Members save an average of <strong>$45/month</strong></span>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => navigate('/book/offer')}
+                      className="w-full border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-500 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                    >
+                      <Crown className="w-4 h-4 mr-2" />
+                      View Membership Plans
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
               <Shield className="w-8 h-8 text-white" />
