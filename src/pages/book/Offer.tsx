@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Gift, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
+import { PromoBanner } from "@/components/booking/PromoBanner";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
@@ -195,6 +196,7 @@ export default function BookingOffer() {
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
+        <PromoBanner />
 
         <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8">
           {/* Header Section */}
