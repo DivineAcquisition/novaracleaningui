@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Home as HomeIcon, ArrowRight, CheckCircle, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProgressBar } from "@/components/booking/ProgressBar";
+import { StepNavigation } from "@/components/booking/StepNavigation";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
@@ -12,12 +12,12 @@ import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
-  { number: 1, label: "Location" },
-  { number: 2, label: "Home Size" },
-  { number: 3, label: "Service" },
-  { number: 4, label: "Checkout" },
-  { number: 5, label: "Details" },
-  { number: 6, label: "Confirm" },
+  { number: 1, label: "Location", path: "/book/zip" },
+  { number: 2, label: "Home Size", path: "/book/sqft" },
+  { number: 3, label: "Service", path: "/book/offer" },
+  { number: 4, label: "Checkout", path: "/book/checkout" },
+  { number: 5, label: "Details", path: "/book/details" },
+  { number: 6, label: "Confirm", path: "/book/confirmation" },
 ];
 
 export default function BookingHome() {
@@ -53,7 +53,7 @@ export default function BookingHome() {
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-muted/30 pb-32 md:pb-8" {...swipeHandlers}>
-        <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+        <StepNavigation currentStep={currentStep} steps={BOOKING_STEPS} />
       
         <div className="container max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
           {/* Header */}
