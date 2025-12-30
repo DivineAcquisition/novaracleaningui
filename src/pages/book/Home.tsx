@@ -69,31 +69,31 @@ export default function BookingHome() {
             </p>
             
             {/* Google Guaranteed Badge */}
-            <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border border-primary/30 rounded-full bg-background">
-              <CheckCircle className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">Google Guaranteed</span>
+            <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border-2 border-green-500 rounded-full bg-green-50 dark:bg-green-950/30">
+              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-300">Google Guaranteed</span>
             </div>
           </div>
           
           {/* Size Selection Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-5 mb-6">
             {HOME_SIZE_RANGES.filter(size => size.id !== '5000_plus').map((size) => {
               const isSelected = bookingData.homeSizeId === size.id;
               return (
                 <Card
                   key={size.id}
                   className={cn(
-                    "cursor-pointer transition-all duration-200 hover:border-foreground/40 bg-background relative",
-                    isSelected ? "border-foreground ring-1 ring-foreground" : "border-border"
+                    "cursor-pointer transition-all duration-200 hover:border-primary/60 bg-background relative",
+                    isSelected ? "border-primary border-2 ring-2 ring-primary/20" : "border-border"
                   )}
                   onClick={() => handleSelect(size.id)}
                 >
                   {isSelected && (
-                    <div className="absolute -top-2 -right-2 w-6 h-6 bg-foreground rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-background" />
+                    <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-4 h-4 text-primary-foreground" />
                     </div>
                   )}
-                  <CardContent className="p-5 md:p-6 text-center">
+                  <CardContent className="p-6 md:p-8 text-center">
                     <h3 className="text-lg md:text-xl font-bold text-foreground mb-1">
                       {size.label}
                     </h3>
