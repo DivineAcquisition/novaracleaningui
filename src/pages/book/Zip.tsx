@@ -3,17 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 import { ArrowRight, Crown, CheckCircle } from "lucide-react";
-import { HeaderNav } from "@/components/HeaderNav";
+import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 
 export default function BookingZip() {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
   const { updateBookingData } = useBooking();
   
   const [zipCode, setZipCode] = useState("");
@@ -27,10 +25,6 @@ export default function BookingZip() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSignOut = async () => {
-    await signOut();
-  };
 
   const handleZipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,19 +101,8 @@ export default function BookingZip() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
-      {/* Header */}
-      <HeaderNav onSignOut={handleSignOut} />
-
-      {/* Promo Banner */}
-      <div className="bg-gradient-primary py-3">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-center gap-2 text-white">
-            <p className="text-sm md:text-base text-center font-semibold">
-              Save up to 30% with our Membership Plan
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Sticky Booking Header */}
+      <BookingHeader currentStep={1} totalSteps={6} stepLabel="Location" />
 
       {/* Hero + Booking Section */}
       <section className="container mx-auto px-4 py-12 md:py-20">
