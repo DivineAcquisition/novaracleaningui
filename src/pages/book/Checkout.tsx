@@ -359,13 +359,11 @@ export default function BookingCheckout() {
         return;
       }
       
+      // Final failure after all retries exhausted
       setInitError(error.message || "Payment service unavailable. Please try again.");
       toast.error("Payment setup failed. Please try again.");
       setRetryCount(0);
-    } finally {
-      if (attempt >= MAX_RETRIES || !initError) {
-        setIsProcessing(false);
-      }
+      setIsProcessing(false);
     }
   };
 

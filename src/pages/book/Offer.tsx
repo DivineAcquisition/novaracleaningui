@@ -283,18 +283,17 @@ export default function BookingOffer() {
               
               <CardContent className="pt-14 pb-6 px-5 space-y-5">
                 <div>
-                  <h3 className="text-2xl font-bold font-jakarta">Recurring Maintenance</h3>
+                  <h3 className="text-2xl font-bold font-jakarta">Novara Membership</h3>
                   <p className="text-muted-foreground">Keep your home guest-ready, always</p>
                 </div>
                 
                 <div className="space-y-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-lg text-muted-foreground line-through">${prices.recurring.original}</span>
-                    <span className="text-3xl font-black text-success">${prices.recurring.discounted}</span>
-                    <span className="text-muted-foreground">/visit</span>
+                    <span className="text-3xl font-black text-success">$189</span>
+                    <span className="text-muted-foreground">/month</span>
                   </div>
                   <p className="text-sm text-success font-medium">
-                    You save ${prices.recurring.savings} every visit!
+                    Includes 1 cleaning per month + member perks
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Pay only ${prices.recurring.deposit} today (25% deposit)
@@ -417,7 +416,7 @@ export default function BookingOffer() {
         <Dialog open={showRecurringModal} onOpenChange={setShowRecurringModal}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-xl font-jakarta">Recurring Maintenance — What's Included</DialogTitle>
+              <DialogTitle className="text-xl font-jakarta">Novara Membership — What's Included</DialogTitle>
               <DialogDescription>
                 Keep your home consistently clean with regular scheduled service.
               </DialogDescription>
