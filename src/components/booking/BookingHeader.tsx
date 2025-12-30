@@ -12,7 +12,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
   const progressPercent = Math.round((currentStep / totalSteps) * 100);
 
   return (
-    <div className="w-full bg-background border-b border-border">
+    <div className="w-full bg-background/95 backdrop-blur-sm border-b border-border sticky top-0 z-50">
       <div className="container max-w-6xl mx-auto px-4 py-4">
         {/* Top Row: Logo and Actions */}
         <div className="flex items-center justify-between mb-4">
