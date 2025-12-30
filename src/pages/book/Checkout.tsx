@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, ChevronDown } from "lucide-react";
-import { ProgressBar } from "@/components/booking/ProgressBar";
+import { StepNavigation } from "@/components/booking/StepNavigation";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
@@ -28,12 +28,12 @@ import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
 
 const BOOKING_STEPS = [
-  { number: 1, label: "Location" },
-  { number: 2, label: "Home Size" },
-  { number: 3, label: "Service" },
-  { number: 4, label: "Checkout" },
-  { number: 5, label: "Details" },
-  { number: 6, label: "Confirm" }
+  { number: 1, label: "Location", path: "/book/zip" },
+  { number: 2, label: "Home Size", path: "/book/sqft" },
+  { number: 3, label: "Service", path: "/book/offer" },
+  { number: 4, label: "Checkout", path: "/book/checkout" },
+  { number: 5, label: "Details", path: "/book/details" },
+  { number: 6, label: "Confirm", path: "/book/confirmation" }
 ];
 
 const TIME_SLOT_LABELS: Record<string, string> = {
@@ -423,7 +423,7 @@ export default function BookingCheckout() {
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
-        <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+        <StepNavigation currentStep={currentStep} steps={BOOKING_STEPS} />
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           

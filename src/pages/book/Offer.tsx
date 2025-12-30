@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Gift, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProgressBar } from "@/components/booking/ProgressBar";
+import { StepNavigation } from "@/components/booking/StepNavigation";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
@@ -16,12 +16,12 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 const BOOKING_STEPS = [
-  { number: 1, label: "Location" },
-  { number: 2, label: "Home Size" },
-  { number: 3, label: "Service" },
-  { number: 4, label: "Checkout" },
-  { number: 5, label: "Details" },
-  { number: 6, label: "Confirm" },
+  { number: 1, label: "Location", path: "/book/zip" },
+  { number: 2, label: "Home Size", path: "/book/sqft" },
+  { number: 3, label: "Service", path: "/book/offer" },
+  { number: 4, label: "Checkout", path: "/book/checkout" },
+  { number: 5, label: "Details", path: "/book/details" },
+  { number: 6, label: "Confirm", path: "/book/confirmation" },
 ];
 
 // New Year's Special - Ends Jan 7, 2025
@@ -145,7 +145,7 @@ export default function BookingOffer() {
     return (
       <PageTransition direction="forward">
         <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
-          <ProgressBar currentStep={3} totalSteps={6} steps={BOOKING_STEPS} />
+          <StepNavigation currentStep={3} steps={BOOKING_STEPS} />
           
           <div className="container max-w-2xl mx-auto px-4 py-8 space-y-6">
             <Card className="border-2 border-primary/30">
@@ -194,7 +194,7 @@ export default function BookingOffer() {
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
-        <ProgressBar currentStep={3} totalSteps={6} steps={BOOKING_STEPS} />
+        <StepNavigation currentStep={3} steps={BOOKING_STEPS} />
 
         <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8">
           {/* Header Section */}
