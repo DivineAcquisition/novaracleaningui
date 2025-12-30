@@ -54,6 +54,8 @@ export default function BookingCheckout() {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
   
   // Referral Code state
   const [referralInput, setReferralInput] = useState('');
@@ -299,7 +301,7 @@ export default function BookingCheckout() {
     }
   };
 
-  const handleInitializePayment = async () => {
+  const handleInitializePayment = async (attempt = 0) => {
     if (isProcessing) return; // Prevent duplicate calls
     
     const email = bookingData.email?.trim();
@@ -309,7 +311,7 @@ export default function BookingCheckout() {
     }
     
     setIsProcessing(true);
-    setInitError(null);
+    if (attempt === 0) setInitError(null);
     
     // Build payload with both email fields for compatibility
     const payload = {
@@ -319,7 +321,7 @@ export default function BookingCheckout() {
     };
     
     try {
-      console.log('[Checkout] Initializing payment intent with payload keys:', Object.keys(payload));
+      console.log(`[Checkout] Initializing payment intent (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
       
       const { data, error } = await supabase.functions.invoke("create-payment-intent", {
         body: payload
@@ -340,19 +342,38 @@ export default function BookingCheckout() {
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
+      setRetryCount(0); // Reset retry count on success
     } catch (error: any) {
       console.error('[Checkout] Payment init error:', error);
+      
+      // Retry with exponential backoff
+      if (attempt < MAX_RETRIES) {
+        const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        console.log(`[Checkout] Retrying in ${delay}ms...`);
+        setRetryCount(attempt + 1);
+        
+        setTimeout(() => {
+          setIsProcessing(false);
+          handleInitializePayment(attempt + 1);
+        }, delay);
+        return;
+      }
+      
       setInitError(error.message || "Payment service unavailable. Please try again.");
       toast.error("Payment setup failed. Please try again.");
+      setRetryCount(0);
     } finally {
-      setIsProcessing(false);
+      if (attempt >= MAX_RETRIES || !initError) {
+        setIsProcessing(false);
+      }
     }
   };
 
   const handleRetryPayment = () => {
     setClientSecret(null);
     setInitError(null);
-    handleInitializePayment();
+    setRetryCount(0);
+    handleInitializePayment(0);
   };
 
   const handlePaymentSuccess = () => {
