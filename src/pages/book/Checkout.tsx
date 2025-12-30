@@ -302,51 +302,41 @@ export default function BookingCheckout() {
   const handleInitializePayment = async () => {
     if (isProcessing) return; // Prevent duplicate calls
     
+    const email = bookingData.email?.trim();
+    if (!email || !bookingData.homeSizeId) {
+      console.log('[Checkout] Missing required data, skipping payment init');
+      return;
+    }
+    
     setIsProcessing(true);
     setInitError(null);
     
+    // Build payload with both email fields for compatibility
+    const payload = {
+      ...bookingData,
+      email,
+      customerEmail: email, // Also send as customerEmail for backward compatibility
+    };
+    
     try {
-      console.log('[Checkout] Initializing payment intent...');
+      console.log('[Checkout] Initializing payment intent with payload keys:', Object.keys(payload));
       
-      // Primary: Use supabase.functions.invoke
       const { data, error } = await supabase.functions.invoke("create-payment-intent", {
-        body: bookingData
+        body: payload
       });
       
       if (error) {
         console.error('[Checkout] Supabase invoke error:', error);
-        
-        // Fallback: Direct fetch with proper headers
-        console.log('[Checkout] Attempting direct fetch fallback...');
-        const response = await fetch('https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/create-payment-intent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I',
-            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
-          },
-          body: JSON.stringify(bookingData)
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[Checkout] Fallback fetch failed:', response.status, errorText);
-          throw new Error(`Payment initialization failed: ${response.status}`);
-        }
-        
-        const fallbackData = await response.json();
-        console.log('[Checkout] Fallback successful:', fallbackData);
-        setClientSecret(fallbackData.clientSecret);
-        setPaymentAmount(fallbackData.amount);
-        setBookingId(fallbackData.bookingId);
-        return;
+        throw new Error(error.message || "Failed to connect to payment service");
       }
       
       if (!data?.clientSecret) {
-        throw new Error("No payment intent data received");
+        const errorMsg = data?.error || data?.details || "No payment intent data received";
+        console.error('[Checkout] Invalid response:', data);
+        throw new Error(errorMsg);
       }
 
-      console.log('[Checkout] Payment intent created:', data);
+      console.log('[Checkout] Payment intent created successfully');
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
@@ -375,22 +365,30 @@ export default function BookingCheckout() {
 
   // Initialize payment when all required fields are present
   useEffect(() => {
-    // Gate payment initialization until we have required data
-    const hasRequiredData = bookingData.email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
+    const email = bookingData.email?.trim();
+    const hasRequiredData = email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
     
     if (!hasRequiredData) {
-      console.log('[Checkout] Waiting for required data before initializing payment');
+      console.log('[Checkout] Waiting for required data before initializing payment', {
+        hasEmail: !!email,
+        hasHomeSizeId: !!bookingData.homeSizeId,
+        hasServiceDate: !!bookingData.serviceDate,
+        hasTimeSlot: !!bookingData.timeSlot
+      });
       return;
     }
     
+    // Reset clientSecret when payment option changes to force re-init
+    if (clientSecret) return;
+    
     const timer = setTimeout(() => {
-      if (!clientSecret && !isProcessing && !initError) {
+      if (!isProcessing && !initError) {
         handleInitializePayment();
       }
     }, 100);
     
     return () => clearTimeout(timer);
-  }, [bookingData.paymentOption, bookingData.email, bookingData.serviceDate, bookingData.timeSlot]);
+  }, [bookingData.paymentOption, bookingData.email, bookingData.homeSizeId, bookingData.serviceDate, bookingData.timeSlot, clientSecret]);
 
   const currentAmount = effectivePaymentOption === 'full' 
     ? fullPaymentPricing.finalAmount 
