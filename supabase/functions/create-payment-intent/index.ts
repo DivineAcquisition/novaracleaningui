@@ -63,23 +63,39 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const bookingData = await req.json();
+    // Parse and normalize the request body - support multiple payload shapes
+    const rawBody = await req.json();
+    
+    // Support both direct booking data AND wrapped { bookingData: {...} } format
+    const bookingData = rawBody.bookingData || rawBody;
+    
+    // Normalize email field - accept both 'email' and 'customerEmail'
+    const customerEmail = (bookingData.email || bookingData.customerEmail || rawBody.email || rawBody.customerEmail || '').trim();
+    
     logStep("Received booking data", { 
       serviceType: bookingData.serviceType,
       paymentOption: bookingData.paymentOption,
       membershipPlan: bookingData.membershipPlan,
-      email: bookingData.email ? 'present' : 'missing',
+      hasEmail: !!customerEmail,
+      hasCustomerEmail: !!bookingData.customerEmail,
+      hasRawEmail: !!rawBody.email,
+      hasHomeSizeId: !!bookingData.homeSizeId,
     });
 
+    // Normalize the email field for downstream use
+    bookingData.email = customerEmail;
+
     // Validate required fields before proceeding
-    if (!bookingData.email || !bookingData.homeSizeId) {
+    if (!customerEmail || !bookingData.homeSizeId) {
       logStep("Validation failed - missing required fields", {
-        hasEmail: !!bookingData.email,
+        hasEmail: !!customerEmail,
         hasHomeSizeId: !!bookingData.homeSizeId,
+        receivedKeys: Object.keys(bookingData),
       });
       return new Response(
         JSON.stringify({ 
           error: "Missing required booking data",
+          details: !customerEmail ? "Email is required" : "Home size is required",
           code: "VALIDATION_ERROR" 
         }),
         { 
