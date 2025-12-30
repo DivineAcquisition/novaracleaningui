@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, PartyPopper, Crown, TrendingUp, ChevronDown } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, ChevronDown } from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
@@ -410,81 +410,6 @@ export default function BookingCheckout() {
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           
-          {/* Holiday Promotion Banner */}
-          {promoDiscount > 0 && appliedPromoCode && (
-            <div className="relative overflow-hidden bg-gradient-to-r from-red-500 via-green-600 to-red-500 rounded-xl p-4 text-white shadow-lg">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMiIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIi8+PC9zdmc+')] opacity-30"></div>
-              <div className="relative flex items-center justify-center gap-3">
-                <PartyPopper className="w-6 h-6 animate-bounce" />
-                <div className="text-center">
-                  <p className="font-bold text-lg">🎄 Holiday Savings Applied!</p>
-                  <p className="text-sm opacity-90">
-                    {appliedPromoCode} • Saving ${promoDiscount.toFixed(2)}
-                    {autoAppliedPromo && " (Auto-applied)"}
-                  </p>
-                </div>
-                <PartyPopper className="w-6 h-6 animate-bounce" />
-              </div>
-            </div>
-          )}
-
-
-          {/* Membership Upsell Banner - Show when no membership selected */}
-          {bookingData.membershipPlan === 'none' && !isMemberUsingCredit && (
-            <Card className="border-amber-300 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-amber-950/30 overflow-hidden">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center shadow-lg">
-                      <Crown className="w-6 h-6 text-white" />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-bold text-amber-900 dark:text-amber-100">Become a Member & Save More!</h4>
-                      <Badge className="bg-amber-500 text-white text-[10px]">Popular</Badge>
-                    </div>
-                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
-                      Join thousands of happy members saving up to <span className="font-bold">30% on every clean</span>
-                    </p>
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-2 text-center">
-                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">$189</p>
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Essential</p>
-                        <p className="text-[10px] text-muted-foreground">1 clean/mo</p>
-                      </div>
-                      <div className="bg-white/80 dark:bg-black/30 rounded-lg p-2 text-center border-2 border-amber-400 relative">
-                        <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-                          <Badge className="bg-primary text-[8px] px-1.5 py-0">Best Value</Badge>
-                        </div>
-                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">$289</p>
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Standard</p>
-                        <p className="text-[10px] text-muted-foreground">2 cleans/mo</p>
-                      </div>
-                      <div className="bg-white/60 dark:bg-black/20 rounded-lg p-2 text-center">
-                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">$389</p>
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Premium</p>
-                        <p className="text-[10px] text-muted-foreground">4 cleans/mo</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300 mb-3">
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      <span>Members save an average of <strong>$45/month</strong></span>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => navigate('/book/offer')}
-                      className="w-full border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-500 dark:text-amber-300 dark:hover:bg-amber-950/50"
-                    >
-                      <Crown className="w-4 h-4 mr-2" />
-                      View Membership Plans
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">

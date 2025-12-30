@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Gift, Sparkles, CalendarCheck, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
+import { Gift, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { PageTransition } from "@/components/booking/PageTransition";
@@ -194,38 +194,13 @@ export default function BookingOffer() {
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
-        {/* Sticky Promo Banner */}
-        <div className="sticky top-0 z-50 bg-[hsl(220,50%,15%)] border-b-2 border-amber-500/50 py-3 px-4">
-          <div className="container max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Gift className="w-5 h-5 text-amber-400 flex-shrink-0" />
-              <div className="text-white text-center sm:text-left">
-                <span className="font-bold">New Year Special: $50 Off Your First Clean + 15% Off Recurring Service</span>
-                <span className="block sm:inline sm:ml-2 text-sm text-amber-200">Book by Jan 7th to claim your discount</span>
-              </div>
-            </div>
-            <Button 
-              size="sm" 
-              className="bg-amber-500 hover:bg-amber-600 text-black font-semibold whitespace-nowrap"
-              onClick={() => document.getElementById('offers-section')?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              Claim My Discount
-            </Button>
-          </div>
-        </div>
-
         <ProgressBar currentStep={3} totalSteps={6} steps={BOOKING_STEPS} />
 
         <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8">
           {/* Header Section */}
           <div className="text-center space-y-4">
-            <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 px-4 py-1.5">
-              <Sparkles className="w-4 h-4 mr-2" />
-              New Year Special — Ends Jan 7th
-            </Badge>
-            
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold font-jakarta">
-              Start 2025 With a Spotless Home
+              Choose Your Service
             </h1>
             
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
@@ -296,20 +271,15 @@ export default function BookingOffer() {
             </Card>
 
             {/* Card B: Recurring Maintenance (Most Popular) */}
-            <Card className="relative overflow-hidden border-2 border-success/30 hover:border-success/60 transition-all duration-300 hover:shadow-xl">
-              {/* Most Popular Pill */}
-              <div className="absolute -top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <Badge className="bg-success text-white font-bold shadow-lg px-4 py-1">
+            <div className="relative">
+              {/* Most Popular Pill - positioned outside the card */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                <Badge className="bg-success text-white font-bold shadow-lg px-4 py-1.5">
                   Most Popular
                 </Badge>
               </div>
               
-              <div className="absolute top-3 left-3">
-                <Badge className="bg-amber-500 text-black font-bold">
-                  <CalendarCheck className="w-3 h-3 mr-1" />
-                  15% Off — Recurring Service
-                </Badge>
-              </div>
+              <Card className="overflow-hidden border-2 border-success/30 hover:border-success/60 transition-all duration-300 hover:shadow-xl">
               
               <CardContent className="pt-14 pb-6 px-5 space-y-5">
                 <div>
@@ -362,6 +332,7 @@ export default function BookingOffer() {
                 </div>
               </CardContent>
             </Card>
+            </div>
           </div>
 
           {/* Schedule Picker - Shows after service selection with animation */}
