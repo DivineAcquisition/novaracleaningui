@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, ChevronDown } from "lucide-react";
-import { StepNavigation } from "@/components/booking/StepNavigation";
+import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
@@ -423,7 +423,7 @@ export default function BookingCheckout() {
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
-        <StepNavigation currentStep={currentStep} steps={BOOKING_STEPS} />
+        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           
