@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, ChevronDown } from "lucide-react";
 import { BookingHeader } from "@/components/booking/BookingHeader";
+import { PromoBanner } from "@/components/booking/PromoBanner";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
@@ -320,16 +321,50 @@ export default function BookingCheckout() {
       customerEmail: email, // Also send as customerEmail for backward compatibility
     };
     
+    const FUNCTION_URL = 'https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/create-payment-intent';
+    const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
+    
     try {
       console.log(`[Checkout] Initializing payment intent (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
       
-      const { data, error } = await supabase.functions.invoke("create-payment-intent", {
-        body: payload
-      });
+      let data: any = null;
+      let invokeError: Error | null = null;
       
-      if (error) {
-        console.error('[Checkout] Supabase invoke error:', error);
-        throw new Error(error.message || "Failed to connect to payment service");
+      // Try supabase.functions.invoke first
+      try {
+        const result = await supabase.functions.invoke("create-payment-intent", {
+          body: payload
+        });
+        
+        if (result.error) {
+          invokeError = new Error(result.error.message || "Invoke failed");
+        } else {
+          data = result.data;
+        }
+      } catch (err: any) {
+        console.warn('[Checkout] Invoke failed, trying direct fetch...', err.message);
+        invokeError = err;
+      }
+      
+      // Fallback to direct fetch if invoke failed
+      if (!data && invokeError) {
+        console.log('[Checkout] Using direct fetch fallback');
+        const response = await fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': API_KEY,
+            'Authorization': `Bearer ${API_KEY}`
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Payment service error: ${response.status} - ${errorText}`);
+        }
+        
+        data = await response.json();
       }
       
       if (!data?.clientSecret) {
@@ -343,6 +378,7 @@ export default function BookingCheckout() {
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
       setRetryCount(0); // Reset retry count on success
+      setIsProcessing(false);
     } catch (error: any) {
       console.error('[Checkout] Payment init error:', error);
       
@@ -424,6 +460,7 @@ export default function BookingCheckout() {
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
+        <PromoBanner />
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           
