@@ -106,7 +106,7 @@ serve(async (req) => {
     }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
+      apiVersion: "2023-10-16",
     });
 
     const supabaseClient = createClient(
@@ -115,7 +115,18 @@ serve(async (req) => {
     );
 
     // Calculate pricing to match frontend logic (values in cents)
-    const basePrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string] ?? 0;
+    const basePrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string];
+    if (basePrice === undefined) {
+      logStep("Invalid home size ID", { homeSizeId: bookingData.homeSizeId, validIds: Object.keys(HOME_SIZE_PRICING) });
+      return new Response(
+        JSON.stringify({ 
+          error: "Invalid home size selected",
+          details: "Please go back and select a valid home size.",
+          code: "INVALID_HOME_SIZE" 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING] ?? 0;
 
     // Prepare add-ons (Move-In/Out includes fridge & oven already)
