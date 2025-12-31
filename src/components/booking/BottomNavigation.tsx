@@ -27,22 +27,6 @@ export function BottomNavigation({
 }: BottomNavigationProps) {
   return (
     <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-lg z-50 animate-slide-up safe-bottom">
-      {/* Step Indicators */}
-      <div className="flex justify-center gap-2 py-3 px-4">
-        {steps.map((step) => (
-          <div
-            key={step.number}
-            className={cn(
-              "h-1.5 rounded-full transition-all duration-300",
-              step.number === currentStep 
-                ? "w-8 bg-primary" 
-                : step.number < currentStep
-                ? "w-6 bg-primary/60"
-                : "w-6 bg-muted"
-            )}
-          />
-        ))}
-      </div>
       
       {/* Navigation Buttons */}
       <div className="flex gap-2 p-3">
