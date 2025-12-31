@@ -76,21 +76,10 @@ export function PromoBanner({ className }: PromoBannerProps) {
           </div>
           
           {/* Promo text */}
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-white text-center">
             <span className="font-bold text-sm md:text-base">
-              {discountText}
+              New Year Special: Claim Our Membership And Get Your First Clean For Only $189
             </span>
-            <span className="text-white/90 text-sm md:text-base">
-              with code
-            </span>
-            <span className="bg-white/20 px-2 py-0.5 rounded font-mono font-bold text-sm md:text-base">
-              {currentPromo.code}
-            </span>
-            {daysRemaining && daysRemaining <= 7 && (
-              <span className="hidden sm:inline text-white/80 text-xs md:text-sm ml-1">
-                • Ends in {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}
-              </span>
-            )}
           </div>
           
           {/* Sparkle decoration */}
