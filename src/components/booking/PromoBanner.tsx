@@ -1,30 +1,32 @@
 import { useState, useEffect } from "react";
-import { Sparkles, Gift, X } from "lucide-react";
+import { X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-
 interface PromoBannerProps {
   className?: string;
 }
-
-export function PromoBanner({ className }: PromoBannerProps) {
-  const [promos, setPromos] = useState<Array<{ code: string; value: number; type: string; expires_at: string | null }>>([]);
+export function PromoBanner({
+  className
+}: PromoBannerProps) {
+  const [promos, setPromos] = useState<Array<{
+    code: string;
+    value: number;
+    type: string;
+    expires_at: string | null;
+  }>>([]);
   const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
   const [isDismissed, setIsDismissed] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
-
   useEffect(() => {
     const fetchPromos = async () => {
-      const { data } = await supabase
-        .from('promo_codes')
-        .select('code, value, type, expires_at')
-        .eq('active', true)
-        .order('value', { ascending: false })
-        .limit(3);
-      
+      const {
+        data
+      } = await supabase.from('promo_codes').select('code, value, type, expires_at').eq('active', true).order('value', {
+        ascending: false
+      }).limit(3);
       if (data && data.length > 0) {
         setPromos(data);
-        
+
         // Calculate days remaining for first promo
         if (data[0].expires_at) {
           const expiryDate = new Date(data[0].expires_at);
@@ -35,33 +37,21 @@ export function PromoBanner({ className }: PromoBannerProps) {
         }
       }
     };
-    
     fetchPromos();
   }, []);
 
   // Rotate through promos every 5 seconds
   useEffect(() => {
     if (promos.length <= 1) return;
-    
     const interval = setInterval(() => {
-      setCurrentPromoIndex((prev) => (prev + 1) % promos.length);
+      setCurrentPromoIndex(prev => (prev + 1) % promos.length);
     }, 5000);
-    
     return () => clearInterval(interval);
   }, [promos.length]);
-
   if (isDismissed || promos.length === 0) return null;
-
   const currentPromo = promos[currentPromoIndex];
-  const discountText = currentPromo.type === 'percent' 
-    ? `${currentPromo.value}% OFF` 
-    : `$${currentPromo.value} OFF`;
-
-  return (
-    <div className={cn(
-      "relative overflow-hidden bg-gradient-to-r from-primary via-primary/90 to-primary/80",
-      className
-    )}>
+  const discountText = currentPromo.type === 'percent' ? `${currentPromo.value}% OFF` : `$${currentPromo.value} OFF`;
+  return <div className={cn("relative overflow-hidden bg-gradient-to-r from-primary via-primary/90 to-primary/80", className)}>
       {/* Animated background pattern */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,white_0%,transparent_50%)]" />
@@ -72,44 +62,25 @@ export function PromoBanner({ className }: PromoBannerProps) {
         <div className="flex items-center justify-center gap-3">
           {/* Animated icon */}
           <div className="flex-shrink-0 animate-pulse">
-            <Gift className="w-5 h-5 text-white" />
+            
           </div>
           
           {/* Promo text */}
           <div className="flex items-center gap-2 text-white text-center">
-            <span className="font-bold text-sm md:text-base">
-              New Year Special: Claim Our Membership And Get Your First Clean For Only $189
-            </span>
+            <span className="font-bold text-sm md:text-base">New Year Special: Claim Our Membership And Get Your First Clean For Only $189</span>
           </div>
           
           {/* Sparkle decoration */}
-          <Sparkles className="w-4 h-4 text-white/80 hidden sm:block" />
+          
           
           {/* Dismiss button */}
-          <button
-            onClick={() => setIsDismissed(true)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full transition-colors"
-            aria-label="Dismiss banner"
-          >
+          <button onClick={() => setIsDismissed(true)} className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full transition-colors" aria-label="Dismiss banner">
             <X className="w-4 h-4 text-white/70 hover:text-white" />
           </button>
         </div>
         
         {/* Progress dots for multiple promos */}
-        {promos.length > 1 && (
-          <div className="flex justify-center gap-1.5 mt-2">
-            {promos.map((_, index) => (
-              <div
-                key={index}
-                className={cn(
-                  "w-1.5 h-1.5 rounded-full transition-all",
-                  index === currentPromoIndex ? "bg-white" : "bg-white/40"
-                )}
-              />
-            ))}
-          </div>
-        )}
+        {promos.length > 1}
       </div>
-    </div>
-  );
+    </div>;
 }
