@@ -125,7 +125,7 @@ const Index = () => {
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
             <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
-              Book Your Cleaning Today For Only $39
+              New Year Special: Claim Our Membership And Get Your First Clean For Only $189
             </h1>
             
             <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">
