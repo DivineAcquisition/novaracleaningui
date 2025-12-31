@@ -50,8 +50,8 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
           </div>
         </div>
 
-        {/* Step Indicator Row - Hidden on mobile */}
-        <div className="hidden sm:flex items-center justify-between mb-2">
+        {/* Step Indicator Row */}
+        <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-medium text-foreground">
             <span className="font-semibold">Step {currentStep}</span>
             <span className="text-muted-foreground"> of {totalSteps}</span>
@@ -64,8 +64,8 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
           </div>
         </div>
 
-        {/* Progress Bar - Hidden on mobile */}
-        <div className="hidden sm:block w-full h-1.5 bg-muted rounded-full overflow-hidden">
+        {/* Progress Bar */}
+        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
           <div 
             className={cn(
               "h-full rounded-full transition-all duration-500 ease-out",
