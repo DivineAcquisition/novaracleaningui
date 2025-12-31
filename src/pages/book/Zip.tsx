@@ -6,7 +6,6 @@ import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { ArrowRight, Crown, CheckCircle } from "lucide-react";
 import { BookingHeader } from "@/components/booking/BookingHeader";
-import { PromoBanner } from "@/components/booking/PromoBanner";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
@@ -104,7 +103,6 @@ export default function BookingZip() {
     <div className="min-h-screen bg-gradient-hero">
       {/* Sticky Booking Header */}
       <BookingHeader currentStep={1} totalSteps={6} stepLabel="Location" />
-      <PromoBanner />
 
       {/* Hero + Booking Section */}
       <section className="container mx-auto px-4 py-12 md:py-20">

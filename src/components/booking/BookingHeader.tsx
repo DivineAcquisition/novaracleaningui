@@ -25,33 +25,33 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="hidden sm:flex items-center gap-3">
+          {/* Action Buttons - Always visible */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button 
               variant="outline" 
               size="sm"
-              className="rounded-full gap-2"
+              className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
               onClick={() => window.open('/', '_blank')}
             >
-              <Globe className="w-4 h-4" />
-              Visit Website
+              <Globe className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Website</span>
             </Button>
             <Button 
               variant="outline" 
               size="sm"
-              className="rounded-full gap-2"
+              className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
               asChild
             >
               <a href="tel:+19725590223">
-                <Phone className="w-4 h-4" />
-                (972) 559-0223
+                <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">Call</span>
               </a>
             </Button>
           </div>
         </div>
 
-        {/* Step Indicator Row */}
-        <div className="flex items-center justify-between mb-2">
+        {/* Step Indicator Row - Hidden on mobile */}
+        <div className="hidden sm:flex items-center justify-between mb-2">
           <div className="text-sm font-medium text-foreground">
             <span className="font-semibold">Step {currentStep}</span>
             <span className="text-muted-foreground"> of {totalSteps}</span>
@@ -64,8 +64,8 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+        {/* Progress Bar - Hidden on mobile */}
+        <div className="hidden sm:block w-full h-1.5 bg-muted rounded-full overflow-hidden">
           <div 
             className={cn(
               "h-full rounded-full transition-all duration-500 ease-out",
