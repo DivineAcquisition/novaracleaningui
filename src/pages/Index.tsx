@@ -114,7 +114,7 @@ const Index = () => {
           <div className="flex items-center justify-center gap-2 text-white">
             
             <p className="text-sm md:text-base text-center font-semibold">
-              Save up to 30% with our Membership Plan
+              New Year Special: Claim Our Membership And Get Your First Clean For Only $189
             </p>
           </div>
         </div>
