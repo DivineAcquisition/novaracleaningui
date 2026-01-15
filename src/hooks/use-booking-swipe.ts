@@ -1,5 +1,7 @@
+"use client";
+
 import { useSwipeable } from 'react-swipeable';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface UseBookingSwipeOptions {
@@ -12,12 +14,11 @@ interface UseBookingSwipeOptions {
 
 const STEP_ROUTES = [
   '/book/zip',
-  '/book/home',
-  '/book/service',
-  '/book/schedule',
-  '/book/details',
-  '/book/summary',
+  '/book/sqft',
+  '/book/offer',
   '/book/checkout',
+  '/book/details',
+  '/book/confirmation',
 ];
 
 export function useBookingSwipe({
@@ -27,7 +28,7 @@ export function useBookingSwipe({
   canSwipeRight = true,
   step,
 }: UseBookingSwipeOptions = {}) {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const handlers = useSwipeable({
     onSwipedLeft: () => {
@@ -35,7 +36,7 @@ export function useBookingSwipe({
         onSwipeLeft();
       } else if (!onSwipeLeft && step && step < STEP_ROUTES.length && canSwipeLeft) {
         // Auto-navigate to next step if no custom handler
-        navigate(STEP_ROUTES[step]);
+        router.push(STEP_ROUTES[step]);
         toast.info('Swipe right to go back');
       }
     },
@@ -44,7 +45,7 @@ export function useBookingSwipe({
         onSwipeRight();
       } else if (!onSwipeRight && step && step > 1 && canSwipeRight) {
         // Auto-navigate to previous step if no custom handler
-        navigate(STEP_ROUTES[step - 2]);
+        router.push(STEP_ROUTES[step - 2]);
       }
     },
     trackMouse: false, // Only track touch gestures on mobile

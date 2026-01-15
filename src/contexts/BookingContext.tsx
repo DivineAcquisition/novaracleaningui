@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export interface BookingData {
@@ -59,17 +61,32 @@ const initialBookingData: BookingData = {
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 export function BookingProvider({ children }: { children: React.ReactNode }) {
-  const [bookingData, setBookingData] = useState<BookingData>(() => {
-    const saved = localStorage.getItem('bookingData');
-    return saved ? JSON.parse(saved) : initialBookingData;
-  });
-  
+  const [bookingData, setBookingData] = useState<BookingData>(initialBookingData);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 6;
 
+  // Load from localStorage on mount (client-side only)
   useEffect(() => {
-    localStorage.setItem('bookingData', JSON.stringify(bookingData));
-  }, [bookingData]);
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bookingData');
+      if (saved) {
+        try {
+          setBookingData(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to parse booking data from localStorage');
+        }
+      }
+      setIsInitialized(true);
+    }
+  }, []);
+
+  // Save to localStorage when data changes
+  useEffect(() => {
+    if (isInitialized && typeof window !== 'undefined') {
+      localStorage.setItem('bookingData', JSON.stringify(bookingData));
+    }
+  }, [bookingData, isInitialized]);
 
   const updateBookingData = (data: Partial<BookingData>) => {
     setBookingData(prev => ({ ...prev, ...data }));
@@ -77,7 +94,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
   const resetBookingData = () => {
     setBookingData(initialBookingData);
-    localStorage.removeItem('bookingData');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bookingData');
+    }
     setCurrentStep(1);
   };
 
