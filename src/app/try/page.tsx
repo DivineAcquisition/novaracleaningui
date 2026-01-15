@@ -43,22 +43,10 @@ export default function TryLandingPage() {
 
     setIsLoading(true);
     try {
-      // Check service coverage
-      const { data: coverage, error } = await supabase
-        .from("service_coverage_zones")
-        .select("*")
-        .eq("zip_code", zipCode)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (error) {
-        console.error("Coverage check error:", error);
-      }
-
       // Store ZIP in session storage
       sessionStorage.setItem("booking_zip", zipCode);
       
-      // Proceed to lead capture regardless (we'll notify them if not covered)
+      // Proceed to lead capture
       setStep("lead");
     } catch (error) {
       console.error("Error checking ZIP:", error);
@@ -77,17 +65,7 @@ export default function TryLandingPage() {
 
     setIsLoading(true);
     try {
-      // Create lead in database
-      await supabase.from("leads").insert({
-        email: formData.email,
-        phone: formData.phone,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        zip_code: zipCode,
-        source: "try.novaracleaning.com",
-      });
-
-      // Fire webhook for GHL/Zapier
+      // Fire webhook for GHL/Zapier (lead capture)
       try {
         await supabase.functions.invoke("send-lead-capture-webhook", {
           body: {
@@ -104,7 +82,7 @@ export default function TryLandingPage() {
       }
 
       // Store lead data in session
-      sessionStorage.setItem("booking_lead", JSON.stringify(formData));
+      sessionStorage.setItem("booking_lead", JSON.stringify({ ...formData, zipCode }));
 
       router.push("/try/sqft");
     } catch (error) {

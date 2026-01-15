@@ -35,7 +35,6 @@ interface Address {
   sqft_tier: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
-  is_primary: boolean | null;
 }
 
 export default function AddressesPage() {
@@ -61,7 +60,7 @@ export default function AddressesPage() {
           .from("addresses")
           .select("*")
           .eq("customer_id", customer.id)
-          .order("is_primary", { ascending: false });
+          .order("created_at", { ascending: false });
 
         if (error) throw error;
         setAddresses(data || []);
@@ -97,29 +96,6 @@ export default function AddressesPage() {
     }
   };
 
-  const handleSetPrimary = async (addressId: string) => {
-    try {
-      // First, unset all primary flags
-      await supabase
-        .from("addresses")
-        .update({ is_primary: false })
-        .neq("id", "placeholder");
-
-      // Then set the selected address as primary
-      const { error } = await supabase
-        .from("addresses")
-        .update({ is_primary: true })
-        .eq("id", addressId);
-
-      if (error) throw error;
-
-      toast.success("Primary address updated");
-      fetchAddresses();
-    } catch (error) {
-      console.error("Error:", error);
-      toast.error("Failed to update primary address");
-    }
-  };
 
   if (isLoading) {
     return (
@@ -173,12 +149,7 @@ export default function AddressesPage() {
                       <Home className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{address.street}</p>
-                        {address.is_primary && (
-                          <Badge variant="secondary">Primary</Badge>
-                        )}
-                      </div>
+                      <p className="font-medium">{address.street}</p>
                       {address.unit && (
                         <p className="text-sm text-muted-foreground">{address.unit}</p>
                       )}
@@ -197,15 +168,6 @@ export default function AddressesPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  {!address.is_primary && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSetPrimary(address.id)}
-                    >
-                      Set Primary
-                    </Button>
-                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -214,7 +176,8 @@ export default function AddressesPage() {
                       setDeleteDialogOpen(true);
                     }}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
                   </Button>
                 </div>
               </CardContent>

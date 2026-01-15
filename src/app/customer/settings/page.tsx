@@ -61,9 +61,9 @@ export default function SettingsPage() {
             last_name: data.last_name || "",
             email: data.email || session.user.email,
             phone: data.phone || "",
-            sms_consent: data.sms_consent ?? true,
-            email_notifications: data.email_notifications ?? true,
-            marketing_opt_in: data.marketing_opt_in ?? false,
+            sms_consent: true,
+            email_notifications: true,
+            marketing_opt_in: false,
           });
         } else {
           setProfile((prev) => ({
@@ -95,9 +95,6 @@ export default function SettingsPage() {
           first_name: profile.first_name,
           last_name: profile.last_name,
           phone: profile.phone,
-          sms_consent: profile.sms_consent,
-          email_notifications: profile.email_notifications,
-          marketing_opt_in: profile.marketing_opt_in,
         }, { onConflict: "email" });
 
       if (error) throw error;

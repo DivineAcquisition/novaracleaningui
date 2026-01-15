@@ -1,7 +1,6 @@
 "use client";
-export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -95,7 +94,7 @@ interface Cleaner {
   last_name: string;
 }
 
-export default function BookingsPage() {
+function BookingsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -651,5 +650,13 @@ export default function BookingsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function BookingsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <BookingsPageContent />
+    </Suspense>
   );
 }

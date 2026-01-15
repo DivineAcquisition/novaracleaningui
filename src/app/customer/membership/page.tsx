@@ -29,7 +29,6 @@ interface Membership {
   credits_used: number;
   current_period_end: string;
   subscription_id: string;
-  paused_until: string | null;
 }
 
 export default function MembershipPage() {
@@ -147,7 +146,6 @@ export default function MembershipPage() {
   }
 
   const creditPercentage = (membership.credits_remaining / membership.credits_per_month) * 100;
-  const isPaused = !!membership.paused_until;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -168,14 +166,10 @@ export default function MembershipPage() {
               </div>
               <div>
                 <CardTitle>{membership.membership_plan}</CardTitle>
-                <CardDescription>
-                  {isPaused ? "Paused" : "Active"} Membership
-                </CardDescription>
+                <CardDescription>Active Membership</CardDescription>
               </div>
             </div>
-            <Badge variant={isPaused ? "secondary" : "default"}>
-              {isPaused ? "Paused" : "Active"}
-            </Badge>
+            <Badge variant="default">Active</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
