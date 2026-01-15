@@ -1,0 +1,19 @@
+{
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "admin.novaracleaning.com" }],
+      "destination": "/admin/:path*"
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "try.novaracleaning.com" }],
+      "destination": "/try/:path*"
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "app.novaracleaning.com" }],
+      "destination": "/customer/:path*"
+    }
+  ]
+}
