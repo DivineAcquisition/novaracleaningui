@@ -28,6 +28,12 @@ import {
   ChevronDown,
   LogOut,
   Sparkles,
+  Shield,
+  UserPlus,
+  Key,
+  PieChart,
+  FileSpreadsheet,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -76,18 +82,14 @@ const navigation = [
     ],
   },
   {
-    title: "Customers",
+    title: "User Management",
     icon: Users,
     items: [
-      { title: "All Customers", url: "/portal/customers" },
-    ],
-  },
-  {
-    title: "Cleaners",
-    icon: UserCog,
-    items: [
-      { title: "Directory", url: "/portal/cleaners" },
-      { title: "Onboarding", url: "/portal/cleaners/onboarding" },
+      { title: "Overview", url: "/portal/users" },
+      { title: "Customers", url: "/portal/users/customers" },
+      { title: "Cleaners", url: "/portal/users/cleaners" },
+      { title: "Admins", url: "/portal/users/admins" },
+      { title: "Roles", url: "/portal/users/roles" },
     ],
   },
   {
@@ -125,13 +127,21 @@ const navigation = [
     ],
   },
   {
-    title: "Reports",
-    icon: BarChart3,
+    title: "Metrics",
+    icon: PieChart,
     items: [
-      { title: "Analytics", url: "/portal/reports" },
-      { title: "Revenue", url: "/portal/reports/revenue" },
-      { title: "Operations", url: "/portal/reports/operations" },
+      { title: "Dashboard", url: "/portal/metrics" },
+      { title: "Customer Metrics", url: "/portal/metrics/customers" },
+      { title: "Cleaner Metrics", url: "/portal/metrics/cleaners" },
+      { title: "Revenue Analytics", url: "/portal/metrics/revenue" },
+      { title: "Operations", url: "/portal/metrics/operations" },
+      { title: "Data Exports", url: "/portal/metrics/exports" },
     ],
+  },
+  {
+    title: "Audit Log",
+    url: "/portal/audit",
+    icon: ClipboardList,
   },
   {
     title: "Settings",
