@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +17,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
 import {
   Sparkles,
   LayoutDashboard,
@@ -28,16 +42,14 @@ import {
   ClipboardList,
   Settings,
   LogOut,
-  ChevronDown,
   ChevronRight,
   Menu,
-  X,
   Bell,
   Search,
-  Moon,
-  Sun,
+  Command,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Toaster } from "sonner";
 
 const navigation = [
   {
@@ -123,31 +135,11 @@ const navigation = [
   },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
-  const [user, setUser] = useState<any>(null);
-  const [isDark, setIsDark] = useState(false);
-
-  // Don't apply layout to login/auth pages
-  const isAuthPage = pathname?.includes("/login") || pathname?.includes("/unauthorized");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    // Auto-expand parent items based on current path
     navigation.forEach((item) => {
       if (item.children?.some((child) => pathname?.startsWith(child.href))) {
         setExpandedItems((prev) =>
@@ -163,170 +155,199 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   };
 
+  return (
+    <nav className="space-y-1 px-2">
+      {navigation.map((item) => {
+        const isExpanded = expandedItems.includes(item.name);
+        const isActive = item.href
+          ? pathname === item.href
+          : item.children?.some((c) => pathname?.startsWith(c.href));
+        const Icon = item.icon;
+
+        if (item.children) {
+          return (
+            <Collapsible
+              key={item.name}
+              open={isExpanded}
+              onOpenChange={() => toggleExpand(item.name)}
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant={isActive ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-start",
+                    isActive && "bg-secondary"
+                  )}
+                >
+                  <Icon className="mr-2 h-4 w-4" />
+                  {item.name}
+                  <ChevronRight
+                    className={cn(
+                      "ml-auto h-4 w-4 transition-transform",
+                      isExpanded && "rotate-90"
+                    )}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pl-6 pt-1 space-y-1">
+                {item.children.map((child) => (
+                  <Button
+                    key={child.href}
+                    variant={pathname === child.href ? "secondary" : "ghost"}
+                    className="w-full justify-start h-8 text-sm"
+                    asChild
+                    onClick={onNavigate}
+                  >
+                    <Link href={child.href}>{child.name}</Link>
+                  </Button>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        }
+
+        return (
+          <Button
+            key={item.name}
+            variant={isActive ? "secondary" : "ghost"}
+            className="w-full justify-start"
+            asChild
+            onClick={onNavigate}
+          >
+            <Link href={item.href!}>
+              <Icon className="mr-2 h-4 w-4" />
+              {item.name}
+            </Link>
+          </Button>
+        );
+      })}
+    </nav>
+  );
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const isAuthPage = pathname?.includes("/login") || pathname?.includes("/unauthorized");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/admin/login");
   };
 
   if (isAuthPage) {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <Toaster position="top-center" richColors />
+      </>
+    );
   }
 
-  const NavItem = ({ item }: { item: typeof navigation[0] }) => {
-    const isExpanded = expandedItems.includes(item.name);
-    const isActive = item.href ? pathname === item.href : item.children?.some((c) => pathname?.startsWith(c.href));
-    const Icon = item.icon;
-
-    if (item.children) {
-      return (
-        <div>
-          <button
-            onClick={() => toggleExpand(item.name)}
-            className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <Icon className="h-5 w-5 flex-shrink-0" />
-            <span className="flex-1 text-left">{item.name}</span>
-            <ChevronRight
-              className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-90")}
-            />
-          </button>
-          {isExpanded && (
-            <div className="ml-8 mt-1 space-y-1">
-              {item.children.map((child) => (
-                <Link
-                  key={child.href}
-                  href={child.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    "block px-3 py-1.5 rounded-lg text-sm transition-colors",
-                    pathname === child.href
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {child.name}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <Link
-        href={item.href!}
-        onClick={() => setSidebarOpen(false)}
-        className={cn(
-          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-          isActive
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        )}
-      >
-        <Icon className="h-5 w-5 flex-shrink-0" />
-        <span>{item.name}</span>
-      </Link>
-    );
-  };
+  const userInitials = user?.email?.slice(0, 2).toUpperCase() || "AD";
+  const userName = user?.email?.split("@")[0] || "Admin";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed top-0 left-0 z-50 h-full w-64 bg-card border-r transition-transform lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center gap-2 px-4 py-4 border-b">
-            <Sparkles className="h-8 w-8 text-primary" />
-            <div>
-              <span className="font-bold text-lg">NovaraCleaning</span>
-              <span className="text-xs text-muted-foreground block">Admin Portal</span>
+    <TooltipProvider>
+      <div className="flex min-h-screen">
+        {/* Desktop Sidebar */}
+        <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r bg-card">
+          <div className="flex h-14 items-center gap-2 border-b px-4">
+            <Sparkles className="h-6 w-6 text-primary" />
+            <div className="flex flex-col">
+              <span className="font-semibold text-sm">NovaraCleaning</span>
+              <span className="text-[10px] text-muted-foreground">Admin Portal</span>
             </div>
           </div>
-
-          {/* Navigation */}
-          <ScrollArea className="flex-1 px-3 py-4">
-            <nav className="space-y-1">
-              {navigation.map((item) => (
-                <NavItem key={item.name} item={item} />
-              ))}
-            </nav>
+          <ScrollArea className="flex-1 py-4">
+            <SidebarNav />
           </ScrollArea>
-        </div>
-      </aside>
+        </aside>
 
-      {/* Main content */}
-      <div className="lg:pl-64">
-        {/* Top header */}
-        <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 border-b bg-background/95 backdrop-blur">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
+        {/* Main Content */}
+        <div className="flex flex-1 flex-col lg:pl-64">
+          {/* Header */}
+          <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 lg:px-6">
+            {/* Mobile Menu */}
+            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="lg:hidden">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 p-0">
+                <div className="flex h-14 items-center gap-2 border-b px-4">
+                  <Sparkles className="h-6 w-6 text-primary" />
+                  <span className="font-semibold">NovaraCleaning</span>
+                </div>
+                <ScrollArea className="h-[calc(100vh-3.5rem)] py-4">
+                  <SidebarNav onNavigate={() => setSheetOpen(false)} />
+                </ScrollArea>
+              </SheetContent>
+            </Sheet>
 
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search... (⌘K)"
-                className="bg-transparent border-none outline-none text-sm w-48"
-              />
+            {/* Search */}
+            <div className="hidden md:flex flex-1 max-w-md">
+              <div className="relative w-full">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search..."
+                  className="pl-8 bg-muted/50"
+                />
+                <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                  <Command className="h-3 w-3" />K
+                </kbd>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsDark(!isDark)}
-            >
-              {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
+            <div className="flex-1 lg:flex-none" />
 
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-            </Button>
+            {/* Notifications */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
+                  <span className="sr-only">Notifications</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Notifications</TooltipContent>
+            </Tooltip>
 
+            {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>
-                      {user?.email?.slice(0, 2).toUpperCase() || "AD"}
-                    </AvatarFallback>
+                <Button variant="ghost" className="gap-2 px-2">
+                  <Avatar className="h-7 w-7">
+                    <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
                   </Avatar>
-                  <span className="hidden md:inline text-sm">
-                    {user?.email?.split("@")[0] || "Admin"}
-                  </span>
-                  <ChevronDown className="h-4 w-4" />
+                  <span className="hidden md:inline text-sm font-medium">{userName}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium">{userName}</p>
+                    <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/admin/settings">
@@ -341,12 +362,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </header>
+          </header>
 
-        {/* Page content */}
-        <main className="p-6">{children}</main>
+          {/* Page Content */}
+          <main className="flex-1 p-4 lg:p-6">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+      <Toaster position="top-center" richColors />
+    </TooltipProvider>
   );
 }

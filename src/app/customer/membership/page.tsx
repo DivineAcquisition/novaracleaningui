@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import {
@@ -13,11 +14,9 @@ import {
   CreditCard,
   Calendar,
   CheckCircle,
-  Loader2,
   ArrowRight,
-  Pause,
-  Play,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -85,8 +84,9 @@ export default function MembershipPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="max-w-2xl mx-auto space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64" />
       </div>
     );
   }
@@ -95,17 +95,15 @@ export default function MembershipPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Membership</h1>
-          <p className="text-muted-foreground">
-            Join our membership program for exclusive benefits
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Membership</h1>
+          <p className="text-sm text-muted-foreground">Join our membership program for exclusive benefits</p>
         </div>
 
-        <Card className="bg-gradient-to-br from-primary/10 to-accent/10">
+        <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-                <Crown className="h-6 w-6 text-white" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary">
+                <Crown className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
                 <CardTitle>Novara Membership</CardTitle>
@@ -114,11 +112,12 @@ export default function MembershipPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="text-3xl font-bold">
-              $189<span className="text-lg font-normal text-muted-foreground">/month</span>
+            <div>
+              <span className="text-3xl font-bold">$189</span>
+              <span className="text-muted-foreground">/month</span>
             </div>
 
-            <ul className="space-y-3">
+            <ul className="space-y-2">
               {[
                 "Monthly standard cleaning included",
                 "Priority scheduling",
@@ -126,19 +125,19 @@ export default function MembershipPage() {
                 "10% off additional services",
                 "Pause or cancel anytime",
               ].map((feature, i) => (
-                <li key={i} className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <li key={i} className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="h-4 w-4 text-emerald-500 flex-shrink-0" />
                   <span>{feature}</span>
                 </li>
               ))}
             </ul>
 
-            <a href="https://try.novaracleaning.com">
-              <Button className="w-full" size="lg">
+            <Button size="lg" className="w-full" asChild>
+              <a href="https://try.novaracleaning.com">
                 Join Membership
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </a>
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -150,10 +149,8 @@ export default function MembershipPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Membership</h1>
-        <p className="text-muted-foreground">
-          Manage your membership and credits
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">Membership</h1>
+        <p className="text-sm text-muted-foreground">Manage your membership and credits</p>
       </div>
 
       {/* Status Card */}
@@ -161,15 +158,15 @@ export default function MembershipPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                <Crown className="h-6 w-6 text-primary" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+                <Crown className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle>{membership.membership_plan}</CardTitle>
+                <CardTitle className="text-base">{membership.membership_plan}</CardTitle>
                 <CardDescription>Active Membership</CardDescription>
               </div>
             </div>
-            <Badge variant="default">Active</Badge>
+            <Badge>Active</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -177,47 +174,35 @@ export default function MembershipPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span>Credits Remaining</span>
-              <span className="font-medium">
-                {membership.credits_remaining} / {membership.credits_per_month}
-              </span>
+              <span className="font-medium">{membership.credits_remaining} / {membership.credits_per_month}</span>
             </div>
             <Progress value={creditPercentage} className="h-2" />
-            <p className="text-xs text-muted-foreground">
-              {membership.credits_used} credits used this period
-            </p>
+            <p className="text-xs text-muted-foreground">{membership.credits_used} credits used this period</p>
           </div>
 
           {/* Renewal Date */}
           <div className="flex items-center justify-between py-3 border-t">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Next Renewal</span>
+              <span>Next Renewal</span>
             </div>
-            <span className="font-medium">
+            <span className="text-sm font-medium">
               {format(parseISO(membership.current_period_end), "MMMM d, yyyy")}
             </span>
           </div>
 
           {/* Actions */}
           <div className="grid grid-cols-2 gap-3">
-            <Link href="/customer/bookings/new">
-              <Button variant="default" className="w-full">
-                Use Credit
-              </Button>
-            </Link>
-            <Button
-              variant="outline"
-              onClick={handleManageBilling}
-              disabled={isProcessing}
-            >
+            <Button asChild>
+              <Link href="/customer/bookings/new">Use Credit</Link>
+            </Button>
+            <Button variant="outline" onClick={handleManageBilling} disabled={isProcessing}>
               {isProcessing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  Manage
-                  <ExternalLink className="ml-2 h-4 w-4" />
-                </>
+                <ExternalLink className="mr-2 h-4 w-4" />
               )}
+              Manage
             </Button>
           </div>
         </CardContent>
@@ -226,26 +211,19 @@ export default function MembershipPage() {
       {/* Billing */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
+          <CardTitle className="text-base flex items-center gap-2">
+            <CreditCard className="h-4 w-4" />
             Billing
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={handleManageBilling}
-            disabled={isProcessing}
-          >
+          <Button variant="outline" className="w-full" onClick={handleManageBilling} disabled={isProcessing}>
             {isProcessing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <>
-                Manage Billing
-                <ExternalLink className="ml-2 h-4 w-4" />
-              </>
+              <ExternalLink className="mr-2 h-4 w-4" />
             )}
+            Manage Billing
           </Button>
           <p className="text-xs text-muted-foreground text-center mt-2">
             Update payment method, view invoices, or cancel subscription

@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import {
@@ -13,16 +21,9 @@ import {
   Eye,
   Clock,
   MapPin,
-  Loader2,
   Filter,
+  Activity,
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface Booking {
   id: string;
@@ -64,7 +65,6 @@ export default function CustomerBookingsPage() {
         }
 
         const { data, error } = await query;
-
         if (error) throw error;
         setBookings(data || []);
       } catch (error) {
@@ -84,16 +84,12 @@ export default function CustomerBookingsPage() {
     }).format(cents / 100);
   };
 
-  const getStatusBadgeVariant = (status: string | null) => {
+  const getStatusVariant = (status: string | null) => {
     switch (status) {
-      case "confirmed":
-        return "default";
-      case "completed":
-        return "secondary";
-      case "cancelled":
-        return "destructive";
-      default:
-        return "outline";
+      case "confirmed": return "default";
+      case "completed": return "secondary";
+      case "cancelled": return "destructive";
+      default: return "outline";
     }
   };
 
@@ -101,23 +97,21 @@ export default function CustomerBookingsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Your Bookings</h1>
-          <p className="text-muted-foreground">
-            View and manage your cleaning appointments
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Your Bookings</h1>
+          <p className="text-sm text-muted-foreground">View and manage your cleaning appointments</p>
         </div>
-        <Link href="/customer/bookings/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
+        <Button asChild>
+          <Link href="/customer/bookings/new">
+            <Plus className="mr-2 h-4 w-4" />
             New Booking
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
       {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-3">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value={filter} onValueChange={setFilter}>
               <SelectTrigger className="w-48">
@@ -136,77 +130,73 @@ export default function CustomerBookingsPage() {
 
       {/* Bookings List */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
         </div>
       ) : bookings.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No bookings found</h3>
-            <p className="text-muted-foreground mb-4">
-              {filter === "all"
-                ? "You haven't made any bookings yet."
-                : `No ${filter} bookings.`}
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Activity className="h-12 w-12 text-muted-foreground/50 mb-4" />
+            <h3 className="font-medium mb-1">No bookings found</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {filter === "all" ? "You haven't made any bookings yet." : `No ${filter} bookings.`}
             </p>
-            <Link href="/customer/bookings/new">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
+            <Button asChild>
+              <Link href="/customer/bookings/new">
+                <Plus className="mr-2 h-4 w-4" />
                 Book Your First Cleaning
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {bookings.map((booking) => (
-            <Card key={booking.id}>
-              <CardContent className="p-6">
+            <Card key={booking.id} className="hover:border-primary/50 transition-colors">
+              <CardContent className="p-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Calendar className="h-6 w-6 text-primary" />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
+                      <Calendar className="h-5 w-5 text-primary" />
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium">
                           {format(parseISO(booking.service_date), "EEEE, MMMM d, yyyy")}
-                        </h3>
-                        <Badge variant={getStatusBadgeVariant(booking.status)}>
+                        </p>
+                        <Badge variant={getStatusVariant(booking.status)}>
                           {booking.status || "Pending"}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
+                          <Clock className="h-3.5 w-3.5" />
                           {booking.time_slot}
                         </span>
                         <span className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
+                          <MapPin className="h-3.5 w-3.5" />
                           {booking.city}
                         </span>
                       </div>
-                      <p className="text-sm">
+                      <div className="flex items-center gap-2">
                         <Badge variant="outline">{booking.service_type}</Badge>
                         {booking.booking_number && (
-                          <span className="ml-2 text-muted-foreground">
-                            #{booking.booking_number}
-                          </span>
+                          <span className="text-xs text-muted-foreground">#{booking.booking_number}</span>
                         )}
-                      </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <p className="text-lg font-semibold">
-                      {formatCurrency(booking.total_estimate_cents)}
-                    </p>
-                    <Link href={`/customer/bookings/${booking.id}`}>
-                      <Button variant="outline">
-                        <Eye className="h-4 w-4 mr-2" />
+                  <div className="flex items-center gap-3 md:flex-col md:items-end">
+                    <p className="font-semibold">{formatCurrency(booking.total_estimate_cents)}</p>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/customer/bookings/${booking.id}`}>
+                        <Eye className="mr-2 h-4 w-4" />
                         View
-                      </Button>
-                    </Link>
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               </CardContent>

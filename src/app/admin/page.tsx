@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, subDays } from "date-fns";
 import {
@@ -16,9 +18,8 @@ import {
   TrendingDown,
   ArrowRight,
   Clock,
-  AlertTriangle,
-  CheckCircle,
-  Loader2,
+  Plus,
+  Activity,
 } from "lucide-react";
 import {
   AreaChart,
@@ -76,7 +77,6 @@ export default function AdminDashboardPage() {
       const today = format(new Date(), "yyyy-MM-dd");
       const yesterday = format(subDays(new Date(), 1), "yyyy-MM-dd");
 
-      // Bookings today
       const { count: bookingsToday } = await supabase
         .from("bookings")
         .select("*", { count: "exact", head: true })
@@ -87,7 +87,6 @@ export default function AdminDashboardPage() {
         .select("*", { count: "exact", head: true })
         .eq("service_date", yesterday);
 
-      // Revenue today
       const { data: revenueTodayData } = await supabase
         .from("bookings")
         .select("total_estimate_cents")
@@ -109,13 +108,11 @@ export default function AdminDashboardPage() {
         0
       );
 
-      // Active cleaners
       const { count: activeCleaners } = await supabase
         .from("cleaners")
         .select("*", { count: "exact", head: true })
         .eq("status", "active");
 
-      // Pending dispatch (unassigned jobs)
       const { count: pendingDispatch } = await supabase
         .from("bookings")
         .select("*", { count: "exact", head: true })
@@ -123,7 +120,6 @@ export default function AdminDashboardPage() {
         .eq("status", "confirmed")
         .is("cleaner_id", null);
 
-      // Calculate growth percentages
       const bookingsGrowth = bookingsYesterday
         ? ((bookingsToday || 0) - bookingsYesterday) / bookingsYesterday * 100
         : 0;
@@ -140,7 +136,6 @@ export default function AdminDashboardPage() {
         pendingDispatch: pendingDispatch || 0,
       });
 
-      // Upcoming bookings
       const { data: upcoming } = await supabase
         .from("bookings")
         .select("id, booking_number, first_name, last_name, service_date, time_slot, status, city")
@@ -150,7 +145,6 @@ export default function AdminDashboardPage() {
 
       setUpcomingBookings(upcoming || []);
 
-      // Revenue chart data (last 30 days)
       const last30Days = Array.from({ length: 30 }, (_, i) => {
         const date = subDays(new Date(), 29 - i);
         return format(date, "yyyy-MM-dd");
@@ -176,7 +170,6 @@ export default function AdminDashboardPage() {
         }))
       );
 
-      // Booking status data
       const { data: statusData } = await supabase
         .from("bookings")
         .select("status")
@@ -189,10 +182,10 @@ export default function AdminDashboardPage() {
       });
 
       setBookingStatusData([
-        { name: "Confirmed", value: statusCounts.get("confirmed") || 0 },
-        { name: "Completed", value: statusCounts.get("completed") || 0 },
-        { name: "Cancelled", value: statusCounts.get("cancelled") || 0 },
-        { name: "Pending", value: statusCounts.get("pending") || 0 },
+        { name: "Confirmed", value: statusCounts.get("confirmed") || 0, fill: "hsl(var(--primary))" },
+        { name: "Completed", value: statusCounts.get("completed") || 0, fill: "hsl(var(--chart-2))" },
+        { name: "Cancelled", value: statusCounts.get("cancelled") || 0, fill: "hsl(var(--destructive))" },
+        { name: "Pending", value: statusCounts.get("pending") || 0, fill: "hsl(var(--muted-foreground))" },
       ]);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -210,61 +203,89 @@ export default function AdminDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-80" />
+          <Skeleton className="h-80" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome back! Here's what's happening today.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Welcome back! Here's what's happening today.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/admin/bookings/intake">
+              <Plus className="mr-2 h-4 w-4" />
+              New Booking
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Bookings Today</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.bookingsToday}</div>
-            <div className={`flex items-center text-xs ${stats.bookingsGrowth >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div className="flex items-center text-xs text-muted-foreground">
               {stats.bookingsGrowth >= 0 ? (
-                <TrendingUp className="h-3 w-3 mr-1" />
+                <TrendingUp className="mr-1 h-3 w-3 text-emerald-500" />
               ) : (
-                <TrendingDown className="h-3 w-3 mr-1" />
+                <TrendingDown className="mr-1 h-3 w-3 text-destructive" />
               )}
-              {Math.abs(stats.bookingsGrowth).toFixed(1)}% from yesterday
+              <span className={stats.bookingsGrowth >= 0 ? "text-emerald-500" : "text-destructive"}>
+                {Math.abs(stats.bookingsGrowth).toFixed(1)}%
+              </span>
+              <span className="ml-1">from yesterday</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.revenueToday)}</div>
-            <div className={`flex items-center text-xs ${stats.revenueGrowth >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div className="flex items-center text-xs text-muted-foreground">
               {stats.revenueGrowth >= 0 ? (
-                <TrendingUp className="h-3 w-3 mr-1" />
+                <TrendingUp className="mr-1 h-3 w-3 text-emerald-500" />
               ) : (
-                <TrendingDown className="h-3 w-3 mr-1" />
+                <TrendingDown className="mr-1 h-3 w-3 text-destructive" />
               )}
-              {Math.abs(stats.revenueGrowth).toFixed(1)}% from yesterday
+              <span className={stats.revenueGrowth >= 0 ? "text-emerald-500" : "text-destructive"}>
+                {Math.abs(stats.revenueGrowth).toFixed(1)}%
+              </span>
+              <span className="ml-1">from yesterday</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Active Cleaners</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -275,7 +296,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Pending Dispatch</CardTitle>
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -286,32 +307,46 @@ export default function AdminDashboardPage() {
                 View dispatch queue →
               </Link>
             ) : (
-              <p className="text-xs text-green-600">All jobs assigned</p>
+              <p className="text-xs text-emerald-500">All jobs assigned</p>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Revenue Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Revenue (Last 30 Days)</CardTitle>
+            <CardTitle className="text-base">Revenue Trend</CardTitle>
+            <CardDescription>Last 30 days</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={revenueData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={4} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, "Revenue"]} />
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={4} className="text-muted-foreground" />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v}`} className="text-muted-foreground" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "var(--radius)",
+                    }}
+                    formatter={(value: number) => [`$${value.toFixed(2)}`, "Revenue"]}
+                  />
                   <Area
                     type="monotone"
                     dataKey="revenue"
                     stroke="hsl(var(--primary))"
-                    fill="hsl(var(--primary))"
-                    fillOpacity={0.2}
+                    fillOpacity={1}
+                    fill="url(#colorRevenue)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -319,20 +354,26 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Booking Status */}
         <Card>
           <CardHeader>
-            <CardTitle>Booking Status (Last 30 Days)</CardTitle>
+            <CardTitle className="text-base">Booking Status</CardTitle>
+            <CardDescription>Last 30 days</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={bookingStatusData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "var(--radius)",
+                    }}
+                  />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -344,55 +385,49 @@ export default function AdminDashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Upcoming Bookings</CardTitle>
+            <CardTitle className="text-base">Upcoming Bookings</CardTitle>
             <CardDescription>Next scheduled cleanings</CardDescription>
           </div>
-          <Link href="/admin/bookings">
-            <Button variant="ghost" size="sm">
-              View All <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </Link>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/bookings">
+              View All
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           {upcomingBookings.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">
-              No upcoming bookings
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Activity className="h-10 w-10 text-muted-foreground/50 mb-2" />
+              <p className="text-sm text-muted-foreground">No upcoming bookings</p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {upcomingBookings.map((booking) => (
                 <div
                   key={booking.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <Calendar className="h-5 w-5 text-primary" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <Calendar className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium">
+                      <p className="text-sm font-medium">
                         {booking.first_name} {booking.last_name}
                         {booking.booking_number && (
-                          <span className="text-muted-foreground ml-2">
+                          <span className="ml-2 text-muted-foreground">
                             #{booking.booking_number}
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {format(parseISO(booking.service_date), "MMM d")} • {booking.time_slot} • {booking.city}
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant={
-                      booking.status === "confirmed"
-                        ? "default"
-                        : booking.status === "completed"
-                        ? "secondary"
-                        : "outline"
-                    }
-                  >
+                  <Badge variant={booking.status === "confirmed" ? "default" : "secondary"}>
                     {booking.status || "Pending"}
                   </Badge>
                 </div>
@@ -405,48 +440,42 @@ export default function AdminDashboardPage() {
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-3">
         <Link href="/admin/bookings/intake">
-          <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">New Booking</h3>
-                  <p className="text-sm text-muted-foreground">Create manual intake</p>
-                </div>
+          <Card className="group hover:border-primary/50 transition-colors cursor-pointer h-full">
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <Calendar className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium">New Booking</h3>
+                <p className="text-sm text-muted-foreground">Create manual intake</p>
               </div>
             </CardContent>
           </Card>
         </Link>
 
         <Link href="/admin/dispatch">
-          <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Truck className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Dispatch Center</h3>
-                  <p className="text-sm text-muted-foreground">Manage job assignments</p>
-                </div>
+          <Card className="group hover:border-primary/50 transition-colors cursor-pointer h-full">
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <Truck className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium">Dispatch Center</h3>
+                <p className="text-sm text-muted-foreground">Manage job assignments</p>
               </div>
             </CardContent>
           </Card>
         </Link>
 
         <Link href="/admin/metrics">
-          <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">View Reports</h3>
-                  <p className="text-sm text-muted-foreground">Analytics dashboard</p>
-                </div>
+          <Card className="group hover:border-primary/50 transition-colors cursor-pointer h-full">
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <TrendingUp className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium">View Reports</h3>
+                <p className="text-sm text-muted-foreground">Analytics dashboard</p>
               </div>
             </CardContent>
           </Card>

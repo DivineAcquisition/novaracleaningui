@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -17,8 +18,6 @@ import {
   Clock,
   ArrowRight,
   Phone,
-  Mail,
-  MapPin,
   Loader2,
 } from "lucide-react";
 
@@ -43,10 +42,7 @@ export default function TryLandingPage() {
 
     setIsLoading(true);
     try {
-      // Store ZIP in session storage
       sessionStorage.setItem("booking_zip", zipCode);
-      
-      // Proceed to lead capture
       setStep("lead");
     } catch (error) {
       console.error("Error checking ZIP:", error);
@@ -65,7 +61,6 @@ export default function TryLandingPage() {
 
     setIsLoading(true);
     try {
-      // Fire webhook for GHL/Zapier (lead capture)
       try {
         await supabase.functions.invoke("send-lead-capture-webhook", {
           body: {
@@ -81,9 +76,7 @@ export default function TryLandingPage() {
         console.error("Webhook error:", webhookError);
       }
 
-      // Store lead data in session
       sessionStorage.setItem("booking_lead", JSON.stringify({ ...formData, zipCode }));
-
       router.push("/try/sqft");
     } catch (error) {
       console.error("Error submitting lead:", error);
@@ -94,261 +87,247 @@ export default function TryLandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold text-primary">NovaraCleaning</span>
+            <Sparkles className="h-6 w-6 text-primary" />
+            <span className="text-lg font-semibold text-primary">NovaraCleaning</span>
           </div>
-          <a href="tel:+1234567890" className="hidden md:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-            <Phone className="h-4 w-4" />
-            (123) 456-7890
-          </a>
+          <Button variant="ghost" size="sm" asChild>
+            <a href="tel:+1234567890" className="gap-2">
+              <Phone className="h-4 w-4" />
+              <span className="hidden md:inline">(123) 456-7890</span>
+            </a>
+          </Button>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Content */}
-            <div className="space-y-8">
-              <Badge variant="secondary" className="text-sm px-4 py-2">
-                🎉 New Year Special - Limited Time!
-              </Badge>
-              
-              <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-                Professional House Cleaning
-                <span className="text-primary block mt-2">Starting at $189/mo</span>
-              </h1>
-              
-              <p className="text-xl text-muted-foreground max-w-lg">
-                Join thousands of happy homeowners enjoying spotless homes. 
-                Your first clean is included with membership!
-              </p>
+      <section className="flex-1 container py-12 lg:py-20">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* Left Content */}
+          <div className="space-y-6">
+            <Badge variant="secondary" className="gap-1">
+              🎉 New Year Special - Limited Time!
+            </Badge>
+            
+            <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">
+              Professional House Cleaning
+              <span className="text-primary block">Starting at $189/mo</span>
+            </h1>
+            
+            <p className="text-lg text-muted-foreground max-w-md">
+              Join thousands of happy homeowners enjoying spotless homes. 
+              Your first clean is included with membership!
+            </p>
 
-              <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <span>Background-checked cleaners</span>
+            <div className="flex flex-col gap-2">
+              {[
+                "Background-checked cleaners",
+                "100% satisfaction guarantee",
+                "Eco-friendly products",
+              ].map((feature, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                  <span>{feature}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <span>100% satisfaction guarantee</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <span>Eco-friendly products</span>
-                </div>
-              </div>
-
-              {/* Trust Signals */}
-              <div className="flex items-center gap-6 pt-4">
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  ))}
-                  <span className="ml-2 font-semibold">4.9/5</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-blue-500" />
-                  <span className="text-sm">Google Guaranteed</span>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Right Form */}
-            <Card className="shadow-2xl border-0 bg-white">
-              <CardContent className="p-8">
-                {step === "zip" ? (
-                  <form onSubmit={handleZipSubmit} className="space-y-6">
-                    <div className="text-center mb-6">
-                      <h2 className="text-2xl font-bold">Get Your Quote</h2>
-                      <p className="text-muted-foreground mt-1">
-                        Enter your ZIP code to check availability
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="zipCode" className="text-base">ZIP Code</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input
-                          id="zipCode"
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          maxLength={5}
-                          placeholder="Enter your ZIP code"
-                          value={zipCode}
-                          onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ""))}
-                          className="pl-10 h-14 text-lg"
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      className="w-full h-14 text-lg"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <>
-                          Check Availability
-                          <ArrowRight className="ml-2 h-5 w-5" />
-                        </>
-                      )}
-                    </Button>
-
-                    <p className="text-center text-sm text-muted-foreground">
-                      Takes less than 2 minutes to book
-                    </p>
-                  </form>
-                ) : (
-                  <form onSubmit={handleLeadSubmit} className="space-y-6">
-                    <div className="text-center mb-6">
-                      <h2 className="text-2xl font-bold">Almost There!</h2>
-                      <p className="text-muted-foreground mt-1">
-                        Enter your details to see available services
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName">First Name</Label>
-                        <Input
-                          id="firstName"
-                          placeholder="John"
-                          value={formData.firstName}
-                          onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                          className="h-12"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName">Last Name</Label>
-                        <Input
-                          id="lastName"
-                          placeholder="Smith"
-                          value={formData.lastName}
-                          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                          className="h-12"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="john@example.com"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="pl-10 h-12"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="(555) 123-4567"
-                          value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                          className="pl-10 h-12"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      className="w-full h-14 text-lg"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <>
-                          Continue
-                          <ArrowRight className="ml-2 h-5 w-5" />
-                        </>
-                      )}
-                    </Button>
-
-                    <p className="text-center text-xs text-muted-foreground">
-                      By continuing, you agree to our Terms of Service and Privacy Policy.
-                    </p>
-                  </form>
-                )}
-              </CardContent>
-            </Card>
+            {/* Trust Signals */}
+            <div className="flex items-center gap-6 pt-2">
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                ))}
+                <span className="ml-1 text-sm font-medium">4.9/5</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-sm">
+                <Shield className="h-4 w-4 text-blue-500" />
+                <span>Google Guaranteed</span>
+              </div>
+            </div>
           </div>
+
+          {/* Right Form */}
+          <Card className="shadow-lg">
+            <CardHeader className="text-center pb-4">
+              <CardTitle>Get Your Quote</CardTitle>
+              <CardDescription>
+                {step === "zip" 
+                  ? "Enter your ZIP code to check availability"
+                  : "Enter your details to see available services"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {step === "zip" ? (
+                <form onSubmit={handleZipSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="zipCode">ZIP Code</Label>
+                    <Input
+                      id="zipCode"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={5}
+                      placeholder="Enter your ZIP code"
+                      value={zipCode}
+                      onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ""))}
+                      className="h-12 text-lg"
+                      autoFocus
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Checking...
+                      </>
+                    ) : (
+                      <>
+                        Check Availability
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-center text-xs text-muted-foreground">
+                    Takes less than 2 minutes to book
+                  </p>
+                </form>
+              ) : (
+                <form onSubmit={handleLeadSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        placeholder="John"
+                        value={formData.firstName}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        placeholder="Smith"
+                        value={formData.lastName}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="john@example.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="(555) 123-4567"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Continue
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-center text-xs text-muted-foreground">
+                    By continuing, you agree to our Terms of Service and Privacy Policy.
+                  </p>
+                </form>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">
+      <section className="border-t bg-muted/30 py-16">
+        <div className="container">
+          <h2 className="text-2xl font-bold text-center mb-10">
             Why Choose NovaraCleaning?
           </h2>
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Shield className="h-8 w-8 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Trusted Professionals</h3>
-              <p className="text-muted-foreground">
-                All cleaners are background-checked, insured, and trained to our high standards.
-              </p>
-            </div>
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock className="h-8 w-8 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Flexible Scheduling</h3>
-              <p className="text-muted-foreground">
-                Book online 24/7. Easily reschedule or modify your appointments anytime.
-              </p>
-            </div>
-            <div className="text-center p-6">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Satisfaction Guaranteed</h3>
-              <p className="text-muted-foreground">
-                Not happy? We'll come back and make it right, or your money back.
-              </p>
-            </div>
+            {[
+              {
+                icon: Shield,
+                title: "Trusted Professionals",
+                description: "All cleaners are background-checked, insured, and trained to our high standards.",
+              },
+              {
+                icon: Clock,
+                title: "Flexible Scheduling",
+                description: "Book online 24/7. Easily reschedule or modify your appointments anytime.",
+              },
+              {
+                icon: CheckCircle,
+                title: "Satisfaction Guaranteed",
+                description: "Not happy? We'll come back and make it right, or your money back.",
+              },
+            ].map((feature, i) => (
+              <Card key={i} className="text-center border-0 shadow-none bg-transparent">
+                <CardContent className="pt-6">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                    <feature.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Promo Banner */}
-      <section className="py-12 bg-gradient-to-r from-primary to-accent text-white">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">
+      <section className="bg-primary text-primary-foreground py-10">
+        <div className="container text-center space-y-4">
+          <h2 className="text-2xl font-bold">
             New Year Special: Save $50 on Your First Clean! 🎊
           </h2>
-          <p className="text-xl opacity-90 mb-6">
-            Use code <span className="font-bold bg-white/20 px-3 py-1 rounded">NEWYEAR</span> at checkout
+          <p className="text-primary-foreground/90">
+            Use code <Badge variant="secondary" className="mx-1 font-mono">NEWYEAR</Badge> at checkout
           </p>
           <Button
             size="lg"
@@ -356,23 +335,21 @@ export default function TryLandingPage() {
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
             Claim Your Discount
-            <ArrowRight className="ml-2 h-5 w-5" />
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-8 bg-muted/50">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-6 w-6 text-primary" />
-              <span className="font-semibold">NovaraCleaning</span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} NovaraCleaning. All rights reserved.
-            </p>
+      <footer className="border-t py-6">
+        <div className="container flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <span className="font-medium">NovaraCleaning</span>
           </div>
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} NovaraCleaning. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>

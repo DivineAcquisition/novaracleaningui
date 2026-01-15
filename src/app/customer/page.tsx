@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import {
@@ -16,7 +18,7 @@ import {
   Clock,
   MapPin,
   Sparkles,
-  Loader2,
+  Activity,
 } from "lucide-react";
 
 interface Booking {
@@ -55,7 +57,6 @@ export default function CustomerDashboardPage() {
       try {
         const today = format(new Date(), "yyyy-MM-dd");
 
-        // Fetch next upcoming booking
         const { data: bookings } = await supabase
           .from("bookings")
           .select("id, service_date, time_slot, service_type, status, city")
@@ -69,7 +70,6 @@ export default function CustomerDashboardPage() {
           setNextBooking(bookings[0]);
         }
 
-        // Fetch membership credits
         const { data: membershipData } = await supabase
           .from("membership_credits")
           .select("membership_plan, credits_remaining, credits_per_month, current_period_end")
@@ -78,7 +78,6 @@ export default function CustomerDashboardPage() {
 
         setMembership(membershipData);
 
-        // Fetch customer for referral code
         const { data: customer } = await supabase
           .from("customers")
           .select("referral_code")
@@ -89,7 +88,6 @@ export default function CustomerDashboardPage() {
           setReferralCode(customer.referral_code);
         }
 
-        // Fetch recent activity
         const { data: activity } = await supabase
           .from("bookings")
           .select("id, service_date, time_slot, service_type, status, city")
@@ -112,28 +110,36 @@ export default function CustomerDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-40" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Welcome back, {userName}! 👋</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {userName}! 👋</h1>
+          <p className="text-sm text-muted-foreground">
             Manage your cleanings and membership from here
           </p>
         </div>
-        <Link href="/customer/bookings/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
+        <Button asChild>
+          <Link href="/customer/bookings/new">
+            <Plus className="mr-2 h-4 w-4" />
             Book a Cleaning
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
       {/* Quick Stats */}
@@ -141,8 +147,8 @@ export default function CustomerDashboardPage() {
         {/* Next Booking */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary" />
               Next Cleaning
             </CardTitle>
           </CardHeader>
@@ -152,25 +158,23 @@ export default function CustomerDashboardPage() {
                 <p className="text-2xl font-bold">
                   {format(parseISO(nextBooking.service_date), "MMM d")}
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  {nextBooking.time_slot}
-                </p>
-                <Link href={`/customer/bookings/${nextBooking.id}`}>
-                  <Button variant="outline" size="sm" className="mt-2">
+                <p className="text-sm text-muted-foreground">{nextBooking.time_slot}</p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/customer/bookings/${nextBooking.id}`}>
                     View Details
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </Link>
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
               </div>
             ) : (
               <div className="space-y-2">
-                <p className="text-muted-foreground">No upcoming bookings</p>
-                <Link href="/customer/bookings/new">
-                  <Button variant="outline" size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
+                <p className="text-sm text-muted-foreground">No upcoming bookings</p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/customer/bookings/new">
+                    <Plus className="mr-2 h-4 w-4" />
                     Schedule One
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             )}
           </CardContent>
@@ -179,37 +183,35 @@ export default function CustomerDashboardPage() {
         {/* Membership Credits */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Crown className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Crown className="h-4 w-4 text-primary" />
               Membership
             </CardTitle>
           </CardHeader>
           <CardContent>
             {membership ? (
               <div className="space-y-2">
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-1">
                   <p className="text-2xl font-bold">{membership.credits_remaining}</p>
-                  <p className="text-sm text-muted-foreground">
-                    / {membership.credits_per_month} credits
-                  </p>
+                  <p className="text-sm text-muted-foreground">/ {membership.credits_per_month} credits</p>
                 </div>
                 <Badge variant="secondary">{membership.membership_plan}</Badge>
-                <Link href="/customer/membership">
-                  <Button variant="outline" size="sm" className="mt-2">
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <Link href="/customer/membership">
                     Manage
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </Link>
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
               </div>
             ) : (
               <div className="space-y-2">
-                <p className="text-muted-foreground">Not a member yet</p>
-                <Link href="/customer/membership">
-                  <Button variant="outline" size="sm">
-                    <Crown className="h-4 w-4 mr-2" />
+                <p className="text-sm text-muted-foreground">Not a member yet</p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/customer/membership">
+                    <Crown className="mr-2 h-4 w-4" />
                     Join Now
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             )}
           </CardContent>
@@ -218,8 +220,8 @@ export default function CustomerDashboardPage() {
         {/* Referral Program */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Gift className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Gift className="h-4 w-4 text-primary" />
               Referrals
             </CardTitle>
           </CardHeader>
@@ -227,22 +229,18 @@ export default function CustomerDashboardPage() {
             <div className="space-y-2">
               {referralCode ? (
                 <>
-                  <p className="text-sm text-muted-foreground">Your code:</p>
-                  <p className="text-xl font-bold font-mono tracking-wider">
-                    {referralCode}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Your code:</p>
+                  <p className="text-xl font-bold font-mono tracking-wider">{referralCode}</p>
                 </>
               ) : (
-                <p className="text-muted-foreground">
-                  Share & earn $25 per referral
-                </p>
+                <p className="text-sm text-muted-foreground">Share & earn $25 per referral</p>
               )}
-              <Link href="/customer/referrals">
-                <Button variant="outline" size="sm" className="mt-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/customer/referrals">
                   View Program
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -251,34 +249,23 @@ export default function CustomerDashboardPage() {
       {/* Quick Actions */}
       <Card>
         <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
+          <CardTitle className="text-base">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Link href="/customer/bookings/new">
-              <Button variant="outline" className="w-full h-auto py-4 flex-col gap-2">
-                <Plus className="h-5 w-5" />
-                <span>Book Cleaning</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { href: "/customer/bookings/new", icon: Plus, label: "Book Cleaning" },
+              { href: "/customer/bookings", icon: Calendar, label: "View Bookings" },
+              { href: "/customer/addresses", icon: MapPin, label: "Manage Addresses" },
+              { href: "/customer/referrals", icon: Gift, label: "Share & Earn" },
+            ].map((action) => (
+              <Button key={action.href} variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
+                <Link href={action.href}>
+                  <action.icon className="h-5 w-5" />
+                  <span className="text-xs">{action.label}</span>
+                </Link>
               </Button>
-            </Link>
-            <Link href="/customer/bookings">
-              <Button variant="outline" className="w-full h-auto py-4 flex-col gap-2">
-                <Calendar className="h-5 w-5" />
-                <span>View Bookings</span>
-              </Button>
-            </Link>
-            <Link href="/customer/addresses">
-              <Button variant="outline" className="w-full h-auto py-4 flex-col gap-2">
-                <MapPin className="h-5 w-5" />
-                <span>Manage Addresses</span>
-              </Button>
-            </Link>
-            <Link href="/customer/referrals">
-              <Button variant="outline" className="w-full h-auto py-4 flex-col gap-2">
-                <Gift className="h-5 w-5" />
-                <span>Share & Earn</span>
-              </Button>
-            </Link>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -287,35 +274,36 @@ export default function CustomerDashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle className="text-base">Recent Activity</CardTitle>
             <CardDescription>Your cleaning history</CardDescription>
           </div>
-          <Link href="/customer/bookings">
-            <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/customer/bookings">
               View All
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </Link>
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           {recentActivity.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">
-              No bookings yet. Schedule your first cleaning!
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Activity className="h-10 w-10 text-muted-foreground/50 mb-2" />
+              <p className="text-sm text-muted-foreground">No bookings yet. Schedule your first cleaning!</p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {recentActivity.map((booking) => (
                 <div
                   key={booking.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
+                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <Sparkles className="h-5 w-5 text-primary" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <Sparkles className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium">{booking.service_type}</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm font-medium">{booking.service_type}</p>
+                      <p className="text-xs text-muted-foreground">
                         {format(parseISO(booking.service_date), "MMM d, yyyy")} • {booking.city}
                       </p>
                     </div>

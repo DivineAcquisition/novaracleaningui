@@ -3,7 +3,9 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { Sparkles, Phone } from "lucide-react";
+import { Toaster } from "sonner";
 
 const steps = [
   { path: "/try", label: "Start", step: 0 },
@@ -21,7 +23,6 @@ export default function TryLayout({
 }) {
   const pathname = usePathname();
   
-  // Landing page has no progress bar
   const isLandingPage = pathname === "/try" || pathname === "/try/";
   const isCustomQuote = pathname?.includes("/custom-quote");
   
@@ -29,53 +30,57 @@ export default function TryLayout({
   const progress = currentStep > 0 ? (currentStep / (steps.length - 1)) * 100 : 0;
 
   if (isLandingPage || isCustomQuote) {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <Toaster position="top-center" richColors />
+      </>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/try" className="flex items-center gap-2">
-              <Sparkles className="h-7 w-7 text-primary" />
-              <span className="text-xl font-bold text-primary">NovaraCleaning</span>
-            </Link>
-            
-            <a
-              href="tel:+1234567890"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-            >
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 items-center justify-between">
+          <Link href="/try" className="flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            <span className="font-semibold text-primary">NovaraCleaning</span>
+          </Link>
+          
+          <Button variant="ghost" size="sm" asChild>
+            <a href="tel:+1234567890" className="gap-2">
               <Phone className="h-4 w-4" />
               <span className="hidden sm:inline">(123) 456-7890</span>
             </a>
-          </div>
-
-          {/* Progress bar */}
-          {currentStep > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                <span>Step {currentStep} of {steps.length - 1}</span>
-                <span>{Math.round(progress)}% complete</span>
-              </div>
-              <Progress value={progress} className="h-1.5" />
-            </div>
-          )}
+          </Button>
         </div>
+
+        {/* Progress bar */}
+        {currentStep > 0 && (
+          <div className="container pb-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+              <span>Step {currentStep} of {steps.length - 1}</span>
+              <span>{Math.round(progress)}% complete</span>
+            </div>
+            <Progress value={progress} className="h-1" />
+          </div>
+        )}
       </header>
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="flex-1 container py-8 max-w-3xl">
         {children}
       </main>
 
       {/* Footer */}
-      <footer className="border-t bg-white/50 py-4">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+      <footer className="border-t py-4">
+        <div className="container text-center text-sm text-muted-foreground">
           Questions? Call us at (123) 456-7890 or email support@novaracleaning.com
         </div>
       </footer>
+      
+      <Toaster position="top-center" richColors />
     </div>
   );
 }
