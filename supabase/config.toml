@@ -162,3 +162,17 @@ verify_jwt = false
 [functions.send-lead-capture-webhook]
 verify_jwt = false
 
+[functions.add-to-waitlist]
+verify_jwt = false
+
+[functions.send-abandoned-cart-email]
+verify_jwt = false
+
+[functions.check-abandoned-carts]
+verify_jwt = false
+
+[functions.track-abandoned-cart]
+verify_jwt = false
+
+[functions.mark-cart-converted]
+verify_jwt = false

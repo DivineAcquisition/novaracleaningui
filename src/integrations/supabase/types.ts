@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      abandoned_carts: {
+        Row: {
+          booking_data: Json | null
+          converted_at: string | null
+          created_at: string | null
+          email: string
+          first_name: string | null
+          home_size: string | null
+          id: string
+          last_name: string | null
+          last_step: string | null
+          phone: string | null
+          reminder_count: number | null
+          reminder_sent_at: string | null
+          service_type: string | null
+          updated_at: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          booking_data?: Json | null
+          converted_at?: string | null
+          created_at?: string | null
+          email: string
+          first_name?: string | null
+          home_size?: string | null
+          id?: string
+          last_name?: string | null
+          last_step?: string | null
+          phone?: string | null
+          reminder_count?: number | null
+          reminder_sent_at?: string | null
+          service_type?: string | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          booking_data?: Json | null
+          converted_at?: string | null
+          created_at?: string | null
+          email?: string
+          first_name?: string | null
+          home_size?: string | null
+          id?: string
+          last_name?: string | null
+          last_step?: string | null
+          phone?: string | null
+          reminder_count?: number | null
+          reminder_sent_at?: string | null
+          service_type?: string | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
       addresses: {
         Row: {
           bathrooms: number | null
@@ -1406,6 +1460,54 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      waitlist: {
+        Row: {
+          city: string | null
+          converted_at: string | null
+          created_at: string | null
+          email: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          notified_at: string | null
+          phone: string | null
+          source: string | null
+          state: string | null
+          updated_at: string | null
+          zip_code: string
+        }
+        Insert: {
+          city?: string | null
+          converted_at?: string | null
+          created_at?: string | null
+          email: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notified_at?: string | null
+          phone?: string | null
+          source?: string | null
+          state?: string | null
+          updated_at?: string | null
+          zip_code: string
+        }
+        Update: {
+          city?: string | null
+          converted_at?: string | null
+          created_at?: string | null
+          email?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notified_at?: string | null
+          phone?: string | null
+          source?: string | null
+          state?: string | null
+          updated_at?: string | null
+          zip_code?: string
         }
         Relationships: []
       }
