@@ -46,6 +46,7 @@ import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerAvailability from "./pages/cleaner/Availability";
 import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
+import ContractorCareers from "./pages/contractor/Careers";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
@@ -101,6 +102,9 @@ function ContractorRoutes() {
   return (
     <Routes>
       <Route path="/" element={<ContractorLanding />} />
+      <Route path="/careers" element={<ContractorCareers />} />
+      <Route path="/hiring" element={<ContractorCareers />} />
+      <Route path="/jobs" element={<ContractorCareers />} />
       <Route path="/cleaner/auth" element={<CleanerAuth />} />
       <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
       <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
