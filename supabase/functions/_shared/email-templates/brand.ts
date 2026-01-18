@@ -3,9 +3,9 @@
 export const BRAND = {
   name: 'Novara Cleaning',
   colors: {
-    primary: '#8B5CF6',
-    primaryDark: '#7C3AED',
-    secondary: '#EC4899',
+    primary: '#5500FF',
+    primaryDark: '#4400DD',
+    secondary: '#8F7BFD',
     success: '#10B981',
     warning: '#F59E0B',
     danger: '#EF4444',
@@ -20,7 +20,7 @@ export const BRAND = {
     },
   },
   gradient: {
-    primary: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+    primary: 'linear-gradient(135deg, #5500FF 0%, #8F7BFD 100%)',
   },
   spacing: {
     xs: '8px',
