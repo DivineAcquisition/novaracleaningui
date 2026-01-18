@@ -3,18 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, ChevronDown } from "lucide-react";
-import { BookingHeader } from "@/components/booking/BookingHeader";
+import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift, ChevronLeft, ChevronRight } from "lucide-react";
+import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { PaymentComparison } from "@/components/booking/PaymentComparison";
-import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
-import { Skeleton } from "@/components/ui/skeleton";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
@@ -24,29 +23,31 @@ import { cn } from "@/lib/utils";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
-import { BookingFooter } from "@/components/booking/BookingFooter";
-import { PageTransition } from "@/components/booking/PageTransition";
+import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
+import { PaymentComparison } from "@/components/booking/PaymentComparison";
+import { useSwipeable } from "react-swipeable";
+
+// Stripe publishable key will be loaded from an Edge Function at runtime
 
 const BOOKING_STEPS = [
-  { number: 1, label: "Location", path: "/book/zip" },
-  { number: 2, label: "Home Size", path: "/book/sqft" },
-  { number: 3, label: "Service", path: "/book/offer" },
-  { number: 4, label: "Checkout", path: "/book/checkout" },
-  { number: 5, label: "Details", path: "/book/details" },
-  { number: 6, label: "Confirm", path: "/book/confirmation" }
+  { number: 1, label: "Location" },
+  { number: 2, label: "Home Size" },
+  { number: 3, label: "Service" },
+  { number: 4, label: "Schedule" },
+  { number: 5, label: "Details" },
+  { number: 6, label: "Payment" },
 ];
 
 const TIME_SLOT_LABELS: Record<string, string> = {
   "8-12": "8:00 AM - 12:00 PM",
   "12-16": "12:00 PM - 4:00 PM",
-  "16-20": "4:00 PM - 8:00 PM"
+  "16-20": "4:00 PM - 8:00 PM",
 };
 
 export default function BookingCheckout() {
   const navigate = useNavigate();
   const { bookingData, currentStep, updateBookingData } = useBooking();
   const { user } = useAuth();
-  
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -54,100 +55,94 @@ export default function BookingCheckout() {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [isNewCustomer, setIsNewCustomer] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const MAX_RETRIES = 3;
-  
-  // Referral Code state
-  const [referralInput, setReferralInput] = useState('');
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [referralCode, setReferralCode] = useState<string>('');
   const [isValidatingReferral, setIsValidatingReferral] = useState(false);
-  const [appliedReferralCode, setAppliedReferralCode] = useState<string | null>(null);
-  const [referralDiscount, setReferralDiscount] = useState(0);
-  
-  // Promo Code state
-  const [promoInput, setPromoInput] = useState('');
+  const [referralValid, setReferralValid] = useState<boolean | null>(null);
+  const [promoCode, setPromoCode] = useState<string>('');
   const [isValidatingPromo, setIsValidatingPromo] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
-  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [autoAppliedPromo, setAutoAppliedPromo] = useState<EligiblePromo | null>(null);
   const [isAutoApplying, setIsAutoApplying] = useState(false);
-  const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
-  const [discountSectionOpen, setDiscountSectionOpen] = useState(false);
-
-  const isScheduleSelected = !!bookingData.serviceDate && !!bookingData.timeSlot;
-
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
-  const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
-  const isMemberUsingCredit = bookingData.useCredit === true;
 
-  // Initialize Stripe
   useEffect(() => {
+    // Ensure default payment option for old localStorage payloads
     if (!bookingData.paymentOption) {
       updateBookingData({ paymentOption: 'deposit' });
     }
 
+    // Fetch publishable key from Edge Function (public)
     const init = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
-        
-        if (error || !data?.key) {
-          const response = await fetch('https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/get-stripe-publishable-key', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
-            }
-          });
-          
-          if (!response.ok) throw new Error('Failed to fetch Stripe key');
-          const fallbackData = await response.json();
-          if (!fallbackData?.key) throw new Error('No Stripe key in response');
-          setStripePromise(loadStripe(fallbackData.key));
-          return;
-        }
-        
-        setStripePromise(loadStripe(data.key));
-      } catch (err: any) {
-        console.error('Stripe initialization failed:', err);
-        setInitError('Unable to load payment system. Please try again.');
+      const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
+      if (error || !data?.key) {
+        console.error('Stripe key missing or error', error || data);
+        toast.error('Payments are temporarily unavailable. Please contact support.');
+        return;
       }
+      setStripePromise(loadStripe(data.key));
     };
     init();
   }, []);
 
-  // Check if new customer and auto-apply best promo
+  // Check customer booking history to determine if they are a new customer
   useEffect(() => {
     const checkNewCustomer = async () => {
       if (!bookingData.email) return;
+      
       const { data } = await supabase
         .from('bookings')
         .select('id, status')
         .eq('email', bookingData.email)
         .in('status', ['confirmed', 'completed'])
         .limit(1);
-
+      
+      // Only truly first-time customers (no confirmed/completed bookings) get the discount
       const isNew = !data || data.length === 0;
       setIsNewCustomer(isNew);
+
+      // Auto-apply best promo code for this customer
       await autoApplyBestPromo(isNew);
     };
+    
     checkNewCustomer();
   }, [bookingData.email]);
 
+  // Auto-apply the best eligible promo code
   const autoApplyBestPromo = async (isNew: boolean) => {
     if (!bookingData.email || isAutoApplying) return;
+    
     setIsAutoApplying(true);
     try {
       const subtotal = calculatePrice(
-        bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns,
-        bookingData.membershipPlan, bookingData.useCredit, isNew, 0
+        bookingData.homeSizeId,
+        bookingData.serviceType,
+        bookingData.addOns,
+        bookingData.membershipPlan,
+        bookingData.useCredit,
+        isNew,
+        0
       ).subtotal;
-      
-      const bestPromo = await findBestPromoCode(supabase, bookingData.email, isNew, subtotal);
+
+      const bestPromo = await findBestPromoCode(
+        supabase,
+        bookingData.email,
+        isNew,
+        subtotal
+      );
+
       if (bestPromo) {
         setAutoAppliedPromo(bestPromo);
-        setAppliedPromoCode(bestPromo.code);
+        setPromoCode(bestPromo.code);
         setPromoDiscount(bestPromo.discount);
+        setPromoMessage(formatPromoSavings(bestPromo));
         updateBookingData({ promoCode: bestPromo.code });
-        toast.success(`🎉 ${bestPromo.description} auto-applied! Saving $${bestPromo.discount.toFixed(2)}`);
+        
+        toast.success(
+          `${bestPromo.description} - You're saving $${bestPromo.discount.toFixed(2)}!`,
+          { duration: 5000 }
+        );
       }
     } catch (error) {
       console.error('Error auto-applying promo:', error);
@@ -156,105 +151,101 @@ export default function BookingCheckout() {
     }
   };
 
-  // Swipe handlers
+  // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
-    onSwipeRight: () => navigate("/book/offer"),
-    step: 4
+    onSwipeRight: () => {
+      navigate("/book/details");
+    },
+    step: 6,
   });
 
-  // Get pricing data
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
   const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
   
   const depositPricing = calculatePrice(
-    bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns,
-    bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+    bookingData.useCredit,
+    isNewCustomer,
+    promoDiscount
   );
-  
+
   const fullPaymentPricing = calculateFullPaymentWithDiscount(
-    bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns,
-    bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+    bookingData.useCredit,
+    isNewCustomer,
+    promoDiscount
   );
 
-  // Handle Referral Code
-  const handleApplyReferral = async () => {
-    if (!referralInput.trim()) return;
-    setIsValidatingReferral(true);
-
-    try {
-      const { data: referral, error } = await supabase
-        .from('referrals')
-        .select('*')
-        .eq('code', referralInput.toUpperCase())
-        .eq('status', 'pending')
-        .single();
-
-      if (error || !referral) {
-        toast.error('Invalid or already used referral code');
-        return;
-      }
-
-      const discount = (referral.credit_cents || 2000) / 100;
-      setReferralDiscount(discount);
-      setAppliedReferralCode(referralInput.toUpperCase());
-      updateBookingData({ referralCode: referralInput.toUpperCase() });
-      toast.success(`Referral applied! $${discount.toFixed(2)} off`);
-    } catch (err) {
-      toast.error('Error validating referral code');
-    } finally {
-      setIsValidatingReferral(false);
-    }
-  };
-
-  const handleRemoveReferral = () => {
-    setReferralInput('');
-    setReferralDiscount(0);
-    setAppliedReferralCode(null);
-    updateBookingData({ referralCode: undefined });
-    toast.info('Referral code removed');
-  };
-
-  // Handle Promo Code
-  const handleApplyPromo = async () => {
-    if (!promoInput.trim()) return;
+  const handleValidatePromo = async () => {
+    if (!promoCode.trim()) return;
+    
     setIsValidatingPromo(true);
-
+    setPromoMessage(null);
+    setAutoAppliedPromo(null); // Clear auto-applied promo when manually validating
+    
     try {
       const { data: promo, error } = await supabase
         .from('promo_codes')
         .select('*')
-        .eq('code', promoInput.toUpperCase())
+        .eq('code', promoCode.toUpperCase())
         .eq('active', true)
         .single();
 
       if (error || !promo) {
+        setPromoMessage('Invalid promo code');
+        setPromoDiscount(0);
         toast.error('Invalid promo code');
         return;
       }
 
+      // Check expiration
       if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+        setPromoMessage('This promo code has expired');
+        setPromoDiscount(0);
         toast.error('This promo code has expired');
         return;
       }
 
+      // Check eligibility
       if (promo.applies_to === 'new_customers' && !isNewCustomer) {
+        setPromoMessage('This code is only for new customers');
+        setPromoDiscount(0);
         toast.error('This code is only for new customers');
         return;
       }
 
+      if (promo.applies_to === 'returning_customers' && isNewCustomer) {
+        setPromoMessage('This code is only for returning customers');
+        setPromoDiscount(0);
+        toast.error('This code is only for returning customers');
+        return;
+      }
+
+      // Calculate discount
       const subtotal = depositPricing.subtotal;
-      let discount = promo.type === 'percent' 
-        ? Math.round(subtotal * promo.value / 100 * 100) / 100 
-        : promo.value;
+      let discount = 0;
+      
+      if (promo.type === 'percent') {
+        discount = Math.round((subtotal * promo.value) / 100 * 100) / 100;
+      } else {
+        discount = promo.value;
+      }
 
       setPromoDiscount(discount);
-      setAppliedPromoCode(promoInput.toUpperCase());
-      setAutoAppliedPromo(null);
-      updateBookingData({ promoCode: promoInput.toUpperCase() });
-      toast.success(`🎉 Promo applied! Saving $${discount.toFixed(2)}`);
-      setShowPromoSuggestions(false);
+      setPromoMessage(`🎉 ${promo.value}% off applied!`);
+      updateBookingData({ promoCode: promoCode.toUpperCase() });
+      toast.success(`Promo code applied! You're saving $${discount}`);
     } catch (err) {
+      console.error('Error validating promo:', err);
+      setPromoMessage('Error validating promo code');
+      setPromoDiscount(0);
       toast.error('Error validating promo code');
     } finally {
       setIsValidatingPromo(false);
@@ -262,142 +253,91 @@ export default function BookingCheckout() {
   };
 
   const handleRemovePromo = () => {
-    setPromoInput('');
+    setPromoCode('');
     setPromoDiscount(0);
-    setAppliedPromoCode(null);
+    setPromoMessage(null);
     setAutoAppliedPromo(null);
     updateBookingData({ promoCode: undefined });
     toast.info('Promo code removed');
   };
 
-  const handlePaymentOptionChange = (option: 'deposit' | 'full') => {
-    updateBookingData({ paymentOption: option });
-    setClientSecret(null);
+  const handleBack = () => {
+    navigate("/book/summary");
   };
 
-  const handleBack = () => navigate("/book/offer");
+  const handlePaymentOptionChange = (value: 'deposit' | 'full') => {
+    updateBookingData({ paymentOption: value });
+    setClientSecret(null); // Reset payment intent when option changes
+    setInitError(null);
+  };
 
-  const handleMembershipCheckout = async () => {
+  // Trigger haptic feedback on mobile devices
+  const triggerHaptic = () => {
+    if (navigator.vibrate) {
+      navigator.vibrate(50); // Short, subtle vibration
+    }
+  };
+
+  // Swipe gesture handlers for payment option toggle
+  const paymentSwipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (effectivePaymentOption === 'deposit') {
+        triggerHaptic();
+        setSwipeDirection('left');
+        setTimeout(() => {
+          handlePaymentOptionChange('full');
+          setSwipeDirection(null);
+        }, 150);
+      }
+    },
+    onSwipedRight: () => {
+      if (effectivePaymentOption === 'full') {
+        triggerHaptic();
+        setSwipeDirection('right');
+        setTimeout(() => {
+          handlePaymentOptionChange('deposit');
+          setSwipeDirection(null);
+        }, 150);
+      }
+    },
+    trackMouse: false,
+    trackTouch: true,
+    delta: 50,
+    preventScrollOnSwipe: false,
+  });
+
+  const handleInitializePayment = async () => {
     setIsProcessing(true);
     setInitError(null);
+    
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { bookingData }
+      console.log("Creating payment intent with booking data:", bookingData);
+      
+      const { data, error } = await supabase.functions.invoke("create-payment-intent", {
+        body: bookingData,
       });
 
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-        toast.success("Redirecting to secure checkout...");
-      } else {
-        throw new Error("No checkout URL returned");
-      }
-    } catch (error: any) {
-      setInitError(error.message || "Failed to create checkout session");
-      toast.error("Failed to start checkout. Please try again.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleInitializePayment = async (attempt = 0) => {
-    if (isProcessing) return; // Prevent duplicate calls
-    
-    const email = bookingData.email?.trim();
-    if (!email || !bookingData.homeSizeId) {
-      console.log('[Checkout] Missing required data, skipping payment init');
-      return;
-    }
-    
-    setIsProcessing(true);
-    if (attempt === 0) setInitError(null);
-    
-    // Build payload with both email fields for compatibility
-    const payload = {
-      ...bookingData,
-      email,
-      customerEmail: email, // Also send as customerEmail for backward compatibility
-    };
-    
-    const FUNCTION_URL = 'https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/create-payment-intent';
-    const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
-    
-    try {
-      console.log(`[Checkout] Initializing payment intent (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
-      
-      let data: any = null;
-      let invokeError: Error | null = null;
-      
-      // Try supabase.functions.invoke first
-      try {
-        const result = await supabase.functions.invoke("create-payment-intent", {
-          body: payload
-        });
-        
-        if (result.error) {
-          invokeError = new Error(result.error.message || "Invoke failed");
-        } else {
-          data = result.data;
-        }
-      } catch (err: any) {
-        console.warn('[Checkout] Invoke failed, trying direct fetch...', err.message);
-        invokeError = err;
-      }
-      
-      // Fallback to direct fetch if invoke failed
-      if (!data && invokeError) {
-        console.log('[Checkout] Using direct fetch fallback');
-        const response = await fetch(FUNCTION_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': API_KEY,
-            'Authorization': `Bearer ${API_KEY}`
-          },
-          body: JSON.stringify(payload)
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Payment service error: ${response.status} - ${errorText}`);
-        }
-        
-        data = await response.json();
-      }
-      
-      if (!data?.clientSecret) {
-        const errorMsg = data?.error || data?.details || "No payment intent data received";
-        console.error('[Checkout] Invalid response:', data);
-        throw new Error(errorMsg);
+      if (error) {
+        console.error("Payment intent error:", error);
+        throw new Error(error.message || "Failed to initialize payment");
       }
 
-      console.log('[Checkout] Payment intent created successfully');
+      if (!data) {
+        throw new Error("No payment intent data received");
+      }
+
+      console.log("Payment intent created:", data);
+
+      // CRITICAL: Always require payment verification - no auto-confirmation
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
-      setRetryCount(0); // Reset retry count on success
-      setIsProcessing(false);
     } catch (error: any) {
-      console.error('[Checkout] Payment init error:', error);
-      
-      // Retry with exponential backoff
-      if (attempt < MAX_RETRIES) {
-        const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-        console.log(`[Checkout] Retrying in ${delay}ms...`);
-        setRetryCount(attempt + 1);
-        
-        setTimeout(() => {
-          setIsProcessing(false);
-          handleInitializePayment(attempt + 1);
-        }, delay);
-        return;
-      }
-      
-      // Final failure after all retries exhausted
-      setInitError(error.message || "Payment service unavailable. Please try again.");
-      toast.error("Payment setup failed. Please try again.");
-      setRetryCount(0);
+      console.error("Payment initialization error:", error);
+      const errorMessage = error.message || "Failed to initialize payment. Please try again.";
+      setInitError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -405,509 +345,597 @@ export default function BookingCheckout() {
   const handleRetryPayment = () => {
     setClientSecret(null);
     setInitError(null);
-    setRetryCount(0);
-    handleInitializePayment(0);
+    handleInitializePayment();
   };
 
   const handlePaymentSuccess = () => {
     toast.success("Payment successful!");
+    // Store booking ID in booking data for additional details page
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentIntent = urlParams.get('payment_intent');
     if (bookingId) {
       updateBookingData({ bookingId });
     }
-    navigate("/book/details?booking_id=" + bookingId);
+    navigate("/book/additional-details?booking_id=" + bookingId);
   };
 
-  // Initialize payment when all required fields are present
+  // Auto-initialize payment when component mounts
   useEffect(() => {
-    const email = bookingData.email?.trim();
-    const hasRequiredData = email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
-    
-    if (!hasRequiredData) {
-      console.log('[Checkout] Waiting for required data before initializing payment', {
-        hasEmail: !!email,
-        hasHomeSizeId: !!bookingData.homeSizeId,
-        hasServiceDate: !!bookingData.serviceDate,
-        hasTimeSlot: !!bookingData.timeSlot
-      });
-      return;
+    if (!clientSecret && !isProcessing) {
+      handleInitializePayment();
     }
-    
-    // Reset clientSecret when payment option changes to force re-init
-    if (clientSecret) return;
-    
-    const timer = setTimeout(() => {
-      if (!isProcessing && !initError) {
-        handleInitializePayment();
-      }
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, [bookingData.paymentOption, bookingData.email, bookingData.homeSizeId, bookingData.serviceDate, bookingData.timeSlot, clientSecret]);
+  }, [bookingData.paymentOption]);
 
-  const currentAmount = effectivePaymentOption === 'full' 
+  const currentAmount = bookingData.paymentOption === 'full' 
     ? fullPaymentPricing.finalAmount 
     : depositPricing.deposit;
 
-  const totalSavings = (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0) + 
-    (depositPricing.membershipDiscount || 0) + 
-    (effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0) + 
-    promoDiscount + referralDiscount;
-
-  const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
-
   return (
-    <PageTransition direction="forward">
-      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
-        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
-        
-        <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
-          
-
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
-              <Shield className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+      <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
+      
+      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
+        <Card variant="outlined" className="border-primary/30 shadow-card animate-fade-in">
+          <CardHeader className="text-center space-y-1.5 pb-5 md:pb-8">
+            <div className="mx-auto w-12 h-12 md:w-16 md:h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-2 md:mb-4 shadow-lavender">
+              <CreditCard className="w-6 h-6 md:w-8 md:h-8 text-white" />
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold">Secure Checkout</h1>
-            <p className="text-muted-foreground mt-1">Review your order and complete payment</p>
-          </div>
-
-          {/* Order Summary Grid */}
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Service Details Card */}
-            <Card className="border-primary/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  Service Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Service Type</span>
-                  <span className="font-medium">{serviceTier?.label || 'Standard'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Home Size</span>
-                  <span className="font-medium">{homeSize?.label || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Est. Duration</span>
-                  <span className="font-medium">{getEstimatedHours(bookingData.homeSizeId)} hours</span>
-                </div>
-                {addOnLabels.length > 0 && (
-                  <div className="pt-2 border-t">
-                    <span className="text-muted-foreground text-xs">Add-ons:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {addOnLabels.map((label, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{label}</Badge>
-                      ))}
+            <CardTitle className="text-base md:text-xl font-semibold font-jakarta">
+              Secure Checkout
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">
+              {autoAppliedPromo 
+                ? `Best discount applied! Saving you $${autoAppliedPromo.discount.toFixed(2)}`
+                : "Review your order and complete your booking"
+              }
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent className="space-y-5 md:space-y-8">
+            {/* Holiday Promotion Banner */}
+            <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 overflow-hidden relative">
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIi8+PC9zdmc+')] opacity-50"></div>
+              <CardContent className="p-4 md:p-6 relative z-10">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg animate-pulse">
+                      <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base md:text-lg font-bold text-foreground font-jakarta">
+                        🎄 Automatic Holiday Savings Applied!
+                      </p>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        {autoAppliedPromo 
+                          ? `${autoAppliedPromo.description} • Save $${autoAppliedPromo.discount.toFixed(2)}`
+                          : "We'll find the best discount for you • Up to 25% off"
+                        }
+                      </p>
                     </div>
                   </div>
-                )}
-                {membership && bookingData.membershipPlan !== 'none' && (
-                  <div className="pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-xs">Membership</span>
-                      <Badge className="bg-primary/10 text-primary text-xs">{membership.label}</Badge>
-                    </div>
+                  <div className="hidden sm:flex flex-col items-end gap-1">
+                    <Badge variant="secondary" className="text-xs font-semibold">Ends Jan 5</Badge>
+                    {autoAppliedPromo && (
+                      <Badge variant="default" className="text-xs bg-green-600">Auto-Applied</Badge>
+                    )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Schedule Summary Card */}
-            <Card className="border-primary/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-primary" />
-                  Schedule
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                {bookingData.serviceDate && bookingData.timeSlot ? (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Date
-                      </span>
-                      <span className="font-medium">
-                        {format(new Date(bookingData.serviceDate + 'T12:00:00'), "EEEE, MMM d, yyyy")}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        Time
-                      </span>
-                      <span className="font-medium">
-                        {bookingData.timeSlot}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5" />
-                        Location
-                      </span>
-                      <span className="font-medium">ZIP {bookingData.zipCode}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-4 space-y-3">
-                    <p className="text-muted-foreground">No schedule selected</p>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/book/offer')}>
-                      <ArrowLeft className="w-4 h-4 mr-2" />
-                      Go Back to Select Date & Time
-                    </Button>
+                </div>
+                {isAutoApplying && (
+                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Finding best discount for you...</span>
                   </div>
                 )}
               </CardContent>
             </Card>
-          </div>
 
-          {/* Gate: Show skeleton/message if schedule not selected */}
-          {!isScheduleSelected && (
-            <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
-              <CardContent className="py-8 text-center space-y-4">
-                <Calendar className="w-12 h-12 text-amber-500 mx-auto" />
-                <div>
-                  <h3 className="font-semibold text-lg">Schedule Required</h3>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    Please select a date and time for your cleaning before proceeding to payment.
+            {/* New Customer Discount Banner */}
+            {isNewCustomer && !user && (
+              <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">
+                <CardContent className="p-3 md:p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-600 flex items-center justify-center">
+                      <Gift className="w-4 h-4 md:w-5 md:h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold md:text-base text-green-700">New Customer Special!</p>
+                      <p className="text-xs md:text-sm text-green-600">You're saving $60 on this booking 🎉</p>
+                    </div>
+                  </div>
+                  <div className="text-base md:text-2xl font-bold text-green-700">-$60</div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Referral Code Input */}
+            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="referralCode" className="text-sm font-medium">
+                    Have a Referral Code?
+                  </Label>
+                  {referralValid !== null && (
+                    <Badge variant={referralValid ? "default" : "destructive"} className="text-xs">
+                      {referralValid ? '✓ Valid - $50 off!' : '✗ Invalid'}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    id="referralCode"
+                    placeholder="Enter code (e.g., ABC12345)"
+                    value={referralCode}
+                    onChange={(e) => {
+                      const code = e.target.value.toUpperCase();
+                      setReferralCode(code);
+                      setReferralValid(null);
+                      updateBookingData({ referralCode: code });
+                    }}
+                    maxLength={8}
+                    className="font-mono"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!referralCode || isValidatingReferral}
+                    onClick={async () => {
+                      setIsValidatingReferral(true);
+                      try {
+                        const { data } = await supabase
+                          .from('customers')
+                          .select('email')
+                          .eq('referral_code', referralCode)
+                          .maybeSingle();
+
+                        const isValid = !!data && data.email !== bookingData.email;
+                        setReferralValid(isValid);
+                        if (isValid) {
+                          toast.success('Referral code applied! You saved $50');
+                        } else {
+                          toast.error(data ? 'Cannot use your own referral code' : 'Invalid referral code');
+                        }
+                      } catch (error) {
+                        setReferralValid(false);
+                        toast.error('Error validating code');
+                      } finally {
+                        setIsValidatingReferral(false);
+                      }
+                    }}
+                  >
+                    {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
+                {referralValid && (
+                  <p className="text-xs text-green-600">
+                    🎉 You'll save $50 on this booking!
                   </p>
-                </div>
-                <Button onClick={() => navigate('/book/offer')} className="bg-gradient-primary">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Select Your Appointment
-                </Button>
+                )}
               </CardContent>
             </Card>
-          )}
 
-          {/* Show payment sections only when schedule is selected */}
-          {isScheduleSelected && (
-            <>
+            {/* Promo Code Input */}
+            <Card className="border-2 border-primary/30 bg-gradient-to-br from-accent/10 to-primary/10">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="promoCode" className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    {autoAppliedPromo ? 'Promo Applied' : 'Have a Different Promo Code?'}
+                  </Label>
+                  {promoMessage && (
+                    <Badge variant={promoDiscount > 0 ? "default" : "destructive"} className="text-xs">
+                      {promoDiscount > 0 ? `✓ -$${promoDiscount}` : '✗ Invalid'}
+                    </Badge>
+                  )}
+                </div>
+
+                {autoAppliedPromo && (
+                  <Alert className="bg-green-50 border-green-200">
+                    <Sparkles className="w-4 h-4 text-green-600" />
+                    <AlertTitle className="text-sm font-semibold text-green-800">
+                      Best discount automatically applied!
+                    </AlertTitle>
+                    <AlertDescription className="text-xs text-green-700">
+                      Code: <strong>{autoAppliedPromo.code}</strong> - {autoAppliedPromo.description}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="flex gap-2">
+                  <Input
+                    id="promoCode"
+                    placeholder={autoAppliedPromo ? "Override with different code" : "Enter promo code"}
+                    value={promoCode}
+                    onChange={(e) => {
+                      const code = e.target.value.toUpperCase();
+                      setPromoCode(code);
+                      setPromoMessage(null);
+                      if (!code) {
+                        setPromoDiscount(0);
+                        setAutoAppliedPromo(null);
+                      }
+                    }}
+                    maxLength={15}
+                    className="font-mono text-sm"
+                    disabled={isAutoApplying}
+                  />
+                  {promoCode && promoDiscount > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemovePromo}
+                      className="shrink-0"
+                    >
+                      Remove
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={!promoCode || isValidatingPromo || isAutoApplying}
+                      onClick={handleValidatePromo}
+                      className="bg-gradient-primary hover:opacity-90 shrink-0"
+                    >
+                      {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                    </Button>
+                  )}
+                </div>
+
+                {promoMessage && !autoAppliedPromo && (
+                  <p className={cn(
+                    "text-xs font-medium",
+                    promoDiscount > 0 ? "text-green-600" : "text-destructive"
+                  )}>
+                    {promoMessage}
+                  </p>
+                )}
+
+                {!autoAppliedPromo && (
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-semibold mb-1.5">Available codes:</p>
+                    <p>• <strong>HOLIDAY25</strong>: 25% off for new customers</p>
+                    <p>• <strong>JOLLY20</strong>: 20% off for returning customers</p>
+                    <p>• <strong>NEWYEAR15</strong>: 15% off any service</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Order Summary */}
+            <div className="space-y-6">
+            <h3 className="text-lg md:text-xl font-semibold" id="order-summary-heading">
+              Order Summary
+            </h3>
+              
+              <div className="grid gap-4 md:grid-cols-2" role="region" aria-labelledby="order-summary-heading">
+                <Card className="border-2 border-primary/30 shadow-md">
+                  <CardContent className="p-4 md:p-6 space-y-2 md:space-y-3">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
+                      <h4 className="font-semibold text-sm md:text-base">Service Details</h4>
+                    </div>
+                    <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Service</span>
+                        <span className="font-medium">{serviceTier?.label}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Home Size</span>
+                        <span className="font-medium">{homeSize?.label}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-border/40 pt-1.5 md:pt-2 mt-1.5 md:mt-2">
+                        <span className="text-muted-foreground">Estimated Time</span>
+                        <span className="font-semibold text-primary">
+                          {getEstimatedHours(bookingData.homeSizeId)} hrs @ ${HOURLY_RATE}/hr
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Membership</span>
+                        <span className="font-medium">{membership?.label}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-2 border-primary/30 shadow-md">
+                  <CardContent className="p-4 md:p-6 space-y-2 md:space-y-3">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Calendar className="w-4 h-4 md:w-5 md:h-5" />
+                      <h4 className="font-semibold text-sm md:text-base">Schedule</h4>
+                    </div>
+                    <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Date</span>
+                        <span className="font-medium">
+                          {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "MMM d, yyyy")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Time Window</span>
+                        <span className="font-medium">{TIME_SLOT_LABELS[bookingData.timeSlot]}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ZIP Code</span>
+                        <span className="font-medium">{bookingData.zipCode}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
               {/* Savings Visualizer */}
               <SavingsVisualizer
-                originalPrice={depositPricing.subtotal + (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0)}
-                newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0}
-                membershipDiscount={depositPricing.membershipDiscount || 0}
-                fullPaymentDiscount={effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0}
-                promoDiscount={promoDiscount + referralDiscount}
-                finalPrice={currentAmount}
-                isMembershipSignup={isNewMembershipSignup}
+                originalPrice={depositPricing.subtotal}
+                newCustomerDiscount={isNewCustomer ? 60 : 0}
+                membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0}
+                fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0}
+                promoDiscount={promoDiscount}
+                finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount}
               />
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">Choose Payment Option</h3>
-            <PaymentComparison
-              depositPricing={{
-                deposit: depositPricing.deposit,
-                balanceDue: depositPricing.balanceDue,
-                subtotal: depositPricing.subtotal,
-                newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
-                membershipDiscount: depositPricing.membershipDiscount || 0,
-              }}
-              fullPaymentPricing={{
-                originalTotal: fullPaymentPricing.originalTotal,
-                finalAmount: fullPaymentPricing.finalAmount,
-                discount: fullPaymentPricing.discount,
-                savings: fullPaymentPricing.savings,
-                newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
-              }}
-              selectedOption={effectivePaymentOption}
-              onSelect={handlePaymentOptionChange}
-            />
-          </div>
 
-          {/* Discount Codes Section - Collapsible */}
-          <Collapsible open={discountSectionOpen} onOpenChange={setDiscountSectionOpen}>
-            <Card className="border-primary/10">
-              <CollapsibleTrigger asChild>
-                <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-primary" />
-                      Have a Promo or Referral Code?
-                      {(appliedPromoCode || appliedReferralCode) && (
-                        <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
-                          Applied
-                        </Badge>
+              {/* Payment Comparison View */}
+              <div className="space-y-3">
+                <h3 className="text-lg md:text-xl font-semibold">Compare Payment Options</h3>
+                <PaymentComparison
+                  depositPricing={depositPricing}
+                  fullPaymentPricing={fullPaymentPricing}
+                  selectedOption={effectivePaymentOption}
+                  onSelect={handlePaymentOptionChange}
+                />
+              </div>
+
+              {/* Payment Option Selection */}
+              {!bookingData.useCredit && (
+                <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
+                  <CardContent className="p-4 md:p-6">
+                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                      <h4 className="font-semibold text-sm md:text-base flex items-center gap-2">
+                        <Zap className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                        Choose Your Payment Option
+                      </h4>
+                      <div className="md:hidden flex items-center gap-1 text-xs text-muted-foreground">
+                        <ChevronLeft className="w-3 h-3" />
+                        <span>Swipe</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </div>
+                    </div>
+                    <div 
+                      {...paymentSwipeHandlers}
+                      className={cn(
+                        "transition-transform duration-150",
+                        swipeDirection === 'left' && "md:transform-none -translate-x-2",
+                        swipeDirection === 'right' && "md:transform-none translate-x-2"
                       )}
-                    </CardTitle>
-                    <ChevronDown className={cn(
-                      "w-4 h-4 text-muted-foreground transition-transform",
-                      discountSectionOpen && "rotate-180"
-                    )} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="space-y-4 pt-0">
-                  {/* Referral Code */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium flex items-center gap-2">
-                      <Gift className="w-4 h-4 text-primary" />
-                      Referral Code
-                    </p>
-                    {appliedReferralCode ? (
-                      <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Gift className="w-4 h-4 text-green-600" />
-                          <span className="font-medium text-green-700 dark:text-green-400">{appliedReferralCode}</span>
-                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
-                            -${referralDiscount.toFixed(2)}
-                          </Badge>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={handleRemoveReferral}>
-                          Remove
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Enter referral code"
-                          value={referralInput}
-                          onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
-                          className="font-mono"
-                          maxLength={10}
-                        />
-                        <Button 
-                          onClick={handleApplyReferral} 
-                          disabled={!referralInput || isValidatingReferral}
-                          variant="outline"
-                        >
-                          {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  <Separator />
-
-                  {/* Promo Code */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-primary" />
-                      Promo Code
-                    </p>
-                    {appliedPromoCode ? (
-                      <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-green-600" />
-                          <span className="font-medium text-green-700 dark:text-green-400">{appliedPromoCode}</span>
-                          {autoAppliedPromo && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400 text-xs">Auto-applied</Badge>
-                          )}
-                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
-                            -${promoDiscount.toFixed(2)}
-                          </Badge>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={handleRemovePromo}>
-                          Remove
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Enter promo code"
-                            value={promoInput}
-                            onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                            className="font-mono"
-                            maxLength={15}
-                          />
-                          <Button 
-                            onClick={handleApplyPromo} 
-                            disabled={!promoInput || isValidatingPromo}
-                            variant="outline"
-                          >
-                            {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                          </Button>
-                        </div>
-                        
-                        {isAutoApplying && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Finding best available promo...
-                          </div>
-                        )}
-                        
-                        <button
-                          type="button"
-                          onClick={() => setShowPromoSuggestions(!showPromoSuggestions)}
-                          className="text-sm text-primary hover:underline"
-                        >
-                          {showPromoSuggestions ? 'Hide suggestions' : 'See available promos'}
-                        </button>
-                        
-                        {showPromoSuggestions && (
-                          <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
-                            <p className="text-muted-foreground">Try these codes:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {['HOLIDAY25', 'NEWYEAR15'].map(code => (
-                                <Badge 
-                                  key={code}
-                                  variant="outline" 
-                                  className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                                  onClick={() => {
-                                    setPromoInput(code);
-                                    setShowPromoSuggestions(false);
-                                  }}
-                                >
-                                  {code}
-                                </Badge>
-                              ))}
+                    >
+                      <RadioGroup 
+                        value={effectivePaymentOption} 
+                        onValueChange={handlePaymentOptionChange}
+                        className="space-y-3 md:space-y-4"
+                      >
+                        {/* Deposit Option */}
+                        <div className={cn(
+                          "relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50",
+                          bookingData.paymentOption === 'deposit' 
+                            ? "border-primary bg-primary/5 shadow-md" 
+                            : "border-border"
+                        )}>
+                          <RadioGroupItem value="deposit" id="deposit" className="mt-1" />
+                          <Label htmlFor="deposit" className="flex-1 cursor-pointer">
+                            <div className="space-y-1.5 md:space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-sm md:text-base">Pay Deposit Now</span>
+                                <span className="text-base md:text-lg font-bold text-primary">
+                                  ${depositPricing.deposit.toFixed(2)}
+                                </span>
+                              </div>
+                              <p className="text-xs md:text-sm text-muted-foreground">
+                                Balance after: ${depositPricing.balanceDue.toFixed(2)}
+                              </p>
+                              {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0 || promoDiscount > 0) && (
+                                <div className="text-[10px] md:text-xs space-y-0.5 pt-1.5 border-t border-border/50 mt-2">
+                                  {depositPricing.newCustomerDiscount > 0 && (
+                                    <div className="flex items-center justify-between text-green-600 font-semibold">
+                                      <span className="flex items-center gap-1">
+                                        <Gift className="w-3 h-3" />
+                                        New Customer $60 Off:
+                                      </span>
+                                      <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {depositPricing.membershipDiscount > 0 && (
+                                    <div className="flex justify-between text-success">
+                                      <span>Membership discount:</span>
+                                      <span className="font-medium">-${depositPricing.membershipDiscount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {promoDiscount > 0 && (
+                                    <div className="flex items-center justify-between text-green-600 font-semibold">
+                                      <span className="flex items-center gap-1">
+                                        <Gift className="w-3 h-3" />
+                                        Promo Code:
+                                      </span>
+                                      <span>-${promoDiscount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
+                          </Label>
+                        </div>
 
-          {/* Payment Section */}
-          <Card className="border-primary/20 shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
-                Payment Details
-              </CardTitle>
-              <CardDescription>
-                {effectivePaymentOption === 'deposit' 
-                  ? `Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} after service`
-                  : `Pay $${currentAmount.toFixed(2)} now • No balance due`
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              
-              {/* Membership Signup Flow */}
-              {isNewMembershipSignup && (
-                <div className="space-y-4">
-                  <div className="bg-primary/5 rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">Membership: {membership?.label}</span>
-                      <Badge className="bg-primary text-white">${membership?.monthlyPrice}/mo</Badge>
+                        {/* Full Payment Option */}
+                        <div className={cn(
+                          "relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50",
+                          bookingData.paymentOption === 'full' 
+                            ? "border-primary bg-primary/5 shadow-md" 
+                            : "border-border"
+                        )}>
+                          <RadioGroupItem value="full" id="full" className="mt-1" />
+                          <Label htmlFor="full" className="flex-1 cursor-pointer">
+                            <div className="space-y-1.5 md:space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                  <span className="font-semibold text-sm md:text-base">Pay in Full</span>
+                                  <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-1 bg-success/20 text-success rounded-full">
+                                    Save 10%
+                                  </span>
+                                </div>
+                                <span className="text-base md:text-lg font-bold text-primary">
+                                  ${fullPaymentPricing.finalAmount.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="space-y-0.5 md:space-y-1 text-[10px] md:text-xs">
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Original Total:</span>
+                                  <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
+                                </div>
+                                {fullPaymentPricing.newCustomerDiscount > 0 && (
+                                  <div className="flex items-center justify-between text-green-600 font-semibold">
+                                    <span className="flex items-center gap-1">
+                                      <Gift className="w-3 h-3" />
+                                      New Customer $60 Off:
+                                    </span>
+                                    <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between text-success font-medium">
+                                  <span>10% Full Payment Discount:</span>
+                                  <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
+                                </div>
+                                <Separator className="my-1 md:my-1.5" />
+                                <div className="flex items-center justify-between gap-1 text-success font-bold pt-0.5 md:pt-1">
+                                  <span className="flex items-center gap-1">
+                                    <Zap className="w-3 h-3 md:w-4 md:h-4" />
+                                    Total You Save:
+                                  </span>
+                                  <span className="text-sm md:text-base">${fullPaymentPricing.savings.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Member Credit Info */}
+              {bookingData.useCredit && (
+                <Card className="border-success/30 bg-success/5">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-2 text-success mb-3">
+                      <Sparkles className="w-5 h-5" />
+                      <h4 className="font-semibold">Using Membership Credit</h4>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {membership?.cleansPerMonth} cleaning credit/month • {membership?.discount}% off extras • Cancel anytime
+                      Your membership credit covers the base service. No deposit required!
                     </p>
-                  </div>
-                  
-                  <Button 
-                    onClick={handleMembershipCheckout}
-                    size="lg"
-                    className="w-full bg-gradient-primary hover:opacity-90"
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? (
-                      <><Loader2 className="mr-2 w-4 h-4 animate-spin" />Processing...</>
-                    ) : (
-                      <>Subscribe & Book First Clean</>
-                    )}
-                  </Button>
-                </div>
+                  </CardContent>
+                </Card>
               )}
 
-              {/* Member Using Credit */}
-              {isMemberUsingCredit && (
-                <div className="text-center space-y-4">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-                    <Sparkles className="w-10 h-10 text-green-600 mx-auto mb-3" />
-                    <p className="text-3xl font-bold text-green-700">$0.00</p>
-                    <p className="text-green-600 mt-1">Covered by your membership credit!</p>
-                  </div>
-                  <Button 
-                    onClick={() => navigate("/book/success")}
-                    size="lg"
-                    className="w-full bg-gradient-primary hover:opacity-90"
-                  >
-                    Confirm Booking
-                  </Button>
-                </div>
+              {/* Initialization Error */}
+              {initError && !isProcessing && (
+                <Alert variant="destructive" className="animate-in slide-in-from-top">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Payment Setup Failed</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    <p>{initError}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRetryPayment}
+                      className="mt-2"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Try Again
+                    </Button>
+                  </AlertDescription>
+                </Alert>
               )}
 
-              {/* Regular Stripe Payment */}
-              {!isNewMembershipSignup && !isMemberUsingCredit && (
-                <>
-                  {/* Error State */}
-                  {initError && !isProcessing && (
-                    <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
-                      <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-                      <p className="text-sm text-destructive font-medium mb-3">{initError}</p>
-                      <Button variant="outline" size="sm" onClick={handleRetryPayment}>
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Try Again
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Loading State */}
-                  {isProcessing && (
-                    <div className="text-center py-8">
-                      <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
-                      <p className="text-sm text-muted-foreground">Setting up secure payment...</p>
-                    </div>
-                  )}
-
-                  {/* Stripe Payment Form */}
-                  {stripePromise && clientSecret && paymentAmount > 0 && !initError && !isProcessing && (
+              {/* Stripe Payment Form */}
+              {stripePromise && clientSecret && paymentAmount > 0 && !initError && (
+                <Card className="border-primary/20">
+                  <CardContent className="p-6">
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-primary" />
+                      Payment Information
+                    </h4>
                     <Elements stripe={stripePromise} options={{ clientSecret }}>
-                      <StripePaymentForm 
-                        amount={paymentAmount} 
-                        onSuccess={handlePaymentSuccess} 
-                        onRetry={handleRetryPayment} 
-                        customerEmail={bookingData.email} 
-                      />
+            <StripePaymentForm
+              amount={paymentAmount}
+              onSuccess={handlePaymentSuccess}
+              onRetry={handleRetryPayment}
+              customerEmail={bookingData.email}
+            />
                     </Elements>
-                  )}
-                </>
+                  </CardContent>
+                </Card>
               )}
 
-              {/* Trust Badges */}
-              <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-4 border-t">
-                <span className="flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5" />
-                  Secure
-                </span>
-                <span>•</span>
-                <span>256-bit Encryption</span>
-                <span>•</span>
+              {/* Loading State */}
+              {isProcessing && (
+                <Card className="border-primary/20">
+                  <CardContent className="p-12">
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                      <p className="text-muted-foreground">Setting up secure payment...</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Security Badge */}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <span className="text-success">✓</span>
+                <span>Secure Payment</span>
+              </div>
+              <span>•</span>
+              <div className="flex items-center gap-1">
+                <span className="text-success">✓</span>
+                <span>Encrypted</span>
+              </div>
+              <span>•</span>
+              <div className="flex items-center gap-1">
+                <span className="text-success">✓</span>
                 <span>PCI Compliant</span>
               </div>
-            </CardContent>
-          </Card>
-            </>
-          )}
+            </div>
 
-          {/* Desktop Back Button */}
-          <div className="hidden md:block">
-            <Button variant="outline" onClick={handleBack} disabled={isProcessing}>
-              <ArrowLeft className="mr-2 w-4 h-4" />
-              Back to Service Selection
-            </Button>
-          </div>
+            {/* Action Buttons - Desktop Only */}
+            <div className="hidden md:flex gap-4 pt-6">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleBack}
+                disabled={isProcessing}
+                className="h-14"
+              >
+                <ArrowLeft className="mr-2 w-5 h-5" />
+                Back
+              </Button>
+            </div>
 
-          <p className="text-center text-xs text-muted-foreground">
-            By completing payment, you agree to our Terms of Service and Privacy Policy
-          </p>
-        </div>
-
-        <BottomNavigation 
-          currentStep={currentStep} 
-          totalSteps={6} 
-          steps={BOOKING_STEPS} 
-          onBack={handleBack} 
-          showPrice={true} 
-          price={currentAmount} 
-          continueDisabled={true} 
-        />
-
-        <BookingFooter />
+            <p className="text-center text-xs text-muted-foreground">
+              By completing payment, you agree to our Terms of Service and Privacy Policy
+            </p>
+          </CardContent>
+        </Card>
       </div>
-    </PageTransition>
+
+      {/* Mobile Navigation */}
+      <BottomNavigation
+        currentStep={currentStep}
+        totalSteps={6}
+        steps={BOOKING_STEPS}
+        onBack={handleBack}
+        showPrice={true}
+        price={currentAmount}
+        continueDisabled={true}
+      />
+    </div>
   );
 }
