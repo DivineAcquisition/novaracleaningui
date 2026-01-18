@@ -53,11 +53,15 @@ import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 const queryClient = new QueryClient();
 
 // Domain detection utility
-type DomainType = "contractor" | "admin" | "booking" | "landing" | "main";
+type DomainType = "contractor" | "admin" | "booking" | "landing" | "app" | "main";
 
 function getCurrentDomain(): DomainType {
   const hostname = window.location.hostname;
   
+  // Check for app subdomain first (customer account management)
+  if (hostname.startsWith("app.") || hostname.includes("app.novara")) {
+    return "app";
+  }
   if (hostname.startsWith("contractor.") || hostname.includes("contractor")) {
     return "contractor";
   }
@@ -86,6 +90,8 @@ function DomainAwareHome() {
       return <Navigate to="/admin/auth" replace />;
     case "landing":
       return <PricingLanding />;
+    case "app":
+      return <Navigate to="/account" replace />;
     default:
       return <Index />;
   }
@@ -162,6 +168,39 @@ function LandingRoutes() {
   );
 }
 
+// App Routes (app.novaracleaning.com) - Customer Account Management
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Default to account page */}
+      <Route path="/" element={<Navigate to="/account" replace />} />
+      
+      {/* Account management */}
+      <Route path="/account" element={<Account />} />
+      <Route path="/membership" element={<Membership />} />
+      
+      {/* Auth flows */}
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/update-password" element={<UpdatePassword />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
+      
+      {/* Allow booking access */}
+      <Route path="/book/zip" element={<BookingZip />} />
+      <Route path="/book/sqft" element={<BookingHome />} />
+      <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
+      <Route path="/book/offer" element={<BookingOffer />} />
+      <Route path="/book/checkout" element={<BookingCheckout />} />
+      <Route path="/book/details" element={<PropertyDetails />} />
+      <Route path="/book/confirmation" element={<BookingSuccess />} />
+      <Route path="/book/custom-quote" element={<CustomQuote />} />
+      
+      {/* Redirect unknown to account */}
+      <Route path="*" element={<Navigate to="/account" replace />} />
+    </Routes>
+  );
+}
+
 // Main/Booking Routes (book.novaracleaning.com or default)
 function MainRoutes() {
   return (
@@ -233,6 +272,8 @@ function DomainRouter() {
       return <AdminRoutes />;
     case "landing":
       return <LandingRoutes />;
+    case "app":
+      return <AppRoutes />;
     default:
       return <MainRoutes />;
   }

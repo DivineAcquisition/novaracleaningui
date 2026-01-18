@@ -38,6 +38,9 @@ export const DOMAINS = {
   // Customer booking portal
   booking: "https://book.novaracleaning.com",
   
+  // Customer account management portal
+  app: "https://app.novaracleaning.com",
+  
   // Landing pages & marketing campaigns
   landing: "https://try.novaracleaning.com",
   
@@ -56,8 +59,16 @@ export const URLS = {
     bookZip: `${DOMAINS.booking}/book/zip`,
     bookHome: `${DOMAINS.booking}/book/sqft`,
     checkout: `${DOMAINS.booking}/book/checkout`,
-    account: `${DOMAINS.booking}/account`,
-    membership: `${DOMAINS.booking}/membership`,
+    account: `${DOMAINS.app}/account`,
+    membership: `${DOMAINS.app}/membership`,
+  },
+  
+  // Customer app (app.novaracleaning.com)
+  app: {
+    home: `${DOMAINS.app}`,
+    account: `${DOMAINS.app}/account`,
+    membership: `${DOMAINS.app}/membership`,
+    auth: `${DOMAINS.app}/auth`,
   },
   
   // Landing page URLs (try.novaracleaning.com)
