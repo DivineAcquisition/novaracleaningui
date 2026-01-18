@@ -1,24 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  Mail, 
   Sparkles, 
-  CheckCircle2, 
-  KeyRound, 
-  ArrowRight, 
   Shield, 
   DollarSign, 
   Clock, 
   Users,
   Loader2,
-  RefreshCw,
-  ChevronLeft
+  ArrowRight,
+  CheckCircle2
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -47,236 +41,89 @@ const BENEFITS = [
 
 export default function OnboardingLanding() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<'email' | 'code'>('email');
-  const [code, setCode] = useState(["", "", "", "", "", ""]);
-  const [verifying, setVerifying] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(0);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // Resend countdown timer
+  // Check if user is already authenticated
   useEffect(() => {
-    if (resendCountdown > 0) {
-      const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [resendCountdown]);
+    checkExistingSession();
+  }, []);
 
-  // Auto-focus first OTP input when entering code step
-  useEffect(() => {
-    if (step === 'code' && inputRefs.current[0]) {
-      inputRefs.current[0].focus();
-    }
-  }, [step]);
-
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email.trim());
-  };
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const trimmedEmail = email.trim().toLowerCase();
-    
-    if (!trimmedEmail) {
-      toast.error("Please enter your email address");
-      return;
-    }
-
-    if (!validateEmail(trimmedEmail)) {
-      toast.error("Please enter a valid email address");
-      return;
-    }
-
-    setIsLoading(true);
-    console.log("[ONBOARDING] Sending verification code to:", trimmedEmail);
-
+  const checkExistingSession = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('send-cleaner-verification-code', {
-        body: { email: trimmedEmail, firstName: "" }
-      });
-
-      console.log("[ONBOARDING] Send code response:", { data, error });
-
-      // Check for invocation error
-      if (error) {
-        console.error("[ONBOARDING] Function invocation error:", error);
-        toast.error("Unable to connect to server. Please try again.");
-        return;
-      }
-
-      // Check response success flag
-      if (data?.success === false) {
-        console.error("[ONBOARDING] Server returned error:", data?.error);
-        toast.error(data?.error || "Failed to send verification code. Please try again.");
-        return;
-      }
-
-      console.log("[ONBOARDING] Verification code sent successfully");
-      setStep('code');
-      setResendCountdown(60);
+      const { data: { session } } = await supabase.auth.getSession();
       
-      // Show debug code if available (only in development)
-      if (data?.testCode) {
-        console.log("[ONBOARDING] Test code:", data.testCode);
-        toast.success(`Code sent! (Debug: ${data.testCode})`);
-      } else {
-        toast.success(data?.message || "Verification code sent! Check your email.");
-      }
-    } catch (error) {
-      console.error("[ONBOARDING] Email verification exception:", error);
-      toast.error("Connection error. Please check your internet and try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCodeChange = (index: number, value: string) => {
-    // Only allow digits
-    const digit = value.replace(/\D/g, '').slice(-1);
-    
-    const newCode = [...code];
-    newCode[index] = digit;
-    setCode(newCode);
-
-    // Auto-advance to next input
-    if (digit && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all digits are entered
-    if (digit && index === 5) {
-      const fullCode = newCode.join('');
-      if (fullCode.length === 6) {
-        handleCodeVerify(fullCode);
-      }
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !code[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pasted.length === 6) {
-      const newCode = pasted.split('');
-      setCode(newCode);
-      inputRefs.current[5]?.focus();
-      handleCodeVerify(pasted);
-    }
-  };
-
-  const handleCodeVerify = async (codeString?: string) => {
-    const fullCode = codeString || code.join('');
-    
-    if (fullCode.length !== 6) {
-      toast.error("Please enter the complete 6-digit code");
-      return;
-    }
-
-    setVerifying(true);
-    console.log("[ONBOARDING] Verifying code for email:", email);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-cleaner-code', {
-        body: { email: email.trim().toLowerCase(), code: fullCode }
-      });
-
-      console.log("[ONBOARDING] Verification response:", {
-        success: data?.success,
-        hasTokens: !!data?.access_token && !!data?.refresh_token,
-        error: error || data?.error
-      });
-
-      // Check for invocation error
-      if (error) {
-        console.error("[ONBOARDING] Function invocation error:", error);
-        setCode(["", "", "", "", "", ""]);
-        inputRefs.current[0]?.focus();
-        toast.error("Unable to connect to server. Please try again.");
-        return;
-      }
-
-      // Check response success flag
-      if (data?.success === false || !data?.access_token || !data?.refresh_token) {
-        console.error("[ONBOARDING] Verification failed:", data?.error);
-        setCode(["", "", "", "", "", ""]);
-        inputRefs.current[0]?.focus();
-        toast.error(data?.error || "Invalid code. Please try again.");
-        return;
-      }
-
-      console.log("[ONBOARDING] Code verified, establishing session...");
-
-      // Establish session directly with the tokens
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      });
-
-      if (sessionError) {
-        console.error("[ONBOARDING] Session establishment error:", sessionError);
-        toast.error("Failed to establish session. Please request a new code.");
-        return;
-      }
-
-      console.log("[ONBOARDING] Session established successfully");
-      toast.success("Email verified! Let's complete your profile.");
-      
-      // Navigate to onboarding
-      setTimeout(() => {
-        navigate("/cleaner/onboarding");
-      }, 500);
-      
-    } catch (error) {
-      console.error("[ONBOARDING] Code verification exception:", error);
-      toast.error("Connection error. Please check your internet and try again.");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    if (resendCountdown > 0) return;
-    
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('send-cleaner-verification-code', {
-        body: { email: email.trim().toLowerCase(), firstName: "" }
-      });
-      
-      if (error) {
-        toast.error("Unable to connect to server. Please try again.");
-      } else if (data?.success === false) {
-        toast.error(data?.error || "Failed to resend code");
-      } else {
-        setResendCountdown(60);
-        setCode(["", "", "", "", "", ""]);
-        inputRefs.current[0]?.focus();
-        if (data?.testCode) {
-          toast.success(`New code sent! (Debug: ${data.testCode})`);
-        } else {
-          toast.success(data?.message || "New code sent! Check your email.");
+      if (session?.user) {
+        console.log("[ONBOARDING] User already authenticated:", session.user.email);
+        
+        // Check if they already have a cleaner profile
+        const { data: cleaner } = await supabase
+          .from("cleaners")
+          .select("id, onboarding_complete")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        
+        if (cleaner?.onboarding_complete) {
+          // Already onboarded, go to dashboard
+          navigate("/cleaner/dashboard");
+          return;
+        } else if (cleaner) {
+          // Has profile but not complete, go to onboarding
+          navigate("/cleaner/onboarding");
+          return;
         }
+        
+        // Authenticated but no cleaner profile - they need to complete onboarding
+        navigate("/cleaner/onboarding");
+        return;
       }
-    } catch {
-      toast.error("Failed to resend code. Please try again.");
+    } catch (error) {
+      console.error("[ONBOARDING] Session check error:", error);
     } finally {
+      setCheckingAuth(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    
+    try {
+      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        console.error("[ONBOARDING] Google sign-in error:", error);
+        toast.error("Failed to start Google sign-in. Please try again.");
+        setIsLoading(false);
+      }
+      // Note: Don't set loading to false on success - page will redirect
+    } catch (error) {
+      console.error("[ONBOARDING] Google sign-in exception:", error);
+      toast.error("An error occurred. Please try again.");
       setIsLoading(false);
     }
   };
 
-  const handleUseDifferentEmail = () => {
-    setStep('email');
-    setCode(["", "", "", "", "", ""]);
-    setResendCountdown(0);
-  };
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#5500FF]/5 via-background to-[#8F7BFD]/10 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-10 h-10 animate-spin text-[#5500FF] mx-auto" />
+          <p className="text-muted-foreground">Checking your account...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#5500FF]/5 via-background to-[#8F7BFD]/10">
@@ -338,177 +185,104 @@ export default function OnboardingLanding() {
             </div>
           </div>
 
-          {/* Right Side - Form Card */}
+          {/* Right Side - Sign Up Card */}
           <div className="lg:pl-8">
             <Card className="shadow-2xl border-[#5500FF]/20 overflow-hidden">
               {/* Card Header with Gradient */}
               <div className="bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] p-6 text-white">
-                <div className="flex items-center gap-3 mb-2">
-                  {step === 'code' ? (
-                    <KeyRound className="w-8 h-8" />
-                  ) : (
-                    <Mail className="w-8 h-8" />
-                  )}
-                  <h2 className="text-2xl font-bold">
-                    {step === 'code' ? "Enter Code" : "Get Started"}
-                  </h2>
-                </div>
+                <h2 className="text-2xl font-bold mb-2">Get Started</h2>
                 <p className="text-white/80">
-                  {step === 'code'
-                    ? `Enter the 6-digit code sent to ${email}`
-                    : "Enter your email to begin the application"
-                  }
+                  Sign up with Google to begin your application
                 </p>
               </div>
 
-              <CardContent className="p-6">
-                {step === 'code' ? (
-                  <div className="space-y-6">
-                    {/* OTP Input */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium text-center block">
-                        Verification Code
-                      </Label>
-                      <div className="flex justify-center gap-2" onPaste={handlePaste}>
-                        {code.map((digit, index) => (
-                          <Input
-                            key={index}
-                            ref={(el) => (inputRefs.current[index] = el)}
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={1}
-                            value={digit}
-                            onChange={(e) => handleCodeChange(index, e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(index, e)}
-                            className="w-12 h-14 text-center text-2xl font-bold border-2 focus:border-[#5500FF] focus:ring-[#5500FF]"
-                            disabled={verifying}
-                          />
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Code expires in 15 minutes
-                      </p>
-                    </div>
+              <CardContent className="p-6 space-y-6">
+                {/* Google Sign In Button */}
+                <Button
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading}
+                  className="w-full h-14 text-lg bg-white hover:bg-gray-50 text-gray-900 border-2 border-gray-200 shadow-sm"
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                  ) : (
+                    <svg className="mr-3 h-5 w-5" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      />
+                    </svg>
+                  )}
+                  {isLoading ? "Connecting..." : "Continue with Google"}
+                </Button>
 
-                    {/* Verify Button */}
-                    <Button
-                      onClick={() => handleCodeVerify()}
-                      className="w-full h-12 text-lg bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
-                      disabled={verifying || code.join('').length !== 6}
-                    >
-                      {verifying ? (
-                        <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Verifying...
-                        </>
-                      ) : (
-                        <>
-                          Verify & Continue
-                          <ArrowRight className="ml-2 w-5 h-5" />
-                        </>
-                      )}
-                    </Button>
+                {/* Info Text */}
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    By continuing, you agree to our Terms of Service and Privacy Policy
+                  </p>
+                </div>
 
-                    {/* Action Buttons */}
-                    <div className="space-y-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleUseDifferentEmail}
-                        className="w-full"
-                        disabled={verifying}
-                      >
-                        <ChevronLeft className="mr-2 w-4 h-4" />
-                        Use Different Email
-                      </Button>
+                {/* What Happens Next */}
+                <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                  <h4 className="font-semibold text-sm">What happens next?</h4>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#5500FF] mt-0.5 flex-shrink-0" />
+                      <span>Sign in securely with your Google account</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#5500FF] mt-0.5 flex-shrink-0" />
+                      <span>Complete your profile (5 minutes)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#5500FF] mt-0.5 flex-shrink-0" />
+                      <span>Set up payment to receive earnings</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#5500FF] mt-0.5 flex-shrink-0" />
+                      <span>Start accepting jobs!</span>
+                    </li>
+                  </ul>
+                </div>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={handleResendCode}
-                        className="w-full"
-                        disabled={isLoading || verifying || resendCountdown > 0}
-                      >
-                        <RefreshCw className={`mr-2 w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        {resendCountdown > 0 
-                          ? `Resend in ${resendCountdown}s` 
-                          : "Resend Code"
-                        }
-                      </Button>
-                    </div>
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
                   </div>
-                ) : (
-                  <form onSubmit={handleEmailSubmit} className="space-y-6">
-                    {/* Email Input */}
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-sm font-medium">
-                        Email Address
-                      </Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="your.email@example.com"
-                          className="pl-10 h-12 text-base"
-                          disabled={isLoading}
-                          autoFocus
-                          required
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        We'll send you a 6-digit verification code
-                      </p>
-                    </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      Already a cleaner?
+                    </span>
+                  </div>
+                </div>
 
-                    {/* Submit Button */}
-                    <Button
-                      type="submit"
-                      className="w-full h-12 text-lg bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
-                      disabled={isLoading || !email.trim()}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Sending Code...
-                        </>
-                      ) : (
-                        <>
-                          Continue
-                          <ArrowRight className="ml-2 w-5 h-5" />
-                        </>
-                      )}
-                    </Button>
-
-                    {/* Divider */}
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-border" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-card px-2 text-muted-foreground">
-                          Already a cleaner?
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Sign In Link */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => navigate("/cleaner/auth")}
-                      className="w-full"
-                      disabled={isLoading}
-                    >
-                      Sign In to Your Account
-                    </Button>
-                  </form>
-                )}
+                {/* Sign In Link */}
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/cleaner/auth")}
+                  className="w-full"
+                  disabled={isLoading}
+                >
+                  Sign In to Your Account
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
 
                 {/* Trust Badges */}
-                <div className="mt-6 pt-6 border-t border-border">
+                <div className="pt-4 border-t border-border">
                   <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Shield className="w-4 h-4 text-[#5500FF]" />

@@ -111,16 +111,32 @@ export default function CleanerOnboarding() {
       
       if (!session) {
         console.warn("[ONBOARDING] No session found - redirecting to landing");
-        toast.error("Please verify your email first");
+        toast.error("Please sign in to continue");
         navigate("/cleaner/onboarding-landing");
         return;
       }
       
       setUserId(session.user.id);
+      
+      // Pre-fill data from Google profile if available
+      const userMetadata = session.user.user_metadata || {};
+      const fullName = userMetadata.full_name || userMetadata.name || "";
+      const nameParts = fullName.split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+      const avatarUrl = userMetadata.avatar_url || userMetadata.picture || "";
+      
       setFormData(prev => ({
         ...prev,
-        email: session.user.email || ""
+        email: session.user.email || "",
+        firstName: prev.firstName || firstName,
+        lastName: prev.lastName || lastName,
       }));
+      
+      // Set avatar from Google if available and not already set
+      if (avatarUrl && !avatarPreview) {
+        setAvatarPreview(avatarUrl);
+      }
       
       // Check if cleaner profile already exists
       const { data: existingCleaner } = await supabase
@@ -138,7 +154,7 @@ export default function CleanerOnboarding() {
       setCheckingAuth(false);
     } catch (error) {
       console.error("[ONBOARDING] Auth check error:", error);
-      toast.error("Session expired. Please verify your email again.");
+      toast.error("Session expired. Please sign in again.");
       navigate("/cleaner/onboarding-landing");
     }
   };
