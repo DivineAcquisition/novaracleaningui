@@ -185,3 +185,6 @@ verify_jwt = false
 
 [functions.retry-failed-payouts]
 verify_jwt = false
+
+[functions.test-payout-flow]
+verify_jwt = false
