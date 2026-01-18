@@ -10,62 +10,69 @@ import { HeaderNav } from "@/components/HeaderNav";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
+
 const Index = () => {
   const navigate = useNavigate();
-  const {
-    signOut
-  } = useAuth();
-  const {
-    updateBookingData
-  } = useBooking();
+  const { signOut } = useAuth();
+  const { updateBookingData } = useBooking();
+  
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [zipValidated, setZipValidated] = useState(false);
   const [cityState, setCityState] = useState("");
-
+  
   // Contact form state
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSignOut = async () => {
     await signOut();
   };
+
   const handleZipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (zipCode.length !== 5) return;
+    
     setIsValidating(true);
-
+    
     // Check if ZIP is in service coverage
-    const {
-      data: coverage
-    } = await supabase.from('service_coverage_zones').select('city, state').eq('zip_code', zipCode).eq('is_active', true).single();
+    const { data: coverage } = await supabase
+      .from('service_coverage_zones')
+      .select('city, state')
+      .eq('zip_code', zipCode)
+      .eq('is_active', true)
+      .single();
+    
     if (coverage) {
       setCityState(`${coverage.city}, ${coverage.state}`);
     } else {
       setCityState("your area");
     }
+    
     setIsValidating(false);
     setZipValidated(true);
-    updateBookingData({
-      zipCode
-    });
+    updateBookingData({ zipCode });
   };
+
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !email || !phone) return;
+    
     setIsSubmitting(true);
+    
     const formattedPhone = phone.replace(/\D/g, '');
-
+    
     // Update booking data
     updateBookingData({
       firstName,
       lastName,
       email,
-      phone: formattedPhone
+      phone: formattedPhone,
     });
-
+    
     // Send lead capture webhook (fire and forget - don't block navigation)
     supabase.functions.invoke('send-lead-capture-webhook', {
       body: {
@@ -77,11 +84,13 @@ const Index = () => {
         city: cityState.split(', ')[0] || '',
         state: cityState.split(', ')[1] || '',
         source: 'Website',
-        landingPage: '/'
+        landingPage: '/',
       }
     }).catch(err => console.error('Lead webhook error:', err));
+    
     navigate("/book/sqft");
   };
+
   const handleChangeZip = () => {
     setZipValidated(false);
     setZipCode("");
@@ -90,6 +99,7 @@ const Index = () => {
     setEmail("");
     setPhone("");
   };
+
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhoneNumber(e.target.value);
     setPhone(formatted);
@@ -118,7 +128,9 @@ const Index = () => {
               New Year Special: Claim Our Membership And Get Your First Clean For Only $189
             </h1>
             
-            <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">Book by Jan 7th — Enter your ZIP to get started</p>
+            <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">
+              Premium cleaning service at transparent prices. Enter your ZIP code to get started.
+            </p>
           </div>
 
           {/* ZIP Code Entry or Contact Form */}
@@ -131,13 +143,29 @@ const Index = () => {
                     <label htmlFor="zipCode" className="text-sm font-medium text-left block">
                       Enter Your ZIP Code
                     </label>
-                    <Input id="zipCode" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={5} placeholder="12345" value={zipCode} onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} className="h-14 text-lg text-center" autoFocus />
+                    <Input 
+                      id="zipCode" 
+                      type="text" 
+                      inputMode="numeric" 
+                      pattern="[0-9]*" 
+                      maxLength={5} 
+                      placeholder="12345" 
+                      value={zipCode} 
+                      onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} 
+                      className="h-14 text-lg text-center" 
+                      autoFocus 
+                    />
                     <p className="text-xs text-muted-foreground">
                       We'll check if we service your area
                     </p>
                   </div>
 
-                  <Button type="submit" size="lg" disabled={zipCode.length !== 5 || isValidating} className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary">
+                  <Button 
+                    type="submit" 
+                    size="lg" 
+                    disabled={zipCode.length !== 5 || isValidating} 
+                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                  >
                     {isValidating ? "Checking..." : "Continue"}
                     <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                   </Button>
@@ -166,13 +194,29 @@ const Index = () => {
                       <label htmlFor="firstName" className="text-sm font-medium text-left block">
                         First Name
                       </label>
-                      <Input id="firstName" type="text" placeholder="John" value={firstName} onChange={e => setFirstName(e.target.value)} className="h-12" required />
+                      <Input
+                        id="firstName"
+                        type="text"
+                        placeholder="John"
+                        value={firstName}
+                        onChange={e => setFirstName(e.target.value)}
+                        className="h-12"
+                        required
+                      />
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="lastName" className="text-sm font-medium text-left block">
                         Last Name
                       </label>
-                      <Input id="lastName" type="text" placeholder="Smith" value={lastName} onChange={e => setLastName(e.target.value)} className="h-12" required />
+                      <Input
+                        id="lastName"
+                        type="text"
+                        placeholder="Smith"
+                        value={lastName}
+                        onChange={e => setLastName(e.target.value)}
+                        className="h-12"
+                        required
+                      />
                     </div>
                   </div>
 
@@ -181,7 +225,15 @@ const Index = () => {
                     <label htmlFor="email" className="text-sm font-medium text-left block">
                       Email
                     </label>
-                    <Input id="email" type="email" placeholder="john@example.com" value={email} onChange={e => setEmail(e.target.value)} className="h-12" required />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="john@example.com"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="h-12"
+                      required
+                    />
                   </div>
 
                   {/* Phone Field */}
@@ -189,16 +241,33 @@ const Index = () => {
                     <label htmlFor="phone" className="text-sm font-medium text-left block">
                       Phone Number
                     </label>
-                    <Input id="phone" type="tel" placeholder="(972) 555-0123" value={phone} onChange={handlePhoneChange} className="h-12" required />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="(972) 555-0123"
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      className="h-12"
+                      required
+                    />
                   </div>
 
                   {/* Submit Button */}
-                  <Button type="submit" size="lg" disabled={!firstName || !lastName || !email || phone.replace(/\D/g, '').length !== 10 || isSubmitting} className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary">
+                  <Button 
+                    type="submit" 
+                    size="lg" 
+                    disabled={!firstName || !lastName || !email || phone.replace(/\D/g, '').length !== 10 || isSubmitting} 
+                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                  >
                     {isSubmitting ? "Processing..." : "Claim My Discount →"}
                   </Button>
 
                   {/* Change ZIP Link */}
-                  <button type="button" onClick={handleChangeZip} className="text-sm text-primary hover:text-primary-hover underline underline-offset-2">
+                  <button
+                    type="button"
+                    onClick={handleChangeZip}
+                    className="text-sm text-primary hover:text-primary-hover underline underline-offset-2"
+                  >
                     ← Change ZIP code ({zipCode})
                   </button>
                 </form>
