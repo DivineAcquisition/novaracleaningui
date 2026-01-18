@@ -203,7 +203,7 @@ export function PayoutOnboardingWizard({
 function IntroStep({ onNext, cleanerName }: { onNext: () => void; cleanerName?: string }) {
   return (
     <div className="text-center space-y-6 py-4">
-      <div className="mx-auto w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+      <div className="mx-auto w-20 h-20 bg-gradient-to-br from-[#5500FF] to-[#8F7BFD] rounded-full flex items-center justify-center shadow-lg">
         <DollarSign className="w-10 h-10 text-white" />
       </div>
 
@@ -260,8 +260,8 @@ function BenefitsStep({ onNext, onBack }: { onNext: () => void; onBack: () => vo
       icon: CreditCard,
       title: "Direct to Your Bank",
       description: "Money goes straight to your bank account, typically in 1-2 days",
-      color: "text-green-500",
-      bgColor: "bg-green-50",
+      color: "text-[#5500FF]",
+      bgColor: "bg-violet-50",
     },
     {
       icon: BadgeCheck,
@@ -538,7 +538,7 @@ function VerifyingStep({
 function CompleteStep({ onClose }: { onClose: () => void }) {
   return (
     <div className="space-y-6 py-4 text-center">
-      <div className="mx-auto w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+      <div className="mx-auto w-20 h-20 bg-gradient-to-br from-[#5500FF] to-[#8F7BFD] rounded-full flex items-center justify-center shadow-lg">
         <CheckCircle2 className="w-10 h-10 text-white" />
       </div>
 
@@ -550,9 +550,9 @@ function CompleteStep({ onClose }: { onClose: () => void }) {
         </p>
       </div>
 
-      <Card className="p-4 bg-green-50 border-green-200 text-left">
-        <h4 className="text-sm font-semibold text-green-800 mb-2">What happens next?</h4>
-        <ul className="text-xs space-y-1 text-green-700">
+      <Card className="p-4 bg-violet-50 border-violet-200 text-left">
+        <h4 className="text-sm font-semibold text-violet-800 mb-2">What happens next?</h4>
+        <ul className="text-xs space-y-1 text-violet-700">
           <li className="flex items-center gap-2">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Complete a job and check out

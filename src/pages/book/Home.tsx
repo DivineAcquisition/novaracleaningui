@@ -71,9 +71,9 @@ export default function BookingHome() {
             </p>
             
             {/* Google Guaranteed Badge */}
-            <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border-2 border-green-500 rounded-full bg-green-50 dark:bg-green-950/30">
-              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-              <span className="text-sm font-medium text-green-700 dark:text-green-300">Google Guaranteed</span>
+            <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border-2 border-[#5500FF] rounded-full bg-violet-50 dark:bg-violet-950/30">
+              <CheckCircle className="w-4 h-4 text-[#5500FF] dark:text-[#8F7BFD]" />
+              <span className="text-sm font-medium text-violet-700 dark:text-violet-300">Google Guaranteed</span>
             </div>
           </div>
           

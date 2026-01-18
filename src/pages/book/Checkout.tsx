@@ -416,7 +416,7 @@ export default function BookingCheckout() {
                   <div className="hidden sm:flex flex-col items-end gap-1">
                     <Badge variant="secondary" className="text-xs font-semibold">Ends Jan 5</Badge>
                     {autoAppliedPromo && (
-                      <Badge variant="default" className="text-xs bg-green-600">Auto-Applied</Badge>
+                      <Badge variant="default" className="text-xs bg-[#5500FF]">Auto-Applied</Badge>
                     )}
                   </div>
                 </div>
@@ -431,18 +431,18 @@ export default function BookingCheckout() {
 
             {/* New Customer Discount Banner */}
             {isNewCustomer && !user && (
-              <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">
+              <Card className="border-2 border-[#5500FF]/50 bg-gradient-to-br from-violet-50 to-purple-50">
                 <CardContent className="p-3 md:p-4 flex items-center justify-between">
                   <div className="flex items-center gap-2 md:gap-3">
-                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-600 flex items-center justify-center">
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#5500FF] flex items-center justify-center">
                       <Gift className="w-4 h-4 md:w-5 md:h-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold md:text-base text-green-700">New Customer Special!</p>
-                      <p className="text-xs md:text-sm text-green-600">You're saving $60 on this booking 🎉</p>
+                      <p className="text-sm font-bold md:text-base text-violet-700">New Customer Special!</p>
+                      <p className="text-xs md:text-sm text-[#5500FF]">You're saving $60 on this booking 🎉</p>
                     </div>
                   </div>
-                  <div className="text-base md:text-2xl font-bold text-green-700">-$60</div>
+                  <div className="text-base md:text-2xl font-bold text-violet-700">-$60</div>
                 </CardContent>
               </Card>
             )}
@@ -506,7 +506,7 @@ export default function BookingCheckout() {
                   </Button>
                 </div>
                 {referralValid && (
-                  <p className="text-xs text-green-600">
+                  <p className="text-xs text-[#5500FF]">
                     🎉 You'll save $50 on this booking!
                   </p>
                 )}
@@ -529,12 +529,12 @@ export default function BookingCheckout() {
                 </div>
 
                 {autoAppliedPromo && (
-                  <Alert className="bg-green-50 border-green-200">
-                    <Sparkles className="w-4 h-4 text-green-600" />
-                    <AlertTitle className="text-sm font-semibold text-green-800">
+                  <Alert className="bg-violet-50 border-violet-200">
+                    <Sparkles className="w-4 h-4 text-[#5500FF]" />
+                    <AlertTitle className="text-sm font-semibold text-violet-800">
                       Best discount automatically applied!
                     </AlertTitle>
-                    <AlertDescription className="text-xs text-green-700">
+                    <AlertDescription className="text-xs text-violet-700">
                       Code: <strong>{autoAppliedPromo.code}</strong> - {autoAppliedPromo.description}
                     </AlertDescription>
                   </Alert>
@@ -583,7 +583,7 @@ export default function BookingCheckout() {
                 {promoMessage && !autoAppliedPromo && (
                   <p className={cn(
                     "text-xs font-medium",
-                    promoDiscount > 0 ? "text-green-600" : "text-destructive"
+                    promoDiscount > 0 ? "text-[#5500FF]" : "text-destructive"
                   )}>
                     {promoMessage}
                   </p>
@@ -733,7 +733,7 @@ export default function BookingCheckout() {
                               {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0 || promoDiscount > 0) && (
                                 <div className="text-[10px] md:text-xs space-y-0.5 pt-1.5 border-t border-border/50 mt-2">
                                   {depositPricing.newCustomerDiscount > 0 && (
-                                    <div className="flex items-center justify-between text-green-600 font-semibold">
+                                    <div className="flex items-center justify-between text-[#5500FF] font-semibold">
                                       <span className="flex items-center gap-1">
                                         <Gift className="w-3 h-3" />
                                         New Customer $60 Off:
@@ -748,7 +748,7 @@ export default function BookingCheckout() {
                                     </div>
                                   )}
                                   {promoDiscount > 0 && (
-                                    <div className="flex items-center justify-between text-green-600 font-semibold">
+                                    <div className="flex items-center justify-between text-[#5500FF] font-semibold">
                                       <span className="flex items-center gap-1">
                                         <Gift className="w-3 h-3" />
                                         Promo Code:
@@ -789,7 +789,7 @@ export default function BookingCheckout() {
                                   <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
                                 </div>
                                 {fullPaymentPricing.newCustomerDiscount > 0 && (
-                                  <div className="flex items-center justify-between text-green-600 font-semibold">
+                                  <div className="flex items-center justify-between text-[#5500FF] font-semibold">
                                     <span className="flex items-center gap-1">
                                       <Gift className="w-3 h-3" />
                                       New Customer $60 Off:

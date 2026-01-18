@@ -30,7 +30,7 @@ export default function ContractorLanding() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-white to-emerald-50">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-white to-violet-50">
       {/* Header */}
       <header className="container max-w-6xl mx-auto px-4 py-6">
         <div className="flex items-center justify-center gap-3">
@@ -63,7 +63,7 @@ export default function ContractorLanding() {
             className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight"
           >
             Welcome,{" "}
-            <span className="bg-gradient-to-r from-primary to-emerald-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary to-[#8F7BFD] bg-clip-text text-transparent">
               Cleaning Pro
             </span>
           </motion.h1>
@@ -96,7 +96,7 @@ export default function ContractorLanding() {
               </Badge>
             </div>
             <CardContent className="p-8 pt-12">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-[#8F7BFD] flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
                 <UserPlus className="w-8 h-8 text-white" />
               </div>
               

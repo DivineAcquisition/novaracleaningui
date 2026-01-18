@@ -142,7 +142,7 @@ export default function CleanerDirectory() {
               <CardTitle className="text-sm font-medium">Available Today</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold text-[#5500FF]">
                 {cleaners.filter(c => c.status_today === "Available").length}
               </div>
             </CardContent>

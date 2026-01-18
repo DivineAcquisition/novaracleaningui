@@ -24,8 +24,8 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       title: "Total Earnings",
       value: formatCurrency(stats.totalEarnings),
       icon: DollarSign,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
+      color: "text-[#5500FF]",
+      bgColor: "bg-[#5500FF]/10",
     },
     {
       title: "Jobs Completed",

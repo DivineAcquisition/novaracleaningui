@@ -253,7 +253,7 @@ export default function AdminCleaners() {
       return <Badge className="bg-blue-500">Approved - No Account</Badge>;
     }
     if (cleaner.status === "active" && cleaner.payouts_enabled) {
-      return <Badge className="bg-green-500">Active</Badge>;
+      return <Badge className="bg-[#5500FF]">Active</Badge>;
     }
     if (cleaner.onboarding_complete) {
       return <Badge className="bg-yellow-500">Onboarding Complete</Badge>;

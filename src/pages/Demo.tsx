@@ -310,10 +310,10 @@ export default function Demo() {
         </CardHeader>
         <CardContent className="space-y-5 px-3 md:px-6">
           {/* New Customer Banner */}
-          <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50 to-emerald-50">
+          <Card className="border-2 border-[#5500FF]/50 bg-gradient-to-br from-violet-50 to-purple-50">
             <CardContent className="p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-[#5500FF] flex items-center justify-center">
                   <span className="text-white text-sm">🎁</span>
                 </div>
                 <div>

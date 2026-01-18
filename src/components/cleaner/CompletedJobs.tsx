@@ -32,7 +32,7 @@ export function CompletedJobs({ jobs }: CompletedJobsProps) {
               </p>
             </div>
             <div className="text-right">
-              <p className="font-semibold text-base text-green-600">
+              <p className="font-semibold text-base text-[#5500FF]">
                 ${(booking.cleaner_payout_cents / 100).toFixed(2)}
               </p>
               <p className="text-[10px] text-muted-foreground">earned</p>

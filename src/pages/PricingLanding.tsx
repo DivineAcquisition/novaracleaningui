@@ -169,7 +169,7 @@ function SavingsCalculator() {
   const savingsPercent = Math.round((savings / regularCost) * 100);
 
   return (
-    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-emerald-50">
+    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-violet-50">
       <CardContent className="p-6 md:p-8">
         <div className="flex items-center gap-2 mb-6">
           <Calculator className="w-6 h-6 text-primary" />
@@ -208,7 +208,7 @@ function SavingsCalculator() {
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-gradient-to-r from-primary to-emerald-600 text-white text-center">
+          <div className="p-4 rounded-xl bg-gradient-to-r from-primary to-[#8F7BFD] text-white text-center">
             <div className="text-sm opacity-90 mb-1">Your Annual Savings</div>
             <div className="text-4xl font-bold">${savings.toLocaleString()}</div>
             <div className="text-sm opacity-90 mt-1">That's {savingsPercent}% off!</div>
@@ -226,7 +226,7 @@ function SavingsComparison({ plan }: { plan: typeof MEMBERSHIP_PLANS[0] }) {
   const savingsPercent = Math.round(((regularYearlyCost - membershipYearlyCost) / regularYearlyCost) * 100);
   
   return (
-    <div className="mt-4 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-emerald-100 border border-primary/20">
+    <div className="mt-4 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-violet-100 border border-primary/20">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium">Annual Savings</span>
         <Badge className="bg-primary text-white">{savingsPercent}% OFF</Badge>
@@ -297,7 +297,7 @@ export default function PricingLanding() {
 
       {/* Hero Section */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-white to-emerald-50" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-white to-violet-50" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
         
         <div className="container max-w-7xl mx-auto px-4 py-20 md:py-28 relative">
@@ -320,7 +320,7 @@ export default function PricingLanding() {
               className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight"
             >
               Simple, Transparent{" "}
-              <span className="bg-gradient-to-r from-primary to-emerald-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] bg-clip-text text-transparent">
                 Pricing
               </span>
             </motion.h1>
@@ -403,7 +403,7 @@ export default function PricingLanding() {
       </section>
 
       {/* Big Savings Banner */}
-      <section className="py-8 bg-gradient-to-r from-primary to-emerald-600 text-white">
+      <section className="py-8 bg-gradient-to-r from-primary to-[#8F7BFD] text-white">
         <div className="container max-w-7xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12 text-center md:text-left">
             <div className="flex items-center gap-3">
@@ -455,7 +455,7 @@ export default function PricingLanding() {
                 </TabsTrigger>
                 <TabsTrigger value="membership" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
                   Membership
-                  <Badge className="ml-2 bg-emerald-500 text-white text-[10px]">Save 30%</Badge>
+                  <Badge className="ml-2 bg-[#8F7BFD] text-white text-[10px]">Save 30%</Badge>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -465,7 +465,7 @@ export default function PricingLanding() {
             /* One-Time Pricing Table */
             <div className="max-w-4xl mx-auto">
               <Card className="overflow-hidden border-0 shadow-xl">
-                <CardHeader className="bg-gradient-to-r from-primary to-emerald-600 text-white">
+                <CardHeader className="bg-gradient-to-r from-primary to-[#8F7BFD] text-white">
                   <CardTitle className="text-center">
                     <span className="text-2xl font-bold">Standard Cleaning Prices</span>
                     <p className="text-sm font-normal text-white/80 mt-2">
@@ -504,7 +504,7 @@ export default function PricingLanding() {
                   </div>
                   
                   {/* Switch to membership CTA */}
-                  <div className="p-6 bg-gradient-to-r from-primary/10 to-emerald-100 border-t">
+                  <div className="p-6 bg-gradient-to-r from-primary/10 to-violet-100 border-t">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                       <div className="text-center md:text-left">
                         <p className="font-semibold text-primary flex items-center gap-2 justify-center md:justify-start">
@@ -569,7 +569,7 @@ export default function PricingLanding() {
                       )}
 
                       <CardHeader className="text-center pt-8 pb-4">
-                        <div className={`mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center shadow-lg mb-4`}>
+                        <div className={`mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-[#8F7BFD] flex items-center justify-center shadow-lg mb-4`}>
                           <Icon className="w-7 h-7 text-white" />
                         </div>
                         <CardTitle className="text-xl">{plan.name}</CardTitle>
@@ -777,7 +777,7 @@ export default function PricingLanding() {
                 </div>
                 <p className="text-muted-foreground mb-4">"{t.text}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center text-white font-semibold text-sm">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-[#8F7BFD] flex items-center justify-center text-white font-semibold text-sm">
                     {t.avatar}
                   </div>
                   <div>
@@ -831,7 +831,7 @@ export default function PricingLanding() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-primary to-emerald-600 text-white">
+      <section className="py-20 bg-gradient-to-r from-primary to-[#8F7BFD] text-white">
         <div className="container max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Ready for a Cleaner Home?

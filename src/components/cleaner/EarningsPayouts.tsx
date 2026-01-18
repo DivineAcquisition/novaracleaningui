@@ -55,7 +55,7 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
       <div className="grid gap-3 md:grid-cols-2">
         <Card className="p-4">
           <div className="text-xs text-muted-foreground mb-1">Total Paid Out</div>
-          <div className="text-2xl font-bold text-green-600">
+          <div className="text-2xl font-bold text-[#5500FF]">
             ${(totalEarnings / 100).toFixed(2)}
           </div>
         </Card>

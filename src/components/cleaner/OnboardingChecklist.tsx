@@ -96,30 +96,30 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
     <>
       {/* Prominent Payout Setup Banner (only if payouts not set up) */}
       {payoutsNotSetup && (
-        <Card className="p-4 mb-4 border-2 border-green-500/30 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+        <Card className="p-4 mb-4 border-2 border-[#5500FF]/30 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex-shrink-0">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#5500FF] to-[#8F7BFD] rounded-full flex items-center justify-center shadow-lg">
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <h3 className="text-base font-bold text-green-800 dark:text-green-200">
+                <h3 className="text-base font-bold text-violet-800 dark:text-violet-200">
                   Get Paid Instantly! 💸
                 </h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 rounded-full">
                   <Zap className="w-3 h-3" />
                   2 min setup
                 </span>
               </div>
-              <p className="text-sm text-green-700 dark:text-green-300">
+              <p className="text-sm text-violet-700 dark:text-violet-300">
                 Set up your payout account to receive payments automatically when you complete jobs.
               </p>
             </div>
             <Button 
               onClick={handleOpenPayoutWizard}
-              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-md w-full sm:w-auto"
+              className="bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:from-[#4400DD] hover:to-[#7F6BED] text-white shadow-md w-full sm:w-auto"
             >
               Set Up Now
               <ExternalLink className="ml-2 w-4 h-4" />
@@ -158,12 +158,12 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
               <div
                 key={item.id}
                 className={`flex items-center justify-between p-2 rounded-lg bg-background/50 border ${
-                  item.id === "stripe" && !item.completed ? "border-green-300 bg-green-50/50" : ""
+                  item.id === "stripe" && !item.completed ? "border-violet-300 bg-violet-50/50" : ""
                 }`}
               >
                 <div className="flex items-center gap-2">
                   {item.completed ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-[#5500FF]" />
                   ) : (
                     <XCircle className="w-4 h-4 text-muted-foreground" />
                   )}
@@ -172,7 +172,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
                     {item.label}
                   </span>
                   {item.id === "stripe" && !item.completed && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+                    <span className="text-[10px] px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded font-medium">
                       Required for payouts
                     </span>
                   )}
@@ -183,7 +183,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
                     size="sm"
                     onClick={item.onAction}
                     variant={item.id === "stripe" ? "default" : "outline"}
-                    className={item.id === "stripe" ? "bg-green-600 hover:bg-green-700" : ""}
+                    className={item.id === "stripe" ? "bg-[#5500FF] hover:bg-[#4400DD]" : ""}
                   >
                     {item.actionLabel}
                   </Button>

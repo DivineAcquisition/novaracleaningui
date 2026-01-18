@@ -99,30 +99,37 @@ export const URLS = {
 // =============================================================================
 
 export const COLORS = {
-  // Primary brand colors
-  primary: "142 76% 36%",           // Green - main brand color
-  primaryHover: "142 76% 30%",      // Darker green for hover states
+  // Primary brand colors - Purple gradient (#5500FF to #8F7BFD)
+  primary: "260 100% 50%",          // #5500FF - Deep purple
+  primaryHover: "260 100% 42%",     // Darker purple for hover states
   primaryForeground: "0 0% 100%",   // White text on primary
+  accent: "249 96% 74%",            // #8F7BFD - Light purple
   
   // Accent colors
-  accent: "142 60% 95%",            // Light green tint
-  accentForeground: "142 76% 25%",  // Dark green text
+  accentTint: "260 60% 95%",        // Light purple tint
+  accentForeground: "260 76% 25%",  // Dark purple text
   
   // Status colors
-  success: "142 76% 36%",           // Same as primary
+  success: "142 76% 36%",           // Green for success states
   warning: "38 92% 50%",            // Orange/amber
   destructive: "0 84% 60%",         // Red for errors
   
   // Neutral colors
   background: "0 0% 100%",          // White
-  foreground: "222 47% 11%",        // Dark text
-  muted: "210 40% 96%",             // Light gray
-  mutedForeground: "215 16% 47%",   // Gray text
-  border: "214 32% 91%",            // Light border
+  foreground: "260 15% 15%",        // Dark text
+  muted: "260 25% 95%",             // Light gray
+  mutedForeground: "260 15% 45%",   // Gray text
+  border: "260 25% 90%",            // Light border
   
   // Card colors
   card: "0 0% 100%",
-  cardForeground: "222 47% 11%",
+  cardForeground: "260 15% 15%",
+  
+  // Hex values for direct usage
+  hex: {
+    primary: "#5500FF",
+    accent: "#8F7BFD",
+  },
 } as const;
 
 // =============================================================================
@@ -131,14 +138,14 @@ export const COLORS = {
 
 export const EFFECTS = {
   gradients: {
-    primary: "linear-gradient(135deg, hsl(142, 76%, 36%), hsl(142, 70%, 28%))",
-    hero: "linear-gradient(180deg, hsl(142, 60%, 95%) 0%, hsl(0, 0%, 100%) 100%)",
-    card: "linear-gradient(135deg, hsl(0, 0%, 100%) 0%, hsl(142, 30%, 98%) 100%)",
+    primary: "linear-gradient(135deg, #5500FF, #8F7BFD)",
+    hero: "linear-gradient(180deg, hsl(249, 50%, 97%) 0%, hsl(0, 0%, 100%) 100%)",
+    card: "linear-gradient(135deg, hsl(0, 0%, 100%) 0%, hsl(260, 30%, 98%) 100%)",
   },
   shadows: {
-    card: "0 4px 20px -4px hsla(142, 76%, 36%, 0.15)",
-    cardHover: "0 8px 30px -4px hsla(142, 76%, 36%, 0.25)",
-    glow: "0 0 40px hsla(142, 76%, 36%, 0.3)",
+    card: "0 4px 20px -4px hsla(260, 100%, 50%, 0.15)",
+    cardHover: "0 8px 30px -4px hsla(260, 100%, 50%, 0.25)",
+    glow: "0 0 40px hsla(260, 100%, 50%, 0.3)",
   },
 } as const;
 

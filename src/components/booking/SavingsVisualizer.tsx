@@ -29,7 +29,7 @@ export const SavingsVisualizer = ({
   return (
     <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-4 border border-primary/20">
       <div className="flex items-center gap-2 mb-3">
-        <DollarSign className="w-5 h-5 text-green-600" />
+        <DollarSign className="w-5 h-5 text-[#5500FF]" />
         <h3 className="font-semibold">Your Savings</h3>
       </div>
 
@@ -40,21 +40,21 @@ export const SavingsVisualizer = ({
         </div>
 
         {membershipDiscount > 0 && (
-          <div className="flex justify-between text-green-600">
+          <div className="flex justify-between text-[#5500FF]">
             <span>Membership Discount</span>
             <span>-${membershipDiscount.toFixed(2)}</span>
           </div>
         )}
 
         {fullPaymentDiscount > 0 && (
-          <div className="flex justify-between text-green-600">
+          <div className="flex justify-between text-[#5500FF]">
             <span>Full Payment Discount</span>
             <span>-${fullPaymentDiscount.toFixed(2)}</span>
           </div>
         )}
 
         {promoDiscount > 0 && (
-          <div className="flex justify-between text-green-600">
+          <div className="flex justify-between text-[#5500FF]">
             <span>Promo Discount</span>
             <span>-${promoDiscount.toFixed(2)}</span>
           </div>
@@ -69,7 +69,7 @@ export const SavingsVisualizer = ({
       </div>
 
       <div className="text-center mt-2">
-        <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+        <Badge variant="secondary" className="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
           Saving ${totalSavings.toFixed(2)}
         </Badge>
       </div>
