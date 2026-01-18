@@ -103,7 +103,9 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 text-white">
             
-            <p className="text-sm md:text-base text-center font-semibold">We Show Up. On Time. Every Time.</p>
+            <p className="text-sm md:text-base text-center font-semibold">
+              New Year Special: Claim Our Membership And Get Your First Clean For Only $189
+            </p>
           </div>
         </div>
       </div>
@@ -112,9 +114,11 @@ const Index = () => {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-3xl md:text-4xl tracking-tight text-center font-extrabold font-jakarta mx-auto max-w-4xl lg:text-4xl">Stop Spending Your One Day Off Scrubbing Bathrooms.</h1>
+            <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
+              New Year Special: Claim Our Membership And Get Your First Clean For Only $189
+            </h1>
             
-            <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">Enter your ZIP to get started</p>
+            <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">Book by Jan 7th — Enter your ZIP to get started</p>
           </div>
 
           {/* ZIP Code Entry or Contact Form */}
@@ -206,7 +210,28 @@ const Index = () => {
           
 
           {/* Membership Promo Card */}
-          
+          <Card className="mt-12 border-2 border-primary/40 bg-gradient-lavender shadow-card">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
+                    <Crown className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                  </div>
+                </div>
+                <div className="flex-1 text-center md:text-left space-y-2">
+                  <h3 className="text-lg md:text-xl font-semibold">Join Our Membership Program</h3>
+                  <p className="text-sm md:text-base text-muted-foreground">
+                    Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
+                    Perfect for regular cleaning schedules.
+                  </p>
+                </div>
+                <Button onClick={() => navigate("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
+                  Learn More
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
 
