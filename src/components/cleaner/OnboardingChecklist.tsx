@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, ExternalLink, Phone, CreditCard, Calendar } from "lucide-react";
+import { CheckCircle2, XCircle, ExternalLink, Phone, CreditCard, Calendar, DollarSign, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PhoneVerificationDialog } from "./PhoneVerificationDialog";
+import { PayoutOnboardingWizard } from "./PayoutOnboardingWizard";
 
 interface ChecklistItem {
   id: string;
@@ -22,8 +23,8 @@ interface OnboardingChecklistProps {
 }
 
 export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistProps) {
-  const [isInitiatingStripe, setIsInitiatingStripe] = useState(false);
   const [showPhoneDialog, setShowPhoneDialog] = useState(false);
+  const [showPayoutWizard, setShowPayoutWizard] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
   // Check Stripe Connect status on mount and when returning from Stripe
@@ -53,33 +54,18 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
     }
   };
 
-  const handleStripeConnect = async () => {
-    setIsInitiatingStripe(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('initiate-cleaner-stripe-connect');
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-        toast.info("Complete Stripe onboarding in the new tab");
-      }
-    } catch (error) {
-      console.error('Error initiating Stripe Connect:', error);
-      toast.error("Failed to start Stripe onboarding");
-    } finally {
-      setIsInitiatingStripe(false);
-    }
+  const handleOpenPayoutWizard = () => {
+    setShowPayoutWizard(true);
   };
 
   const checklist: ChecklistItem[] = [
     {
       id: "stripe",
-      label: "Complete Stripe Connect",
+      label: "Set Up Instant Payouts",
       completed: cleaner?.stripe_account_id && cleaner?.payouts_enabled,
       icon: CreditCard,
       actionLabel: "Setup Payouts",
-      onAction: handleStripeConnect,
+      onAction: handleOpenPayoutWizard,
     },
     {
       id: "phone",
@@ -102,11 +88,47 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
   const completedCount = checklist.filter(item => item.completed).length;
   const progress = (completedCount / checklist.length) * 100;
   const allComplete = completedCount === checklist.length;
+  const payoutsNotSetup = !cleaner?.stripe_account_id || !cleaner?.payouts_enabled;
 
   if (isDismissed && allComplete) return null;
 
   return (
     <>
+      {/* Prominent Payout Setup Banner (only if payouts not set up) */}
+      {payoutsNotSetup && (
+        <Card className="p-4 mb-4 border-2 border-green-500/30 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex-shrink-0">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-base font-bold text-green-800 dark:text-green-200">
+                  Get Paid Instantly! 💸
+                </h3>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full">
+                  <Zap className="w-3 h-3" />
+                  2 min setup
+                </span>
+              </div>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Set up your payout account to receive payments automatically when you complete jobs.
+              </p>
+            </div>
+            <Button 
+              onClick={handleOpenPayoutWizard}
+              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-md w-full sm:w-auto"
+            >
+              Set Up Now
+              <ExternalLink className="ml-2 w-4 h-4" />
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Standard Checklist */}
       <Card className="p-4 mb-4 border-primary/20 bg-gradient-to-r from-primary/5 to-background">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -135,7 +157,9 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
             return (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-2 rounded-lg bg-background/50 border"
+                className={`flex items-center justify-between p-2 rounded-lg bg-background/50 border ${
+                  item.id === "stripe" && !item.completed ? "border-green-300 bg-green-50/50" : ""
+                }`}
               >
                 <div className="flex items-center gap-2">
                   {item.completed ? (
@@ -147,16 +171,21 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
                   <span className={`text-sm ${item.completed ? "text-muted-foreground" : ""}`}>
                     {item.label}
                   </span>
+                  {item.id === "stripe" && !item.completed && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+                      Required for payouts
+                    </span>
+                  )}
                 </div>
 
                 {!item.completed && (
                   <Button
                     size="sm"
                     onClick={item.onAction}
-                    disabled={item.id === "stripe" && isInitiatingStripe}
+                    variant={item.id === "stripe" ? "default" : "outline"}
+                    className={item.id === "stripe" ? "bg-green-600 hover:bg-green-700" : ""}
                   >
                     {item.actionLabel}
-                    {item.id === "stripe" && <ExternalLink className="ml-2 w-3.5 h-3.5" />}
                   </Button>
                 )}
               </div>
@@ -164,6 +193,14 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
           })}
         </div>
       </Card>
+
+      {/* Payout Onboarding Wizard */}
+      <PayoutOnboardingWizard
+        open={showPayoutWizard}
+        onOpenChange={setShowPayoutWizard}
+        cleaner={cleaner}
+        onComplete={onRefresh}
+      />
 
       <PhoneVerificationDialog
         open={showPhoneDialog}
