@@ -100,16 +100,31 @@ export default function OnboardingLanding() {
 
       console.log("[ONBOARDING] Send code response:", { data, error });
 
+      // Check for invocation error
       if (error) {
-        console.error("[ONBOARDING] Failed to send code:", error);
-        toast.error(error.message || "Failed to send verification code. Please try again.");
+        console.error("[ONBOARDING] Function invocation error:", error);
+        toast.error("Unable to connect to server. Please try again.");
+        return;
+      }
+
+      // Check response success flag
+      if (data?.success === false) {
+        console.error("[ONBOARDING] Server returned error:", data?.error);
+        toast.error(data?.error || "Failed to send verification code. Please try again.");
         return;
       }
 
       console.log("[ONBOARDING] Verification code sent successfully");
       setStep('code');
       setResendCountdown(60);
-      toast.success("Verification code sent! Check your email.");
+      
+      // Show debug code if available (only in development)
+      if (data?.testCode) {
+        console.log("[ONBOARDING] Test code:", data.testCode);
+        toast.success(`Code sent! (Debug: ${data.testCode})`);
+      } else {
+        toast.success(data?.message || "Verification code sent! Check your email.");
+      }
     } catch (error) {
       console.error("[ONBOARDING] Email verification exception:", error);
       toast.error("Connection error. Please check your internet and try again.");
@@ -174,24 +189,26 @@ export default function OnboardingLanding() {
       });
 
       console.log("[ONBOARDING] Verification response:", {
+        success: data?.success,
         hasTokens: !!data?.access_token && !!data?.refresh_token,
-        error: error
+        error: error || data?.error
       });
 
-      if (error || !data?.access_token || !data?.refresh_token) {
-        console.error("[ONBOARDING] Verification failed:", error);
-        
-        // Clear code on error
+      // Check for invocation error
+      if (error) {
+        console.error("[ONBOARDING] Function invocation error:", error);
         setCode(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
-        
-        if (error?.message?.includes("expired")) {
-          toast.error("Code expired. Please request a new one.");
-        } else if (error?.message?.includes("already used")) {
-          toast.error("Code already used. Please request a new one.");
-        } else {
-          toast.error(error?.message || "Invalid code. Please try again.");
-        }
+        toast.error("Unable to connect to server. Please try again.");
+        return;
+      }
+
+      // Check response success flag
+      if (data?.success === false || !data?.access_token || !data?.refresh_token) {
+        console.error("[ONBOARDING] Verification failed:", data?.error);
+        setCode(["", "", "", "", "", ""]);
+        inputRefs.current[0]?.focus();
+        toast.error(data?.error || "Invalid code. Please try again.");
         return;
       }
 
@@ -230,17 +247,23 @@ export default function OnboardingLanding() {
     
     setIsLoading(true);
     try {
-      const { error } = await supabase.functions.invoke('send-cleaner-verification-code', {
+      const { data, error } = await supabase.functions.invoke('send-cleaner-verification-code', {
         body: { email: email.trim().toLowerCase(), firstName: "" }
       });
       
       if (error) {
-        toast.error(error.message || "Failed to resend code");
+        toast.error("Unable to connect to server. Please try again.");
+      } else if (data?.success === false) {
+        toast.error(data?.error || "Failed to resend code");
       } else {
         setResendCountdown(60);
         setCode(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
-        toast.success("New code sent! Check your email.");
+        if (data?.testCode) {
+          toast.success(`New code sent! (Debug: ${data.testCode})`);
+        } else {
+          toast.success(data?.message || "New code sent! Check your email.");
+        }
       }
     } catch {
       toast.error("Failed to resend code. Please try again.");

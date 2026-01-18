@@ -16,22 +16,33 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  logStep("Function invoked");
+
   try {
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid request body" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     const email = body?.email?.trim()?.toLowerCase();
     const code = body?.code?.trim();
     
     if (!email || !code) {
       return new Response(
-        JSON.stringify({ error: "Email and code are required" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        JSON.stringify({ success: false, error: "Email and code are required" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
       return new Response(
-        JSON.stringify({ error: "Invalid code format. Please enter a 6-digit code." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        JSON.stringify({ success: false, error: "Please enter a valid 6-digit code" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
@@ -41,14 +52,14 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseKey) {
       logStep("Missing Supabase configuration");
       return new Response(
-        JSON.stringify({ error: "Server configuration error" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        JSON.stringify({ success: false, error: "Server configuration error" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    logStep("Verifying code", { email });
+    logStep("Verifying code", { email, codePrefix: code.substring(0, 2) });
 
     // Find the most recent unused code for this email
     const { data: verification, error: fetchError } = await supabase
@@ -64,16 +75,16 @@ serve(async (req) => {
     if (fetchError) {
       logStep("Database error", { error: fetchError.message });
       return new Response(
-        JSON.stringify({ error: "Unable to verify code. Please try again." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        JSON.stringify({ success: false, error: "Unable to verify code. Please try again." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
     if (!verification) {
       logStep("Code not found or already used", { email });
       return new Response(
-        JSON.stringify({ error: "Invalid verification code. Please check and try again." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        JSON.stringify({ success: false, error: "Invalid code. Please check and try again." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
@@ -82,32 +93,26 @@ serve(async (req) => {
     const now = new Date();
     
     if (now > expiresAt) {
-      logStep("Code expired", { email, expiredAt: verification.expires_at });
+      logStep("Code expired", { email });
       
-      // Mark as used to prevent reuse
       await supabase
         .from("cleaner_verification_codes")
         .update({ used: true })
         .eq("id", verification.id);
       
       return new Response(
-        JSON.stringify({ error: "Verification code has expired. Please request a new one." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        JSON.stringify({ success: false, error: "Code expired. Please request a new one." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
     logStep("Code verified successfully", { email });
 
     // Mark code as used
-    const { error: updateError } = await supabase
+    await supabase
       .from("cleaner_verification_codes")
       .update({ used: true })
       .eq("id", verification.id);
-
-    if (updateError) {
-      logStep("Failed to mark code as used", { error: updateError.message });
-      // Continue anyway - code was valid
-    }
 
     // Check if user already exists
     const { data: existingUsers } = await supabase.auth.admin.listUsers();
@@ -116,7 +121,8 @@ serve(async (req) => {
     let userId: string;
     
     if (!existingUser) {
-      // Create new user with auto-generated password
+      logStep("Creating new user", { email });
+      
       const tempPassword = `${crypto.randomUUID()}-${Date.now()}`;
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
         email: email,
@@ -131,83 +137,68 @@ serve(async (req) => {
       if (createError || !newUser.user) {
         logStep("Failed to create user", { error: createError?.message });
         return new Response(
-          JSON.stringify({ error: "Failed to create account. Please try again." }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+          JSON.stringify({ success: false, error: "Failed to create account. Please try again." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
       }
       
       userId = newUser.user.id;
-      logStep("New user created", { email, userId });
+      logStep("User created", { userId });
     } else {
       userId = existingUser.id;
-      
-      // Update metadata for existing user
-      await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: {
-          onboarding: true,
-          is_cleaner: true,
-        }
-      });
-      
-      logStep("Existing user found", { email, userId });
+      logStep("Existing user found", { userId });
     }
 
-    // Generate a secure temporary password for session creation
+    // Generate session
     const sessionPassword = `${crypto.randomUUID()}-${Date.now()}`;
     
-    // Update user with temporary password to enable sign-in
-    const { error: passwordUpdateError } = await supabase.auth.admin.updateUserById(userId, {
+    const { error: passwordError } = await supabase.auth.admin.updateUserById(userId, {
       password: sessionPassword,
-      user_metadata: {
-        onboarding: true,
-        is_cleaner: true,
-      }
+      user_metadata: { onboarding: true, is_cleaner: true }
     });
 
-    if (passwordUpdateError) {
-      logStep("Failed to update user password", { error: passwordUpdateError.message });
+    if (passwordError) {
+      logStep("Failed to update password", { error: passwordError.message });
       return new Response(
-        JSON.stringify({ error: "Failed to establish session. Please try again." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        JSON.stringify({ success: false, error: "Failed to create session. Please try again." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
-    logStep("User password updated for session creation");
-
-    // Sign in programmatically to get real session tokens
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: email,
+      email,
       password: sessionPassword,
     });
 
     if (signInError || !signInData.session) {
       logStep("Failed to create session", { error: signInError?.message });
       return new Response(
-        JSON.stringify({ error: "Failed to create session. Please try again." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        JSON.stringify({ success: false, error: "Failed to create session. Please try again." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
-    logStep("Session created successfully", { email, userId });
+    logStep("Session created successfully", { email });
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: "Code verified successfully",
+        message: "Email verified successfully",
         access_token: signInData.session.access_token,
         refresh_token: signInData.session.refresh_token,
-        email: email,
-        userId: userId,
+        email,
+        userId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
+    logStep("FATAL ERROR", { message: errorMessage });
+    
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred. Please try again." }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      JSON.stringify({ success: false, error: "An unexpected error occurred. Please try again." }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   }
 });

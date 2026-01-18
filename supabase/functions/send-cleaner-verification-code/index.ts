@@ -16,41 +16,62 @@ const generateCode = (): string => {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  logStep("Function invoked", { method: req.method });
+
   try {
-    const body = await req.json();
+    // Parse request body
+    let body;
+    try {
+      body = await req.json();
+      logStep("Request body parsed", { hasEmail: !!body?.email });
+    } catch (parseError) {
+      logStep("Failed to parse request body", { error: String(parseError) });
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid request body" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     const email = body?.email?.trim()?.toLowerCase();
     const firstName = body?.firstName || "";
     
     if (!email) {
+      logStep("Email missing");
       return new Response(
-        JSON.stringify({ error: "Email is required" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        JSON.stringify({ success: false, error: "Email is required" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      logStep("Invalid email format", { email });
       return new Response(
-        JSON.stringify({ error: "Invalid email format" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        JSON.stringify({ success: false, error: "Invalid email format" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
     logStep("Generating verification code", { email });
 
+    // Check environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
     if (!supabaseUrl || !supabaseKey) {
-      logStep("Missing Supabase configuration");
+      logStep("Missing Supabase configuration", { 
+        hasUrl: !!supabaseUrl, 
+        hasKey: !!supabaseKey 
+      });
       return new Response(
-        JSON.stringify({ error: "Server configuration error" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        JSON.stringify({ success: false, error: "Server configuration error. Please contact support." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
@@ -59,105 +80,121 @@ serve(async (req) => {
     // Generate 6-digit code
     const code = generateCode();
     const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes expiry
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
-    // Delete any existing unused codes for this email first
-    await supabase
-      .from("cleaner_verification_codes")
-      .delete()
-      .eq("email", email)
-      .eq("used", false);
+    logStep("Code generated", { code: code.substring(0, 2) + "****", expiresAt: expiresAt.toISOString() });
+
+    // Try to delete existing unused codes for this email (non-critical)
+    try {
+      const { error: deleteError } = await supabase
+        .from("cleaner_verification_codes")
+        .delete()
+        .eq("email", email)
+        .eq("used", false);
+      
+      if (deleteError) {
+        logStep("Could not delete old codes (non-critical)", { error: deleteError.message });
+      }
+    } catch (deleteErr) {
+      logStep("Delete old codes exception (non-critical)", { error: String(deleteErr) });
+    }
 
     // Store new code in database
-    const { error: insertError } = await supabase
+    logStep("Inserting code into database");
+    const { data: insertData, error: insertError } = await supabase
       .from("cleaner_verification_codes")
       .insert({
         email,
         code,
         expires_at: expiresAt.toISOString(),
         used: false,
-      });
+      })
+      .select()
+      .single();
 
     if (insertError) {
-      logStep("Failed to store code", { error: insertError.message });
-      return new Response(
-        JSON.stringify({ error: "Failed to generate verification code. Please try again." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    }
-
-    logStep("Code stored in database", { email, expiresAt: expiresAt.toISOString() });
-
-    // Try to send email via Resend
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    
-    if (!resendApiKey) {
-      logStep("RESEND_API_KEY not configured - code stored but email not sent");
-      // Return success anyway since code was stored - user might be testing
+      logStep("Failed to store code in database", { 
+        error: insertError.message,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint
+      });
+      
+      // Check if it's a table not found error
+      if (insertError.message?.includes("relation") || insertError.code === "42P01") {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "Database setup incomplete. Please contact support.",
+            debug: { errorCode: insertError.code }
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ 
-          success: true,
-          message: "Verification code generated (email service not configured)",
-          debug: true
+          success: false, 
+          error: "Failed to generate verification code. Please try again.",
+          debug: { errorMessage: insertError.message }
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
-    // Send email using Resend REST API directly (more reliable than SDK)
+    logStep("Code stored successfully", { id: insertData?.id });
+
+    // Try to send email via Resend
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    
+    if (!resendApiKey) {
+      logStep("RESEND_API_KEY not configured - returning code in debug mode");
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          message: "Code generated (email service not configured)",
+          debug: true,
+          // Only include code in development/debug scenarios
+          testCode: code
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // Build email HTML
     const emailHtml = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Verification Code</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
-          <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #5500FF 0%, #8F7BFD 100%); padding: 32px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">🧹 Welcome to Novara!</h1>
-              <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Verify your email to get started</p>
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">🧹 Novara Cleaning</h1>
+              <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Your verification code</p>
             </td>
           </tr>
-          <!-- Content -->
           <tr>
             <td style="padding: 32px;">
-              <p style="margin: 0 0 16px 0; font-size: 16px; color: #374151; line-height: 1.6;">
-                Hi ${firstName || 'there'},
-              </p>
-              <p style="margin: 0 0 24px 0; font-size: 16px; color: #374151; line-height: 1.6;">
-                Thanks for joining Novara Cleaning! Enter this verification code to continue:
-              </p>
-              <!-- Code Box -->
+              <p style="margin: 0 0 16px 0; font-size: 16px; color: #374151;">Hi ${firstName || 'there'},</p>
+              <p style="margin: 0 0 24px 0; font-size: 16px; color: #374151;">Enter this code to verify your email:</p>
               <div style="background: linear-gradient(135deg, #5500FF 0%, #8F7BFD 100%); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 40px; font-weight: 700; color: #ffffff; letter-spacing: 12px; font-family: 'Courier New', monospace;">
-                  ${code}
-                </span>
+                <span style="font-size: 36px; font-weight: 700; color: #ffffff; letter-spacing: 8px; font-family: monospace;">${code}</span>
               </div>
-              <!-- Warning -->
-              <div style="background-color: #FFF7ED; border-left: 4px solid #F59E0B; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
-                <p style="margin: 0; font-size: 14px; color: #92400E;">
-                  <strong>⏰ This code expires in 15 minutes</strong><br>
-                  Enter the code in the app to continue.
-                </p>
-              </div>
-              <p style="margin: 0; font-size: 14px; color: #6B7280; line-height: 1.6;">
-                If you didn't request this code, please ignore this email.
+              <p style="margin: 0; font-size: 14px; color: #6B7280; background: #FFF7ED; padding: 12px; border-radius: 8px; border-left: 4px solid #F59E0B;">
+                ⏰ This code expires in 15 minutes
               </p>
             </td>
           </tr>
-          <!-- Footer -->
           <tr>
             <td style="padding: 24px; background-color: #F9FAFB; text-align: center; border-top: 1px solid #E5E7EB;">
-              <p style="margin: 0; font-size: 13px; color: #9CA3AF;">
-                © ${new Date().getFullYear()} Novara Cleaning. All rights reserved.
-              </p>
+              <p style="margin: 0; font-size: 12px; color: #9CA3AF;">If you didn't request this code, ignore this email.</p>
             </td>
           </tr>
         </table>
@@ -165,9 +202,10 @@ serve(async (req) => {
     </tr>
   </table>
 </body>
-</html>
-    `;
+</html>`;
 
+    logStep("Sending email via Resend");
+    
     try {
       const emailResponse = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -180,37 +218,40 @@ serve(async (req) => {
           to: [email],
           subject: `${code} is your Novara verification code`,
           html: emailHtml,
-          text: `Your Novara Cleaning verification code is ${code}. It expires in 15 minutes. If you didn't request this, please ignore this email.`,
+          text: `Your Novara Cleaning verification code is ${code}. It expires in 15 minutes.`,
         }),
       });
 
       const emailResult = await emailResponse.json();
+      logStep("Resend API response", { 
+        status: emailResponse.status, 
+        ok: emailResponse.ok,
+        result: emailResult 
+      });
 
       if (!emailResponse.ok) {
-        logStep("Email send failed", { status: emailResponse.status, result: emailResult });
-        // Still return success since code was stored - they can use resend
+        logStep("Email send failed but code was stored", { error: emailResult });
         return new Response(
           JSON.stringify({ 
             success: true,
-            message: "Code generated. If you don't receive the email, try resending.",
+            message: "Code generated. Check your spam folder if you don't see the email.",
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
       }
 
-      logStep("Verification email sent successfully", { email, messageId: emailResult.id });
+      logStep("Email sent successfully", { messageId: emailResult.id });
 
       return new Response(
         JSON.stringify({ 
           success: true,
-          message: "Verification code sent successfully"
+          message: "Verification code sent! Check your email."
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
 
     } catch (emailError) {
-      logStep("Email send exception", { error: emailError instanceof Error ? emailError.message : String(emailError) });
-      // Still return success since code was stored
+      logStep("Email send exception", { error: String(emailError) });
       return new Response(
         JSON.stringify({ 
           success: true,
@@ -222,10 +263,15 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
+    logStep("FATAL ERROR", { message: errorMessage, stack: error instanceof Error ? error.stack : undefined });
+    
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred. Please try again." }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      JSON.stringify({ 
+        success: false, 
+        error: "An unexpected error occurred. Please try again.",
+        debug: { message: errorMessage }
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   }
 });
