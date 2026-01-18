@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar as CalendarIcon, Clock, ChevronRight, ChevronLeft, Loader2, Sun, Sunset, Moon } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, ChevronRight, ChevronLeft, Loader2, Sun, Sunset, Moon, Check, Sparkles } from "lucide-react";
 import { format, addDays, isWeekend, isBefore, startOfDay, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAvailability } from "@/hooks/use-availability";
@@ -19,30 +19,26 @@ interface SchedulePickerProps {
   isProcessing?: boolean;
 }
 
-// Extended time windows - more granular slots
 const TIME_SLOTS = [
-  // Morning slots
   { id: "8:00 AM - 9:00 AM", label: "8:00 AM", period: "morning", startTime: "08:00", endTime: "09:00" },
   { id: "9:00 AM - 10:00 AM", label: "9:00 AM", period: "morning", startTime: "09:00", endTime: "10:00" },
   { id: "10:00 AM - 11:00 AM", label: "10:00 AM", period: "morning", startTime: "10:00", endTime: "11:00" },
   { id: "11:00 AM - 12:00 PM", label: "11:00 AM", period: "morning", startTime: "11:00", endTime: "12:00" },
-  // Afternoon slots
   { id: "12:00 PM - 1:00 PM", label: "12:00 PM", period: "afternoon", startTime: "12:00", endTime: "13:00" },
   { id: "1:00 PM - 2:00 PM", label: "1:00 PM", period: "afternoon", startTime: "13:00", endTime: "14:00" },
   { id: "2:00 PM - 3:00 PM", label: "2:00 PM", period: "afternoon", startTime: "14:00", endTime: "15:00" },
   { id: "3:00 PM - 4:00 PM", label: "3:00 PM", period: "afternoon", startTime: "15:00", endTime: "16:00" },
-  // Evening slots
   { id: "4:00 PM - 5:00 PM", label: "4:00 PM", period: "evening", startTime: "16:00", endTime: "17:00" },
   { id: "5:00 PM - 6:00 PM", label: "5:00 PM", period: "evening", startTime: "17:00", endTime: "18:00" },
 ];
 
 const PERIOD_CONFIG = {
-  morning: { label: "Morning", icon: Sun, color: "text-amber-500" },
-  afternoon: { label: "Afternoon", icon: Sunset, color: "text-orange-500" },
-  evening: { label: "Evening", icon: Moon, color: "text-indigo-500" },
+  morning: { label: "Morning", icon: Sun, color: "text-amber-500", bgColor: "bg-amber-50", borderColor: "border-amber-200" },
+  afternoon: { label: "Afternoon", icon: Sunset, color: "text-orange-500", bgColor: "bg-orange-50", borderColor: "border-orange-200" },
+  evening: { label: "Evening", icon: Moon, color: "text-violet-500", bgColor: "bg-violet-50", borderColor: "border-violet-200" },
 };
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export function SchedulePicker({
   selectedDate,
@@ -60,7 +56,6 @@ export function SchedulePicker({
 
   const { availability, loading: isLoading } = useAvailability(minDate, endDate);
 
-  // Group availability by date for quick lookup
   const availabilityByDate = useMemo(() => {
     const map: Record<string, Record<string, { available: boolean; capacity: number; booked: number }>> = {};
     availability.forEach((slot) => {
@@ -92,16 +87,12 @@ export function SchedulePicker({
 
   const isScheduleComplete = selectedDate && selectedTime;
 
-  // Generate calendar days for current month view
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
     const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    
-    // Add padding days for the start of the week
     const startPadding = getDay(monthStart);
     const paddingDays = Array(startPadding).fill(null);
-    
     return [...paddingDays, ...days];
   }, [currentMonth]);
 
@@ -119,7 +110,6 @@ export function SchedulePicker({
     }
   };
 
-  // Group time slots by period
   const slotsByPeriod = useMemo(() => {
     return TIME_SLOTS.reduce((acc, slot) => {
       if (!acc[slot.period]) acc[slot.period] = [];
@@ -129,222 +119,272 @@ export function SchedulePicker({
   }, []);
 
   return (
-    <Card className="border-primary/20 overflow-hidden shadow-lg">
-      <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pb-4">
-        <CardTitle className="text-xl flex items-center gap-2">
-          <CalendarIcon className="w-5 h-5 text-primary" />
-          Pick Your Date & Time
-        </CardTitle>
-        <CardDescription>
-          Select a convenient appointment slot (3+ days advance booking required)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
-        {/* Step 1: Date Selection - Horizontal scroll card layout */}
-        <div className="p-4 md:p-6 border-b">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">1</span>
-              Select Date
-            </p>
-            <div className="flex items-center gap-1">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="text-center">
+        <h2 className="text-2xl md:text-3xl font-bold mb-2">When would you like us?</h2>
+        <p className="text-muted-foreground">Book 3+ days in advance for best availability</p>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Date Selection Card */}
+        <Card className="border-2 border-border hover:border-[#5500FF]/30 transition-colors overflow-hidden">
+          <div className="bg-gradient-to-r from-[#5500FF]/10 to-[#8F7BFD]/10 px-5 py-4 border-b">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center",
+                  selectedDate ? "bg-[#5500FF] text-white" : "bg-muted"
+                )}>
+                  {selectedDate ? <Check className="w-5 h-5" /> : <CalendarIcon className="w-5 h-5" />}
+                </div>
+                <div>
+                  <p className="font-semibold">Select Date</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedDate ? format(selectedDate, "EEEE, MMM d") : "Choose your preferred day"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <CardContent className="p-4">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between mb-4">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-8 w-8"
+                size="sm"
+                className="h-9 w-9 p-0"
                 onClick={goToPreviousMonth}
                 disabled={isBefore(endOfMonth(addMonths(currentMonth, -1)), minDate)}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-5 w-5" />
               </Button>
-              <span className="text-sm font-medium min-w-[120px] text-center">
+              <h3 className="text-lg font-semibold">
                 {format(currentMonth, "MMMM yyyy")}
-              </span>
+              </h3>
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-8 w-8"
+                size="sm"
+                className="h-9 w-9 p-0"
                 onClick={goToNextMonth}
                 disabled={!isBefore(startOfMonth(addMonths(currentMonth, 1)), endDate)}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-5 w-5" />
               </Button>
             </div>
-          </div>
-          
-          {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {WEEKDAYS.map((day) => (
-              <div key={day} className="text-center text-xs font-medium text-muted-foreground py-1">
-                {day}
-              </div>
-            ))}
-          </div>
-          
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {calendarDays.map((day, idx) => {
-              if (!day) {
-                return <div key={`padding-${idx}`} className="aspect-square" />;
-              }
-              
-              const disabled = isDateDisabled(day);
-              const isSelected = selectedDate && isSameDay(day, selectedDate);
-              const isToday = isSameDay(day, new Date());
-              const isCurrentMonth = isSameMonth(day, currentMonth);
-              
-              return (
-                <button
-                  key={day.toISOString()}
-                  onClick={() => !disabled && onDateSelect(day)}
-                  disabled={disabled}
-                  className={cn(
-                    "aspect-square rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all relative",
-                    "hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    disabled && "opacity-30 cursor-not-allowed hover:bg-transparent",
-                    !isCurrentMonth && "opacity-50",
-                    isSelected && "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md",
-                    isToday && !isSelected && "ring-2 ring-primary/30 font-bold",
-                    !disabled && !isSelected && "hover:scale-105"
-                  )}
-                >
-                  <span>{format(day, "d")}</span>
-                  {isToday && !isSelected && (
-                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-primary" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step 2: Time Selection */}
-        <div className="p-4 md:p-6">
-          <p className="text-sm font-semibold flex items-center gap-2 mb-4">
-            <span className={cn(
-              "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors",
-              selectedDate ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}>2</span>
-            Select Time
-          </p>
-          
-          {!selectedDate ? (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Clock className="w-10 h-10 mb-3 opacity-30" />
-              <p className="text-sm">Select a date first to see available times</p>
-            </div>
-          ) : isLoading ? (
-            <div className="space-y-4">
-              {["morning", "afternoon", "evening"].map((period) => (
-                <div key={period} className="space-y-2">
-                  <Skeleton className="h-5 w-20" />
-                  <div className="grid grid-cols-4 gap-2">
-                    {[1, 2, 3, 4].map((i) => (
-                      <Skeleton key={i} className="h-12 rounded-lg" />
-                    ))}
-                  </div>
+            
+            {/* Weekday Headers */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {WEEKDAYS.map((day, i) => (
+                <div key={i} className="text-center text-xs font-medium text-muted-foreground py-2">
+                  {day}
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="space-y-4">
-              {(["morning", "afternoon", "evening"] as const).map((period) => {
-                const config = PERIOD_CONFIG[period];
-                const Icon = config.icon;
-                const slots = slotsByPeriod[period] || [];
+            
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((day, idx) => {
+                if (!day) {
+                  return <div key={`padding-${idx}`} className="aspect-square" />;
+                }
+                
+                const disabled = isDateDisabled(day);
+                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                const isToday = isSameDay(day, new Date());
+                const isCurrentMonth = isSameMonth(day, currentMonth);
                 
                 return (
-                  <div key={period} className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Icon className={cn("w-4 h-4", config.color)} />
-                      {config.label}
-                    </div>
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                      {slots.map((slot) => {
-                        const status = getSlotStatus(slot.id);
-                        const isSelected = selectedTime === slot.id;
-                        
-                        return (
-                          <button
-                            key={slot.id}
-                            onClick={() => {
-                              if (status.available && selectedDate) {
-                                onTimeSelect(selectedDate, slot.id, slot.startTime, slot.endTime);
-                              }
-                            }}
-                            disabled={!status.available}
-                            className={cn(
-                              "relative py-2.5 px-2 rounded-lg border text-sm font-medium transition-all",
-                              "hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                              isSelected 
-                                ? "border-primary bg-primary text-primary-foreground shadow-md" 
-                                : "border-border hover:bg-muted/50",
-                              !status.available && "opacity-40 cursor-not-allowed bg-muted/30 hover:bg-muted/30",
-                              !isSelected && status.available && "hover:scale-105"
-                            )}
-                          >
-                            {slot.label}
-                            {status.label === "Few left" && status.available && !isSelected && (
-                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <button
+                    key={day.toISOString()}
+                    onClick={() => !disabled && onDateSelect(day)}
+                    disabled={disabled}
+                    className={cn(
+                      "aspect-square rounded-xl flex items-center justify-center text-sm font-medium transition-all relative",
+                      "hover:bg-[#5500FF]/10 focus:outline-none focus:ring-2 focus:ring-[#5500FF]/50",
+                      disabled && "opacity-25 cursor-not-allowed hover:bg-transparent",
+                      !isCurrentMonth && "opacity-40",
+                      isSelected && "bg-gradient-to-br from-[#5500FF] to-[#8F7BFD] text-white shadow-lg scale-110",
+                      isToday && !isSelected && "ring-2 ring-[#5500FF]/40 font-bold text-[#5500FF]",
+                      !disabled && !isSelected && "hover:scale-105"
+                    )}
+                  >
+                    {format(day, "d")}
+                  </button>
                 );
               })}
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Selection Summary & Continue */}
-        {showContinue && (
-          <div className="border-t bg-gradient-to-r from-muted/50 to-muted/30 p-4 md:p-6">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="text-center md:text-left">
-                {isScheduleComplete ? (
-                  <div className="flex items-center gap-3 text-sm animate-scale-in">
-                    <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
-                      {format(selectedDate!, "EEE, MMM d, yyyy")}
-                    </Badge>
-                    <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <Clock className="w-3.5 h-3.5 mr-1.5" />
-                      {selectedTime}
-                    </Badge>
+        {/* Time Selection Card */}
+        <Card className="border-2 border-border hover:border-[#5500FF]/30 transition-colors overflow-hidden">
+          <div className="bg-gradient-to-r from-[#8F7BFD]/10 to-[#5500FF]/10 px-5 py-4 border-b">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center",
+                selectedTime ? "bg-[#5500FF] text-white" : "bg-muted"
+              )}>
+                {selectedTime ? <Check className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+              </div>
+              <div>
+                <p className="font-semibold">Select Time</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedTime || "Pick your arrival window"}
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <CardContent className="p-4">
+            {!selectedDate ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                  <Clock className="w-8 h-8 opacity-40" />
+                </div>
+                <p className="text-sm font-medium">Select a date first</p>
+                <p className="text-xs">Available times will appear here</p>
+              </div>
+            ) : isLoading ? (
+              <div className="space-y-4 py-4">
+                {["morning", "afternoon", "evening"].map((period) => (
+                  <div key={period} className="space-y-2">
+                    <Skeleton className="h-6 w-24" />
+                    <div className="grid grid-cols-2 gap-2">
+                      {[1, 2, 3, 4].map((i) => (
+                        <Skeleton key={i} className="h-12 rounded-xl" />
+                      ))}
+                    </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-5 py-2">
+                {(["morning", "afternoon", "evening"] as const).map((period) => {
+                  const config = PERIOD_CONFIG[period];
+                  const Icon = config.icon;
+                  const slots = slotsByPeriod[period] || [];
+                  
+                  return (
+                    <div key={period}>
+                      <div className={cn(
+                        "flex items-center gap-2 mb-3 px-3 py-2 rounded-lg",
+                        config.bgColor, config.borderColor, "border"
+                      )}>
+                        <Icon className={cn("w-4 h-4", config.color)} />
+                        <span className="text-sm font-semibold">{config.label}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {slots.map((slot) => {
+                          const status = getSlotStatus(slot.id);
+                          const isSelected = selectedTime === slot.id;
+                          
+                          return (
+                            <button
+                              key={slot.id}
+                              onClick={() => {
+                                if (status.available && selectedDate) {
+                                  onTimeSelect(selectedDate, slot.id, slot.startTime, slot.endTime);
+                                }
+                              }}
+                              disabled={!status.available}
+                              className={cn(
+                                "relative py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all",
+                                "focus:outline-none focus:ring-2 focus:ring-[#5500FF]/50",
+                                isSelected 
+                                  ? "border-[#5500FF] bg-gradient-to-br from-[#5500FF] to-[#8F7BFD] text-white shadow-lg" 
+                                  : "border-border hover:border-[#5500FF]/50 hover:bg-[#5500FF]/5",
+                                !status.available && "opacity-30 cursor-not-allowed bg-muted/30 hover:bg-muted/30 hover:border-border",
+                              )}
+                            >
+                              {slot.label}
+                              {status.label === "Few left" && status.available && !isSelected && (
+                                <Badge className="absolute -top-2 -right-2 px-1.5 py-0.5 text-[10px] bg-amber-500 text-white border-0">
+                                  2 left
+                                </Badge>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Selection Summary & Continue */}
+      {showContinue && (
+        <Card className={cn(
+          "border-2 transition-all overflow-hidden",
+          isScheduleComplete 
+            ? "border-[#5500FF] bg-gradient-to-r from-[#5500FF]/5 to-[#8F7BFD]/5" 
+            : "border-border bg-muted/30"
+        )}>
+          <CardContent className="p-5">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                {isScheduleComplete ? (
+                  <>
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5500FF] to-[#8F7BFD] flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">Perfect! You're all set.</p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CalendarIcon className="w-4 h-4" />
+                        {format(selectedDate!, "EEE, MMM d")}
+                        <span>•</span>
+                        <Clock className="w-4 h-4" />
+                        {selectedTime}
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {selectedDate ? "Now select a time slot above" : "Select a date and time to continue"}
-                  </p>
+                  <>
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                      <CalendarIcon className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-muted-foreground">
+                        {selectedDate ? "Now select a time" : "Select date & time to continue"}
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
               <Button
                 size="lg"
                 className={cn(
-                  "w-full md:w-auto font-semibold min-w-[200px] transition-all",
-                  isScheduleComplete ? "bg-gradient-primary shadow-lg hover:shadow-xl" : "bg-muted text-muted-foreground"
+                  "w-full md:w-auto min-w-[200px] h-12 font-semibold text-base transition-all",
+                  isScheduleComplete 
+                    ? "bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90 shadow-lg" 
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
                 onClick={onContinue}
                 disabled={!isScheduleComplete || continueDisabled || isProcessing}
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     Processing...
                   </>
                 ) : (
                   <>
                     Continue to Checkout
-                    <ChevronRight className="w-4 h-4 ml-1" />
+                    <ChevronRight className="w-5 h-5 ml-1" />
                   </>
                 )}
               </Button>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }

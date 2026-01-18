@@ -3,19 +3,22 @@ import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, Zap, AlertCircle, RefreshCw, Gift, ChevronLeft, ChevronRight } from "lucide-react";
+import { 
+  ArrowLeft, Calendar, Clock, Sparkles, Loader2, CreditCard, 
+  Zap, AlertCircle, RefreshCw, Gift, ChevronRight, Shield, 
+  Check, Tag, Home, MapPin, Percent
+} from "lucide-react";
 import { ProgressBar } from "@/components/booking/ProgressBar";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, applyPromoCode, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
-import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
-import { useBookingSwipe } from "@/hooks/use-booking-swipe";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, MEMBERSHIP_PLANS, getEstimatedHours, HOURLY_RATE } from "@/lib/pricing-system";
+import { findBestPromoCode, formatPromoSavings, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -23,11 +26,6 @@ import { cn } from "@/lib/utils";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
-import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
-import { PaymentComparison } from "@/components/booking/PaymentComparison";
-import { useSwipeable } from "react-swipeable";
-
-// Stripe publishable key will be loaded from an Edge Function at runtime
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location" },
@@ -55,25 +53,20 @@ export default function BookingCheckout() {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [isNewCustomer, setIsNewCustomer] = useState(false);
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
-  const [referralCode, setReferralCode] = useState<string>('');
-  const [isValidatingReferral, setIsValidatingReferral] = useState(false);
-  const [referralValid, setReferralValid] = useState<boolean | null>(null);
   const [promoCode, setPromoCode] = useState<string>('');
   const [isValidatingPromo, setIsValidatingPromo] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [autoAppliedPromo, setAutoAppliedPromo] = useState<EligiblePromo | null>(null);
   const [isAutoApplying, setIsAutoApplying] = useState(false);
+  const [showPromoInput, setShowPromoInput] = useState(false);
   const effectivePaymentOption = bookingData.paymentOption || 'deposit';
 
   useEffect(() => {
-    // Ensure default payment option for old localStorage payloads
     if (!bookingData.paymentOption) {
       updateBookingData({ paymentOption: 'deposit' });
     }
 
-    // Fetch publishable key from Edge Function (public)
     const init = async () => {
       const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
       if (error || !data?.key) {
@@ -86,7 +79,6 @@ export default function BookingCheckout() {
     init();
   }, []);
 
-  // Check customer booking history to determine if they are a new customer
   useEffect(() => {
     const checkNewCustomer = async () => {
       if (!bookingData.email) return;
@@ -98,18 +90,14 @@ export default function BookingCheckout() {
         .in('status', ['confirmed', 'completed'])
         .limit(1);
       
-      // Only truly first-time customers (no confirmed/completed bookings) get the discount
       const isNew = !data || data.length === 0;
       setIsNewCustomer(isNew);
-
-      // Auto-apply best promo code for this customer
       await autoApplyBestPromo(isNew);
     };
     
     checkNewCustomer();
   }, [bookingData.email]);
 
-  // Auto-apply the best eligible promo code
   const autoApplyBestPromo = async (isNew: boolean) => {
     if (!bookingData.email || isAutoApplying) return;
     
@@ -138,11 +126,6 @@ export default function BookingCheckout() {
         setPromoDiscount(bestPromo.discount);
         setPromoMessage(formatPromoSavings(bestPromo));
         updateBookingData({ promoCode: bestPromo.code });
-        
-        toast.success(
-          `${bestPromo.description} - You're saving $${bestPromo.discount.toFixed(2)}!`,
-          { duration: 5000 }
-        );
       }
     } catch (error) {
       console.error('Error auto-applying promo:', error);
@@ -151,17 +134,8 @@ export default function BookingCheckout() {
     }
   };
 
-  // Swipe gesture handlers
-  const swipeHandlers = useBookingSwipe({
-    onSwipeRight: () => {
-      navigate("/book/details");
-    },
-    step: 6,
-  });
-
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
-  const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
   
   const depositPricing = calculatePrice(
     bookingData.homeSizeId,
@@ -188,7 +162,7 @@ export default function BookingCheckout() {
     
     setIsValidatingPromo(true);
     setPromoMessage(null);
-    setAutoAppliedPromo(null); // Clear auto-applied promo when manually validating
+    setAutoAppliedPromo(null);
     
     try {
       const { data: promo, error } = await supabase
@@ -205,30 +179,18 @@ export default function BookingCheckout() {
         return;
       }
 
-      // Check expiration
       if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
         setPromoMessage('This promo code has expired');
         setPromoDiscount(0);
-        toast.error('This promo code has expired');
         return;
       }
 
-      // Check eligibility
       if (promo.applies_to === 'new_customers' && !isNewCustomer) {
         setPromoMessage('This code is only for new customers');
         setPromoDiscount(0);
-        toast.error('This code is only for new customers');
         return;
       }
 
-      if (promo.applies_to === 'returning_customers' && isNewCustomer) {
-        setPromoMessage('This code is only for returning customers');
-        setPromoDiscount(0);
-        toast.error('This code is only for returning customers');
-        return;
-      }
-
-      // Calculate discount
       const subtotal = depositPricing.subtotal;
       let discount = 0;
       
@@ -239,14 +201,12 @@ export default function BookingCheckout() {
       }
 
       setPromoDiscount(discount);
-      setPromoMessage(`🎉 ${promo.value}% off applied!`);
+      setPromoMessage(`${promo.value}% off applied!`);
       updateBookingData({ promoCode: promoCode.toUpperCase() });
-      toast.success(`Promo code applied! You're saving $${discount}`);
+      toast.success(`You're saving $${discount}!`);
     } catch (err) {
-      console.error('Error validating promo:', err);
       setPromoMessage('Error validating promo code');
       setPromoDiscount(0);
-      toast.error('Error validating promo code');
     } finally {
       setIsValidatingPromo(false);
     }
@@ -258,82 +218,34 @@ export default function BookingCheckout() {
     setPromoMessage(null);
     setAutoAppliedPromo(null);
     updateBookingData({ promoCode: undefined });
-    toast.info('Promo code removed');
   };
 
   const handleBack = () => {
-    navigate("/book/summary");
+    navigate("/book/offer");
   };
 
   const handlePaymentOptionChange = (value: 'deposit' | 'full') => {
     updateBookingData({ paymentOption: value });
-    setClientSecret(null); // Reset payment intent when option changes
+    setClientSecret(null);
     setInitError(null);
   };
-
-  // Trigger haptic feedback on mobile devices
-  const triggerHaptic = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate(50); // Short, subtle vibration
-    }
-  };
-
-  // Swipe gesture handlers for payment option toggle
-  const paymentSwipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
-      if (effectivePaymentOption === 'deposit') {
-        triggerHaptic();
-        setSwipeDirection('left');
-        setTimeout(() => {
-          handlePaymentOptionChange('full');
-          setSwipeDirection(null);
-        }, 150);
-      }
-    },
-    onSwipedRight: () => {
-      if (effectivePaymentOption === 'full') {
-        triggerHaptic();
-        setSwipeDirection('right');
-        setTimeout(() => {
-          handlePaymentOptionChange('deposit');
-          setSwipeDirection(null);
-        }, 150);
-      }
-    },
-    trackMouse: false,
-    trackTouch: true,
-    delta: 50,
-    preventScrollOnSwipe: false,
-  });
 
   const handleInitializePayment = async () => {
     setIsProcessing(true);
     setInitError(null);
     
     try {
-      console.log("Creating payment intent with booking data:", bookingData);
-      
       const { data, error } = await supabase.functions.invoke("create-payment-intent", {
         body: bookingData,
       });
 
-      if (error) {
-        console.error("Payment intent error:", error);
-        throw new Error(error.message || "Failed to initialize payment");
-      }
+      if (error) throw new Error(error.message || "Failed to initialize payment");
+      if (!data) throw new Error("No payment intent data received");
 
-      if (!data) {
-        throw new Error("No payment intent data received");
-      }
-
-      console.log("Payment intent created:", data);
-
-      // CRITICAL: Always require payment verification - no auto-confirmation
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
     } catch (error: any) {
-      console.error("Payment initialization error:", error);
       const errorMessage = error.message || "Failed to initialize payment. Please try again.";
       setInitError(errorMessage);
       toast.error(errorMessage);
@@ -350,16 +262,12 @@ export default function BookingCheckout() {
 
   const handlePaymentSuccess = () => {
     toast.success("Payment successful!");
-    // Store booking ID in booking data for additional details page
-    const urlParams = new URLSearchParams(window.location.search);
-    const paymentIntent = urlParams.get('payment_intent');
     if (bookingId) {
       updateBookingData({ bookingId });
     }
     navigate("/book/additional-details?booking_id=" + bookingId);
   };
 
-  // Auto-initialize payment when component mounts
   useEffect(() => {
     if (!clientSecret && !isProcessing) {
       handleInitializePayment();
@@ -370,560 +278,303 @@ export default function BookingCheckout() {
     ? fullPaymentPricing.finalAmount 
     : depositPricing.deposit;
 
+  const totalSavings = (isNewCustomer ? 60 : 0) + promoDiscount + 
+    (bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0);
+
   return (
-    <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+    <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background pb-32 md:pb-8">
       <ProgressBar currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} />
       
-      <div className="container max-w-4xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        <Card variant="outlined" className="border-primary/30 shadow-card animate-fade-in">
-          <CardHeader className="text-center space-y-1.5 pb-5 md:pb-8">
-            <div className="mx-auto w-12 h-12 md:w-16 md:h-16 bg-gradient-primary rounded-full flex items-center justify-center mb-2 md:mb-4 shadow-lavender">
-              <CreditCard className="w-6 h-6 md:w-8 md:h-8 text-white" />
-            </div>
-            <CardTitle className="text-base md:text-xl font-semibold font-jakarta">
-              Secure Checkout
-            </CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              {autoAppliedPromo 
-                ? `Best discount applied! Saving you $${autoAppliedPromo.discount.toFixed(2)}`
-                : "Review your order and complete your booking"
-              }
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-5 md:space-y-8">
-            {/* Holiday Promotion Banner */}
-            <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 overflow-hidden relative">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIi8+PC9zdmc+')] opacity-50"></div>
-              <CardContent className="p-4 md:p-6 relative z-10">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg animate-pulse">
-                      <Sparkles className="w-6 h-6 md:w-7 md:h-7 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-base md:text-lg font-bold text-foreground font-jakarta">
-                        🎄 Automatic Holiday Savings Applied!
-                      </p>
-                      <p className="text-xs md:text-sm text-muted-foreground">
-                        {autoAppliedPromo 
-                          ? `${autoAppliedPromo.description} • Save $${autoAppliedPromo.discount.toFixed(2)}`
-                          : "We'll find the best discount for you • Up to 25% off"
-                        }
-                      </p>
-                    </div>
+      <div className="container max-w-5xl mx-auto px-4 py-6 md:py-10">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">Checkout</h1>
+          <p className="text-muted-foreground">Review your booking and complete payment</p>
+        </div>
+
+        <div className="grid lg:grid-cols-5 gap-6">
+          {/* Left Column - Order Summary */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Booking Summary Card */}
+            <Card className="border-2 overflow-hidden">
+              <div className="bg-gradient-to-r from-[#5500FF]/10 to-[#8F7BFD]/10 px-5 py-4 border-b">
+                <h2 className="font-bold text-lg">Booking Summary</h2>
+              </div>
+              <CardContent className="p-5 space-y-4">
+                {/* Service */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#5500FF]/10 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-5 h-5 text-[#5500FF]" />
                   </div>
-                  <div className="hidden sm:flex flex-col items-end gap-1">
-                    <Badge variant="secondary" className="text-xs font-semibold">Ends Jan 5</Badge>
-                    {autoAppliedPromo && (
-                      <Badge variant="default" className="text-xs bg-[#5500FF]">Auto-Applied</Badge>
-                    )}
+                  <div className="flex-1">
+                    <p className="font-semibold">{serviceTier?.label || "Deep Clean"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {homeSize?.label} • {getEstimatedHours(bookingData.homeSizeId)} hours
+                    </p>
                   </div>
                 </div>
-                {isAutoApplying && (
-                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Finding best discount for you...</span>
+
+                <Separator />
+
+                {/* Schedule */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#5500FF]/10 flex items-center justify-center flex-shrink-0">
+                    <Calendar className="w-5 h-5 text-[#5500FF]" />
                   </div>
-                )}
+                  <div className="flex-1">
+                    <p className="font-semibold">
+                      {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "EEEE, MMM d, yyyy")}
+                    </p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {bookingData.timeSlot || TIME_SLOT_LABELS[bookingData.timeSlot]}
+                    </p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Location */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#5500FF]/10 flex items-center justify-center flex-shrink-0">
+                    <MapPin className="w-5 h-5 text-[#5500FF]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold">Service Location</p>
+                    <p className="text-sm text-muted-foreground">ZIP: {bookingData.zipCode}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
-            {/* New Customer Discount Banner */}
-            {isNewCustomer && !user && (
-              <Card className="border-2 border-[#5500FF]/50 bg-gradient-to-br from-violet-50 to-purple-50">
-                <CardContent className="p-3 md:p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#5500FF] flex items-center justify-center">
-                      <Gift className="w-4 h-4 md:w-5 md:h-5 text-white" />
+            {/* Savings Applied Card */}
+            {totalSavings > 0 && (
+              <Card className="border-2 border-green-200 bg-green-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                        <Tag className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-green-800">Savings Applied</p>
+                        <p className="text-xs text-green-600">
+                          {isNewCustomer && "New customer discount"}
+                          {promoDiscount > 0 && (isNewCustomer ? " + promo" : "Promo code")}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold md:text-base text-violet-700">New Customer Special!</p>
-                      <p className="text-xs md:text-sm text-[#5500FF]">You're saving $60 on this booking 🎉</p>
-                    </div>
+                    <span className="text-xl font-bold text-green-700">-${totalSavings.toFixed(0)}</span>
                   </div>
-                  <div className="text-base md:text-2xl font-bold text-violet-700">-$60</div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Referral Code Input */}
-            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-              <CardContent className="pt-6 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="referralCode" className="text-sm font-medium">
-                    Have a Referral Code?
-                  </Label>
-                  {referralValid !== null && (
-                    <Badge variant={referralValid ? "default" : "destructive"} className="text-xs">
-                      {referralValid ? '✓ Valid - $50 off!' : '✗ Invalid'}
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    id="referralCode"
-                    placeholder="Enter code (e.g., ABC12345)"
-                    value={referralCode}
-                    onChange={(e) => {
-                      const code = e.target.value.toUpperCase();
-                      setReferralCode(code);
-                      setReferralValid(null);
-                      updateBookingData({ referralCode: code });
-                    }}
-                    maxLength={8}
-                    className="font-mono"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!referralCode || isValidatingReferral}
-                    onClick={async () => {
-                      setIsValidatingReferral(true);
-                      try {
-                        const { data } = await supabase
-                          .from('customers')
-                          .select('email')
-                          .eq('referral_code', referralCode)
-                          .maybeSingle();
-
-                        const isValid = !!data && data.email !== bookingData.email;
-                        setReferralValid(isValid);
-                        if (isValid) {
-                          toast.success('Referral code applied! You saved $50');
-                        } else {
-                          toast.error(data ? 'Cannot use your own referral code' : 'Invalid referral code');
-                        }
-                      } catch (error) {
-                        setReferralValid(false);
-                        toast.error('Error validating code');
-                      } finally {
-                        setIsValidatingReferral(false);
-                      }
-                    }}
+            {/* Promo Code Section */}
+            <Card className="border">
+              <CardContent className="p-4">
+                {!showPromoInput && !autoAppliedPromo ? (
+                  <button 
+                    onClick={() => setShowPromoInput(true)}
+                    className="flex items-center gap-2 text-[#5500FF] font-medium text-sm hover:underline"
                   >
-                    {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
-                  </Button>
-                </div>
-                {referralValid && (
-                  <p className="text-xs text-[#5500FF]">
-                    🎉 You'll save $50 on this booking!
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Promo Code Input */}
-            <Card className="border-2 border-primary/30 bg-gradient-to-br from-accent/10 to-primary/10">
-              <CardContent className="pt-6 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="promoCode" className="text-sm font-medium flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    {autoAppliedPromo ? 'Promo Applied' : 'Have a Different Promo Code?'}
-                  </Label>
-                  {promoMessage && (
-                    <Badge variant={promoDiscount > 0 ? "default" : "destructive"} className="text-xs">
-                      {promoDiscount > 0 ? `✓ -$${promoDiscount}` : '✗ Invalid'}
-                    </Badge>
-                  )}
-                </div>
-
-                {autoAppliedPromo && (
-                  <Alert className="bg-violet-50 border-violet-200">
-                    <Sparkles className="w-4 h-4 text-[#5500FF]" />
-                    <AlertTitle className="text-sm font-semibold text-violet-800">
-                      Best discount automatically applied!
-                    </AlertTitle>
-                    <AlertDescription className="text-xs text-violet-700">
-                      Code: <strong>{autoAppliedPromo.code}</strong> - {autoAppliedPromo.description}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="flex gap-2">
-                  <Input
-                    id="promoCode"
-                    placeholder={autoAppliedPromo ? "Override with different code" : "Enter promo code"}
-                    value={promoCode}
-                    onChange={(e) => {
-                      const code = e.target.value.toUpperCase();
-                      setPromoCode(code);
-                      setPromoMessage(null);
-                      if (!code) {
-                        setPromoDiscount(0);
-                        setAutoAppliedPromo(null);
-                      }
-                    }}
-                    maxLength={15}
-                    className="font-mono text-sm"
-                    disabled={isAutoApplying}
-                  />
-                  {promoCode && promoDiscount > 0 ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <Gift className="w-4 h-4" />
+                    Have a promo code?
+                  </button>
+                ) : autoAppliedPromo ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-500" />
+                      <span className="text-sm font-medium">{autoAppliedPromo.code}</span>
+                      <Badge variant="secondary" className="text-xs">Auto-applied</Badge>
+                    </div>
+                    <button 
                       onClick={handleRemovePromo}
-                      className="shrink-0"
+                      className="text-xs text-muted-foreground hover:text-foreground"
                     >
                       Remove
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      disabled={!promoCode || isValidatingPromo || isAutoApplying}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter code"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      className="font-mono text-sm h-10"
+                    />
+                    <Button 
                       onClick={handleValidatePromo}
-                      className="bg-gradient-primary hover:opacity-90 shrink-0"
+                      disabled={!promoCode || isValidatingPromo}
+                      size="sm"
+                      className="h-10 px-4"
                     >
-                      {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                      {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
                     </Button>
-                  )}
-                </div>
-
+                  </div>
+                )}
                 {promoMessage && !autoAppliedPromo && (
                   <p className={cn(
-                    "text-xs font-medium",
-                    promoDiscount > 0 ? "text-[#5500FF]" : "text-destructive"
+                    "text-xs mt-2",
+                    promoDiscount > 0 ? "text-green-600" : "text-red-500"
                   )}>
                     {promoMessage}
                   </p>
                 )}
+              </CardContent>
+            </Card>
+          </div>
 
-                {!autoAppliedPromo && (
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p className="font-semibold mb-1.5">Available codes:</p>
-                    <p>• <strong>HOLIDAY25</strong>: 25% off for new customers</p>
-                    <p>• <strong>JOLLY20</strong>: 20% off for returning customers</p>
-                    <p>• <strong>NEWYEAR15</strong>: 15% off any service</p>
+          {/* Right Column - Payment */}
+          <div className="lg:col-span-3 space-y-4">
+            {/* Payment Option Selection */}
+            <Card className="border-2 overflow-hidden">
+              <div className="bg-gradient-to-r from-[#5500FF]/10 to-[#8F7BFD]/10 px-5 py-4 border-b">
+                <h2 className="font-bold text-lg">Payment Option</h2>
+              </div>
+              <CardContent className="p-5">
+                <RadioGroup 
+                  value={effectivePaymentOption} 
+                  onValueChange={handlePaymentOptionChange}
+                  className="space-y-3"
+                >
+                  {/* Deposit Option */}
+                  <label className={cn(
+                    "flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all",
+                    effectivePaymentOption === 'deposit' 
+                      ? "border-[#5500FF] bg-[#5500FF]/5" 
+                      : "border-border hover:border-[#5500FF]/50"
+                  )}>
+                    <div className="flex items-center gap-3">
+                      <RadioGroupItem value="deposit" id="deposit" />
+                      <div>
+                        <p className="font-semibold">Pay Deposit</p>
+                        <p className="text-sm text-muted-foreground">
+                          ${depositPricing.balanceDue.toFixed(0)} due after service
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-bold text-[#5500FF]">
+                      ${depositPricing.deposit.toFixed(0)}
+                    </span>
+                  </label>
+
+                  {/* Full Payment Option */}
+                  <label className={cn(
+                    "relative flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all",
+                    effectivePaymentOption === 'full' 
+                      ? "border-[#5500FF] bg-[#5500FF]/5" 
+                      : "border-border hover:border-[#5500FF]/50"
+                  )}>
+                    <Badge className="absolute -top-2 left-4 bg-green-500 text-white border-0">
+                      Save 10%
+                    </Badge>
+                    <div className="flex items-center gap-3">
+                      <RadioGroupItem value="full" id="full" />
+                      <div>
+                        <p className="font-semibold">Pay in Full</p>
+                        <p className="text-sm text-muted-foreground">
+                          <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(0)}</span>
+                          {" "}• Save ${fullPaymentPricing.discount.toFixed(0)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-bold text-[#5500FF]">
+                      ${fullPaymentPricing.finalAmount.toFixed(0)}
+                    </span>
+                  </label>
+                </RadioGroup>
+              </CardContent>
+            </Card>
+
+            {/* Payment Form */}
+            <Card className="border-2 overflow-hidden">
+              <div className="bg-gradient-to-r from-[#5500FF]/10 to-[#8F7BFD]/10 px-5 py-4 border-b flex items-center justify-between">
+                <h2 className="font-bold text-lg flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  Payment Details
+                </h2>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Shield className="w-3.5 h-3.5" />
+                  Secure
+                </div>
+              </div>
+              <CardContent className="p-5">
+                {/* Error State */}
+                {initError && !isProcessing && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Payment Setup Failed</AlertTitle>
+                    <AlertDescription className="space-y-3">
+                      <p>{initError}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryPayment}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Try Again
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Loading State */}
+                {isProcessing && (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader2 className="w-10 h-10 animate-spin text-[#5500FF] mb-4" />
+                    <p className="text-muted-foreground">Setting up secure payment...</p>
                   </div>
+                )}
+
+                {/* Stripe Form */}
+                {stripePromise && clientSecret && paymentAmount > 0 && !initError && !isProcessing && (
+                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                    <StripePaymentForm
+                      amount={paymentAmount}
+                      onSuccess={handlePaymentSuccess}
+                      onRetry={handleRetryPayment}
+                      customerEmail={bookingData.email}
+                    />
+                  </Elements>
                 )}
               </CardContent>
             </Card>
 
-            {/* Order Summary */}
-            <div className="space-y-6">
-            <h3 className="text-lg md:text-xl font-semibold" id="order-summary-heading">
-              Order Summary
-            </h3>
-              
-              <div className="grid gap-4 md:grid-cols-2" role="region" aria-labelledby="order-summary-heading">
-                <Card className="border-2 border-primary/30 shadow-md">
-                  <CardContent className="p-4 md:p-6 space-y-2 md:space-y-3">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
-                      <h4 className="font-semibold text-sm md:text-base">Service Details</h4>
-                    </div>
-                    <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Service</span>
-                        <span className="font-medium">{serviceTier?.label}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Home Size</span>
-                        <span className="font-medium">{homeSize?.label}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-border/40 pt-1.5 md:pt-2 mt-1.5 md:mt-2">
-                        <span className="text-muted-foreground">Estimated Time</span>
-                        <span className="font-semibold text-primary">
-                          {getEstimatedHours(bookingData.homeSizeId)} hrs @ ${HOURLY_RATE}/hr
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Membership</span>
-                        <span className="font-medium">{membership?.label}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-2 border-primary/30 shadow-md">
-                  <CardContent className="p-4 md:p-6 space-y-2 md:space-y-3">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Calendar className="w-4 h-4 md:w-5 md:h-5" />
-                      <h4 className="font-semibold text-sm md:text-base">Schedule</h4>
-                    </div>
-                    <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Date</span>
-                        <span className="font-medium">
-                          {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "MMM d, yyyy")}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Time Window</span>
-                        <span className="font-medium">{TIME_SLOT_LABELS[bookingData.timeSlot]}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">ZIP Code</span>
-                        <span className="font-medium">{bookingData.zipCode}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Security Trust Badges */}
+            <div className="flex items-center justify-center gap-6 py-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-green-500" />
+                256-bit SSL
               </div>
-
-              {/* Savings Visualizer */}
-              <SavingsVisualizer
-                originalPrice={depositPricing.subtotal}
-                newCustomerDiscount={isNewCustomer ? 60 : 0}
-                membershipDiscount={bookingData.membershipPlan ? depositPricing.membershipDiscount : 0}
-                fullPaymentDiscount={bookingData.paymentOption === 'full' ? fullPaymentPricing.discount : 0}
-                promoDiscount={promoDiscount}
-                finalPrice={bookingData.paymentOption === 'deposit' ? depositPricing.total : fullPaymentPricing.finalAmount}
-              />
-
-              {/* Payment Comparison View */}
-              <div className="space-y-3">
-                <h3 className="text-lg md:text-xl font-semibold">Compare Payment Options</h3>
-                <PaymentComparison
-                  depositPricing={depositPricing}
-                  fullPaymentPricing={fullPaymentPricing}
-                  selectedOption={effectivePaymentOption}
-                  onSelect={handlePaymentOptionChange}
-                />
+              <div className="flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-green-500" />
+                PCI Compliant
               </div>
-
-              {/* Payment Option Selection */}
-              {!bookingData.useCredit && (
-                <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
-                  <CardContent className="p-4 md:p-6">
-                    <div className="flex items-center justify-between mb-3 md:mb-4">
-                      <h4 className="font-semibold text-sm md:text-base flex items-center gap-2">
-                        <Zap className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-                        Choose Your Payment Option
-                      </h4>
-                      <div className="md:hidden flex items-center gap-1 text-xs text-muted-foreground">
-                        <ChevronLeft className="w-3 h-3" />
-                        <span>Swipe</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </div>
-                    </div>
-                    <div 
-                      {...paymentSwipeHandlers}
-                      className={cn(
-                        "transition-transform duration-150",
-                        swipeDirection === 'left' && "md:transform-none -translate-x-2",
-                        swipeDirection === 'right' && "md:transform-none translate-x-2"
-                      )}
-                    >
-                      <RadioGroup 
-                        value={effectivePaymentOption} 
-                        onValueChange={handlePaymentOptionChange}
-                        className="space-y-3 md:space-y-4"
-                      >
-                        {/* Deposit Option */}
-                        <div className={cn(
-                          "relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50",
-                          bookingData.paymentOption === 'deposit' 
-                            ? "border-primary bg-primary/5 shadow-md" 
-                            : "border-border"
-                        )}>
-                          <RadioGroupItem value="deposit" id="deposit" className="mt-1" />
-                          <Label htmlFor="deposit" className="flex-1 cursor-pointer">
-                            <div className="space-y-1.5 md:space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-semibold text-sm md:text-base">Pay Deposit Now</span>
-                                <span className="text-base md:text-lg font-bold text-primary">
-                                  ${depositPricing.deposit.toFixed(2)}
-                                </span>
-                              </div>
-                              <p className="text-xs md:text-sm text-muted-foreground">
-                                Balance after: ${depositPricing.balanceDue.toFixed(2)}
-                              </p>
-                              {(depositPricing.membershipDiscount > 0 || depositPricing.newCustomerDiscount > 0 || promoDiscount > 0) && (
-                                <div className="text-[10px] md:text-xs space-y-0.5 pt-1.5 border-t border-border/50 mt-2">
-                                  {depositPricing.newCustomerDiscount > 0 && (
-                                    <div className="flex items-center justify-between text-[#5500FF] font-semibold">
-                                      <span className="flex items-center gap-1">
-                                        <Gift className="w-3 h-3" />
-                                        New Customer $60 Off:
-                                      </span>
-                                      <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
-                                    </div>
-                                  )}
-                                  {depositPricing.membershipDiscount > 0 && (
-                                    <div className="flex justify-between text-success">
-                                      <span>Membership discount:</span>
-                                      <span className="font-medium">-${depositPricing.membershipDiscount.toFixed(2)}</span>
-                                    </div>
-                                  )}
-                                  {promoDiscount > 0 && (
-                                    <div className="flex items-center justify-between text-[#5500FF] font-semibold">
-                                      <span className="flex items-center gap-1">
-                                        <Gift className="w-3 h-3" />
-                                        Promo Code:
-                                      </span>
-                                      <span>-${promoDiscount.toFixed(2)}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </Label>
-                        </div>
-
-                        {/* Full Payment Option */}
-                        <div className={cn(
-                          "relative flex items-start space-x-2 md:space-x-3 rounded-lg border-2 p-3 md:p-4 transition-all cursor-pointer hover:border-primary/50",
-                          bookingData.paymentOption === 'full' 
-                            ? "border-primary bg-primary/5 shadow-md" 
-                            : "border-border"
-                        )}>
-                          <RadioGroupItem value="full" id="full" className="mt-1" />
-                          <Label htmlFor="full" className="flex-1 cursor-pointer">
-                            <div className="space-y-1.5 md:space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5 md:gap-2">
-                                  <span className="font-semibold text-sm md:text-base">Pay in Full</span>
-                                  <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-1 bg-success/20 text-success rounded-full">
-                                    Save 10%
-                                  </span>
-                                </div>
-                                <span className="text-base md:text-lg font-bold text-primary">
-                                  ${fullPaymentPricing.finalAmount.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="space-y-0.5 md:space-y-1 text-[10px] md:text-xs">
-                                <div className="flex justify-between text-muted-foreground">
-                                  <span>Original Total:</span>
-                                  <span className="line-through">${fullPaymentPricing.originalTotal.toFixed(2)}</span>
-                                </div>
-                                {fullPaymentPricing.newCustomerDiscount > 0 && (
-                                  <div className="flex items-center justify-between text-[#5500FF] font-semibold">
-                                    <span className="flex items-center gap-1">
-                                      <Gift className="w-3 h-3" />
-                                      New Customer $60 Off:
-                                    </span>
-                                    <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between text-success font-medium">
-                                  <span>10% Full Payment Discount:</span>
-                                  <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
-                                </div>
-                                <Separator className="my-1 md:my-1.5" />
-                                <div className="flex items-center justify-between gap-1 text-success font-bold pt-0.5 md:pt-1">
-                                  <span className="flex items-center gap-1">
-                                    <Zap className="w-3 h-3 md:w-4 md:h-4" />
-                                    Total You Save:
-                                  </span>
-                                  <span className="text-sm md:text-base">${fullPaymentPricing.savings.toFixed(2)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Member Credit Info */}
-              {bookingData.useCredit && (
-                <Card className="border-success/30 bg-success/5">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-2 text-success mb-3">
-                      <Sparkles className="w-5 h-5" />
-                      <h4 className="font-semibold">Using Membership Credit</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Your membership credit covers the base service. No deposit required!
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Initialization Error */}
-              {initError && !isProcessing && (
-                <Alert variant="destructive" className="animate-in slide-in-from-top">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Payment Setup Failed</AlertTitle>
-                  <AlertDescription className="space-y-3">
-                    <p>{initError}</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRetryPayment}
-                      className="mt-2"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Try Again
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Stripe Payment Form */}
-              {stripePromise && clientSecret && paymentAmount > 0 && !initError && (
-                <Card className="border-primary/20">
-                  <CardContent className="p-6">
-                    <h4 className="font-semibold mb-4 flex items-center gap-2">
-                      <CreditCard className="w-5 h-5 text-primary" />
-                      Payment Information
-                    </h4>
-                    <Elements stripe={stripePromise} options={{ clientSecret }}>
-            <StripePaymentForm
-              amount={paymentAmount}
-              onSuccess={handlePaymentSuccess}
-              onRetry={handleRetryPayment}
-              customerEmail={bookingData.email}
-            />
-                    </Elements>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Loading State */}
-              {isProcessing && (
-                <Card className="border-primary/20">
-                  <CardContent className="p-12">
-                    <div className="flex flex-col items-center justify-center space-y-4">
-                      <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                      <p className="text-muted-foreground">Setting up secure payment...</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Security Badge */}
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1">
-                <span className="text-success">✓</span>
-                <span>Secure Payment</span>
-              </div>
-              <span>•</span>
-              <div className="flex items-center gap-1">
-                <span className="text-success">✓</span>
-                <span>Encrypted</span>
-              </div>
-              <span>•</span>
-              <div className="flex items-center gap-1">
-                <span className="text-success">✓</span>
-                <span>PCI Compliant</span>
+              <div className="flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-green-500" />
+                Stripe Secure
               </div>
             </div>
 
-            {/* Action Buttons - Desktop Only */}
-            <div className="hidden md:flex gap-4 pt-6">
+            {/* Desktop Back Button */}
+            <div className="hidden md:block">
               <Button
-                variant="outline"
-                size="lg"
+                variant="ghost"
                 onClick={handleBack}
                 disabled={isProcessing}
-                className="h-14"
+                className="text-muted-foreground"
               >
-                <ArrowLeft className="mr-2 w-5 h-5" />
-                Back
+                <ArrowLeft className="mr-2 w-4 h-4" />
+                Back to Services
               </Button>
             </div>
+          </div>
+        </div>
 
-            <p className="text-center text-xs text-muted-foreground">
-              By completing payment, you agree to our Terms of Service and Privacy Policy
-            </p>
-          </CardContent>
-        </Card>
+        <p className="text-center text-xs text-muted-foreground mt-8">
+          By completing payment, you agree to our Terms of Service and Privacy Policy
+        </p>
       </div>
 
       {/* Mobile Navigation */}
