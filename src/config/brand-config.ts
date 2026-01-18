@@ -17,9 +17,9 @@ export const COMPANY = {
   website: "https://novaracleaning.com",
   logoUrl: "/novara-logo.png",
   address: {
-    city: "Dallas",
-    state: "TX",
-    serviceAreas: ["Dallas", "Fort Worth", "Plano", "Frisco", "McKinney"],
+    city: "Bethesda",
+    state: "MD",
+    serviceAreas: ["Bethesda", "Rockville", "Silver Spring", "Potomac", "Chevy Chase", "Gaithersburg", "Columbia", "Ellicott City"],
   },
   social: {
     instagram: "@novaracleaning",
