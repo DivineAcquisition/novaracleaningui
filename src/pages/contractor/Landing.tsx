@@ -339,7 +339,7 @@ export default function ContractorLanding() {
             </div>
             <div className="flex gap-6">
               <a href="mailto:hello@novaracleaning.com" className="hover:text-[#5500FF]">Contact</a>
-              <button onClick={() => window.location.href = "https://book.novaracleaning.com"} className="hover:text-[#5500FF]">
+              <button onClick={() => window.location.href = "https://try.novaracleaning.com"} className="hover:text-[#5500FF]">
                 Book a Cleaning
               </button>
             </div>

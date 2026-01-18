@@ -53,7 +53,7 @@ import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 const queryClient = new QueryClient();
 
 // Domain detection utility
-type DomainType = "contractor" | "admin" | "booking" | "landing" | "app" | "main";
+type DomainType = "contractor" | "admin" | "try" | "app" | "main";
 
 function getCurrentDomain(): DomainType {
   const hostname = window.location.hostname;
@@ -68,11 +68,9 @@ function getCurrentDomain(): DomainType {
   if (hostname.startsWith("admin.") || hostname.includes("admin")) {
     return "admin";
   }
+  // try.novaracleaning.com is the main booking/landing page
   if (hostname.startsWith("try.") || hostname.includes("try")) {
-    return "landing";
-  }
-  if (hostname.startsWith("book.") || hostname.includes("book")) {
-    return "booking";
+    return "try";
   }
   
   // Default for localhost or main domain
@@ -88,8 +86,8 @@ function DomainAwareHome() {
       return <ContractorLanding />;
     case "admin":
       return <Navigate to="/admin/auth" replace />;
-    case "landing":
-      return <PricingLanding />;
+    case "try":
+      return <Index />; // try.novaracleaning.com is the main booking site
     case "app":
       return <Navigate to="/account" replace />;
     default:
@@ -145,25 +143,40 @@ function AdminRoutes() {
   );
 }
 
-// Landing Page Routes (try.novaracleaning.com)
-function LandingRoutes() {
+// Try Routes (try.novaracleaning.com) - Main booking/landing site
+function TryRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<PricingLanding />} />
+      <Route path="/" element={<Index />} />
       <Route path="/price" element={<PricingLanding />} />
       <Route path="/pricing" element={<PricingLanding />} />
       
-      {/* Allow booking flow access */}
+      {/* Full booking flow */}
       <Route path="/book/zip" element={<BookingZip />} />
       <Route path="/book/sqft" element={<BookingHome />} />
+      <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
       <Route path="/book/offer" element={<BookingOffer />} />
       <Route path="/book/checkout" element={<BookingCheckout />} />
       <Route path="/book/details" element={<PropertyDetails />} />
       <Route path="/book/confirmation" element={<BookingSuccess />} />
+      <Route path="/book/custom-quote" element={<CustomQuote />} />
       
+      {/* Legacy redirects */}
+      <Route path="/book/service" element={<Navigate to="/book/offer" replace />} />
+      <Route path="/book/schedule" element={<Navigate to="/book/checkout" replace />} />
+      <Route path="/book/summary" element={<Navigate to="/book/checkout" replace />} />
+      <Route path="/book/success" element={<Navigate to="/book/confirmation" replace />} />
+      
+      {/* Auth & Account */}
       <Route path="/auth" element={<Auth />} />
+      <Route path="/account" element={<Account />} />
+      <Route path="/membership" element={<Membership />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
-      <Route path="*" element={<PricingLanding />} />
+      
+      <Route path="/sms-consent" element={<SmsConsent />} />
+      <Route path="*" element={<Index />} />
     </Routes>
   );
 }
@@ -270,8 +283,8 @@ function DomainRouter() {
       return <ContractorRoutes />;
     case "admin":
       return <AdminRoutes />;
-    case "landing":
-      return <LandingRoutes />;
+    case "try":
+      return <TryRoutes />;
     case "app":
       return <AppRoutes />;
     default:

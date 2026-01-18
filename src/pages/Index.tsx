@@ -105,7 +105,7 @@ const Index = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => window.location.href = "https://app.novaracleaning.com/account"}
+                    onClick={() => navigate("/account")}
                   >
                     <User className="w-4 h-4 mr-2" />
                     Account

@@ -35,14 +35,11 @@ export const DOMAINS = {
   // Main marketing website
   main: "https://novaracleaning.com",
   
-  // Customer booking portal
-  booking: "https://book.novaracleaning.com",
+  // Main booking & landing site (try.novaracleaning.com)
+  try: "https://try.novaracleaning.com",
   
   // Customer account management portal
   app: "https://app.novaracleaning.com",
-  
-  // Landing pages & marketing campaigns
-  landing: "https://try.novaracleaning.com",
   
   // Contractor/Cleaner portal (onboarding, dashboard, payouts)
   contractor: "https://contractor.novaracleaning.com",
@@ -53,28 +50,21 @@ export const DOMAINS = {
 
 // URL paths for each domain
 export const URLS = {
-  // Customer-facing URLs
-  customer: {
-    home: `${DOMAINS.booking}`,
-    bookZip: `${DOMAINS.booking}/book/zip`,
-    bookHome: `${DOMAINS.booking}/book/sqft`,
-    checkout: `${DOMAINS.booking}/book/checkout`,
-    account: `${DOMAINS.app}/account`,
-    membership: `${DOMAINS.app}/membership`,
+  // Customer booking URLs (try.novaracleaning.com)
+  booking: {
+    home: `${DOMAINS.try}`,
+    bookZip: `${DOMAINS.try}/book/zip`,
+    bookHome: `${DOMAINS.try}/book/sqft`,
+    checkout: `${DOMAINS.try}/book/checkout`,
+    pricing: `${DOMAINS.try}/price`,
   },
   
-  // Customer app (app.novaracleaning.com)
+  // Customer account management (app.novaracleaning.com)
   app: {
     home: `${DOMAINS.app}`,
     account: `${DOMAINS.app}/account`,
     membership: `${DOMAINS.app}/membership`,
     auth: `${DOMAINS.app}/auth`,
-  },
-  
-  // Landing page URLs (try.novaracleaning.com)
-  landing: {
-    pricing: `${DOMAINS.landing}/price`,
-    home: `${DOMAINS.landing}`,
   },
   
   // Contractor portal URLs (contractor.novaracleaning.com)
