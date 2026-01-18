@@ -188,3 +188,15 @@ verify_jwt = false
 
 [functions.test-payout-flow]
 verify_jwt = false
+
+[functions.create-connect-account]
+verify_jwt = false
+
+[functions.stripe-connect-webhook]
+verify_jwt = false
+
+[functions.connected-accounts]
+verify_jwt = false
+
+[functions.payout]
+verify_jwt = false
