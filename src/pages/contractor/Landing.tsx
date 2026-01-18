@@ -54,10 +54,20 @@ export default function ContractorLanding() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
+  // Get the correct redirect URL based on current domain
+  const getRedirectUrl = (path: string) => {
+    const hostname = window.location.hostname;
+    if (hostname.includes("contractor.")) {
+      return `https://contractor.novaracleaning.com${path}`;
+    }
+    return `${window.location.origin}${path}`;
+  };
+
   const handleGoogleSignUp = async () => {
     setIsLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
+      const redirectUrl = getRedirectUrl("/cleaner/onboarding");
+      console.log("[CONTRACTOR] Google signup redirect URL:", redirectUrl);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -78,7 +88,8 @@ export default function ContractorLanding() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/dashboard`;
+      const redirectUrl = getRedirectUrl("/cleaner/dashboard");
+      console.log("[CONTRACTOR] Google signin redirect URL:", redirectUrl);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

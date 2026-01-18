@@ -61,10 +61,20 @@ export default function CleanerAuth() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  // Get the correct redirect URL based on current domain
+  const getRedirectUrl = (path: string) => {
+    const hostname = window.location.hostname;
+    if (hostname.includes("contractor.")) {
+      return `https://contractor.novaracleaning.com${path}`;
+    }
+    return `${window.location.origin}${path}`;
+  };
+
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/dashboard`;
+      const redirectUrl = getRedirectUrl("/cleaner/dashboard");
+      console.log("[AUTH] Google redirect URL:", redirectUrl);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -92,7 +102,8 @@ export default function CleanerAuth() {
 
     setLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/dashboard`;
+      const redirectUrl = getRedirectUrl("/cleaner/dashboard");
+      console.log("[AUTH] Magic link redirect URL:", redirectUrl);
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim().toLowerCase(),
         options: { emailRedirectTo: redirectUrl },

@@ -92,11 +92,23 @@ export default function OnboardingLanding() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  // Get the correct redirect URL based on current domain
+  const getRedirectUrl = (path: string) => {
+    const hostname = window.location.hostname;
+    // If we're on contractor subdomain, use it; otherwise use current origin
+    if (hostname.includes("contractor.")) {
+      return `https://contractor.novaracleaning.com${path}`;
+    }
+    // For localhost or other domains, use current origin
+    return `${window.location.origin}${path}`;
+  };
+
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
+      const redirectUrl = getRedirectUrl("/cleaner/onboarding");
+      console.log("[ONBOARDING] Google redirect URL:", redirectUrl);
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -132,7 +144,8 @@ export default function OnboardingLanding() {
     setIsLoading(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
+      const redirectUrl = getRedirectUrl("/cleaner/onboarding");
+      console.log("[ONBOARDING] Magic link redirect URL:", redirectUrl);
       
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim().toLowerCase(),
@@ -175,7 +188,8 @@ export default function OnboardingLanding() {
     setIsLoading(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
+      const redirectUrl = getRedirectUrl("/cleaner/onboarding");
+      console.log("[ONBOARDING] Email signup redirect URL:", redirectUrl);
       
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
