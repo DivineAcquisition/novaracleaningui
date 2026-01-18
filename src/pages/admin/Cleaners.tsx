@@ -137,7 +137,7 @@ export default function AdminCleaners() {
             firstName: newCleaner.firstName,
             lastName: newCleaner.lastName,
             email: newCleaner.email,
-            onboardingUrl: "https://book.novaracleaning.com/cleaner/onboarding-landing",
+            onboardingUrl: "https://contractor.novaracleaning.com/cleaner/onboarding-landing",
           },
         },
       });

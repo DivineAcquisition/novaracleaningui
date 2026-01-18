@@ -25,6 +25,13 @@ export const COMPANY = {
     instagram: "@novaracleaning",
     facebook: "novaracleaning",
   },
+  // Domain URLs
+  urls: {
+    main: "https://novaracleaning.com",
+    booking: "https://book.novaracleaning.com",
+    contractor: "https://contractor.novaracleaning.com", // For cleaner/contractor onboarding and portal
+    admin: "https://book.novaracleaning.com/admin",
+  },
 } as const;
 
 // =============================================================================

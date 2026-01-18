@@ -47,6 +47,11 @@ export const BRAND = {
     privacy: 'https://novaracleaning.com/privacy',
     cancellation: 'https://novaracleaning.com/cancellation-policy',
     membershipPolicy: 'https://novaracleaning.com/membership-policy',
+    // Contractor/Cleaner Portal URLs
+    contractor: 'https://contractor.novaracleaning.com',
+    contractorDashboard: 'https://contractor.novaracleaning.com/cleaner/dashboard',
+    contractorOnboarding: 'https://contractor.novaracleaning.com/cleaner/onboarding-landing',
+    contractorAuth: 'https://contractor.novaracleaning.com/cleaner/auth',
   },
   // Logo as base64 or URL - Update this with actual logo
   logo: {
