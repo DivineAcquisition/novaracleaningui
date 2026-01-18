@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, ArrowRight, Shield, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Loader2, ArrowRight, Shield, Mail, Lock, Eye, EyeOff, UserPlus, LogIn } from "lucide-react";
 import logo from "@/assets/logo.png";
 
 export default function CleanerAuth() {
@@ -18,8 +18,11 @@ export default function CleanerAuth() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState("signin");
 
   useEffect(() => {
     if (user) {
@@ -38,7 +41,7 @@ export default function CleanerAuth() {
     try {
       const { data, error } = await supabase
         .from("cleaners")
-        .select("id, onboarding_complete")
+        .select("id, onboarding_complete, payouts_enabled")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -73,7 +76,7 @@ export default function CleanerAuth() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const redirectUrl = getRedirectUrl("/cleaner/dashboard");
+      const redirectUrl = getRedirectUrl("/auth/callback?type=cleaner");
       console.log("[AUTH] Google redirect URL:", redirectUrl);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -102,7 +105,7 @@ export default function CleanerAuth() {
 
     setLoading(true);
     try {
-      const redirectUrl = getRedirectUrl("/cleaner/dashboard");
+      const redirectUrl = getRedirectUrl("/auth/callback?type=cleaner");
       console.log("[AUTH] Magic link redirect URL:", redirectUrl);
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim().toLowerCase(),
@@ -145,7 +148,7 @@ export default function CleanerAuth() {
         if (error.message.includes("Invalid login credentials")) {
           toast.error("Invalid email or password.");
         } else if (error.message.includes("Email not confirmed")) {
-          toast.error("Please confirm your email first.");
+          toast.error("Please confirm your email first. Check your inbox.");
         } else {
           toast.error(error.message);
         }
@@ -153,17 +156,73 @@ export default function CleanerAuth() {
         // Check cleaner profile
         const { data: cleaner } = await supabase
           .from("cleaners")
-          .select("id, onboarding_complete")
+          .select("id, onboarding_complete, payouts_enabled")
           .eq("user_id", data.user.id)
           .maybeSingle();
 
         if (cleaner?.onboarding_complete) {
-          toast.success("Welcome back!");
-          navigate("/cleaner/dashboard");
+          if (!cleaner.payouts_enabled) {
+            toast.success("Welcome back! Please complete your payment setup.");
+            navigate("/cleaner/dashboard?stripe=pending");
+          } else {
+            toast.success("Welcome back!");
+            navigate("/cleaner/dashboard");
+          }
         } else {
           toast.success("Please complete your profile.");
           navigate("/cleaner/onboarding");
         }
+      }
+    } catch (error) {
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !validateEmail(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    if (!password || password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const redirectUrl = getRedirectUrl("/auth/callback?type=cleaner_signup");
+      console.log("[AUTH] Sign up redirect URL:", redirectUrl);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            is_cleaner: true,
+            onboarding: true,
+          },
+        },
+      });
+
+      if (error) {
+        if (error.message.includes("already registered")) {
+          toast.error("This email is already registered. Please sign in.");
+          setActiveTab("signin");
+        } else {
+          toast.error(error.message);
+        }
+      } else if (data.user) {
+        setSignUpSuccess(true);
+        toast.success("Check your email to verify your account!");
       }
     } catch (error) {
       toast.error("An error occurred. Please try again.");
@@ -183,26 +242,62 @@ export default function CleanerAuth() {
     );
   }
 
+  // Success state after sign up
+  if (signUpSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#5500FF]/5 via-background to-[#8F7BFD]/10 px-4 py-12">
+        <div className="w-full max-w-md">
+          <Card className="shadow-xl border-[#5500FF]/20">
+            <CardContent className="pt-8 pb-8 text-center space-y-6">
+              <div className="w-16 h-16 rounded-full bg-[#5500FF]/10 flex items-center justify-center mx-auto">
+                <Mail className="w-8 h-8 text-[#5500FF]" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Check Your Email</h2>
+                <p className="text-muted-foreground">
+                  We sent a verification link to <strong>{email}</strong>
+                </p>
+              </div>
+              <div className="text-sm text-muted-foreground bg-muted/50 p-4 rounded-lg">
+                <p className="font-medium mb-2">What's next?</p>
+                <ol className="text-left space-y-1 list-decimal list-inside">
+                  <li>Click the link in your email</li>
+                  <li>Complete your profile</li>
+                  <li>Set up payments</li>
+                  <li>Start receiving jobs!</li>
+                </ol>
+              </div>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSignUpSuccess(false);
+                  setEmail("");
+                  setPassword("");
+                  setConfirmPassword("");
+                }}
+              >
+                Use a different email
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#5500FF]/5 via-background to-[#8F7BFD]/10 px-4 py-12">
       <div className="w-full max-w-md space-y-8">
         {/* Header */}
         <div className="text-center">
           <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-20 h-20 rounded-2xl mb-6 shadow-lg" />
-          <h1 className="text-4xl font-bold mb-2">Welcome Back</h1>
-          <p className="text-muted-foreground text-lg">Sign in to your cleaner account</p>
+          <h1 className="text-4xl font-bold mb-2">Cleaner Portal</h1>
+          <p className="text-muted-foreground text-lg">Sign in or create your account</p>
         </div>
 
-        {/* Sign In Card */}
+        {/* Auth Card */}
         <Card className="shadow-xl border-[#5500FF]/20">
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-2xl">Cleaner Portal</CardTitle>
-            <CardDescription className="text-base">
-              Access your dashboard, jobs, and earnings
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-6">
+          <CardContent className="pt-6 space-y-6">
             {magicLinkSent ? (
               <div className="text-center py-6 space-y-4">
                 <div className="w-14 h-14 rounded-full bg-[#5500FF]/10 flex items-center justify-center mx-auto">
@@ -243,26 +338,130 @@ export default function CleanerAuth() {
                     <span className="w-full border-t" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Or</span>
+                    <span className="bg-card px-2 text-muted-foreground">Or with email</span>
                   </div>
                 </div>
 
-                {/* Email Tabs */}
-                <Tabs defaultValue="password" className="w-full">
+                {/* Sign In / Sign Up Tabs */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="password">Password</TabsTrigger>
-                    <TabsTrigger value="magic-link">Email Link</TabsTrigger>
+                    <TabsTrigger value="signin" className="gap-2">
+                      <LogIn className="w-4 h-4" />
+                      Sign In
+                    </TabsTrigger>
+                    <TabsTrigger value="signup" className="gap-2">
+                      <UserPlus className="w-4 h-4" />
+                      Sign Up
+                    </TabsTrigger>
                   </TabsList>
                   
-                  {/* Password Tab */}
-                  <TabsContent value="password" className="space-y-4 mt-4">
-                    <form onSubmit={handlePasswordSignIn} className="space-y-4">
+                  {/* Sign In Tab */}
+                  <TabsContent value="signin" className="space-y-4 mt-4">
+                    <Tabs defaultValue="password" className="w-full">
+                      <TabsList className="grid w-full grid-cols-2 h-9">
+                        <TabsTrigger value="password" className="text-xs">Password</TabsTrigger>
+                        <TabsTrigger value="magic-link" className="text-xs">Email Link</TabsTrigger>
+                      </TabsList>
+                      
+                      {/* Password Sign In */}
+                      <TabsContent value="password" className="space-y-4 mt-4">
+                        <form onSubmit={handlePasswordSignIn} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="signin-email">Email</Label>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                id="signin-email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="your.email@example.com"
+                                className="pl-9 h-11"
+                                disabled={loading}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="signin-password">Password</Label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                id="signin-password"
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                                className="pl-9 pr-9 h-11"
+                                disabled={loading}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+                          <Button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full h-11 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
+                          >
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {loading ? "Signing in..." : "Sign In"}
+                          </Button>
+                        </form>
+                        <div className="text-center">
+                          <Link to="/cleaner/reset-password" className="text-sm text-[#5500FF] hover:underline">
+                            Forgot password?
+                          </Link>
+                        </div>
+                      </TabsContent>
+
+                      {/* Magic Link Sign In */}
+                      <TabsContent value="magic-link" className="space-y-4 mt-4">
+                        <form onSubmit={handleMagicLink} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="magic-email">Email</Label>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                id="magic-email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="your.email@example.com"
+                                className="pl-9 h-11"
+                                disabled={loading}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              We'll send a secure login link to your email
+                            </p>
+                          </div>
+                          <Button
+                            type="submit"
+                            disabled={loading || !email}
+                            className="w-full h-11 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
+                          >
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                            {loading ? "Sending..." : "Send Login Link"}
+                          </Button>
+                        </form>
+                      </TabsContent>
+                    </Tabs>
+                  </TabsContent>
+
+                  {/* Sign Up Tab */}
+                  <TabsContent value="signup" className="space-y-4 mt-4">
+                    <form onSubmit={handlePasswordSignUp} className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="email">Email</Label>
+                        <Label htmlFor="signup-email">Email</Label>
                         <div className="relative">
                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
-                            id="email"
+                            id="signup-email"
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -273,15 +472,15 @@ export default function CleanerAuth() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password">Password</Label>
+                        <Label htmlFor="signup-password">Password</Label>
                         <div className="relative">
                           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
-                            id="password"
+                            id="signup-password"
                             type={showPassword ? "text" : "password"}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
+                            placeholder="Min. 6 characters"
                             className="pl-9 pr-9 h-11"
                             disabled={loading}
                           />
@@ -294,51 +493,32 @@ export default function CleanerAuth() {
                           </button>
                         </div>
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="confirm-password">Confirm Password</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="confirm-password"
+                            type={showPassword ? "text" : "password"}
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Re-enter password"
+                            className="pl-9 h-11"
+                            disabled={loading}
+                          />
+                        </div>
+                      </div>
                       <Button
                         type="submit"
                         disabled={loading}
                         className="w-full h-11 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
                       >
-                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        {loading ? "Signing in..." : "Sign In"}
+                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                        {loading ? "Creating account..." : "Create Account"}
                       </Button>
-                    </form>
-                    <div className="text-center">
-                      <Link to="/cleaner/reset-password" className="text-sm text-[#5500FF] hover:underline">
-                        Forgot password?
-                      </Link>
-                    </div>
-                  </TabsContent>
-
-                  {/* Magic Link Tab */}
-                  <TabsContent value="magic-link" className="space-y-4 mt-4">
-                    <form onSubmit={handleMagicLink} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="magic-email">Email</Label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <Input
-                            id="magic-email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="your.email@example.com"
-                            className="pl-9 h-11"
-                            disabled={loading}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          We'll send a secure login link to your email
-                        </p>
-                      </div>
-                      <Button
-                        type="submit"
-                        disabled={loading || !email}
-                        className="w-full h-11 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
-                      >
-                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                        {loading ? "Sending..." : "Send Login Link"}
-                      </Button>
+                      <p className="text-xs text-center text-muted-foreground">
+                        By signing up, you agree to our terms of service
+                      </p>
                     </form>
                   </TabsContent>
                 </Tabs>
@@ -347,25 +527,6 @@ export default function CleanerAuth() {
           </CardContent>
           
           <CardFooter className="flex flex-col gap-4 pt-0">
-            <div className="relative w-full">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">New to Novara?</span>
-              </div>
-            </div>
-            
-            <Button
-              variant="outline"
-              onClick={() => navigate("/cleaner/onboarding-landing")}
-              className="w-full"
-              disabled={loading}
-            >
-              Join Our Team
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
-
             <div className="text-center text-sm w-full">
               <Link to="/" className="text-muted-foreground hover:text-[#5500FF]">
                 ← Back to Customer Booking

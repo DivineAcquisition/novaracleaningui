@@ -4,13 +4,36 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-expiry",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-expiry, origin, referer",
 };
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[INITIATE-CLEANER-STRIPE] ${step}${detailsStr}`);
 };
+
+// Get the appropriate base URL for redirects
+function getBaseUrl(req: Request): string {
+  // Try to get origin from headers
+  const origin = req.headers.get("origin");
+  const referer = req.headers.get("referer");
+  
+  logStep("Request headers", { origin, referer });
+  
+  // If origin contains contractor, use that
+  if (origin && origin.includes("contractor.")) {
+    return origin;
+  }
+  
+  // Check referer for contractor domain
+  if (referer && referer.includes("contractor.")) {
+    const url = new URL(referer);
+    return `${url.protocol}//${url.host}`;
+  }
+  
+  // Default to contractor domain for production
+  return "https://contractor.novaracleaning.com";
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -87,6 +110,10 @@ serve(async (req) => {
           transfers: { requested: true },
         },
         business_type: "individual",
+        metadata: {
+          cleaner_id: cleaner.id,
+          user_id: userId,
+        },
       });
       
       accountId = account.id;
@@ -99,11 +126,15 @@ serve(async (req) => {
         .eq("id", cleaner.id);
     }
 
+    // Get dynamic base URL
+    const baseUrl = getBaseUrl(req);
+    logStep("Using base URL for redirects", { baseUrl });
+
     // Create account link for onboarding
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=refresh`,
-      return_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=complete`,
+      refresh_url: `${baseUrl}/cleaner/dashboard?stripe=refresh`,
+      return_url: `${baseUrl}/cleaner/dashboard?stripe=complete`,
       type: "account_onboarding",
     });
 
