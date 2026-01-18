@@ -7,26 +7,40 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 import { User, LogOut, ArrowRight, Sparkles as SparkleIcon, Clock, Shield, Crown, Tag } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { isValidZipCode, formatZipCode } from "@/lib/input-formatters";
 
 const Index = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { updateBookingData } = useBooking();
   const [zipCode, setZipCode] = useState("");
+  const [zipError, setZipError] = useState("");
   const [isValidating, setIsValidating] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
   };
 
+  const handleZipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatZipCode(e.target.value);
+    setZipCode(formatted);
+    
+    // Clear error when user starts typing
+    if (zipError) {
+      setZipError("");
+    }
+  };
+
   const handleStartBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (zipCode.length !== 5) {
+    if (!isValidZipCode(zipCode)) {
+      setZipError("Please enter a valid 5-digit ZIP code");
       return;
     }
 
     setIsValidating(true);
+    setZipError("");
     
     // Simulate validation
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -121,19 +135,23 @@ const Index = () => {
                     maxLength={5}
                     placeholder="12345"
                     value={zipCode}
-                    onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ''))}
-                    className="h-14 text-lg text-center"
+                    onChange={handleZipChange}
+                    className={`h-14 text-lg text-center ${zipError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     autoFocus
                   />
-                  <p className="text-xs text-muted-foreground">
-                    We'll check if we service your area
-                  </p>
+                  {zipError ? (
+                    <p className="text-xs text-red-500">{zipError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      We'll check if we service your area
+                    </p>
+                  )}
                 </div>
 
                 <Button
                   type="submit"
                   size="lg"
-                  disabled={zipCode.length !== 5 || isValidating}
+                  disabled={!isValidZipCode(zipCode) || isValidating}
                   className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
                 >
                   {isValidating ? "Checking..." : "Continue"}

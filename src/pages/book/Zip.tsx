@@ -8,7 +8,7 @@ import { ArrowRight, Crown, CheckCircle, Clock, MapPin } from "lucide-react";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
-import { formatPhoneNumber } from "@/lib/input-formatters";
+import { formatPhoneNumber, isValidZipCode, formatZipCode } from "@/lib/input-formatters";
 
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
@@ -17,6 +17,7 @@ export default function BookingZip() {
   const { updateBookingData } = useBooking();
   
   const [zipCode, setZipCode] = useState("");
+  const [zipError, setZipError] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('zip');
   const [cityState, setCityState] = useState("");
@@ -28,11 +29,26 @@ export default function BookingZip() {
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const handleZipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatZipCode(e.target.value);
+    setZipCode(formatted);
+    
+    // Clear error when user starts typing
+    if (zipError) {
+      setZipError("");
+    }
+  };
+
   const handleZipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (zipCode.length !== 5) return;
+    
+    if (!isValidZipCode(zipCode)) {
+      setZipError("Please enter a valid 5-digit ZIP code");
+      return;
+    }
     
     setIsValidating(true);
+    setZipError("");
     
     // Check if ZIP is in service coverage
     const { data: coverage } = await supabase
@@ -138,6 +154,7 @@ export default function BookingZip() {
   const handleChangeZip = () => {
     setFormMode('zip');
     setZipCode("");
+    setZipError("");
     setFirstName("");
     setLastName("");
     setEmail("");
@@ -193,19 +210,23 @@ export default function BookingZip() {
                       maxLength={5} 
                       placeholder="12345" 
                       value={zipCode} 
-                      onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} 
-                      className="h-14 text-lg text-center" 
+                      onChange={handleZipChange} 
+                      className={`h-14 text-lg text-center ${zipError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                       autoFocus 
                     />
-                    <p className="text-xs text-muted-foreground">
-                      We'll check if we service your area
-                    </p>
+                    {zipError ? (
+                      <p className="text-xs text-red-500">{zipError}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        We'll check if we service your area
+                      </p>
+                    )}
                   </div>
 
                   <Button 
                     type="submit" 
                     size="lg" 
-                    disabled={zipCode.length !== 5 || isValidating} 
+                    disabled={!isValidZipCode(zipCode) || isValidating} 
                     className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
                   >
                     {isValidating ? "Checking..." : "Continue"}
