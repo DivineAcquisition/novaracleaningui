@@ -7,6 +7,7 @@ import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Demo from "./pages/Demo";
+import PricingLanding from "./pages/PricingLanding";
 import Auth from "./pages/Auth";
 import Account from "./pages/Account";
 import Membership from "./pages/Membership";
@@ -53,6 +54,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
+              <Route path="/price" element={<PricingLanding />} />
+              <Route path="/pricing" element={<PricingLanding />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/account" element={<Account />} />
               <Route path="/membership" element={<Membership />} />

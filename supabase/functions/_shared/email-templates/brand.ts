@@ -39,19 +39,36 @@ export const BRAND = {
     phone: '(555) 123-4567',
   },
   urls: {
+    // Main domains
     website: 'https://novaracleaning.com',
+    booking: 'https://book.novaracleaning.com',
+    landing: 'https://try.novaracleaning.com',
+    
+    // Customer URLs
     account: 'https://book.novaracleaning.com/account',
-    booking: 'https://book.novaracleaning.com/book/home',
+    bookHome: 'https://book.novaracleaning.com/book/home',
     membership: 'https://book.novaracleaning.com/membership',
+    
+    // Landing page URLs
+    pricing: 'https://try.novaracleaning.com/price',
+    
+    // Legal pages
     terms: 'https://novaracleaning.com/terms',
     privacy: 'https://novaracleaning.com/privacy',
     cancellation: 'https://novaracleaning.com/cancellation-policy',
     membershipPolicy: 'https://novaracleaning.com/membership-policy',
-    // Contractor/Cleaner Portal URLs
+    
+    // Contractor/Cleaner Portal URLs (contractor.novaracleaning.com)
     contractor: 'https://contractor.novaracleaning.com',
     contractorDashboard: 'https://contractor.novaracleaning.com/cleaner/dashboard',
     contractorOnboarding: 'https://contractor.novaracleaning.com/cleaner/onboarding-landing',
     contractorAuth: 'https://contractor.novaracleaning.com/cleaner/auth',
+    
+    // Admin Backend URLs (admin.novaracleaning.com)
+    admin: 'https://admin.novaracleaning.com',
+    adminCleaners: 'https://admin.novaracleaning.com/admin/cleaners',
+    adminDispatch: 'https://admin.novaracleaning.com/admin/dispatch',
+    adminIntake: 'https://admin.novaracleaning.com/admin/intake',
   },
   // Logo as base64 or URL - Update this with actual logo
   logo: {

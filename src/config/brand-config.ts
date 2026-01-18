@@ -25,12 +25,72 @@ export const COMPANY = {
     instagram: "@novaracleaning",
     facebook: "novaracleaning",
   },
-  // Domain URLs
-  urls: {
-    main: "https://novaracleaning.com",
-    booking: "https://book.novaracleaning.com",
-    contractor: "https://contractor.novaracleaning.com", // For cleaner/contractor onboarding and portal
-    admin: "https://book.novaracleaning.com/admin",
+} as const;
+
+// =============================================================================
+// DOMAIN URLS - Each domain serves a specific purpose
+// =============================================================================
+
+export const DOMAINS = {
+  // Main marketing website
+  main: "https://novaracleaning.com",
+  
+  // Customer booking portal
+  booking: "https://book.novaracleaning.com",
+  
+  // Landing pages & marketing campaigns
+  landing: "https://try.novaracleaning.com",
+  
+  // Contractor/Cleaner portal (onboarding, dashboard, payouts)
+  contractor: "https://contractor.novaracleaning.com",
+  
+  // Admin backend (manage accounts, LTV metrics, cleaner management)
+  admin: "https://admin.novaracleaning.com",
+} as const;
+
+// URL paths for each domain
+export const URLS = {
+  // Customer-facing URLs
+  customer: {
+    home: `${DOMAINS.booking}`,
+    bookZip: `${DOMAINS.booking}/book/zip`,
+    bookHome: `${DOMAINS.booking}/book/sqft`,
+    checkout: `${DOMAINS.booking}/book/checkout`,
+    account: `${DOMAINS.booking}/account`,
+    membership: `${DOMAINS.booking}/membership`,
+  },
+  
+  // Landing page URLs (try.novaracleaning.com)
+  landing: {
+    pricing: `${DOMAINS.landing}/price`,
+    home: `${DOMAINS.landing}`,
+  },
+  
+  // Contractor portal URLs (contractor.novaracleaning.com)
+  contractor: {
+    auth: `${DOMAINS.contractor}/cleaner/auth`,
+    dashboard: `${DOMAINS.contractor}/cleaner/dashboard`,
+    onboarding: `${DOMAINS.contractor}/cleaner/onboarding-landing`,
+    profile: `${DOMAINS.contractor}/cleaner/profile`,
+    availability: `${DOMAINS.contractor}/cleaner/availability`,
+  },
+  
+  // Admin URLs (admin.novaracleaning.com)
+  admin: {
+    home: `${DOMAINS.admin}`,
+    cleaners: `${DOMAINS.admin}/admin/cleaners`,
+    dispatch: `${DOMAINS.admin}/admin/dispatch`,
+    intake: `${DOMAINS.admin}/admin/intake`,
+    webhooks: `${DOMAINS.admin}/admin/webhooks`,
+    directory: `${DOMAINS.admin}/admin/directory`,
+  },
+  
+  // Legal pages
+  legal: {
+    terms: `${DOMAINS.main}/terms`,
+    privacy: `${DOMAINS.main}/privacy`,
+    cancellation: `${DOMAINS.main}/cancellation-policy`,
+    membershipPolicy: `${DOMAINS.main}/membership-policy`,
   },
 } as const;
 
