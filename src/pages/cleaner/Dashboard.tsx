@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
 import { ProfileCompletionWizard } from "@/components/cleaner/ProfileCompletionWizard";
+import { StripeConnectStatus } from "@/components/cleaner/StripeConnectStatus";
 import JobOffers from "./JobOffers";
 import { UpcomingJobs } from "@/components/cleaner/UpcomingJobs";
 import { CompletedJobs } from "@/components/cleaner/CompletedJobs";
@@ -30,89 +31,15 @@ export default function CleanerDashboard() {
   const [completedBookings, setCompletedBookings] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [checkingStripe, setCheckingStripe] = useState(false);
-  const [stripeMessage, setStripeMessage] = useState<{type: 'success' | 'info' | 'warning', text: string} | null>(null);
 
-  // Handle Stripe return parameters
+  // Handle Stripe return parameters - clean up URL
   useEffect(() => {
     const stripeStatus = searchParams.get('stripe');
-    
     if (stripeStatus) {
-      handleStripeReturn(stripeStatus);
-      // Clean up URL
+      // Clean up URL - the StripeConnectStatus component will handle the status check
       window.history.replaceState({}, '', '/cleaner/dashboard');
     }
   }, [searchParams]);
-
-  const handleStripeReturn = async (status: string) => {
-    console.log("[DASHBOARD] Handling Stripe return:", status);
-    
-    switch (status) {
-      case 'complete':
-        setCheckingStripe(true);
-        setStripeMessage({ type: 'info', text: 'Verifying your payment setup...' });
-        
-        // Check Stripe status and update database
-        try {
-          const { data, error } = await supabase.functions.invoke('check-cleaner-status');
-          
-          if (error) {
-            console.error("[DASHBOARD] Error checking Stripe status:", error);
-            setStripeMessage({ type: 'warning', text: 'Could not verify payment setup. Please try again.' });
-          } else if (data?.payouts_enabled) {
-            setStripeMessage({ type: 'success', text: 'Payment setup complete! You can now receive payouts.' });
-            toast.success("Payment setup complete! You're ready to receive jobs.");
-            // Refresh cleaner data
-            await fetchCleanerData();
-          } else {
-            setStripeMessage({ type: 'warning', text: 'Payment setup incomplete. Please complete all required information.' });
-            toast.info("Please complete all required payment information.");
-          }
-        } catch (err) {
-          console.error("[DASHBOARD] Stripe verification error:", err);
-          setStripeMessage({ type: 'warning', text: 'Could not verify payment setup.' });
-        } finally {
-          setCheckingStripe(false);
-        }
-        break;
-        
-      case 'refresh':
-        setStripeMessage({ type: 'warning', text: 'Payment setup was interrupted. Please continue to receive payouts.' });
-        toast.info("Please complete your payment setup to receive payouts.");
-        break;
-        
-      case 'pending':
-        setStripeMessage({ type: 'info', text: 'Set up your payment account to start receiving payouts.' });
-        // Auto-initiate Stripe Connect
-        initiateStripeConnect();
-        break;
-        
-      default:
-        break;
-    }
-  };
-
-  const initiateStripeConnect = async () => {
-    setCheckingStripe(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('initiate-cleaner-stripe-connect');
-      
-      if (error) {
-        console.error("[DASHBOARD] Stripe Connect initiation error:", error);
-        toast.error("Failed to start payment setup. Please try again.");
-        setStripeMessage({ type: 'warning', text: 'Failed to start payment setup. Click the button below to try again.' });
-      } else if (data?.url) {
-        toast.info("Redirecting to payment setup...");
-        window.location.href = data.url;
-        return;
-      }
-    } catch (err) {
-      console.error("[DASHBOARD] Stripe Connect error:", err);
-      toast.error("Failed to start payment setup.");
-    } finally {
-      setCheckingStripe(false);
-    }
-  };
 
   useEffect(() => {
     fetchCleanerData();
@@ -317,58 +244,10 @@ export default function CleanerDashboard() {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-4">
-        {/* Stripe Status Message */}
-        {stripeMessage && (
-          <Card className={`mb-4 border-2 ${
-            stripeMessage.type === 'success' ? 'border-green-500 bg-green-50' :
-            stripeMessage.type === 'warning' ? 'border-amber-500 bg-amber-50' :
-            'border-[#5500FF] bg-[#5500FF]/5'
-          }`}>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  {stripeMessage.type === 'success' ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  ) : stripeMessage.type === 'warning' ? (
-                    <AlertCircle className="w-5 h-5 text-amber-600" />
-                  ) : (
-                    <CreditCard className="w-5 h-5 text-[#5500FF]" />
-                  )}
-                  <span className={`font-medium ${
-                    stripeMessage.type === 'success' ? 'text-green-800' :
-                    stripeMessage.type === 'warning' ? 'text-amber-800' :
-                    'text-[#5500FF]'
-                  }`}>
-                    {stripeMessage.text}
-                  </span>
-                </div>
-                {(stripeMessage.type === 'warning' || stripeMessage.type === 'info') && !checkingStripe && (
-                  <Button 
-                    size="sm" 
-                    onClick={initiateStripeConnect}
-                    className="bg-gradient-to-r from-[#5500FF] to-[#8F7BFD]"
-                  >
-                    {checkingStripe ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <CreditCard className="w-4 h-4 mr-2" />
-                    )}
-                    Set Up Payments
-                  </Button>
-                )}
-                {stripeMessage.type === 'success' && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => setStripeMessage(null)}
-                  >
-                    Dismiss
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Stripe Connect Status - Always visible */}
+        <div className="mb-4">
+          <StripeConnectStatus cleaner={cleaner} onRefresh={fetchCleanerData} />
+        </div>
 
         <OnboardingChecklist cleaner={cleaner} onRefresh={fetchCleanerData} />
         
