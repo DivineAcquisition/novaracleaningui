@@ -46,8 +46,8 @@ export function BentoCard({
     <div className={cn(
       "relative overflow-hidden rounded-2xl md:rounded-3xl border bg-card p-6 md:p-8",
       sizeClasses[size],
-      gradient && "bg-gradient-to-br from-white to-purple-50/50 dark:from-gray-900 dark:to-purple-950/20",
-      hover && "transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10 hover:border-[#5500FF]/30",
+      gradient && "bg-gradient-to-br from-white to-[#5500FF]/5 dark:from-gray-900 dark:to-[#5500FF]/10",
+      hover && "transition-all duration-300 hover:shadow-xl hover:shadow-[#5500FF]/10 hover:border-[#5500FF]/30",
       className
     )}>
       {children}

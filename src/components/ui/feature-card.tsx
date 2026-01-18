@@ -27,7 +27,7 @@ export function FeatureCard({
 }: FeatureCardProps) {
   const variants = {
     default: "bg-card border-2 hover:border-[#5500FF]/50",
-    gradient: "bg-gradient-to-br from-white to-purple-50/50 border hover:shadow-lg",
+    gradient: "bg-gradient-to-br from-white to-[#5500FF]/5 border hover:shadow-lg",
     outline: "bg-transparent border-2 border-dashed hover:border-solid hover:border-[#5500FF]/50",
   };
 

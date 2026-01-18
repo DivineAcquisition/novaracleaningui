@@ -17,7 +17,7 @@ export function GlassCard({ children, className, hover = true, glow = false }: G
     <Card 
       className={cn(
         "bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border-white/20 dark:border-gray-800/50",
-        hover && "transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1",
+        hover && "transition-all duration-300 hover:shadow-xl hover:shadow-[#5500FF]/10 hover:-translate-y-1",
         glow && "shadow-lg shadow-[#5500FF]/20",
         className
       )}

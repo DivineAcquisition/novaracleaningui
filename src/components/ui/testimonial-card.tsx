@@ -28,7 +28,7 @@ export function TestimonialCard({
 }: TestimonialCardProps) {
   const variants = {
     default: "bg-card border-2",
-    gradient: "bg-gradient-to-br from-white to-purple-50/50 border",
+    gradient: "bg-gradient-to-br from-white to-[#5500FF]/5 border",
     minimal: "bg-transparent border-0",
   };
 

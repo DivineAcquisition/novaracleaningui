@@ -6,16 +6,18 @@ import { cn } from "@/lib/utils";
 
 interface GradientBlobProps {
   className?: string;
-  color?: "purple" | "blue" | "pink" | "green";
+  color?: "brand" | "purple" | "blue" | "pink" | "green";
   size?: "sm" | "md" | "lg" | "xl";
   animate?: boolean;
 }
 
+// Brand purple: #5500FF to #8F7BFD
 const colorVariants = {
-  purple: "from-[#5500FF]/20 to-[#8F7BFD]/20",
-  blue: "from-blue-400/20 to-cyan-400/20",
-  pink: "from-pink-400/20 to-rose-400/20",
-  green: "from-emerald-400/20 to-teal-400/20",
+  brand: "from-[#5500FF]/20 to-[#8F7BFD]/20",
+  purple: "from-[#5500FF]/20 to-[#8F7BFD]/20", // Same as brand
+  blue: "from-[#5500FF]/15 to-blue-400/15",    // Purple-tinted blue
+  pink: "from-[#8F7BFD]/20 to-pink-400/15",    // Purple-tinted pink
+  green: "from-emerald-400/15 to-[#5500FF]/10", // Subtle purple accent
 };
 
 const sizeVariants = {
