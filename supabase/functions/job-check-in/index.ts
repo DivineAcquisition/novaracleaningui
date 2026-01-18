@@ -208,15 +208,58 @@ serve(async (req) => {
         throw new Error(`Failed to update assignment: ${assignmentUpdateError.message}`);
       }
 
-      // Trigger completion workflow (could call complete-booking here)
-      logStep("Check-out complete, triggering completion workflow");
+      logStep("Check-out recorded, checking if all cleaners completed");
+
+      // Check if ALL assigned cleaners have checked out
+      const { data: allAssignments } = await supabase
+        .from("job_assignments")
+        .select("id, status")
+        .eq("job_id", job.id);
+
+      const allCompleted = allAssignments?.every(a => a.status === "Completed") ?? false;
+      let payoutTriggered = false;
+
+      if (allCompleted) {
+        logStep("All cleaners checked out, triggering auto-completion", { jobId: job.id });
+        
+        // Get booking from job
+        const { data: jobWithBooking } = await supabase
+          .from("jobs")
+          .select("booking_id")
+          .eq("id", job.id)
+          .single();
+        
+        if (jobWithBooking?.booking_id) {
+          // Trigger auto-completion (internal call, no auth needed)
+          try {
+            const autoCompleteResponse = await supabase.functions.invoke('auto-complete-booking', {
+              body: { 
+                bookingId: jobWithBooking.booking_id,
+                triggeredBy: "cleaner_checkout",
+                cleanerId: cleanerId
+              }
+            });
+            
+            if (autoCompleteResponse.error) {
+              logStep("Auto-completion failed", { error: autoCompleteResponse.error });
+            } else {
+              logStep("Auto-completion triggered successfully", autoCompleteResponse.data);
+              payoutTriggered = true;
+            }
+          } catch (autoCompleteError) {
+            logStep("Auto-completion error (non-critical)", { error: autoCompleteError });
+          }
+        }
+      }
 
       return new Response(
         JSON.stringify({ 
           success: true, 
           message: "Checked out successfully",
           checkOutTime: now.toISOString(),
-          actualDurationHours: Math.round(durationHours * 100) / 100
+          actualDurationHours: Math.round(durationHours * 100) / 100,
+          allCleanersCompleted: allCompleted,
+          payoutTriggered: payoutTriggered
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
