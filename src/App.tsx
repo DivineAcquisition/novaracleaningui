@@ -49,6 +49,7 @@ import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
+import { OAuthCodeHandler } from "./components/OAuthCodeHandler";
 
 const queryClient = new QueryClient();
 
@@ -300,7 +301,9 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
-            <DomainRouter />
+            <OAuthCodeHandler>
+              <DomainRouter />
+            </OAuthCodeHandler>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>
