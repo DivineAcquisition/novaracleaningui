@@ -200,3 +200,30 @@ verify_jwt = false
 
 [functions.payout]
 verify_jwt = false
+
+[functions.get-saved-payment-methods]
+verify_jwt = true
+
+[functions.modify-booking]
+verify_jwt = false
+
+[functions.update-payment-verification]
+verify_jwt = false
+
+[functions.stripe-health-check]
+verify_jwt = false
+
+[functions.apply-referral-credit]
+verify_jwt = false
+
+[functions.generate-booking-referral-code]
+verify_jwt = false
+
+[functions.sms-consent]
+verify_jwt = false
+
+[functions.handle-sms-optout]
+verify_jwt = false
+
+[functions.submit-rating]
+verify_jwt = false

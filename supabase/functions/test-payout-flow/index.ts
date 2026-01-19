@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
+import Stripe from "https://esm.sh/stripe@14.21.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -44,7 +44,7 @@ serve(async (req) => {
       
       // Test Stripe connection
       try {
-        const stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" });
+        const stripe = new Stripe(stripeSecretKey, { apiVersion: "2023-10-16" });
         const balance = await stripe.balance.retrieve();
         results.checks.push(`✓ Stripe connection verified (Available: $${(balance.available[0]?.amount || 0) / 100})`);
       } catch (stripeError) {
