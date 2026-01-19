@@ -68,13 +68,40 @@ export default function BookingCheckout() {
     }
 
     const init = async () => {
-      const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
-      if (error || !data?.key) {
-        console.error('Stripe key missing or error', error || data);
-        toast.error('Payments are temporarily unavailable. Please contact support.');
-        return;
+      try {
+        console.log('[CHECKOUT] Fetching Stripe publishable key...');
+        const { data, error } = await supabase.functions.invoke('get-stripe-publishable-key');
+        
+        if (error) {
+          console.error('[CHECKOUT] Edge function error:', error);
+          setInitError('Unable to connect to payment service. Please try again.');
+          toast.error('Payment service unavailable. Please try again.');
+          return;
+        }
+
+        // Check for explicit error in response
+        if (data?.error || !data?.key) {
+          console.error('[CHECKOUT] Stripe key error:', data?.error || 'No key returned');
+          setInitError(data?.error || 'Payment service configuration error.');
+          toast.error('Payments are temporarily unavailable. Please contact support.');
+          return;
+        }
+
+        // Validate key format
+        if (!data.key.startsWith('pk_')) {
+          console.error('[CHECKOUT] Invalid Stripe key format');
+          setInitError('Invalid payment configuration.');
+          toast.error('Payment configuration error. Please contact support.');
+          return;
+        }
+
+        console.log('[CHECKOUT] Stripe key loaded successfully');
+        setStripePromise(loadStripe(data.key));
+      } catch (err) {
+        console.error('[CHECKOUT] Unexpected error loading Stripe:', err);
+        setInitError('Failed to initialize payment. Please refresh and try again.');
+        toast.error('Payment initialization failed.');
       }
-      setStripePromise(loadStripe(data.key));
     };
     init();
   }, []);
@@ -231,22 +258,62 @@ export default function BookingCheckout() {
   };
 
   const handleInitializePayment = async () => {
+    // Don't initialize if Stripe isn't loaded yet
+    if (!stripePromise) {
+      console.log('[CHECKOUT] Waiting for Stripe to load before initializing payment');
+      return;
+    }
+
     setIsProcessing(true);
     setInitError(null);
     
     try {
+      console.log('[CHECKOUT] Creating payment intent with booking data:', {
+        email: bookingData.email,
+        homeSizeId: bookingData.homeSizeId,
+        serviceType: bookingData.serviceType,
+        paymentOption: bookingData.paymentOption,
+      });
+
       const { data, error } = await supabase.functions.invoke("create-payment-intent", {
         body: bookingData,
       });
 
-      if (error) throw new Error(error.message || "Failed to initialize payment");
-      if (!data) throw new Error("No payment intent data received");
+      console.log('[CHECKOUT] Payment intent response:', { data, error });
+
+      if (error) {
+        console.error('[CHECKOUT] Edge function error:', error);
+        throw new Error(error.message || "Failed to connect to payment service");
+      }
+      
+      if (!data) {
+        console.error('[CHECKOUT] No data returned from payment intent');
+        throw new Error("No response from payment service");
+      }
+
+      // Check for error in response body
+      if (data.error) {
+        console.error('[CHECKOUT] Payment intent error:', data.error, data.details);
+        throw new Error(data.details || data.error);
+      }
+
+      if (!data.clientSecret) {
+        console.error('[CHECKOUT] No client secret in response');
+        throw new Error("Payment setup incomplete. Please try again.");
+      }
+
+      console.log('[CHECKOUT] Payment intent created successfully:', {
+        bookingId: data.bookingId,
+        amount: data.amount,
+        hasClientSecret: !!data.clientSecret,
+      });
 
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
     } catch (error: any) {
       const errorMessage = error.message || "Failed to initialize payment. Please try again.";
+      console.error('[CHECKOUT] Payment initialization error:', errorMessage);
       setInitError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -269,10 +336,11 @@ export default function BookingCheckout() {
   };
 
   useEffect(() => {
-    if (!clientSecret && !isProcessing) {
+    // Only initialize payment once Stripe is loaded and we don't have a client secret yet
+    if (stripePromise && !clientSecret && !isProcessing && !initError) {
       handleInitializePayment();
     }
-  }, [bookingData.paymentOption]);
+  }, [stripePromise, bookingData.paymentOption]);
 
   const currentAmount = bookingData.paymentOption === 'full' 
     ? fullPaymentPricing.finalAmount 
@@ -520,16 +588,49 @@ export default function BookingCheckout() {
                 )}
 
                 {/* Loading State */}
-                {isProcessing && (
+                {(isProcessing || (!stripePromise && !initError)) && (
                   <div className="flex flex-col items-center justify-center py-12">
                     <Loader2 className="w-10 h-10 animate-spin text-[#5500FF] mb-4" />
-                    <p className="text-muted-foreground">Setting up secure payment...</p>
+                    <p className="text-muted-foreground">
+                      {!stripePromise ? "Loading payment service..." : "Setting up secure payment..."}
+                    </p>
                   </div>
                 )}
 
                 {/* Stripe Form */}
                 {stripePromise && clientSecret && paymentAmount > 0 && !initError && !isProcessing && (
-                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'stripe',
+                        variables: {
+                          colorPrimary: '#5500FF',
+                          colorBackground: '#ffffff',
+                          colorText: '#1a1a1a',
+                          colorDanger: '#ef4444',
+                          fontFamily: 'system-ui, -apple-system, sans-serif',
+                          borderRadius: '12px',
+                        },
+                        rules: {
+                          '.Input': {
+                            border: '2px solid #e5e5e5',
+                            boxShadow: 'none',
+                            padding: '14px',
+                          },
+                          '.Input:focus': {
+                            border: '2px solid #5500FF',
+                            boxShadow: '0 0 0 1px #5500FF',
+                          },
+                          '.Label': {
+                            fontWeight: '500',
+                            marginBottom: '8px',
+                          },
+                        },
+                      }
+                    }}
+                  >
                     <StripePaymentForm
                       amount={paymentAmount}
                       onSuccess={handlePaymentSuccess}

@@ -32,6 +32,16 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [saveForFuture, setSaveForFuture] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Log when Stripe/Elements are available
+  useEffect(() => {
+    console.log('[STRIPE-FORM] Component mounted', { 
+      hasStripe: !!stripe, 
+      hasElements: !!elements,
+      amount 
+    });
+  }, [stripe, elements, amount]);
 
   // Load saved payment methods for returning customers
   useEffect(() => {
@@ -107,7 +117,16 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    console.log('[STRIPE-FORM] Submit initiated', { 
+      hasStripe: !!stripe, 
+      hasElements: !!elements,
+      selectedPaymentMethod,
+      isReady 
+    });
+
     if (!stripe || !elements) {
+      console.error('[STRIPE-FORM] Stripe or Elements not available');
+      setPaymentError('Payment system not ready. Please wait and try again.');
       return;
     }
 
@@ -120,6 +139,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
       if (selectedPaymentMethod !== "new" && savedPaymentMethods.length > 0) {
         const paymentMethod = savedPaymentMethods.find(pm => pm.id === selectedPaymentMethod);
         if (paymentMethod) {
+          console.log('[STRIPE-FORM] Using saved payment method:', selectedPaymentMethod);
           const { error } = await stripe.confirmPayment({
             elements,
             confirmParams: {
@@ -129,6 +149,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
           });
 
           if (error) {
+            console.error('[STRIPE-FORM] Saved payment method error:', error);
             const errorDetails = getErrorMessage(error);
             setPaymentError(errorDetails.message);
             setErrorType(errorDetails.type);
@@ -139,6 +160,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
       }
 
       // New payment method
+      console.log('[STRIPE-FORM] Confirming new payment');
       const { error } = await stripe.confirmPayment({
         elements,
         confirmParams: {
@@ -147,13 +169,30 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
         },
       });
 
+      // Note: If payment requires redirect (3D Secure, etc.), the page will redirect
+      // and this code won't execute. If we reach here, there was an error.
       if (error) {
-        const errorDetails = getErrorMessage(error);
-        setPaymentError(errorDetails.message);
-        setErrorType(errorDetails.type);
-        toast.error(errorDetails.title);
+        console.error('[STRIPE-FORM] Payment error:', error.type, error.message);
+        
+        // Handle specific error types
+        if (error.type === "card_error" || error.type === "validation_error") {
+          const errorDetails = getErrorMessage(error);
+          setPaymentError(errorDetails.message);
+          setErrorType(errorDetails.type);
+          toast.error(errorDetails.title);
+        } else if (error.type === "invalid_request_error") {
+          setPaymentError('Payment configuration error. Please contact support.');
+          setErrorType('config_error');
+          toast.error('Configuration Error');
+        } else {
+          const errorDetails = getErrorMessage(error);
+          setPaymentError(errorDetails.message);
+          setErrorType(errorDetails.type);
+          toast.error(errorDetails.title);
+        }
       }
     } catch (error: any) {
+      console.error('[STRIPE-FORM] Unexpected error:', error);
       const errorDetails = getErrorMessage(error);
       setPaymentError(errorDetails.message);
       setErrorType('general');
@@ -282,18 +321,65 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
       {selectedPaymentMethod === "new" && (
         <div className="space-y-4">
           <div className="rounded-xl border-2 border-border bg-white p-4 focus-within:border-[#5500FF]/50 transition-colors">
-            <PaymentElement 
-              onReady={() => setIsReady(true)}
-              options={{
-                layout: {
-                  type: "tabs",
-                  defaultCollapsed: false,
-                },
-                business: {
-                  name: "Novara Cleaning"
-                }
-              }}
-            />
+            {loadError ? (
+              <Alert variant="destructive" className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Payment Form Error</AlertTitle>
+                <AlertDescription>
+                  <p className="mb-2">{loadError}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setLoadError(null);
+                      setIsReady(false);
+                      if (onRetry) onRetry();
+                    }}
+                    className="bg-white"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Reload Form
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                {!isReady && (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#5500FF]" />
+                    <span className="ml-2 text-sm text-muted-foreground">Loading secure payment form...</span>
+                  </div>
+                )}
+                <PaymentElement 
+                  onReady={() => {
+                    console.log('[STRIPE-FORM] PaymentElement ready');
+                    setIsReady(true);
+                    setLoadError(null);
+                  }}
+                  onLoadError={(event) => {
+                    console.error('[STRIPE-FORM] PaymentElement load error:', event.error);
+                    setLoadError(event.error?.message || 'Failed to load payment form. Please refresh and try again.');
+                  }}
+                  onChange={(event) => {
+                    console.log('[STRIPE-FORM] PaymentElement change:', { 
+                      complete: event.complete, 
+                      empty: event.empty,
+                      error: event.value?.type 
+                    });
+                  }}
+                  options={{
+                    layout: {
+                      type: "tabs",
+                      defaultCollapsed: false,
+                    },
+                    business: {
+                      name: "Novara Cleaning"
+                    }
+                  }}
+                />
+              </>
+            )}
           </div>
           
           {/* Save for future */}
