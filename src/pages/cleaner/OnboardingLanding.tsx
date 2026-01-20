@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -14,12 +13,12 @@ import {
   Clock, 
   Users,
   Loader2,
-  ArrowRight,
   CheckCircle2,
   Mail,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  User
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -50,10 +49,12 @@ export default function OnboardingLanding() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
 
   // Check if user is already authenticated
   useEffect(() => {
@@ -95,11 +96,9 @@ export default function OnboardingLanding() {
   // Get the correct redirect URL based on current domain
   const getRedirectUrl = (path: string) => {
     const hostname = window.location.hostname;
-    // If we're on contractor subdomain, use it; otherwise use current origin
     if (hostname.includes("contractor.")) {
       return `https://contractor.novaracleaning.com${path}`;
     }
-    // For localhost or other domains, use current origin
     return `${window.location.origin}${path}`;
   };
 
@@ -133,48 +132,20 @@ export default function OnboardingLanding() {
     }
   };
 
-  const handleMagicLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!email || !validateEmail(email)) {
-      toast.error("Please enter a valid email address");
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const redirectUrl = getRedirectUrl("/cleaner/onboarding");
-      console.log("[ONBOARDING] Magic link redirect URL:", redirectUrl);
-      
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            is_cleaner: true,
-          }
-        },
-      });
-
-      if (error) {
-        console.error("[ONBOARDING] Magic link error:", error);
-        toast.error(error.message || "Failed to send magic link. Please try again.");
-      } else {
-        setMagicLinkSent(true);
-        toast.success("Check your email for the login link!");
-      }
-    } catch (error) {
-      console.error("[ONBOARDING] Magic link exception:", error);
-      toast.error("An error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate all fields
+    if (!firstName.trim()) {
+      toast.error("Please enter your first name");
+      return;
+    }
+
+    if (!lastName.trim()) {
+      toast.error("Please enter your last name");
+      return;
+    }
+
     if (!email || !validateEmail(email)) {
       toast.error("Please enter a valid email address");
       return;
@@ -198,6 +169,9 @@ export default function OnboardingLanding() {
           emailRedirectTo: redirectUrl,
           data: {
             is_cleaner: true,
+            full_name: `${firstName.trim()} ${lastName.trim()}`,
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
           }
         },
       });
@@ -213,13 +187,13 @@ export default function OnboardingLanding() {
         if (data.user.identities?.length === 0) {
           toast.error("This email is already registered. Try signing in instead.");
         } else if (data.session) {
-          // User was created and logged in directly
+          // User was created and logged in directly (email confirmation disabled)
           toast.success("Account created! Completing setup...");
           navigate("/cleaner/onboarding");
         } else {
           // Email confirmation required
-          setMagicLinkSent(true);
-          toast.success("Check your email to confirm your account!");
+          setVerificationSent(true);
+          toast.success("Verification email sent! Please check your inbox.");
         }
       }
     } catch (error) {
@@ -308,27 +282,35 @@ export default function OnboardingLanding() {
               <div className="bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] p-6 text-white">
                 <h2 className="text-2xl font-bold mb-2">Get Started</h2>
                 <p className="text-white/80">
-                  Create your account to begin
+                  Create your contractor account
                 </p>
               </div>
 
               <CardContent className="p-6 space-y-6">
-                {magicLinkSent ? (
-                  // Success State
+                {verificationSent ? (
+                  // Success State - Email Verification Sent
                   <div className="text-center py-8 space-y-4">
                     <div className="w-16 h-16 rounded-full bg-[#5500FF]/10 flex items-center justify-center mx-auto">
                       <Mail className="w-8 h-8 text-[#5500FF]" />
                     </div>
                     <h3 className="text-xl font-semibold">Check Your Email</h3>
                     <p className="text-muted-foreground">
-                      We sent a link to <strong>{email}</strong>
+                      We sent a verification link to <strong>{email}</strong>
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Click the link in the email to continue setting up your account.
+                      Click the link in the email to verify your account and continue.
                     </p>
+                    <div className="bg-muted/50 rounded-lg p-4 text-left mt-4">
+                      <p className="text-sm font-medium mb-2">Didn't receive the email?</p>
+                      <ul className="text-xs text-muted-foreground space-y-1">
+                        <li>• Check your spam/junk folder</li>
+                        <li>• Make sure {email} is correct</li>
+                        <li>• Wait a few minutes and try again</li>
+                      </ul>
+                    </div>
                     <Button
                       variant="outline"
-                      onClick={() => setMagicLinkSent(false)}
+                      onClick={() => setVerificationSent(false)}
                       className="mt-4"
                     >
                       Use a different email
@@ -361,109 +343,106 @@ export default function OnboardingLanding() {
                         <span className="w-full border-t border-border" />
                       </div>
                       <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+                        <span className="bg-card px-2 text-muted-foreground">Or create an account</span>
                       </div>
                     </div>
 
-                    {/* Email Options Tabs */}
-                    <Tabs defaultValue="magic-link" className="w-full">
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="magic-link">Email Link</TabsTrigger>
-                        <TabsTrigger value="password">Password</TabsTrigger>
-                      </TabsList>
-                      
-                      {/* Magic Link Tab */}
-                      <TabsContent value="magic-link" className="space-y-4 mt-4">
-                        <form onSubmit={handleMagicLink} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="magic-email">Email Address</Label>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                              <Input
-                                id="magic-email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="your.email@example.com"
-                                className="pl-10 h-12"
-                                disabled={isLoading}
-                              />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              We'll send you a secure login link
-                            </p>
+                    {/* Email/Password Sign Up Form */}
+                    <form onSubmit={handleEmailSignUp} className="space-y-4">
+                      {/* Name Fields */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="firstName">First Name</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              id="firstName"
+                              type="text"
+                              value={firstName}
+                              onChange={(e) => setFirstName(e.target.value)}
+                              placeholder="John"
+                              className="pl-10 h-11"
+                              disabled={isLoading}
+                              required
+                            />
                           </div>
-                          <Button
-                            type="submit"
-                            disabled={isLoading || !email}
-                            className="w-full h-12 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
-                          >
-                            {isLoading ? (
-                              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            ) : (
-                              <Mail className="mr-2 h-5 w-5" />
-                            )}
-                            {isLoading ? "Sending..." : "Send Login Link"}
-                          </Button>
-                        </form>
-                      </TabsContent>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="lastName">Last Name</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              id="lastName"
+                              type="text"
+                              value={lastName}
+                              onChange={(e) => setLastName(e.target.value)}
+                              placeholder="Doe"
+                              className="pl-10 h-11"
+                              disabled={isLoading}
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
 
-                      {/* Password Tab */}
-                      <TabsContent value="password" className="space-y-4 mt-4">
-                        <form onSubmit={handleEmailSignUp} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="signup-email">Email Address</Label>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                              <Input
-                                id="signup-email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="your.email@example.com"
-                                className="pl-10 h-12"
-                                disabled={isLoading}
-                              />
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="signup-password">Password</Label>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                              <Input
-                                id="signup-password"
-                                type={showPassword ? "text" : "password"}
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Create a password"
-                                className="pl-10 pr-10 h-12"
-                                disabled={isLoading}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                              >
-                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                              </button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              At least 6 characters
-                            </p>
-                          </div>
-                          <Button
-                            type="submit"
-                            disabled={isLoading || !email || !password}
-                            className="w-full h-12 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
+                      {/* Email */}
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email Address</Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <Input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="your.email@example.com"
+                            className="pl-10 h-11"
+                            disabled={isLoading}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Password */}
+                      <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Create a password"
+                            className="pl-10 pr-10 h-11"
+                            disabled={isLoading}
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                           >
-                            {isLoading ? (
-                              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            ) : null}
-                            {isLoading ? "Creating Account..." : "Create Account"}
-                          </Button>
-                        </form>
-                      </TabsContent>
-                    </Tabs>
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          At least 6 characters
+                        </p>
+                      </div>
+
+                      {/* Submit Button */}
+                      <Button
+                        type="submit"
+                        disabled={isLoading || !firstName || !lastName || !email || !password}
+                        className="w-full h-12 bg-gradient-to-r from-[#5500FF] to-[#8F7BFD] hover:opacity-90"
+                      >
+                        {isLoading ? (
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        ) : null}
+                        {isLoading ? "Creating Account..." : "Create Account"}
+                      </Button>
+                    </form>
 
                     {/* What Happens Next */}
                     <div className="bg-muted/50 rounded-lg p-4 space-y-2">
@@ -471,7 +450,7 @@ export default function OnboardingLanding() {
                       <ul className="space-y-1.5 text-xs text-muted-foreground">
                         <li className="flex items-center gap-2">
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#5500FF] flex-shrink-0" />
-                          <span>Verify your email</span>
+                          <span>Verify your email address</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#5500FF] flex-shrink-0" />
@@ -479,7 +458,7 @@ export default function OnboardingLanding() {
                         </li>
                         <li className="flex items-center gap-2">
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#5500FF] flex-shrink-0" />
-                          <span>Start accepting jobs!</span>
+                          <span>Set up payouts & start earning!</span>
                         </li>
                       </ul>
                     </div>
