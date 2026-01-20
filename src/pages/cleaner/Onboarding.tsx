@@ -324,6 +324,8 @@ export default function CleanerOnboarding() {
       }
 
       // Insert cleaner record
+      // NOTE: approved = false - Admin must approve before cleaner can receive jobs
+      // NOTE: available_for_bookings = false - Cleaner sets this after approval
       const { data: cleanerData, error: insertError } = await supabase
         .from("cleaners")
         .insert({
@@ -341,16 +343,30 @@ export default function CleanerOnboarding() {
           avatar_url: avatarUrl,
           skillset: formData.skillset,
           pay_rate_hr: 18.00,
-          status: "active",
-          approved: true,
+          status: "pending_approval", // Changed from "active"
+          approved: false, // Admin must approve first
+          available_for_bookings: false, // Cleaner enables after approval
           onboarding_complete: true,
-          activated_at: new Date().toISOString(),
-          status_today: formData.preferredWorkDays.includes(
-            new Date().toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3)
-          ) ? "Available" : "Unavailable"
+          activated_at: null, // Set when admin approves
+          status_today: "Unavailable"
         })
         .select()
         .single();
+
+      // Notify admin of new cleaner application
+      if (cleanerData) {
+        try {
+          await supabase.from("admin_notifications").insert({
+            type: "new_cleaner_application",
+            title: "New Contractor Application",
+            message: `${formData.firstName} ${formData.lastName} has completed onboarding and is awaiting approval.`,
+            data: { cleaner_id: cleanerData.id, email: formData.email },
+            read: false
+          });
+        } catch (notifyError) {
+          console.warn("Failed to create admin notification:", notifyError);
+        }
+      }
 
       if (insertError) {
         if (insertError.code === '23505') {

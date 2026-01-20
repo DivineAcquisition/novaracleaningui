@@ -233,3 +233,6 @@ verify_jwt = false
 
 [functions.check-expired-offers]
 verify_jwt = false
+
+[functions.send-cleaner-approval-email]
+verify_jwt = false

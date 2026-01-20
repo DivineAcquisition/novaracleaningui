@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, Settings, Calendar, CheckCircle2, AlertCircle, CreditCard, Loader2 } from "lucide-react";
+import { User, Settings, Calendar, CheckCircle2, AlertCircle, CreditCard, Loader2, Clock, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
@@ -244,6 +244,97 @@ export default function CleanerDashboard() {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-4">
+        {/* Pending Approval Banner */}
+        {cleaner?.status === "pending_approval" && !cleaner?.approved && (
+          <Card className="mb-4 border-yellow-200 bg-yellow-50/50">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-6 h-6 text-yellow-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-yellow-800 flex items-center gap-2">
+                    <Shield className="w-4 h-4" />
+                    Application Under Review
+                  </h3>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Your application is being reviewed by our team. You'll receive an email once approved.
+                    This typically takes 1-2 business days.
+                  </p>
+                  <div className="flex items-center gap-4 mt-3 text-xs text-yellow-600">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Profile Complete
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      Awaiting Approval
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Rejected Status Banner */}
+        {cleaner?.status === "rejected" && (
+          <Card className="mb-4 border-red-200 bg-red-50/50">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-red-800">Application Not Approved</h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    Unfortunately, your application was not approved at this time.
+                    {cleaner?.rejection_reason && (
+                      <span className="block mt-2 p-2 bg-red-100 rounded text-red-800">
+                        Reason: {cleaner.rejection_reason}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-red-600 mt-2">
+                    If you have questions, please contact hello@novaracleaning.com
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Approved Banner - Show briefly after approval */}
+        {cleaner?.approved && cleaner?.status === "active" && !cleaner?.available_for_bookings && (
+          <Card className="mb-4 border-green-200 bg-green-50/50">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-green-800">You're Approved! 🎉</h3>
+                  <p className="text-sm text-green-700 mt-1">
+                    Congratulations! Your account has been approved. To start receiving job offers:
+                  </p>
+                  <ol className="text-sm text-green-700 mt-2 space-y-1 list-decimal list-inside">
+                    <li>Complete your Stripe payment setup below</li>
+                    <li>Set yourself as "Available for Bookings" in your Availability settings</li>
+                  </ol>
+                  <Button
+                    size="sm"
+                    className="mt-3 bg-green-600 hover:bg-green-700"
+                    onClick={() => navigate("/cleaner/availability")}
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Set Availability
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stripe Connect Status - Always visible */}
         <div className="mb-4">
           <StripeConnectStatus cleaner={cleaner} onRefresh={fetchCleanerData} />
