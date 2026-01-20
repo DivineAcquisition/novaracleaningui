@@ -227,3 +227,9 @@ verify_jwt = false
 
 [functions.submit-rating]
 verify_jwt = false
+
+[functions.automated-job-redistribution]
+verify_jwt = false
+
+[functions.check-expired-offers]
+verify_jwt = false

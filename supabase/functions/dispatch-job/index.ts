@@ -1,3 +1,14 @@
+/**
+ * Enhanced Job Dispatch Function
+ * 
+ * Smart assignment algorithm with:
+ * - Multi-factor scoring (location, rating, workload, performance)
+ * - Assignment queue for backup cleaners
+ * - Analytics tracking
+ * - Secure token generation
+ * - Priority-based response deadlines
+ */
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
@@ -9,6 +20,13 @@ const corsHeaders = {
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[DISPATCH] ${step}${detailsStr}`);
+};
+
+// Priority configuration
+const PRIORITY_CONFIG = {
+  normal: { responseMinutes: 30 },
+  high: { responseMinutes: 20 },
+  urgent: { responseMinutes: 15 }
 };
 
 /**
@@ -341,35 +359,133 @@ serve(async (req) => {
       }))
     });
 
-    // STAGE 4: Create job assignments with estimated pay
-    const assignments = selectedCleaners.map((cleaner, index) => {
+    // STAGE 4: Create assignment analytics record
+    const { data: analyticsRecord } = await supabase
+      .from("assignment_analytics")
+      .insert({
+        job_id: jobId,
+        total_cleaners_needed: job.min_cleaners_required,
+        first_offer_sent_at: new Date().toISOString(),
+        total_offers_sent: selectedCleaners.length,
+        status: 'in_progress'
+      })
+      .select()
+      .single();
+
+    // Update job with analytics reference
+    if (analyticsRecord) {
+      await supabase
+        .from("jobs")
+        .update({ assignment_analytics_id: analyticsRecord.id })
+        .eq("id", jobId);
+    }
+
+    logStep("Analytics record created", { analyticsId: analyticsRecord?.id });
+
+    // STAGE 5: Add all scored candidates to queue (for redistribution)
+    const queueEntries = scoredCandidates.map((cleaner, index) => ({
+      job_id: jobId,
+      cleaner_id: cleaner.id,
+      priority_level: 'normal',
+      queue_position: index + 1,
+      match_score: cleaner.match_score,
+      distance_miles: cleaner.distance_miles,
+      status: index < selectedCleaners.length ? 'offered' : 'queued',
+      offered_at: index < selectedCleaners.length ? new Date().toISOString() : null,
+      response_deadline: index < selectedCleaners.length 
+        ? new Date(Date.now() + PRIORITY_CONFIG.normal.responseMinutes * 60 * 1000).toISOString()
+        : null
+    }));
+
+    await supabase
+      .from("assignment_queue")
+      .upsert(queueEntries, { onConflict: 'job_id,cleaner_id' });
+
+    logStep("Queue populated", { totalQueued: queueEntries.length });
+
+    // STAGE 6: Create job assignments with estimated pay and secure tokens
+    const responseDeadline = new Date(
+      Date.now() + PRIORITY_CONFIG.normal.responseMinutes * 60 * 1000
+    ).toISOString();
+
+    const assignments = [];
+    
+    for (let index = 0; index < selectedCleaners.length; index++) {
+      const cleaner = selectedCleaners[index];
       const estimatedPayCents = Math.round(
         (cleaner.pay_rate_hr || 18) * job.duration_est_hours * 100
       );
-      
-      return {
+
+      // Generate secure tokens
+      const acceptToken = crypto.randomUUID().replace(/-/g, '');
+      const declineToken = crypto.randomUUID().replace(/-/g, '');
+
+      // Create assignment
+      const assignment = {
         job_id: jobId,
         cleaner_id: cleaner.id,
         distance_miles: cleaner.distance_miles,
         role: index === 0 ? "Lead" : "Support",
         status: "Offered",
         pay_rate_hr: cleaner.pay_rate_hr || 18,
-        estimated_pay_cents: estimatedPayCents
+        estimated_pay_cents: estimatedPayCents,
+        priority_level: 'normal',
+        response_deadline: responseDeadline,
+        offer_sent_at: new Date().toISOString(),
+        escalation_level: 0
       };
-    });
+
+      assignments.push({
+        ...assignment,
+        acceptToken,
+        declineToken
+      });
+    }
 
     const { data: createdAssignments, error: assignError } = await supabase
       .from("job_assignments")
-      .insert(assignments)
+      .insert(assignments.map(a => {
+        const { acceptToken, declineToken, ...assignmentData } = a;
+        return assignmentData;
+      }))
       .select("*, cleaners(*)");
+
+    // Create secure tokens for each assignment
+    if (createdAssignments) {
+      for (let i = 0; i < createdAssignments.length; i++) {
+        const assignment = createdAssignments[i];
+        const tokenData = assignments[i];
+
+        // Create accept token
+        await supabase
+          .from("job_assignment_tokens")
+          .insert({
+            job_assignment_id: assignment.id,
+            token: tokenData.acceptToken,
+            action: 'accept',
+            expires_at: responseDeadline
+          });
+
+        // Create decline token
+        await supabase
+          .from("job_assignment_tokens")
+          .insert({
+            job_assignment_id: assignment.id,
+            token: tokenData.declineToken,
+            action: 'decline',
+            expires_at: responseDeadline
+          });
+      }
+      logStep("Tokens created for assignments");
+    }
 
     if (assignError) {
       throw new Error(`Error creating assignments: ${assignError.message}`);
     }
 
-    // STAGE 5: Send SMS notifications to cleaners
+    // STAGE 7: Send SMS notifications to cleaners with secure tokens
     logStep("Sending SMS notifications");
-    const smsPromises = createdAssignments.map(async (assignment: any) => {
+    const smsPromises = createdAssignments.map(async (assignment: any, index: number) => {
       if (!assignment.cleaners.sms_notifications_enabled) {
         console.log(`[SMS] Skipping ${assignment.cleaners.first_name} - SMS disabled`);
         return;
@@ -381,21 +497,28 @@ serve(async (req) => {
         day: 'numeric' 
       });
       const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
-      const token = btoa(assignment.id).substring(0, 10);
-      const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
+      
+      // Get secure tokens
+      const { data: tokens } = await supabase
+        .from("job_assignment_tokens")
+        .select("token, action")
+        .eq("job_assignment_id", assignment.id);
+      
+      const acceptToken = tokens?.find((t: any) => t.action === 'accept')?.token;
+      const declineToken = tokens?.find((t: any) => t.action === 'decline')?.token;
+      
+      const baseUrl = Deno.env.get("SUPABASE_URL") + "/functions/v1/respond-to-offer";
       
       const message = `🧹 New Job Offer!
 
-Date: ${jobDateFormatted}
-Location: ${job.city}, ${job.zip}
-Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
-Distance: ${assignment.distance_miles.toFixed(1)} miles
+📅 ${jobDateFormatted}
+📍 ${job.city}, ${job.zip}
+💰 $${estimatedPay} (${job.duration_est_hours}hrs)
+📏 ${assignment.distance_miles.toFixed(1)} miles
 
-Respond within 15 min:
-Accept: ${baseUrl}?id=${assignment.id}&action=accept&token=${token}
-Decline: ${baseUrl}?id=${assignment.id}&action=decline&token=${token}
-
-Or open app to view details.`;
+⏰ Respond in 30 min:
+✅ Accept: ${baseUrl}?token=${acceptToken}
+❌ Decline: ${baseUrl}?token=${declineToken}`;
 
       try {
         await supabase.functions.invoke("send-sms-notification", {
@@ -414,10 +537,13 @@ Or open app to view details.`;
     await Promise.all(smsPromises);
     logStep("SMS notifications sent");
 
-    // STAGE 6: Update job status
+    // STAGE 8: Update job status
     await supabase
       .from("jobs")
-      .update({ status: "Assigned" })
+      .update({ 
+        status: "Assigned",
+        current_priority: 'normal'
+      })
       .eq("id", jobId);
 
     // Trigger Zapier webhook
