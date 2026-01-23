@@ -39,6 +39,7 @@ import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { SubdomainRouter } from "./components/SubdomainRouter";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
+            <SubdomainRouter>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
@@ -99,6 +101,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </SubdomainRouter>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>
