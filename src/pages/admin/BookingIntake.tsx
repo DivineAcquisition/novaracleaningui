@@ -10,13 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Clock, DollarSign, Lock, RefreshCw, Trash2, User, XCircle } from "lucide-react";
+import { ArrowLeft, Save, Clock, DollarSign, RefreshCw, Trash2 } from "lucide-react";
 
-const ACCESS_PIN = "1234";
-
-// Admin credentials
-const ADMIN_EMAIL = "contact@novaracleaning.com";
-const ADMIN_PASSWORD = "Divine74!";
 import { US_STATES } from "@/lib/us-states";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, calculatePrice, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
@@ -43,14 +38,10 @@ export default function BookingIntake() {
   const [loading, setLoading] = useState(false);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
 
-  // Authentication
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loginMode, setLoginMode] = useState<"pin" | "email">("email");
-  const [pinCode, setPinCode] = useState(["", "", "", ""]);
-  const [pinError, setPinError] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
+  // Authentication - checks session storage from AdminAuth page
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem("intake_access") === "true";
+  });
 
   // Customer Recognition
   const [customerStatus, setCustomerStatus] = useState<CustomerStatus | null>(null);
@@ -105,13 +96,16 @@ export default function BookingIntake() {
   const [teamNotes, setTeamNotes] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
 
-  // Check authentication and restore autosave on mount
+  // Redirect to auth if not authenticated
   useEffect(() => {
-    const hasAccess = sessionStorage.getItem("intake_access");
-    if (hasAccess === "true") {
-      setIsAuthenticated(true);
-      
-      // Check for autosaved data
+    if (!isAuthenticated) {
+      navigate('/admin/auth?redirect=/admin/intake', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Check for autosaved data on mount
+  useEffect(() => {
+    if (isAuthenticated) {
       const autosaved = localStorage.getItem("admin_intake_autosave");
       if (autosaved) {
         try {
@@ -143,7 +137,7 @@ export default function BookingIntake() {
         }
       }
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -378,50 +372,6 @@ export default function BookingIntake() {
     );
   };
 
-  const handlePinChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    if (value && !/^\d$/.test(value)) return;
-
-    const newPin = [...pinCode];
-    newPin[index] = value;
-    setPinCode(newPin);
-    setPinError(false);
-
-    // Auto-focus next input
-    if (value && index < 3) {
-      const nextInput = document.getElementById(`pin-${index + 1}`);
-      nextInput?.focus();
-    }
-  };
-
-  const handlePinSubmit = () => {
-    const enteredPin = pinCode.join("");
-    if (enteredPin === ACCESS_PIN) {
-      sessionStorage.setItem("intake_access", "true");
-      setIsAuthenticated(true);
-      setPinError(false);
-    } else {
-      setPinError(true);
-      setPinCode(["", "", "", ""]);
-      document.getElementById("pin-0")?.focus();
-    }
-  };
-
-  const handleEmailLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-    
-    const emailMatch = adminEmail.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
-    const passwordMatch = adminPassword === ADMIN_PASSWORD;
-    
-    if (emailMatch && passwordMatch) {
-      sessionStorage.setItem("intake_access", "true");
-      setIsAuthenticated(true);
-    } else {
-      setLoginError("Invalid email or password. Please try again.");
-    }
-  };
-
   const validateForm = () => {
     if (!firstName || !lastName || !email || !phone) {
       toast({ title: "Missing customer info", description: "Please fill in all customer fields", variant: "destructive" });
@@ -598,136 +548,9 @@ export default function BookingIntake() {
     }
   };
 
-  // Show login screen if not authenticated
+  // Redirect handled by useEffect above, return null while redirecting
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-card border-primary/20">
-          <CardContent className="pt-8 pb-8">
-            <div className="flex flex-col items-center space-y-6">
-              <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg">
-                <Lock className="w-8 h-8 text-white" />
-              </div>
-              
-              <div className="text-center">
-                <h1 className="text-2xl font-semibold text-foreground mb-2">
-                  Phone Booking Intake
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Sign in to access the booking intake form
-                </p>
-              </div>
-
-              {/* Login Mode Toggle */}
-              <div className="flex gap-2 w-full">
-                <Button
-                  variant={loginMode === "email" ? "default" : "outline"}
-                  onClick={() => setLoginMode("email")}
-                  className={loginMode === "email" ? "flex-1 bg-gradient-primary" : "flex-1"}
-                >
-                  <User className="w-4 h-4 mr-2" />
-                  Admin Login
-                </Button>
-                <Button
-                  variant={loginMode === "pin" ? "default" : "outline"}
-                  onClick={() => setLoginMode("pin")}
-                  className={loginMode === "pin" ? "flex-1 bg-gradient-primary" : "flex-1"}
-                >
-                  <Lock className="w-4 h-4 mr-2" />
-                  PIN Code
-                </Button>
-              </div>
-
-              {loginMode === "email" ? (
-                <form onSubmit={handleEmailLogin} className="w-full space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email">Email</Label>
-                    <Input
-                      id="admin-email"
-                      type="email"
-                      value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
-                      placeholder="contact@novaracleaning.com"
-                      className="h-12"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-password">Password</Label>
-                    <Input
-                      id="admin-password"
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Enter password"
-                      className="h-12"
-                    />
-                  </div>
-
-                  {loginError && (
-                    <p className="text-sm text-destructive flex items-center gap-2">
-                      <XCircle className="w-4 h-4" />
-                      {loginError}
-                    </p>
-                  )}
-
-                  <Button
-                    type="submit"
-                    disabled={!adminEmail || !adminPassword}
-                    className="w-full bg-gradient-primary"
-                    size="lg"
-                  >
-                    Sign In
-                  </Button>
-                </form>
-              ) : (
-                <>
-                  <div className="flex gap-3">
-                    {pinCode.map((digit, index) => (
-                      <Input
-                        key={index}
-                        id={`pin-${index}`}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handlePinChange(index, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Backspace" && !digit && index > 0) {
-                            document.getElementById(`pin-${index - 1}`)?.focus();
-                          }
-                          if (e.key === "Enter" && pinCode.every(d => d)) {
-                            handlePinSubmit();
-                          }
-                        }}
-                        className="w-14 h-14 text-center text-2xl font-semibold border-2 focus:border-primary"
-                        autoFocus={index === 0}
-                      />
-                    ))}
-                  </div>
-
-                  {pinError && (
-                    <p className="text-sm text-destructive flex items-center gap-2">
-                      <XCircle className="w-4 h-4" />
-                      Incorrect PIN. Please try again.
-                    </p>
-                  )}
-
-                  <Button
-                    onClick={handlePinSubmit}
-                    disabled={!pinCode.every(d => d)}
-                    className="w-full bg-gradient-primary"
-                    size="lg"
-                  >
-                    Access Intake Form
-                  </Button>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return null;
   }
 
   return (

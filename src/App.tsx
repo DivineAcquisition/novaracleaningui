@@ -29,6 +29,7 @@ import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
 import VASalesForm from "./pages/admin/VASalesForm";
 import AdminDashboard from "./pages/admin/Dashboard";
+import AdminAuth from "./pages/admin/AdminAuth";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerProfile from "./pages/cleaner/Profile";
@@ -87,6 +88,7 @@ const App = () => (
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/auth" element={<AdminAuth />} />
               <Route path="/admin/intake" element={<BookingIntake />} />
               <Route path="/admin/va-sales" element={<VASalesForm />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />

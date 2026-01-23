@@ -34,12 +34,6 @@ import { calculateDistance } from "@/lib/distance-calculator";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 
-const ACCESS_PIN = "1234";
-
-// Admin credentials
-const ADMIN_EMAIL = "contact@novaracleaning.com";
-const ADMIN_PASSWORD = "Divine74!";
-
 // Sales-specific constants
 const LEAD_SOURCES = [
   { value: "inbound_call", label: "Inbound Call", icon: PhoneCall },
@@ -102,14 +96,10 @@ export default function VASalesForm() {
   const [loading, setLoading] = useState(false);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
 
-  // Authentication
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loginMode, setLoginMode] = useState<"pin" | "email">("email");
-  const [pinCode, setPinCode] = useState(["", "", "", ""]);
-  const [pinError, setPinError] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
+  // Authentication - checks session storage from AdminAuth page
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem("va_sales_access") === "true";
+  });
 
   // Call Timer
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
@@ -186,13 +176,12 @@ export default function VASalesForm() {
   const [paymentLinkGenerated, setPaymentLinkGenerated] = useState(false);
   const [paymentLink, setPaymentLink] = useState("");
 
-  // Check authentication on mount
+  // Redirect to auth if not authenticated
   useEffect(() => {
-    const hasAccess = sessionStorage.getItem("va_sales_access");
-    if (hasAccess === "true") {
-      setIsAuthenticated(true);
+    if (!isAuthenticated) {
+      navigate('/admin/auth?redirect=/admin/va-sales', { replace: true });
     }
-  }, []);
+  }, [isAuthenticated, navigate]);
 
   // Call timer effect
   useEffect(() => {
@@ -394,51 +383,6 @@ export default function VASalesForm() {
         ? prev.filter(id => id !== addonId)
         : [...prev, addonId]
     );
-  };
-
-  const handlePinChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    if (value && !/^\d$/.test(value)) return;
-
-    const newPin = [...pinCode];
-    newPin[index] = value;
-    setPinCode(newPin);
-    setPinError(false);
-
-    if (value && index < 3) {
-      const nextInput = document.getElementById(`va-pin-${index + 1}`);
-      nextInput?.focus();
-    }
-  };
-
-  const handlePinSubmit = () => {
-    const enteredPin = pinCode.join("");
-    if (enteredPin === ACCESS_PIN) {
-      sessionStorage.setItem("va_sales_access", "true");
-      setIsAuthenticated(true);
-      setPinError(false);
-      startCall();
-    } else {
-      setPinError(true);
-      setPinCode(["", "", "", ""]);
-      document.getElementById("va-pin-0")?.focus();
-    }
-  };
-
-  const handleEmailLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-    
-    const emailMatch = adminEmail.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
-    const passwordMatch = adminPassword === ADMIN_PASSWORD;
-    
-    if (emailMatch && passwordMatch) {
-      sessionStorage.setItem("va_sales_access", "true");
-      setIsAuthenticated(true);
-      startCall();
-    } else {
-      setLoginError("Invalid email or password. Please try again.");
-    }
   };
 
   const validateForm = () => {
@@ -666,138 +610,9 @@ export default function VASalesForm() {
     setSelectedCleaners([]);
   };
 
-  // Login Screen
+  // Redirect handled by useEffect above, return null while redirecting
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-card border-primary/20">
-          <CardContent className="pt-8 pb-8">
-            <div className="flex flex-col items-center space-y-6">
-              <div className="w-20 h-20 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg">
-                <Headphones className="w-10 h-10 text-white" />
-              </div>
-              
-              <div className="text-center">
-                <h1 className="text-2xl font-bold text-foreground mb-2 font-jakarta">
-                  Novara VA Sales Portal
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Sign in to begin taking calls
-                </p>
-              </div>
-
-              {/* Login Mode Toggle */}
-              <div className="flex gap-2 w-full">
-                <Button
-                  variant={loginMode === "email" ? "default" : "outline"}
-                  onClick={() => setLoginMode("email")}
-                  className={cn("flex-1", loginMode === "email" && "bg-gradient-primary")}
-                >
-                  <User className="w-4 h-4 mr-2" />
-                  Admin Login
-                </Button>
-                <Button
-                  variant={loginMode === "pin" ? "default" : "outline"}
-                  onClick={() => setLoginMode("pin")}
-                  className={cn("flex-1", loginMode === "pin" && "bg-gradient-primary")}
-                >
-                  <Lock className="w-4 h-4 mr-2" />
-                  PIN Code
-                </Button>
-              </div>
-
-              {loginMode === "email" ? (
-                <form onSubmit={handleEmailLogin} className="w-full space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email">Email</Label>
-                    <Input
-                      id="admin-email"
-                      type="email"
-                      value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
-                      placeholder="contact@novaracleaning.com"
-                      className="h-12"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-password">Password</Label>
-                    <Input
-                      id="admin-password"
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Enter password"
-                      className="h-12"
-                    />
-                  </div>
-
-                  {loginError && (
-                    <p className="text-sm text-destructive flex items-center gap-2">
-                      <XCircle className="w-4 h-4" />
-                      {loginError}
-                    </p>
-                  )}
-
-                  <Button
-                    type="submit"
-                    disabled={!adminEmail || !adminPassword}
-                    className="w-full bg-gradient-primary font-semibold"
-                    size="lg"
-                  >
-                    <Phone className="w-5 h-5 mr-2" />
-                    Sign In & Start Calls
-                  </Button>
-                </form>
-              ) : (
-                <>
-                  <div className="flex gap-3">
-                    {pinCode.map((digit, index) => (
-                      <Input
-                        key={index}
-                        id={`va-pin-${index}`}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handlePinChange(index, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Backspace" && !digit && index > 0) {
-                            document.getElementById(`va-pin-${index - 1}`)?.focus();
-                          }
-                          if (e.key === "Enter" && pinCode.every(d => d)) {
-                            handlePinSubmit();
-                          }
-                        }}
-                        className="w-14 h-14 text-center text-2xl font-bold border-2 focus:border-primary"
-                        autoFocus={index === 0}
-                      />
-                    ))}
-                  </div>
-
-                  {pinError && (
-                    <p className="text-sm text-destructive flex items-center gap-2">
-                      <XCircle className="w-4 h-4" />
-                      Incorrect PIN. Please try again.
-                    </p>
-                  )}
-
-                  <Button
-                    onClick={handlePinSubmit}
-                    disabled={!pinCode.every(d => d)}
-                    className="w-full bg-gradient-primary font-semibold"
-                    size="lg"
-                  >
-                    <Phone className="w-5 h-5 mr-2" />
-                    Start Taking Calls
-                  </Button>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return null;
   }
 
   const pricing = getPricing();

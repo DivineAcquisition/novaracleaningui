@@ -26,7 +26,7 @@ export function SubdomainRouter({ children }: { children: React.ReactNode }) {
     // Only redirect if we're on the root path
     if (pathname === '/' || pathname === '') {
       if (isAdminSubdomain) {
-        navigate('/admin', { replace: true });
+        navigate('/admin/auth', { replace: true });
         return;
       }
       
@@ -36,13 +36,13 @@ export function SubdomainRouter({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // For admin subdomain, redirect non-admin paths to admin dashboard
+    // For admin subdomain, redirect non-admin paths to admin auth
     if (isAdminSubdomain && !pathname.startsWith('/admin')) {
-      // Allow auth-related paths
+      // Allow general auth-related paths
       if (pathname.startsWith('/auth') || pathname.startsWith('/reset-password') || pathname.startsWith('/update-password')) {
         return;
       }
-      navigate('/admin', { replace: true });
+      navigate('/admin/auth', { replace: true });
       return;
     }
 
