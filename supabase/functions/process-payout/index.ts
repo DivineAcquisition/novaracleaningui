@@ -166,6 +166,24 @@ serve(async (req) => {
 
       logStep("Payout completed successfully");
 
+      // Trigger cleaner payout webhook
+      try {
+        await supabase.functions.invoke('send-cleaner-payout-webhook', {
+          body: { 
+            cleanerId: cleaner.id,
+            payoutId: payoutRecord.id,
+            bookingIds: [bookingId],
+            payoutType: 'standard',
+            amount: cleanerPayoutCents,
+            stripeTransferId: transfer.id,
+            status: 'completed'
+          }
+        });
+        logStep("Cleaner payout webhook triggered");
+      } catch (webhookError) {
+        logStep("Payout webhook failed (non-critical)", { error: webhookError });
+      }
+
       return new Response(
         JSON.stringify({
           success: true,

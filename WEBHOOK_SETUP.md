@@ -87,4 +87,162 @@ The webhook handler processes these events:
 
 ---
 
+## External Webhook Integrations (Zapier & GHL)
+
+Novara supports sending webhooks to external services like Zapier and GoHighLevel (GHL) for various events.
+
+### Webhook Endpoints (Supabase Edge Functions)
+
+| Function | Description | Trigger |
+|----------|-------------|---------|
+| `send-zapier-webhook` | Sends booking data to Zapier/GHL | Booking created, updated, completed |
+| `send-lead-capture-webhook` | Sends lead data to CRM | Landing page form submission |
+| `ghl-inbound-webhook` | Receives bookings from GHL | GHL contact/booking workflow |
+| `send-cleaner-assignment-webhook` | Notifies when cleaner is assigned | Cleaner assigned to booking |
+| `send-cleaner-payout-webhook` | Notifies when payout is processed | Payout completed |
+
+### Environment Variables Required
+
+Add these to your Supabase Edge Function secrets:
+
+```bash
+# Outbound Zapier Webhooks
+ZAPIER_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/...
+ZAPIER_BOOKING_WEBHOOK_URL_2=https://hooks.zapier.com/hooks/catch/...  # Secondary
+ZAPIER_DISPATCH_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/...
+ZAPIER_LEAD_CAPTURE_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/...
+ZAPIER_CLEANER_ASSIGNMENT_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/...
+ZAPIER_CLEANER_PAYOUT_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/...
+
+# Outbound GoHighLevel Webhooks
+GHL_BOOKING_WEBHOOK_URL=https://services.leadconnectorhq.com/hooks/...
+GHL_LEAD_CAPTURE_WEBHOOK_URL=https://services.leadconnectorhq.com/hooks/...
+GHL_CLEANER_ASSIGNMENT_WEBHOOK_URL=https://services.leadconnectorhq.com/hooks/...
+GHL_CLEANER_PAYOUT_WEBHOOK_URL=https://services.leadconnectorhq.com/hooks/...
+
+# Inbound GHL Webhook Secret (optional, for signature validation)
+GHL_WEBHOOK_SECRET=your-secret-here
+```
+
+### Inbound GHL Webhook Endpoint
+
+To receive bookings/leads FROM GoHighLevel:
+
+**Endpoint URL:**
+```
+https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ghl-inbound-webhook
+```
+
+**Expected Payload Format:**
+```json
+{
+  "type": "contact.created",
+  "contact": {
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "phone": "+1234567890",
+    "address1": "123 Main St",
+    "city": "Dallas",
+    "state": "TX",
+    "postal_code": "75001"
+  },
+  "customFields": {
+    "service_type": "deep",
+    "home_size": "2001-2500",
+    "service_date": "2025-02-01",
+    "time_slot": "morning"
+  }
+}
+```
+
+### Booking Webhook Payload (Outbound)
+
+When a booking is created/updated, the following data is sent:
+
+```json
+{
+  "Job ID": "uuid",
+  "External Job Ref": "NOV-00001",
+  "Customer Phone": "+1234567890",
+  "Customer Email": "john@example.com",
+  "Service Address": "123 Main St, Dallas, TX 75001",
+  "Service Type": "Deep Cleaning",
+  "Sq Ft": "2001-2500",
+  "Scheduled Date": "2025-02-01",
+  "Arrival Window": "8–10a",
+  "Status": "Booked",
+  "Assigned Cleaner Name": "Jane Smith",
+  "Total Charged": "$225.00",
+  "Deposit": "$39.00",
+  ...
+}
+```
+
+### Cleaner Assignment Webhook Payload
+
+When a cleaner is assigned to a booking:
+
+```json
+{
+  "Event Type": "Cleaner Assigned",
+  "Booking Number": "NOV-00001",
+  "Customer Name": "John Doe",
+  "Service Address": "123 Main St, Dallas, TX 75001",
+  "Service Date": "Saturday, February 1, 2025",
+  "Cleaner Name": "Jane Smith",
+  "Cleaner Phone": "+1987654321",
+  "Cleaner Rating": "4.8 (42 reviews)",
+  "Estimated Cleaner Payout": "$90.00",
+  ...
+}
+```
+
+### Cleaner Payout Webhook Payload
+
+When a payout is processed:
+
+```json
+{
+  "Event Type": "Payout Completed",
+  "Payout Status": "Completed",
+  "Cleaner Name": "Jane Smith",
+  "Total Payout Amount": "$90.00",
+  "Number of Jobs": 1,
+  "Job IDs": "NOV-00001",
+  "Stripe Transfer ID": "tr_...",
+  ...
+}
+```
+
+### Testing Webhooks
+
+1. **Test Zapier webhook manually:**
+   ```bash
+   curl -X POST https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/test-zapier-webhook \
+     -H "Content-Type: application/json" \
+     -d '{"bookingId": "your-booking-id"}'
+   ```
+
+2. **Test GHL inbound webhook:**
+   ```bash
+   curl -X POST https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ghl-inbound-webhook \
+     -H "Content-Type: application/json" \
+     -d '{
+       "contact": {
+         "first_name": "Test",
+         "last_name": "User",
+         "email": "test@example.com",
+         "phone": "1234567890"
+       }
+     }'
+   ```
+
+### Webhook Monitoring
+
+- **View webhook failures:** `/admin/webhooks` in your app
+- **View webhook logs:** Check `webhook_logs` and `webhook_failures` tables in Supabase
+
+---
+
 **Note**: The Zapier webhooks (`send-zapier-webhook`, `test-zapier-webhook`) are working correctly as shown in your logs. This setup is specifically for Stripe payment webhooks.

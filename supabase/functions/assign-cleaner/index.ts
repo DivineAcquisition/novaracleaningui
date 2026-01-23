@@ -115,15 +115,22 @@ serve(async (req) => {
 
     logStep("Assignment complete");
 
-    // Trigger Zapier webhook for assigned booking
+    // Trigger webhooks for assigned booking
     try {
+      // Trigger booking update webhook (Zapier/GHL)
       await supabase.functions.invoke('send-zapier-webhook', {
         body: { bookingId }
       });
-      logStep("Zapier webhook triggered");
+      logStep("Zapier booking webhook triggered");
+      
+      // Trigger cleaner assignment specific webhook
+      await supabase.functions.invoke('send-cleaner-assignment-webhook', {
+        body: { bookingId, cleanerId: selectedCleaner.id, assignmentType: 'assigned' }
+      });
+      logStep("Cleaner assignment webhook triggered");
     } catch (webhookError) {
       // Log but don't fail the assignment if webhook fails
-      logStep("Zapier webhook failed (non-critical)", { error: webhookError });
+      logStep("Webhook failed (non-critical)", { error: webhookError });
     }
 
     return new Response(
