@@ -36,6 +36,10 @@ import { cn } from "@/lib/utils";
 
 const ACCESS_PIN = "1234";
 
+// Admin credentials
+const ADMIN_EMAIL = "contact@novaracleaning.com";
+const ADMIN_PASSWORD = "Divine74!";
+
 // Sales-specific constants
 const LEAD_SOURCES = [
   { value: "inbound_call", label: "Inbound Call", icon: PhoneCall },
@@ -98,10 +102,14 @@ export default function VASalesForm() {
   const [loading, setLoading] = useState(false);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
 
-  // PIN Authentication
+  // Authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginMode, setLoginMode] = useState<"pin" | "email">("email");
   const [pinCode, setPinCode] = useState(["", "", "", ""]);
   const [pinError, setPinError] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
 
   // Call Timer
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
@@ -417,6 +425,19 @@ export default function VASalesForm() {
     }
   };
 
+  const handleEmailLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    
+    if (adminEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase() && adminPassword === ADMIN_PASSWORD) {
+      sessionStorage.setItem("va_sales_access", "true");
+      setIsAuthenticated(true);
+      startCall();
+    } else {
+      setLoginError("Invalid email or password. Please try again.");
+    }
+  };
+
   const validateForm = () => {
     if (!firstName || !phone) {
       toast({ title: "Missing customer info", description: "Please fill in name and phone", variant: "destructive" });
@@ -642,7 +663,7 @@ export default function VASalesForm() {
     setSelectedCleaners([]);
   };
 
-  // PIN Entry Screen
+  // Login Screen
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
@@ -658,50 +679,117 @@ export default function VASalesForm() {
                   Novara VA Sales Portal
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Enter your access code to begin taking calls
+                  Sign in to begin taking calls
                 </p>
               </div>
 
-              <div className="flex gap-3">
-                {pinCode.map((digit, index) => (
-                  <Input
-                    key={index}
-                    id={`va-pin-${index}`}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handlePinChange(index, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Backspace" && !digit && index > 0) {
-                        document.getElementById(`va-pin-${index - 1}`)?.focus();
-                      }
-                      if (e.key === "Enter" && pinCode.every(d => d)) {
-                        handlePinSubmit();
-                      }
-                    }}
-                    className="w-14 h-14 text-center text-2xl font-bold border-2 focus:border-primary"
-                    autoFocus={index === 0}
-                  />
-                ))}
+              {/* Login Mode Toggle */}
+              <div className="flex gap-2 w-full">
+                <Button
+                  variant={loginMode === "email" ? "default" : "outline"}
+                  onClick={() => setLoginMode("email")}
+                  className={cn("flex-1", loginMode === "email" && "bg-gradient-primary")}
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  Admin Login
+                </Button>
+                <Button
+                  variant={loginMode === "pin" ? "default" : "outline"}
+                  onClick={() => setLoginMode("pin")}
+                  className={cn("flex-1", loginMode === "pin" && "bg-gradient-primary")}
+                >
+                  <Lock className="w-4 h-4 mr-2" />
+                  PIN Code
+                </Button>
               </div>
 
-              {pinError && (
-                <p className="text-sm text-destructive flex items-center gap-2">
-                  <XCircle className="w-4 h-4" />
-                  Incorrect PIN. Please try again.
-                </p>
+              {loginMode === "email" ? (
+                <form onSubmit={handleEmailLogin} className="w-full space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-email">Email</Label>
+                    <Input
+                      id="admin-email"
+                      type="email"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="contact@novaracleaning.com"
+                      className="h-12"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-password">Password</Label>
+                    <Input
+                      id="admin-password"
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      placeholder="Enter password"
+                      className="h-12"
+                    />
+                  </div>
+
+                  {loginError && (
+                    <p className="text-sm text-destructive flex items-center gap-2">
+                      <XCircle className="w-4 h-4" />
+                      {loginError}
+                    </p>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={!adminEmail || !adminPassword}
+                    className="w-full bg-gradient-primary font-semibold"
+                    size="lg"
+                  >
+                    <Phone className="w-5 h-5 mr-2" />
+                    Sign In & Start Calls
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <div className="flex gap-3">
+                    {pinCode.map((digit, index) => (
+                      <Input
+                        key={index}
+                        id={`va-pin-${index}`}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handlePinChange(index, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Backspace" && !digit && index > 0) {
+                            document.getElementById(`va-pin-${index - 1}`)?.focus();
+                          }
+                          if (e.key === "Enter" && pinCode.every(d => d)) {
+                            handlePinSubmit();
+                          }
+                        }}
+                        className="w-14 h-14 text-center text-2xl font-bold border-2 focus:border-primary"
+                        autoFocus={index === 0}
+                      />
+                    ))}
+                  </div>
+
+                  {pinError && (
+                    <p className="text-sm text-destructive flex items-center gap-2">
+                      <XCircle className="w-4 h-4" />
+                      Incorrect PIN. Please try again.
+                    </p>
+                  )}
+
+                  <Button
+                    onClick={handlePinSubmit}
+                    disabled={!pinCode.every(d => d)}
+                    className="w-full bg-gradient-primary font-semibold"
+                    size="lg"
+                  >
+                    <Phone className="w-5 h-5 mr-2" />
+                    Start Taking Calls
+                  </Button>
+                </>
               )}
-
-              <Button
-                onClick={handlePinSubmit}
-                disabled={!pinCode.every(d => d)}
-                className="w-full bg-gradient-primary font-semibold"
-                size="lg"
-              >
-                <Phone className="w-5 h-5 mr-2" />
-                Start Taking Calls
-              </Button>
             </div>
           </CardContent>
         </Card>
