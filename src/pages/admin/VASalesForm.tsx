@@ -429,7 +429,10 @@ export default function VASalesForm() {
     e.preventDefault();
     setLoginError("");
     
-    if (adminEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase() && adminPassword === ADMIN_PASSWORD) {
+    const emailMatch = adminEmail.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    const passwordMatch = adminPassword === ADMIN_PASSWORD;
+    
+    if (emailMatch && passwordMatch) {
       sessionStorage.setItem("va_sales_access", "true");
       setIsAuthenticated(true);
       startCall();

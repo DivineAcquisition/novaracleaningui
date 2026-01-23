@@ -411,7 +411,10 @@ export default function BookingIntake() {
     e.preventDefault();
     setLoginError("");
     
-    if (adminEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase() && adminPassword === ADMIN_PASSWORD) {
+    const emailMatch = adminEmail.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    const passwordMatch = adminPassword === ADMIN_PASSWORD;
+    
+    if (emailMatch && passwordMatch) {
       sessionStorage.setItem("intake_access", "true");
       setIsAuthenticated(true);
     } else {

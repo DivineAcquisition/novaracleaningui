@@ -6,7 +6,7 @@ import { useNavigate, useLocation } from "react-router-dom";
  * 
  * Detects subdomains and redirects to appropriate pages:
  * - admin.* -> /admin/va-sales (VA Sales Form)
- * - cleaner.* -> /cleaner/auth (Cleaner Portal)
+ * - contractor.* -> /cleaner/auth (Contractor Portal)
  */
 export function SubdomainRouter({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -16,57 +16,42 @@ export function SubdomainRouter({ children }: { children: React.ReactNode }) {
     const hostname = window.location.hostname;
     const pathname = location.pathname;
 
-    // Extract subdomain
-    // Handle cases like: admin.novaracleaning.com, admin.localhost, etc.
-    const parts = hostname.split('.');
-    const subdomain = parts.length > 2 ? parts[0] : 
-                      (parts.length === 2 && parts[1] !== 'com' && parts[1] !== 'localhost') ? parts[0] : 
-                      null;
-
-    // Also check for localhost with port for development
-    // e.g., admin.localhost:3000
-    const isLocalDev = hostname.includes('localhost') || hostname.includes('127.0.0.1');
-    
-    // For production domains like admin.novaracleaning.com
-    const isAdminSubdomain = subdomain === 'admin' || 
-                             hostname.startsWith('admin.') ||
+    // For production domains
+    const isAdminSubdomain = hostname.startsWith('admin.') ||
                              hostname === 'admin.novaracleaning.com';
     
-    const isCleanerSubdomain = subdomain === 'cleaner' || 
-                               hostname.startsWith('cleaner.') ||
-                               hostname === 'cleaner.novaracleaning.com';
+    const isContractorSubdomain = hostname.startsWith('contractor.') ||
+                                   hostname === 'contractor.novaracleaning.com';
 
-    // Only redirect if we're on the root path and haven't already redirected
+    // Only redirect if we're on the root path
     if (pathname === '/' || pathname === '') {
       if (isAdminSubdomain) {
         navigate('/admin/va-sales', { replace: true });
         return;
       }
       
-      if (isCleanerSubdomain) {
+      if (isContractorSubdomain) {
         navigate('/cleaner/auth', { replace: true });
         return;
       }
     }
 
-    // For admin subdomain, also handle paths that don't start with /admin
+    // For admin subdomain, redirect non-admin paths to admin
     if (isAdminSubdomain && !pathname.startsWith('/admin')) {
       // Allow auth-related paths
       if (pathname.startsWith('/auth') || pathname.startsWith('/reset-password') || pathname.startsWith('/update-password')) {
         return;
       }
-      // Redirect other paths to admin
       navigate('/admin/va-sales', { replace: true });
       return;
     }
 
-    // For cleaner subdomain, handle paths that don't start with /cleaner
-    if (isCleanerSubdomain && !pathname.startsWith('/cleaner')) {
+    // For contractor subdomain, redirect non-cleaner paths to cleaner portal
+    if (isContractorSubdomain && !pathname.startsWith('/cleaner')) {
       // Allow auth-related paths
       if (pathname.startsWith('/auth') || pathname.startsWith('/reset-password') || pathname.startsWith('/update-password')) {
         return;
       }
-      // Redirect other paths to cleaner portal
       navigate('/cleaner/auth', { replace: true });
       return;
     }
@@ -84,9 +69,9 @@ export function useIsAdminSubdomain(): boolean {
 }
 
 /**
- * Hook to check if current subdomain is cleaner
+ * Hook to check if current subdomain is contractor
  */
-export function useIsCleanerSubdomain(): boolean {
+export function useIsContractorSubdomain(): boolean {
   const hostname = window.location.hostname;
-  return hostname.startsWith('cleaner.') || hostname === 'cleaner.novaracleaning.com';
+  return hostname.startsWith('contractor.') || hostname === 'contractor.novaracleaning.com';
 }
