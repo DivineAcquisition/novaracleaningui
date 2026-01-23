@@ -27,6 +27,7 @@ import WebhookTester from "./pages/admin/WebhookTester";
 import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
+import VASalesForm from "./pages/admin/VASalesForm";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerProfile from "./pages/cleaner/Profile";
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin/intake" element={<BookingIntake />} />
+              <Route path="/admin/va-sales" element={<VASalesForm />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
