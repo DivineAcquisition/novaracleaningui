@@ -96,9 +96,19 @@ export default function BookingCheckout() {
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
 
-  // Initialize Stripe
+  // Initialize Stripe and set payment option
   useEffect(() => {
-    if (!bookingData.paymentOption) {
+    // Force full payment for membership signups, allow deposit for one-time services
+    const isMembership = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
+    if (isMembership) {
+      // Membership must pay in full
+      if (bookingData.paymentOption !== 'full') {
+        updateBookingData({
+          paymentOption: 'full'
+        });
+      }
+    } else if (!bookingData.paymentOption) {
+      // Default to deposit for non-membership
       updateBookingData({
         paymentOption: 'deposit'
       });
@@ -548,22 +558,26 @@ export default function BookingCheckout() {
           {isScheduleSelected && <>
               {/* Savings Visualizer */}
               <SavingsVisualizer originalPrice={depositPricing.subtotal + (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0)} newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0} membershipDiscount={depositPricing.membershipDiscount || 0} fullPaymentDiscount={effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0} promoDiscount={promoDiscount + referralDiscount} finalPrice={currentAmount} isMembershipSignup={isNewMembershipSignup} />
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">Choose Payment Option</h3>
-            <PaymentComparison depositPricing={{
-              deposit: depositPricing.deposit,
-              balanceDue: depositPricing.balanceDue,
-              subtotal: depositPricing.subtotal,
-              newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
-              membershipDiscount: depositPricing.membershipDiscount || 0
-            }} fullPaymentPricing={{
-              originalTotal: fullPaymentPricing.originalTotal,
-              finalAmount: fullPaymentPricing.finalAmount,
-              discount: fullPaymentPricing.discount,
-              savings: fullPaymentPricing.savings,
-              newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0
-            }} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
-          </div>
+          
+          {/* Payment Options - Only show for non-membership (one-time) bookings */}
+          {!isNewMembershipSignup && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-lg">Choose Payment Option</h3>
+              <PaymentComparison depositPricing={{
+                deposit: depositPricing.deposit,
+                balanceDue: depositPricing.balanceDue,
+                subtotal: depositPricing.subtotal,
+                newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
+                membershipDiscount: depositPricing.membershipDiscount || 0
+              }} fullPaymentPricing={{
+                originalTotal: fullPaymentPricing.originalTotal,
+                finalAmount: fullPaymentPricing.finalAmount,
+                discount: fullPaymentPricing.discount,
+                savings: fullPaymentPricing.savings,
+                newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0
+              }} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
+            </div>
+          )}
 
           {/* Discount Codes Section - Collapsible */}
           <Collapsible open={discountSectionOpen} onOpenChange={setDiscountSectionOpen}>
