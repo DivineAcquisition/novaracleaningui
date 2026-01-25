@@ -42,23 +42,71 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
-// Check if we're on the contractor subdomain
-const isContractorSubdomain = () => {
+// Subdomain detection utility
+type SubdomainType = 'main' | 'app' | 'admin' | 'contractor' | 'unknown';
+
+const getSubdomain = (): SubdomainType => {
   const hostname = window.location.hostname;
-  return hostname.startsWith('contractor.') || hostname.startsWith('cleaner.');
+  
+  // Local development
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'main';
+  }
+  
+  // Check for subdomains
+  if (hostname.startsWith('app.')) return 'app';
+  if (hostname.startsWith('admin.')) return 'admin';
+  if (hostname.startsWith('contractor.') || hostname.startsWith('cleaner.')) return 'contractor';
+  
+  // Main domain (no subdomain or www)
+  if (hostname.startsWith('www.') || !hostname.includes('.') || hostname.split('.').length <= 2) {
+    return 'main';
+  }
+  
+  return 'main';
 };
 
-// Component to handle subdomain redirects
-const SubdomainRedirect = ({ children }: { children: React.ReactNode }) => {
+// Component to handle subdomain-based routing
+const SubdomainRouter = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
+  const subdomain = getSubdomain();
   
   useEffect(() => {
-    // If on contractor subdomain and not already on a /cleaner route, redirect
-    if (isContractorSubdomain() && !location.pathname.startsWith('/cleaner')) {
-      const newPath = location.pathname === '/' ? '/cleaner/auth' : `/cleaner${location.pathname}`;
-      window.location.href = newPath;
+    const currentPath = location.pathname;
+    
+    switch (subdomain) {
+      case 'contractor':
+        // Contractor subdomain: redirect to /cleaner/* routes
+        if (!currentPath.startsWith('/cleaner')) {
+          const newPath = currentPath === '/' ? '/cleaner/auth' : `/cleaner${currentPath}`;
+          window.history.replaceState(null, '', newPath);
+          window.location.reload();
+        }
+        break;
+        
+      case 'admin':
+        // Admin subdomain: redirect to /admin/* routes
+        if (!currentPath.startsWith('/admin') && !currentPath.startsWith('/auth')) {
+          const newPath = currentPath === '/' ? '/admin/cleaners' : `/admin${currentPath}`;
+          window.history.replaceState(null, '', newPath);
+          window.location.reload();
+        }
+        break;
+        
+      case 'app':
+        // App subdomain: redirect to customer account/dashboard
+        if (currentPath === '/') {
+          window.history.replaceState(null, '', '/account');
+          window.location.reload();
+        }
+        break;
+        
+      case 'main':
+      default:
+        // Main domain: no special handling needed
+        break;
     }
-  }, [location.pathname]);
+  }, [location.pathname, subdomain]);
   
   return <>{children}</>;
 };
@@ -72,7 +120,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
-            <SubdomainRedirect>
+            <SubdomainRouter>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
@@ -116,11 +164,17 @@ const App = () => (
               <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
               <Route path="/cleaner/onboard" element={<OnboardingLanding />} /> {/* Legacy route */}
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
+              
+              {/* Hiring/Careers routes - redirect to cleaner onboarding */}
+              <Route path="/hiring" element={<OnboardingLanding />} />
+              <Route path="/careers" element={<OnboardingLanding />} />
+              <Route path="/join" element={<OnboardingLanding />} />
+              <Route path="/apply" element={<OnboardingLanding />} />
               <Route path="/sms-consent" element={<SmsConsent />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-            </SubdomainRedirect>
+            </SubdomainRouter>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>
