@@ -1,20 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   ArrowLeft,
-  ArrowRight,
   MapPin, 
   Clock, 
   DollarSign, 
-  Briefcase,
-  Loader2,
   Sparkles,
   Car,
   Smartphone,
@@ -24,7 +15,6 @@ import {
   ClipboardList,
   Star
 } from "lucide-react";
-import { toast } from "sonner";
 
 // Glowing dot component
 function GlowDot() {
@@ -136,36 +126,30 @@ const responsibilityIcons = [
   <Users key="3" className="w-4 h-4" />,
   <Star key="4" className="w-4 h-4" />,
   <Clock key="5" className="w-4 h-4" />,
-  <Briefcase key="6" className="w-4 h-4" />,
+  <MapPin key="6" className="w-4 h-4" />,
   <Heart key="7" className="w-4 h-4" />,
 ];
 
 export default function FieldCleanerRole() {
   const [mounted, setMounted] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    experience: '',
-    availability: '',
-    whyYou: '',
-  });
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Load Fillout embed script
+    const script = document.createElement('script');
+    script.src = 'https://server.fillout.com/embed/v1/';
+    script.async = true;
+    document.body.appendChild(script);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    toast.success('Application submitted! We\'ll contact you within 48 hours.');
-    setIsApplying(false);
-    setFormData({ fullName: '', email: '', phone: '', experience: '', availability: '', whyYou: '' });
-    setIsSubmitting(false);
-  };
+    return () => {
+      // Cleanup script on unmount
+      const existingScript = document.querySelector('script[src="https://server.fillout.com/embed/v1/"]');
+      if (existingScript) {
+        existingScript.remove();
+      }
+    };
+  }, []);
 
   const shouldUseIcons = (title: string) => {
     return title === 'Responsibilities' || title === 'Requirements';
@@ -358,7 +342,7 @@ export default function FieldCleanerRole() {
             </p>
           </section>
 
-          {/* Application Section */}
+          {/* Application Section - Fillout Embed */}
           <section id="apply">
             <div className="relative rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-lg shadow-slate-200/50">
               {/* Background glow */}
@@ -385,126 +369,14 @@ export default function FieldCleanerRole() {
                 </div>
               </div>
               
-              {/* Form content */}
-              <div className="relative p-6 md:p-8">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName" className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Full Name *
-                      </Label>
-                      <Input
-                        id="fullName"
-                        required
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        className="h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary"
-                        placeholder="John Doe"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Email Address *
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        required
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary"
-                        placeholder="john@example.com"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="phone" className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Phone Number *
-                      </Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        required
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary"
-                        placeholder="(555) 123-4567"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="experience" className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Cleaning Experience
-                      </Label>
-                      <Input
-                        id="experience"
-                        value={formData.experience}
-                        onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
-                        className="h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary"
-                        placeholder="e.g., 2 years residential cleaning"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="availability" className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      Availability *
-                    </Label>
-                    <Select
-                      value={formData.availability}
-                      onValueChange={(value) => setFormData({ ...formData, availability: value })}
-                    >
-                      <SelectTrigger className="h-12 bg-slate-50 border-slate-200">
-                        <SelectValue placeholder="Select your availability" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="weekdays">Weekdays Only</SelectItem>
-                        <SelectItem value="weekends">Weekends Only</SelectItem>
-                        <SelectItem value="flexible">Flexible Schedule</SelectItem>
-                        <SelectItem value="fulltime">Full-time (40+ hours)</SelectItem>
-                        <SelectItem value="parttime">Part-time (20-30 hours)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="whyYou" className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      Why do you want to join Novara? *
-                    </Label>
-                    <Textarea
-                      id="whyYou"
-                      required
-                      rows={4}
-                      value={formData.whyYou}
-                      onChange={(e) => setFormData({ ...formData, whyYou: e.target.value })}
-                      className="bg-slate-50 border-slate-200 focus:bg-white focus:border-primary resize-none"
-                      placeholder="Tell us about yourself and what excites you about this opportunity..."
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full h-14 rounded-xl bg-primary hover:bg-primary/90 text-white font-semibold shadow-lg shadow-primary/30"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        Submit Application
-                        <ArrowRight className="w-5 h-5 ml-2" />
-                      </>
-                    )}
-                  </Button>
-
-                  <p className="text-xs text-slate-500 text-center">
-                    By submitting, you agree to our privacy policy and consent to being contacted about this opportunity.
-                  </p>
-                </form>
+              {/* Fillout Form Embed */}
+              <div className="relative" style={{ minHeight: '600px' }}>
+                <div 
+                  data-fillout-id="p9FCwh89JPus" 
+                  data-fillout-embed-type="standard"
+                  data-fillout-inherit-parameters
+                  style={{ width: '100%', height: '600px' }}
+                />
               </div>
             </div>
           </section>
