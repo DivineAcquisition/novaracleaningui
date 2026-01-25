@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,23 +12,19 @@ import {
   MapPin, 
   Clock, 
   DollarSign, 
-  CheckCircle2,
   ArrowRight,
   Briefcase,
   Users,
   TrendingUp,
-  Shield,
   Star,
   Zap,
   Send,
   Loader2,
   ChevronRight,
-  Building2,
   Heart,
   Target
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 interface Position {
   id: string;
@@ -37,8 +34,7 @@ interface Position {
   location: string;
   salary: string;
   description: string;
-  responsibilities: string[];
-  requirements: string[];
+  link: string;
 }
 
 const POSITIONS: Position[] = [
@@ -50,18 +46,7 @@ const POSITIONS: Position[] = [
     location: 'Dallas-Fort Worth, TX',
     salary: '$18 - $25/hour',
     description: 'Join our team of professional cleaners delivering exceptional cleaning services to homes across the DFW metroplex.',
-    responsibilities: [
-      'Perform residential deep cleaning and maintenance cleaning',
-      'Follow our 40-point cleaning checklist for consistent quality',
-      'Communicate professionally with clients',
-      'Maintain cleaning supplies and equipment',
-    ],
-    requirements: [
-      'Reliable transportation',
-      'Smartphone for job management',
-      'Attention to detail',
-      'Positive attitude',
-    ],
+    link: '/field-cleaner',
   },
   {
     id: 'ops-coordinator',
@@ -71,18 +56,7 @@ const POSITIONS: Position[] = [
     location: 'Remote',
     salary: '$45,000 - $55,000/year',
     description: 'Coordinate daily operations, manage cleaner schedules, and ensure smooth service delivery across our growing operation.',
-    responsibilities: [
-      'Manage daily cleaner schedules and job assignments',
-      'Handle customer inquiries and booking changes',
-      'Coordinate emergency coverage',
-      'Onboard and train new cleaning staff',
-    ],
-    requirements: [
-      '2+ years in operations or customer service',
-      'Experience with scheduling software',
-      'Excellent communication skills',
-      'Problem-solving mindset',
-    ],
+    link: '/ops-coordinator',
   },
   {
     id: 'executive-assistant',
@@ -92,18 +66,7 @@ const POSITIONS: Position[] = [
     location: 'Remote',
     salary: '$50,000 - $65,000/year',
     description: 'Support the executive team with administrative tasks, project management, and strategic initiatives as we scale.',
-    responsibilities: [
-      'Manage executive calendars and scheduling',
-      'Coordinate meetings and prepare agendas',
-      'Handle confidential correspondence',
-      'Assist with project management',
-    ],
-    requirements: [
-      '3+ years as executive assistant',
-      'Proficiency in Google Workspace',
-      'Excellent written communication',
-      'High level of discretion',
-    ],
+    link: '/executive-assistant',
   },
 ];
 
@@ -287,47 +250,43 @@ export default function Hiring() {
           
           <div className="space-y-4">
             {POSITIONS.map((position) => (
-              <Card 
-                key={position.id} 
-                className="border border-slate-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all cursor-pointer group"
-                onClick={() => handleApply(position)}
-              >
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-xl font-semibold text-slate-900 group-hover:text-primary transition-colors">
-                          {position.title}
-                        </h3>
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-700">
-                          {position.department}
-                        </Badge>
+              <Link key={position.id} to={position.link}>
+                <Card className="border border-slate-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all cursor-pointer group">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-xl font-semibold text-slate-900 group-hover:text-primary transition-colors">
+                            {position.title}
+                          </h3>
+                          <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                            {position.department}
+                          </Badge>
+                        </div>
+                        <p className="text-slate-600 mb-4 line-clamp-2">{position.description}</p>
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4" />
+                            {position.location}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="w-4 h-4" />
+                            {position.type}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <DollarSign className="w-4 h-4" />
+                            {position.salary}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-slate-600 mb-4 line-clamp-2">{position.description}</p>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                        <span className="flex items-center gap-1.5">
-                          <MapPin className="w-4 h-4" />
-                          {position.location}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <Clock className="w-4 h-4" />
-                          {position.type}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <DollarSign className="w-4 h-4" />
-                          {position.salary}
-                        </span>
-                      </div>
+                      <Button className="shrink-0 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 group-hover:shadow-xl group-hover:shadow-primary/30 transition-all">
+                        View Role
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
                     </div>
-                    <Button 
-                      className="shrink-0 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 group-hover:shadow-xl group-hover:shadow-primary/30 transition-all"
-                    >
-                      Apply Now
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

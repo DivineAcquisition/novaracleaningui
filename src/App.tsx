@@ -41,6 +41,9 @@ import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
 import Hiring from "./pages/Hiring";
+import FieldCleanerRole from "./pages/hiring/FieldCleaner";
+import OpsCoordinatorRole from "./pages/hiring/OpsCoordinator";
+import ExecutiveAssistantRole from "./pages/hiring/ExecutiveAssistant";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -204,10 +207,10 @@ const HiringRoutes = () => (
     <Route path="/careers" element={<Hiring />} />
     <Route path="/jobs" element={<Hiring />} />
     
-    {/* Position-specific routes */}
-    <Route path="/field-cleaner" element={<Hiring />} />
-    <Route path="/ops-coordinator" element={<Hiring />} />
-    <Route path="/executive-assistant" element={<Hiring />} />
+    {/* Individual position pages */}
+    <Route path="/field-cleaner" element={<FieldCleanerRole />} />
+    <Route path="/ops-coordinator" element={<OpsCoordinatorRole />} />
+    <Route path="/executive-assistant" element={<ExecutiveAssistantRole />} />
     
     {/* Legacy cleaner onboarding for existing applicants */}
     <Route path="/onboarding" element={<OnboardingLanding />} />
