@@ -2,9 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 import Index from "./pages/Index";
 import Demo from "./pages/Demo";
 import Auth from "./pages/Auth";
@@ -41,6 +42,27 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
+// Check if we're on the contractor subdomain
+const isContractorSubdomain = () => {
+  const hostname = window.location.hostname;
+  return hostname.startsWith('contractor.') || hostname.startsWith('cleaner.');
+};
+
+// Component to handle subdomain redirects
+const SubdomainRedirect = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // If on contractor subdomain and not already on a /cleaner route, redirect
+    if (isContractorSubdomain() && !location.pathname.startsWith('/cleaner')) {
+      const newPath = location.pathname === '/' ? '/cleaner/auth' : `/cleaner${location.pathname}`;
+      window.location.href = newPath;
+    }
+  }, [location.pathname]);
+  
+  return <>{children}</>;
+};
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -50,6 +72,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
+            <SubdomainRedirect>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
@@ -97,6 +120,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </SubdomainRedirect>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>

@@ -5,6 +5,7 @@
       "destination": "/index.html"
     }
   ],
+  "redirects": [],
   "headers": [
     {
       "source": "/(.*)",
