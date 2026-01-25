@@ -2,10 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { useEffect } from "react";
 import Index from "./pages/Index";
 import Demo from "./pages/Demo";
 import Auth from "./pages/Auth";
@@ -42,76 +41,6 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
-// Subdomain detection utility
-type SubdomainType = 'main' | 'app' | 'admin' | 'contractor' | 'unknown';
-
-const getSubdomain = (): SubdomainType => {
-  const hostname = window.location.hostname;
-  
-  // Local development
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'main';
-  }
-  
-  // Check for subdomains
-  if (hostname.startsWith('app.')) return 'app';
-  if (hostname.startsWith('admin.')) return 'admin';
-  if (hostname.startsWith('contractor.') || hostname.startsWith('cleaner.')) return 'contractor';
-  
-  // Main domain (no subdomain or www)
-  if (hostname.startsWith('www.') || !hostname.includes('.') || hostname.split('.').length <= 2) {
-    return 'main';
-  }
-  
-  return 'main';
-};
-
-// Component to handle subdomain-based routing
-const SubdomainRouter = ({ children }: { children: React.ReactNode }) => {
-  const location = useLocation();
-  const subdomain = getSubdomain();
-  
-  useEffect(() => {
-    const currentPath = location.pathname;
-    
-    switch (subdomain) {
-      case 'contractor':
-        // Contractor subdomain: redirect to /cleaner/* routes
-        if (!currentPath.startsWith('/cleaner')) {
-          const newPath = currentPath === '/' ? '/cleaner/auth' : `/cleaner${currentPath}`;
-          window.history.replaceState(null, '', newPath);
-          window.location.reload();
-        }
-        break;
-        
-      case 'admin':
-        // Admin subdomain: redirect to /admin/* routes
-        if (!currentPath.startsWith('/admin') && !currentPath.startsWith('/auth')) {
-          const newPath = currentPath === '/' ? '/admin/cleaners' : `/admin${currentPath}`;
-          window.history.replaceState(null, '', newPath);
-          window.location.reload();
-        }
-        break;
-        
-      case 'app':
-        // App subdomain: redirect to customer account/dashboard
-        if (currentPath === '/') {
-          window.history.replaceState(null, '', '/account');
-          window.location.reload();
-        }
-        break;
-        
-      case 'main':
-      default:
-        // Main domain: no special handling needed
-        break;
-    }
-  }, [location.pathname, subdomain]);
-  
-  return <>{children}</>;
-};
-
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -120,7 +49,6 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
-            <SubdomainRouter>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
@@ -131,7 +59,7 @@ const App = () => (
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               
-              {/* New simplified booking flow */}
+              {/* Booking flow */}
               <Route path="/book/zip" element={<BookingZip />} />
               <Route path="/book/sqft" element={<BookingHome />} />
               <Route path="/book/offer" element={<BookingOffer />} />
@@ -148,12 +76,16 @@ const App = () => (
               <Route path="/book/additional-details" element={<Navigate to="/book/details" replace />} />
               
               <Route path="/book/custom-quote" element={<CustomQuote />} />
+              
+              {/* Admin routes */}
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
               <Route path="/admin/webhook-tester" element={<ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>} />
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin/intake" element={<BookingIntake />} />
+              
+              {/* Cleaner/Contractor routes */}
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
@@ -162,19 +94,20 @@ const App = () => (
               <Route path="/cleaner/availability" element={<CleanerAvailability />} />
               <Route path="/cleaner/profile" element={<CleanerProfile />} />
               <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
-              <Route path="/cleaner/onboard" element={<OnboardingLanding />} /> {/* Legacy route */}
+              <Route path="/cleaner/onboard" element={<OnboardingLanding />} />
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               
-              {/* Hiring/Careers routes - redirect to cleaner onboarding */}
+              {/* Hiring/Careers routes */}
               <Route path="/hiring" element={<OnboardingLanding />} />
               <Route path="/careers" element={<OnboardingLanding />} />
               <Route path="/join" element={<OnboardingLanding />} />
               <Route path="/apply" element={<OnboardingLanding />} />
+              
               <Route path="/sms-consent" element={<SmsConsent />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              
+              {/* Catch-all route */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-            </SubdomainRouter>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>
