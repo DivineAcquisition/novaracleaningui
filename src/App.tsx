@@ -40,6 +40,7 @@ import CleanerAvailability from "./pages/cleaner/Availability";
 import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
+import Hiring from "./pages/Hiring";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -233,6 +234,28 @@ const MainRoutes = () => (
   </Routes>
 );
 
+// Hiring subdomain routes (hiring.novaracleaning.com)
+const HiringRoutes = () => (
+  <Routes>
+    {/* Main hiring page */}
+    <Route path="/" element={<Hiring />} />
+    <Route path="/apply" element={<Hiring />} />
+    <Route path="/careers" element={<Hiring />} />
+    <Route path="/jobs" element={<Hiring />} />
+    
+    {/* Position-specific routes */}
+    <Route path="/field-cleaner" element={<Hiring />} />
+    <Route path="/ops-coordinator" element={<Hiring />} />
+    <Route path="/executive-assistant" element={<Hiring />} />
+    
+    {/* Legacy cleaner onboarding for existing applicants */}
+    <Route path="/onboarding" element={<OnboardingLanding />} />
+    <Route path="/cleaner/onboarding" element={<OnboardingLanding />} />
+    
+    <Route path="*" element={<Hiring />} />
+  </Routes>
+);
+
 // Get the right routes based on subdomain
 const getSubdomainRoutes = () => {
   switch (CURRENT_SUBDOMAIN) {
@@ -244,6 +267,8 @@ const getSubdomainRoutes = () => {
       return <TryRoutes />;
     case 'app':
       return <AppRoutes />;
+    case 'hiring':
+      return <HiringRoutes />;
     default:
       return <MainRoutes />;
   }

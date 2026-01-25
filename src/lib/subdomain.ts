@@ -1,6 +1,6 @@
 // Subdomain detection and configuration
 
-export type SubdomainType = 'admin' | 'contractor' | 'try' | 'app' | 'main';
+export type SubdomainType = 'admin' | 'contractor' | 'try' | 'app' | 'hiring' | 'main';
 
 export const getSubdomain = (): SubdomainType => {
   const hostname = window.location.hostname;
@@ -13,6 +13,7 @@ export const getSubdomain = (): SubdomainType => {
     if (subdomain === 'contractor') return 'contractor';
     if (subdomain === 'try') return 'try';
     if (subdomain === 'app') return 'app';
+    if (subdomain === 'hiring') return 'hiring';
     return 'main';
   }
   
@@ -21,6 +22,7 @@ export const getSubdomain = (): SubdomainType => {
   if (hostname.startsWith('contractor.') || hostname.startsWith('cleaner.')) return 'contractor';
   if (hostname.startsWith('try.') || hostname.startsWith('book.')) return 'try';
   if (hostname.startsWith('app.')) return 'app';
+  if (hostname.startsWith('hiring.') || hostname.startsWith('careers.') || hostname.startsWith('jobs.')) return 'hiring';
   
   return 'main';
 };
@@ -58,6 +60,12 @@ export const SUBDOMAIN_CONFIG = {
     description: 'Manage Your Cleanings',
     defaultRoute: '/account',
     authRoute: '/auth',
+  },
+  hiring: {
+    title: 'Careers at Novara',
+    description: 'Join Our Team',
+    defaultRoute: '/',
+    authRoute: '/apply',
   },
   main: {
     title: 'Novara Cleaning',
