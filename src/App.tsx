@@ -145,7 +145,7 @@ const TryRoutes = () => (
   </Routes>
 );
 
-// App subdomain routes (app.novaracleaning.com) - Existing customer portal
+// App subdomain routes (app.novaracleaning.com) - Existing customer portal ONLY
 const AppRoutes = () => (
   <Routes>
     {/* Default route - account/dashboard */}
@@ -161,73 +161,34 @@ const AppRoutes = () => (
     <Route path="/reset-password" element={<ResetPassword />} />
     <Route path="/update-password" element={<UpdatePassword />} />
     
-    {/* Existing customer can also book */}
-    <Route path="/book/zip" element={<BookingZip />} />
-    <Route path="/book/sqft" element={<BookingHome />} />
-    <Route path="/book/offer" element={<BookingOffer />} />
-    <Route path="/book/checkout" element={<BookingCheckout />} />
-    <Route path="/book/details" element={<PropertyDetails />} />
-    <Route path="/book/confirmation" element={<BookingSuccess />} />
-    <Route path="/book/custom-quote" element={<CustomQuote />} />
+    {/* NO booking routes - redirect to try subdomain */}
+    <Route path="/book/*" element={<NotFound />} />
     
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
 
-// Main domain routes (novaracleaning.com)
+// Main domain routes (novaracleaning.com) - Landing page only, no booking
 const MainRoutes = () => (
   <Routes>
+    {/* Public pages */}
     <Route path="/" element={<Index />} />
     <Route path="/demo" element={<Demo />} />
-    <Route path="/auth" element={<Auth />} />
-    <Route path="/account" element={<Account />} />
-    <Route path="/membership" element={<Membership />} />
-    <Route path="/reset-password" element={<ResetPassword />} />
-    <Route path="/update-password" element={<UpdatePassword />} />
-    <Route path="/auth/callback" element={<AuthCallback />} />
     
-    {/* Booking flow */}
-    <Route path="/book/zip" element={<BookingZip />} />
-    <Route path="/book/sqft" element={<BookingHome />} />
-    <Route path="/book/offer" element={<BookingOffer />} />
-    <Route path="/book/checkout" element={<BookingCheckout />} />
-    <Route path="/book/details" element={<PropertyDetails />} />
-    <Route path="/book/confirmation" element={<BookingSuccess />} />
-    <Route path="/book/custom-quote" element={<CustomQuote />} />
+    {/* NO booking on main domain - booking is ONLY on try.novaracleaning.com */}
+    <Route path="/book/*" element={<NotFound />} />
     
-    {/* Legacy redirects */}
-    <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
-    <Route path="/book/service" element={<Navigate to="/book/offer" replace />} />
-    <Route path="/book/schedule" element={<Navigate to="/book/checkout" replace />} />
-    <Route path="/book/summary" element={<Navigate to="/book/checkout" replace />} />
-    <Route path="/book/success" element={<Navigate to="/book/confirmation" replace />} />
-    <Route path="/book/additional-details" element={<Navigate to="/book/details" replace />} />
+    {/* NO admin on main domain - admin is ONLY on admin.novaracleaning.com */}
+    <Route path="/admin/*" element={<NotFound />} />
     
-    {/* Admin routes */}
-    <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
-    <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
-    <Route path="/admin/webhook-tester" element={<ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>} />
-    <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
-    <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
-    <Route path="/admin/intake" element={<BookingIntake />} />
+    {/* NO cleaner portal on main domain - cleaner is ONLY on contractor.novaracleaning.com */}
+    <Route path="/cleaner/*" element={<NotFound />} />
     
-    {/* Cleaner routes */}
-    <Route path="/cleaner/auth" element={<CleanerAuth />} />
-    <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
-    <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
-    <Route path="/cleaner/mobile-dashboard" element={<MobileDashboard />} />
-    <Route path="/cleaner/job-offers" element={<MobileJobOffers />} />
-    <Route path="/cleaner/availability" element={<CleanerAvailability />} />
-    <Route path="/cleaner/profile" element={<CleanerProfile />} />
-    <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
-    <Route path="/cleaner/onboard" element={<OnboardingLanding />} />
-    <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
-    
-    {/* Hiring routes */}
-    <Route path="/hiring" element={<OnboardingLanding />} />
-    <Route path="/careers" element={<OnboardingLanding />} />
-    <Route path="/join" element={<OnboardingLanding />} />
-    <Route path="/apply" element={<OnboardingLanding />} />
+    {/* Hiring redirects to hiring subdomain info */}
+    <Route path="/hiring" element={<Hiring />} />
+    <Route path="/careers" element={<Hiring />} />
+    <Route path="/join" element={<Hiring />} />
+    <Route path="/apply" element={<Hiring />} />
     
     <Route path="/sms-consent" element={<SmsConsent />} />
     <Route path="*" element={<NotFound />} />
