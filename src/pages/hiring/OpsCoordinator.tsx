@@ -45,7 +45,7 @@ const jobData = {
   department: 'Operations',
   location: 'Remote',
   type: 'Full-time',
-  compensation: '$45,000 - $55,000/year',
+  compensation: 'Based on Experience',
   mission: 'Operations is the backbone of everything we do. As Operations Coordinator, you\'ll be the central hub that connects our cleaners with our customers, ensuring every job runs smoothly and every customer has an exceptional experience.',
   description: 'Coordinate daily operations, manage cleaner schedules, and ensure smooth service delivery across our growing operation.',
   techStack: ['Jobber', 'Slack', 'Google Workspace', 'Zapier', 'CRM Tools'],
@@ -112,7 +112,7 @@ const jobData = {
       title: 'Compensation',
       type: 'list' as const,
       items: [
-        'Base salary: $45,000 - $55,000/year depending on experience',
+        'Competitive salary based on experience',
         'Performance bonuses tied to operational metrics',
         'Health insurance stipend',
         'Paid time off and holidays',

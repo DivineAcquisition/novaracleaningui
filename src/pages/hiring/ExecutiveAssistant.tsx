@@ -47,7 +47,7 @@ const jobData = {
   department: 'Executive',
   location: 'Remote',
   type: 'Full-time',
-  compensation: '$50,000 - $65,000/year',
+  compensation: 'Based on Experience',
   mission: 'Behind every successful executive is an exceptional assistant. As our Executive Assistant, you\'ll be the force multiplier that enables our leadership team to focus on what matters most — scaling the company and serving our customers.',
   description: 'Support the executive team with administrative tasks, project management, and strategic initiatives as we scale.',
   techStack: ['Notion', 'Google Workspace', 'Slack', 'Calendly', 'Asana', 'Loom'],
@@ -114,7 +114,7 @@ const jobData = {
       title: 'Compensation',
       type: 'list' as const,
       items: [
-        'Base salary: $50,000 - $65,000/year depending on experience',
+        'Competitive salary based on experience',
         'Performance bonuses tied to executive team productivity',
         'Comprehensive health insurance',
         'Paid time off and flexible scheduling',

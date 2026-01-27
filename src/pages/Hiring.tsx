@@ -61,7 +61,7 @@ const jobs: Job[] = [
     location: 'remote',
     region: 'Remote',
     type: 'Full-time',
-    salary: '$45,000 - $55,000/year',
+    salary: 'Based on Experience',
     level: 2,
   },
   {
@@ -74,7 +74,7 @@ const jobs: Job[] = [
     location: 'remote',
     region: 'Remote',
     type: 'Full-time',
-    salary: '$50,000 - $65,000/year',
+    salary: 'Based on Experience',
     level: 3,
   },
 ];
