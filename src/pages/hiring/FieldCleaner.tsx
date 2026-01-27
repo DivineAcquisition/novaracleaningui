@@ -32,11 +32,11 @@ const jobData = {
   title: 'Field Cleaner',
   subtitle: 'Operations',
   department: 'Operations',
-  location: 'Dallas-Fort Worth, TX',
+  location: 'Washington DC Metro Area',
   type: 'Part-time / Full-time',
   compensation: '$18 - $25/hour',
   mission: 'We believe every home deserves exceptional care. Our Field Cleaners are the heart of Novara, transforming spaces and creating joy for our customers through meticulous attention to detail and genuine care.',
-  description: 'Join our team of professional cleaners delivering exceptional cleaning services to homes across the DFW metroplex. Flexible hours and competitive pay.',
+  description: 'Join our team of professional cleaners delivering exceptional cleaning services to homes across the DMV area. Flexible hours and competitive pay.',
   sections: [
     {
       title: 'Responsibilities',
@@ -106,7 +106,7 @@ const jobData = {
   ],
 };
 
-const aboutContent = `Novara Cleaning delivers premium residential cleaning services across the Dallas-Fort Worth metroplex. We exist to transform homes and create peace of mind for busy families.
+const aboutContent = `Novara Cleaning delivers premium residential cleaning services across the DC, Maryland & Virginia area. We exist to transform homes and create peace of mind for busy families.
 
 Our philosophy rests on three pillars:
 • Excellence — We hold ourselves to the highest standards

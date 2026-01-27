@@ -27,32 +27,41 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 
 const SERVICE_AREAS = [
-  "Dallas", "Fort Worth", "Arlington", "Plano", "Frisco",
-  "McKinney", "Irving", "Garland", "Grand Prairie", "Denton"
+  "Washington DC", "Bethesda", "Silver Spring", "Rockville", "Arlington",
+  "Alexandria", "Fairfax", "Falls Church", "Tysons", "Chevy Chase"
 ];
 
 const TESTIMONIALS = [
   {
     name: "Sarah M.",
-    location: "Frisco, TX",
+    location: "Bethesda, MD",
     rating: 5,
     text: "Best cleaning service I've ever used! They were thorough, professional, and my home has never looked better.",
     avatar: "SM"
   },
   {
     name: "Michael R.",
-    location: "Plano, TX",
+    location: "Arlington, VA",
     rating: 5,
     text: "The membership is worth every penny. I love having a dedicated team that knows my home.",
     avatar: "MR"
   },
   {
     name: "Jennifer L.",
-    location: "Dallas, TX",
+    location: "Washington, DC",
     rating: 5,
     text: "Finally, cleaners I can trust! They're always on time and do an amazing job every single visit.",
     avatar: "JL"
   }
+];
+
+const BOOKING_STEPS_DEMO = [
+  { step: 1, title: "Enter ZIP Code", desc: "Check if we service your area", visual: "20814" },
+  { step: 2, title: "Select Home Size", desc: "Choose your square footage", visual: "1,500-2,000 sq ft" },
+  { step: 3, title: "Pick Your Service", desc: "Deep clean or membership", visual: "$189 Membership" },
+  { step: 4, title: "Schedule Date", desc: "Choose your preferred time", visual: "Sat, Jan 25 • 9am" },
+  { step: 5, title: "Secure Checkout", desc: "Pay securely with Stripe", visual: "💳 **** 4242" },
+  { step: 6, title: "Confirmation", desc: "You're all set!", visual: "✓ Booked!" },
 ];
 
 const MEMBERSHIP_PERKS = [
@@ -204,7 +213,7 @@ export default function SpecialOffer() {
               </h1>
               
               <p className="text-xl text-slate-600 leading-relaxed">
-                Join thousands of DFW families who trust Novara for spotless homes. 
+                Join thousands of DMV families who trust Novara for spotless homes. 
                 Professional teams, 40-point checklists, and a satisfaction guarantee.
               </p>
               
@@ -532,6 +541,90 @@ export default function SpecialOffer() {
         </div>
       </section>
 
+      {/* Live Demo - Booking Process */}
+      <section className="py-20 bg-white overflow-hidden">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge className="mb-4 bg-primary/10 text-primary border-0">
+              <Play className="w-4 h-4 mr-2" />
+              See How Easy It Is
+            </Badge>
+            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
+              Book in Under 2 Minutes
+            </h2>
+            <p className="mt-4 text-lg text-slate-600 max-w-2xl mx-auto">
+              Our streamlined booking process makes scheduling your cleaning effortless
+            </p>
+          </div>
+          
+          {/* Desktop Visual Demo */}
+          <div className="hidden md:block relative">
+            <div className="flex items-center justify-between gap-2">
+              {BOOKING_STEPS_DEMO.map((item, idx) => (
+                <div key={idx} className="flex-1 relative">
+                  {/* Connector Line */}
+                  {idx < BOOKING_STEPS_DEMO.length - 1 && (
+                    <div className="absolute top-8 left-1/2 w-full h-0.5 bg-gradient-to-r from-primary to-primary/30 z-0" />
+                  )}
+                  
+                  {/* Step Card */}
+                  <div className="relative z-10 flex flex-col items-center">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg ${
+                      idx === BOOKING_STEPS_DEMO.length - 1 
+                        ? 'bg-green-500 shadow-green-500/30' 
+                        : 'bg-primary shadow-primary/30'
+                    }`}>
+                      {item.step}
+                    </div>
+                    <div className="mt-4 text-center">
+                      <p className="font-semibold text-slate-900 text-sm">{item.title}</p>
+                      <p className="text-xs text-slate-500 mt-1">{item.desc}</p>
+                    </div>
+                    {/* Visual Preview */}
+                    <div className="mt-3 px-3 py-2 bg-slate-100 rounded-lg text-xs font-mono text-slate-600">
+                      {item.visual}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Mobile Visual Demo */}
+          <div className="md:hidden space-y-4">
+            {BOOKING_STEPS_DEMO.map((item, idx) => (
+              <div key={idx} className="flex items-start gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shrink-0 ${
+                  idx === BOOKING_STEPS_DEMO.length - 1 
+                    ? 'bg-green-500' 
+                    : 'bg-primary'
+                }`}>
+                  {item.step}
+                </div>
+                <div className="flex-1 pb-4 border-b border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-slate-900">{item.title}</p>
+                      <p className="text-sm text-slate-500">{item.desc}</p>
+                    </div>
+                    <div className="px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-mono text-slate-600">
+                      {item.visual}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="text-center mt-12">
+            <Button size="lg" onClick={scrollToBooking} className="bg-primary hover:bg-primary/90">
+              Start Booking Now
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* Service Areas */}
       <section className="py-20 bg-slate-50">
         <div className="max-w-6xl mx-auto px-4">
@@ -541,10 +634,10 @@ export default function SpecialOffer() {
               Service Areas
             </Badge>
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
-              Serving the DFW Metroplex
+              Serving the DMV Area
             </h2>
             <p className="mt-4 text-lg text-slate-600">
-              Premium cleaning services across the Dallas-Fort Worth area
+              Premium cleaning services across DC, Maryland & Virginia
             </p>
           </div>
           
@@ -592,7 +685,7 @@ export default function SpecialOffer() {
                 <span className="font-bold text-xl">Novara</span>
               </div>
               <p className="text-slate-400 text-sm">
-                Premium residential cleaning services for the Dallas-Fort Worth metroplex.
+                Premium residential cleaning services for the DC, Maryland & Virginia area.
               </p>
             </div>
             
@@ -625,7 +718,7 @@ export default function SpecialOffer() {
                 </li>
                 <li className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
-                  Dallas-Fort Worth, TX
+                  Washington DC Metro Area
                 </li>
               </ul>
             </div>

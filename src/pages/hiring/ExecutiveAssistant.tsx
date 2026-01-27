@@ -133,7 +133,7 @@ const jobData = {
   ],
 };
 
-const aboutContent = `Novara Cleaning delivers premium residential cleaning services across the Dallas-Fort Worth metroplex. We exist to transform homes and create peace of mind for busy families.
+const aboutContent = `Novara Cleaning delivers premium residential cleaning services across the DC, Maryland & Virginia area. We exist to transform homes and create peace of mind for busy families.
 
 Our philosophy rests on three pillars:
 • Excellence — We hold ourselves to the highest standards
