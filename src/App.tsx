@@ -23,6 +23,7 @@ import BookingCheckout from "./pages/book/Checkout";
 import PropertyDetails from "./pages/book/PropertyDetails";
 import BookingSuccess from "./pages/book/Success";
 import CustomQuote from "./pages/book/CustomQuote";
+import SpecialOffer from "./pages/book/SpecialOffer";
 import NotFound from "./pages/NotFound";
 import AdminCleaners from "./pages/admin/Cleaners";
 import AdminWebhooks from "./pages/admin/WebhookMonitor";
@@ -126,6 +127,7 @@ const TryRoutes = () => (
     
     {/* Booking flow */}
     <Route path="/book/zip" element={<BookingZip />} />
+    <Route path="/special/offer" element={<SpecialOffer />} />
     <Route path="/book/sqft" element={<BookingHome />} />
     <Route path="/book/offer" element={<BookingOffer />} />
     <Route path="/book/checkout" element={<BookingCheckout />} />
@@ -177,6 +179,9 @@ const MainRoutes = () => (
     {/* Public pages */}
     <Route path="/" element={<Index />} />
     <Route path="/demo" element={<Demo />} />
+    
+    {/* Special offer landing page accessible on main domain */}
+    <Route path="/special/offer" element={<SpecialOffer />} />
     
     {/* NO booking on main domain - booking is ONLY on try.novaracleaning.com */}
     <Route path="/book/*" element={<NotFound />} />
