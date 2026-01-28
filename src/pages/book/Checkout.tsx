@@ -442,28 +442,28 @@ export default function BookingCheckout() {
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
-        <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
+        <div className="container max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
           
 
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
-              <Shield className="w-8 h-8 text-white" />
+            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-primary rounded-full mb-3 sm:mb-4">
+              <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold">Secure Checkout</h1>
-            <p className="text-muted-foreground mt-1">Review your order and complete payment</p>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">Secure Checkout</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Review your order and complete payment</p>
           </div>
 
           {/* Order Summary Grid */}
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Service Details Card */}
             <Card className="border-primary/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
+              <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2">
+                  <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                   Service Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+              <CardContent className="space-y-2 sm:space-y-3 text-xs sm:text-sm px-3 sm:px-6 pb-3 sm:pb-6">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Service Type</span>
                   <span className="font-medium">{serviceTier?.label || 'Standard'}</span>
@@ -477,15 +477,15 @@ export default function BookingCheckout() {
                   <span className="font-medium">{getEstimatedHours(bookingData.homeSizeId)} hours</span>
                 </div>
                 {addOnLabels.length > 0 && <div className="pt-2 border-t">
-                    <span className="text-muted-foreground text-xs">Add-ons:</span>
+                    <span className="text-muted-foreground text-[10px] sm:text-xs">Add-ons:</span>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {addOnLabels.map((label, i) => <Badge key={i} variant="secondary" className="text-xs">{label}</Badge>)}
+                      {addOnLabels.map((label, i) => <Badge key={i} variant="secondary" className="text-[10px] sm:text-xs">{label}</Badge>)}
                     </div>
                   </div>}
                 {membership && bookingData.membershipPlan !== 'none' && <div className="pt-2 border-t">
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-xs">Membership</span>
-                      <Badge className="bg-primary/10 text-primary text-xs">{membership.label}</Badge>
+                      <span className="text-muted-foreground text-[10px] sm:text-xs">Membership</span>
+                      <Badge className="bg-primary/10 text-primary text-[10px] sm:text-xs">{membership.label}</Badge>
                     </div>
                   </div>}
               </CardContent>
@@ -493,26 +493,26 @@ export default function BookingCheckout() {
 
             {/* Schedule Summary Card */}
             <Card className="border-primary/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-primary" />
+              <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2">
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                   Schedule
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+              <CardContent className="space-y-2 sm:space-y-3 text-xs sm:text-sm px-3 sm:px-6 pb-3 sm:pb-6">
                 {bookingData.serviceDate && bookingData.timeSlot ? <>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
+                      <span className="text-muted-foreground flex items-center gap-1 sm:gap-1.5">
+                        <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         Date
                       </span>
-                      <span className="font-medium">
-                        {format(new Date(bookingData.serviceDate + 'T12:00:00'), "EEEE, MMM d, yyyy")}
+                      <span className="font-medium text-right">
+                        {format(new Date(bookingData.serviceDate + 'T12:00:00'), "EEE, MMM d")}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
+                      <span className="text-muted-foreground flex items-center gap-1 sm:gap-1.5">
+                        <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         Time
                       </span>
                       <span className="font-medium">
@@ -520,17 +520,17 @@ export default function BookingCheckout() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5" />
+                      <span className="text-muted-foreground flex items-center gap-1 sm:gap-1.5">
+                        <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         Location
                       </span>
                       <span className="font-medium">ZIP {bookingData.zipCode}</span>
                     </div>
-                  </> : <div className="text-center py-4 space-y-3">
-                    <p className="text-muted-foreground">No schedule selected</p>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/book/offer')}>
-                      <ArrowLeft className="w-4 h-4 mr-2" />
-                      Go Back to Select Date & Time
+                  </> : <div className="text-center py-3 sm:py-4 space-y-2 sm:space-y-3">
+                    <p className="text-muted-foreground text-xs sm:text-sm">No schedule selected</p>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/book/offer')} className="text-xs sm:text-sm h-8 sm:h-9">
+                      <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                      Select Date & Time
                     </Button>
                   </div>}
               </CardContent>
@@ -539,17 +539,17 @@ export default function BookingCheckout() {
 
           {/* Gate: Show skeleton/message if schedule not selected */}
           {!isScheduleSelected && <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
-              <CardContent className="py-8 text-center space-y-4">
-                <Calendar className="w-12 h-12 text-amber-500 mx-auto" />
+              <CardContent className="py-5 sm:py-8 text-center space-y-3 sm:space-y-4 px-4 sm:px-6">
+                <Calendar className="w-10 h-10 sm:w-12 sm:h-12 text-amber-500 mx-auto" />
                 <div>
-                  <h3 className="font-semibold text-lg">Schedule Required</h3>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    Please select a date and time for your cleaning before proceeding to payment.
+                  <h3 className="font-semibold text-base sm:text-lg">Schedule Required</h3>
+                  <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+                    Please select a date and time for your cleaning.
                   </p>
                 </div>
-                <Button onClick={() => navigate('/book/offer')} className="bg-gradient-primary">
+                <Button onClick={() => navigate('/book/offer')} className="bg-gradient-primary h-10 sm:h-11 text-sm">
                   <Calendar className="w-4 h-4 mr-2" />
-                  Select Your Appointment
+                  Select Appointment
                 </Button>
               </CardContent>
             </Card>}
@@ -561,8 +561,8 @@ export default function BookingCheckout() {
           
           {/* Payment Options - Only show for non-membership (one-time) bookings */}
           {!isNewMembershipSignup && (
-            <div className="space-y-3">
-              <h3 className="font-semibold text-lg">Choose Payment Option</h3>
+            <div className="space-y-2 sm:space-y-3">
+              <h3 className="font-semibold text-base sm:text-lg">Choose Payment Option</h3>
               <PaymentComparison depositPricing={{
                 deposit: depositPricing.deposit,
                 balanceDue: depositPricing.balanceDue,
@@ -680,16 +680,16 @@ export default function BookingCheckout() {
 
           {/* Payment Section */}
           <Card className="border-primary/20 shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
+            <CardHeader className="px-3 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4">
+              <CardTitle className="flex items-center gap-1.5 sm:gap-2 text-base sm:text-lg">
+                <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                 Payment Details
               </CardTitle>
-              <CardDescription>
-                {effectivePaymentOption === 'deposit' ? `Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} after service` : `Pay $${currentAmount.toFixed(2)} now • No balance due`}
+              <CardDescription className="text-xs sm:text-sm">
+                {effectivePaymentOption === 'deposit' ? `Pay $${currentAmount.toFixed(2)} now • $${depositPricing.balanceDue.toFixed(2)} after` : `Pay $${currentAmount.toFixed(2)} now • No balance due`}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-4 sm:pb-6">
               
               {/* Membership Signup Flow */}
               {isNewMembershipSignup && <div className="space-y-4">
@@ -747,15 +747,15 @@ export default function BookingCheckout() {
                 </>}
 
               {/* Trust Badges */}
-              <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-4 border-t">
+              <div className="flex items-center justify-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-muted-foreground pt-3 sm:pt-4 border-t">
                 <span className="flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5" />
+                  <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   Secure
                 </span>
                 <span>•</span>
                 <span>256-bit Encryption</span>
-                <span>•</span>
-                <span>PCI Compliant</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">PCI Compliant</span>
               </div>
             </CardContent>
           </Card>
@@ -763,7 +763,7 @@ export default function BookingCheckout() {
 
           {/* Desktop Back Button */}
           <div className="hidden md:block">
-            <Button variant="outline" onClick={handleBack} disabled={isProcessing}>
+            <Button variant="outline" onClick={handleBack} disabled={isProcessing} className="text-sm">
               <ArrowLeft className="mr-2 w-4 h-4" />
               Back to Service Selection
             </Button>

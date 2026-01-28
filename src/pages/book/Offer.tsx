@@ -173,23 +173,23 @@ export default function BookingOffer() {
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 pb-32 md:pb-8">
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
 
-        <div className="container max-w-5xl mx-auto px-4 py-8 md:py-12 space-y-8 md:space-y-12">
+        <div className="container max-w-5xl mx-auto px-3 sm:px-4 py-5 sm:py-8 md:py-12 space-y-5 sm:space-y-8 md:space-y-12">
           {/* Hero Section */}
-          <div className="text-center space-y-4 max-w-2xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
-              <Sparkles className="w-4 h-4" />
+          <div className="text-center space-y-2 sm:space-y-4 max-w-2xl mx-auto">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-medium">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Premium Cleaning Services
             </div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
               Choose Your Service
             </h1>
-            <p className="text-muted-foreground text-lg md:text-xl leading-relaxed">
-              Professional cleaning tailored to your needs. Select the option that works best for your home.
+            <p className="text-muted-foreground text-sm sm:text-lg md:text-xl leading-relaxed">
+              Professional cleaning tailored to your needs.
             </p>
           </div>
 
           {/* Service Cards */}
-          <div id="offers-section" className="grid lg:grid-cols-2 gap-6 lg:gap-8">
+          <div id="offers-section" className="grid lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
             {/* Deep Clean Card */}
             <Card 
               className={cn(
@@ -203,62 +203,62 @@ export default function BookingOffer() {
             >
               {/* Selection indicator */}
               {selectedService === 'deep' && (
-                <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                  <Check className="w-5 h-5 text-white" />
+                <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center">
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
               )}
               
-              <CardContent className="p-6 md:p-8 space-y-6">
+              <CardContent className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6">
                 {/* Header */}
-                <div className="space-y-2">
+                <div className="space-y-1 sm:space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">One-Time Service</span>
+                    <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">One-Time Service</span>
                   </div>
-                  <h3 className="text-2xl md:text-3xl font-bold text-foreground">Deep Clean</h3>
-                  <p className="text-muted-foreground">A thorough top-to-bottom clean for your entire home</p>
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Deep Clean</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground">A thorough top-to-bottom clean for your entire home</p>
                 </div>
                 
                 {/* Pricing */}
-                <div className="py-4 border-y border-slate-100 dark:border-slate-800">
+                <div className="py-3 sm:py-4 border-y border-slate-100 dark:border-slate-800">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl md:text-5xl font-bold text-foreground">${prices.deepClean.price}</span>
-                    <span className="text-muted-foreground text-lg">one-time</span>
+                    <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground">${prices.deepClean.price}</span>
+                    <span className="text-muted-foreground text-sm sm:text-lg">one-time</span>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Or pay ${prices.deepClean.deposit} deposit today, rest after service
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-2">
+                    Or pay ${prices.deepClean.deposit} deposit today
                   </p>
                 </div>
                 
                 {/* Features */}
-                <ul className="space-y-3">
+                <ul className="space-y-2 sm:space-y-3">
                   {DEEP_CLEAN_FEATURES.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <feature.icon className="w-4 h-4 text-primary" />
+                    <li key={idx} className="flex items-center gap-2 sm:gap-3">
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <feature.icon className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
                       </div>
-                      <span className="text-sm text-foreground">{feature.text}</span>
+                      <span className="text-xs sm:text-sm text-foreground">{feature.text}</span>
                     </li>
                   ))}
                 </ul>
                 
                 {/* CTA */}
-                <div className="space-y-3 pt-2">
+                <div className="space-y-2 sm:space-y-3 pt-1 sm:pt-2">
                   <Button 
                     size="lg" 
                     className={cn(
-                      "w-full font-semibold h-12 text-base transition-all",
+                      "w-full font-semibold h-10 sm:h-12 text-sm sm:text-base transition-all",
                       selectedService === 'deep' 
                         ? "bg-primary" 
                         : "bg-primary/90 group-hover:bg-primary"
                     )}
                   >
                     {selectedService === 'deep' ? 'Selected' : 'Select Deep Clean'}
-                    <ChevronRight className="w-5 h-5 ml-1" />
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
                   </Button>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="w-full text-muted-foreground hover:text-foreground"
+                    className="w-full text-xs sm:text-sm text-muted-foreground hover:text-foreground"
                     onClick={(e) => { e.stopPropagation(); setShowDeepCleanModal(true); }}
                   >
                     View full checklist
@@ -280,69 +280,69 @@ export default function BookingOffer() {
             >
               {/* Popular Badge */}
               <div className="absolute top-0 right-0">
-                <div className="bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-lg">
+                <div className="bg-emerald-500 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-4 py-1 sm:py-1.5 rounded-bl-lg">
                   RECOMMENDED
                 </div>
               </div>
               
               {/* Selection indicator */}
               {selectedService === 'membership' && (
-                <div className="absolute top-4 left-4 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-white" />
+                <div className="absolute top-3 left-3 sm:top-4 sm:left-4 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
               )}
               
-              <CardContent className="p-6 md:p-8 space-y-6">
+              <CardContent className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6">
                 {/* Header */}
-                <div className="space-y-2">
+                <div className="space-y-1 sm:space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Membership Plan</span>
+                    <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Membership Plan</span>
                   </div>
-                  <h3 className="text-2xl md:text-3xl font-bold text-foreground">Novara Membership</h3>
-                  <p className="text-muted-foreground">Keep your home consistently clean with scheduled service</p>
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Novara Membership</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Keep your home consistently clean with scheduled service</p>
                 </div>
                 
                 {/* Pricing */}
-                <div className="py-4 border-y border-slate-100 dark:border-slate-800">
+                <div className="py-3 sm:py-4 border-y border-slate-100 dark:border-slate-800">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl md:text-5xl font-bold text-foreground">${prices.membership.monthlyPrice}</span>
-                    <span className="text-muted-foreground text-lg">/month</span>
+                    <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground">${prices.membership.monthlyPrice}</span>
+                    <span className="text-muted-foreground text-sm sm:text-lg">/month</span>
                   </div>
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mt-2">
+                  <p className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-medium mt-1 sm:mt-2">
                     Includes 1 professional cleaning per month
                   </p>
                 </div>
                 
                 {/* Features */}
-                <ul className="space-y-3">
+                <ul className="space-y-2 sm:space-y-3">
                   {MEMBERSHIP_FEATURES.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                        <feature.icon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <li key={idx} className="flex items-center gap-2 sm:gap-3">
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                        <feature.icon className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-600 dark:text-emerald-400" />
                       </div>
-                      <span className="text-sm text-foreground">{feature.text}</span>
+                      <span className="text-xs sm:text-sm text-foreground">{feature.text}</span>
                     </li>
                   ))}
                 </ul>
                 
                 {/* CTA */}
-                <div className="space-y-3 pt-2">
+                <div className="space-y-2 sm:space-y-3 pt-1 sm:pt-2">
                   <Button 
                     size="lg" 
                     className={cn(
-                      "w-full font-semibold h-12 text-base transition-all",
+                      "w-full font-semibold h-10 sm:h-12 text-sm sm:text-base transition-all",
                       selectedService === 'membership' 
                         ? "bg-emerald-500 hover:bg-emerald-600" 
                         : "bg-emerald-500/90 hover:bg-emerald-500 group-hover:bg-emerald-500"
                     )}
                   >
                     {selectedService === 'membership' ? 'Selected' : 'Select Membership'}
-                    <ChevronRight className="w-5 h-5 ml-1" />
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
                   </Button>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="w-full text-muted-foreground hover:text-foreground"
+                    className="w-full text-xs sm:text-sm text-muted-foreground hover:text-foreground"
                     onClick={(e) => { e.stopPropagation(); setShowMembershipModal(true); }}
                   >
                     View membership details
@@ -386,9 +386,9 @@ export default function BookingOffer() {
           )}
 
           {/* Back Navigation */}
-          <div className="flex justify-center pt-4">
-            <Button variant="ghost" onClick={handleBack} className="text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="w-4 h-4 mr-2" />
+          <div className="flex justify-center pt-2 sm:pt-4">
+            <Button variant="ghost" onClick={handleBack} className="text-muted-foreground hover:text-foreground text-xs sm:text-sm">
+              <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Back to Home Size
             </Button>
           </div>

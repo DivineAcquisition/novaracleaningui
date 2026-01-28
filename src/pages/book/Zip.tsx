@@ -156,17 +156,17 @@ export default function BookingZip() {
       <BookingHeader currentStep={1} totalSteps={6} stepLabel="Location" />
 
       {/* Hero + Booking Section */}
-      <section className="container mx-auto px-4 py-12 md:py-20">
-        <div className="max-w-2xl mx-auto text-center space-y-8">
-          <div className="space-y-4">
-            <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
+      <section className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 md:py-20">
+        <div className="max-w-2xl mx-auto text-center space-y-4 sm:space-y-8">
+          <div className="space-y-2 sm:space-y-4">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
               {formMode === 'waitlist-success' 
                 ? "You're On The List! 🎉" 
                 : "Book Your Cleaning Today For Only $39"}
             </h1>
             
             {formMode !== 'waitlist-success' && (
-              <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">
+              <p className="text-[#2c2c2c] font-normal text-xs sm:text-sm">
                 {formMode === 'waitlist' 
                   ? "We're not in your area yet, but we're expanding soon!"
                   : "Premium cleaning service at transparent prices. Enter your ZIP code to get started."}
@@ -176,13 +176,13 @@ export default function BookingZip() {
 
           {/* Main Card */}
           <Card variant="outlined" className="border-primary/30 shadow-card overflow-hidden">
-            <CardContent className="pt-8 pb-8 space-y-6">
+            <CardContent className="pt-5 pb-5 sm:pt-8 sm:pb-8 space-y-4 sm:space-y-6 px-4 sm:px-6">
               
               {/* ZIP Code Form */}
               {formMode === 'zip' && (
-                <form onSubmit={handleZipSubmit} className="space-y-4 animate-fade-in">
+                <form onSubmit={handleZipSubmit} className="space-y-3 sm:space-y-4 animate-fade-in">
                   <div className="space-y-2">
-                    <label htmlFor="zipCode" className="text-sm font-medium text-left block">
+                    <label htmlFor="zipCode" className="text-xs sm:text-sm font-medium text-left block">
                       Enter Your ZIP Code
                     </label>
                     <Input 
@@ -194,10 +194,10 @@ export default function BookingZip() {
                       placeholder="12345" 
                       value={zipCode} 
                       onChange={e => setZipCode(e.target.value.replace(/\D/g, ''))} 
-                      className="h-14 text-lg text-center" 
+                      className="h-12 sm:h-14 text-base sm:text-lg text-center" 
                       autoFocus 
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
                       We'll check if we service your area
                     </p>
                   </div>
@@ -206,7 +206,7 @@ export default function BookingZip() {
                     type="submit" 
                     size="lg" 
                     disabled={zipCode.length !== 5 || isValidating} 
-                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                    className="w-full h-11 sm:h-12 md:h-14 text-sm sm:text-base md:text-lg font-semibold bg-gradient-primary"
                   >
                     {isValidating ? "Checking..." : "Continue"}
                     <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
@@ -216,24 +216,24 @@ export default function BookingZip() {
 
               {/* Contact Details Form (Service Area) */}
               {formMode === 'contact' && (
-                <form onSubmit={handleContactSubmit} className="space-y-5 animate-fade-in">
+                <form onSubmit={handleContactSubmit} className="space-y-3 sm:space-y-5 animate-fade-in">
                   {/* Success Message */}
-                  <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
-                    <CheckCircle className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 sm:gap-3 p-3 sm:p-4 bg-muted/50 rounded-lg">
+                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-primary flex-shrink-0 mt-0.5" />
                     <div className="text-left">
-                      <p className="font-semibold text-foreground">
+                      <p className="font-semibold text-foreground text-sm sm:text-base">
                         Great news! We service {cityState}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs sm:text-sm text-muted-foreground">
                         Enter your details to claim your New Year discount
                       </p>
                     </div>
                   </div>
 
                   {/* Name Fields */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label htmlFor="firstName" className="text-sm font-medium text-left block">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                    <div className="space-y-1 sm:space-y-2">
+                      <label htmlFor="firstName" className="text-xs sm:text-sm font-medium text-left block">
                         First Name
                       </label>
                       <Input
@@ -242,12 +242,12 @@ export default function BookingZip() {
                         placeholder="John"
                         value={firstName}
                         onChange={e => setFirstName(e.target.value)}
-                        className="h-12"
+                        className="h-10 sm:h-12 text-sm sm:text-base"
                         required
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label htmlFor="lastName" className="text-sm font-medium text-left block">
+                    <div className="space-y-1 sm:space-y-2">
+                      <label htmlFor="lastName" className="text-xs sm:text-sm font-medium text-left block">
                         Last Name
                       </label>
                       <Input
@@ -256,15 +256,15 @@ export default function BookingZip() {
                         placeholder="Smith"
                         value={lastName}
                         onChange={e => setLastName(e.target.value)}
-                        className="h-12"
+                        className="h-10 sm:h-12 text-sm sm:text-base"
                         required
                       />
                     </div>
                   </div>
 
                   {/* Email Field */}
-                  <div className="space-y-2">
-                    <label htmlFor="email" className="text-sm font-medium text-left block">
+                  <div className="space-y-1 sm:space-y-2">
+                    <label htmlFor="email" className="text-xs sm:text-sm font-medium text-left block">
                       Email
                     </label>
                     <Input
@@ -273,14 +273,14 @@ export default function BookingZip() {
                       placeholder="john@example.com"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      className="h-12"
+                      className="h-10 sm:h-12 text-sm sm:text-base"
                       required
                     />
                   </div>
 
                   {/* Phone Field */}
-                  <div className="space-y-2">
-                    <label htmlFor="phone" className="text-sm font-medium text-left block">
+                  <div className="space-y-1 sm:space-y-2">
+                    <label htmlFor="phone" className="text-xs sm:text-sm font-medium text-left block">
                       Phone Number
                     </label>
                     <Input
@@ -289,7 +289,7 @@ export default function BookingZip() {
                       placeholder="(301) 555-0123"
                       value={phone}
                       onChange={handlePhoneChange}
-                      className="h-12"
+                      className="h-10 sm:h-12 text-sm sm:text-base"
                       required
                     />
                   </div>
@@ -299,7 +299,7 @@ export default function BookingZip() {
                     type="submit" 
                     size="lg" 
                     disabled={!firstName || !lastName || !email || phone.replace(/\D/g, '').length !== 10 || isSubmitting} 
-                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                    className="w-full h-11 sm:h-12 md:h-14 text-sm sm:text-base md:text-lg font-semibold bg-gradient-primary"
                   >
                     {isSubmitting ? "Processing..." : "Claim My Discount →"}
                   </Button>
@@ -308,7 +308,7 @@ export default function BookingZip() {
                   <button
                     type="button"
                     onClick={handleChangeZip}
-                    className="text-sm text-primary hover:text-primary-hover underline underline-offset-2"
+                    className="text-xs sm:text-sm text-primary hover:text-primary-hover underline underline-offset-2"
                   >
                     ← Change ZIP code ({zipCode})
                   </button>
@@ -317,43 +317,43 @@ export default function BookingZip() {
 
               {/* Waitlist Form (Outside Service Area) */}
               {formMode === 'waitlist' && (
-                <form onSubmit={handleWaitlistSubmit} className="space-y-5 animate-fade-in">
+                <form onSubmit={handleWaitlistSubmit} className="space-y-3 sm:space-y-5 animate-fade-in">
                   {/* Info Message */}
-                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <MapPin className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 sm:gap-3 p-3 sm:p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <MapPin className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 flex-shrink-0 mt-0.5" />
                     <div className="text-left">
-                      <p className="font-semibold text-amber-800">
+                      <p className="font-semibold text-amber-800 text-sm sm:text-base">
                         We're not in {zipCode} yet
                       </p>
-                      <p className="text-sm text-amber-700">
+                      <p className="text-xs sm:text-sm text-amber-700">
                         But we're expanding to your area soon! Join our waitlist and be the first to know.
                       </p>
                     </div>
                   </div>
 
                   {/* Benefits */}
-                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-                    <p className="text-sm font-medium text-foreground">Waitlist perks:</p>
-                    <ul className="text-sm text-muted-foreground space-y-1">
+                  <div className="bg-muted/30 rounded-lg p-3 sm:p-4 space-y-2">
+                    <p className="text-xs sm:text-sm font-medium text-foreground">Waitlist perks:</p>
+                    <ul className="text-xs sm:text-sm text-muted-foreground space-y-1">
                       <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-primary" />
+                        <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary flex-shrink-0" />
                         First to know when we launch in your area
                       </li>
                       <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-primary" />
+                        <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary flex-shrink-0" />
                         Exclusive early-bird pricing
                       </li>
                       <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-primary" />
+                        <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary flex-shrink-0" />
                         Special founding member perks
                       </li>
                     </ul>
                   </div>
 
                   {/* Name Fields */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label htmlFor="firstName" className="text-sm font-medium text-left block">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                    <div className="space-y-1 sm:space-y-2">
+                      <label htmlFor="firstName" className="text-xs sm:text-sm font-medium text-left block">
                         First Name
                       </label>
                       <Input
@@ -362,12 +362,12 @@ export default function BookingZip() {
                         placeholder="John"
                         value={firstName}
                         onChange={e => setFirstName(e.target.value)}
-                        className="h-12"
+                        className="h-10 sm:h-12 text-sm sm:text-base"
                         required
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label htmlFor="lastName" className="text-sm font-medium text-left block">
+                    <div className="space-y-1 sm:space-y-2">
+                      <label htmlFor="lastName" className="text-xs sm:text-sm font-medium text-left block">
                         Last Name
                       </label>
                       <Input
@@ -376,15 +376,15 @@ export default function BookingZip() {
                         placeholder="Smith"
                         value={lastName}
                         onChange={e => setLastName(e.target.value)}
-                        className="h-12"
+                        className="h-10 sm:h-12 text-sm sm:text-base"
                         required
                       />
                     </div>
                   </div>
 
                   {/* Email Field */}
-                  <div className="space-y-2">
-                    <label htmlFor="email" className="text-sm font-medium text-left block">
+                  <div className="space-y-1 sm:space-y-2">
+                    <label htmlFor="email" className="text-xs sm:text-sm font-medium text-left block">
                       Email
                     </label>
                     <Input
@@ -393,14 +393,14 @@ export default function BookingZip() {
                       placeholder="john@example.com"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      className="h-12"
+                      className="h-10 sm:h-12 text-sm sm:text-base"
                       required
                     />
                   </div>
 
                   {/* Phone Field */}
-                  <div className="space-y-2">
-                    <label htmlFor="phone" className="text-sm font-medium text-left block">
+                  <div className="space-y-1 sm:space-y-2">
+                    <label htmlFor="phone" className="text-xs sm:text-sm font-medium text-left block">
                       Phone Number
                     </label>
                     <Input
@@ -409,7 +409,7 @@ export default function BookingZip() {
                       placeholder="(301) 555-0123"
                       value={phone}
                       onChange={handlePhoneChange}
-                      className="h-12"
+                      className="h-10 sm:h-12 text-sm sm:text-base"
                       required
                     />
                   </div>
@@ -419,7 +419,7 @@ export default function BookingZip() {
                     type="submit" 
                     size="lg" 
                     disabled={!firstName || !lastName || !email || phone.replace(/\D/g, '').length !== 10 || isSubmitting} 
-                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                    className="w-full h-11 sm:h-12 md:h-14 text-sm sm:text-base md:text-lg font-semibold bg-gradient-primary"
                   >
                     {isSubmitting ? "Adding to Waitlist..." : "Join the Waitlist"}
                     <Clock className="w-4 h-4 md:w-5 md:h-5 ml-2" />
@@ -429,7 +429,7 @@ export default function BookingZip() {
                   <button
                     type="button"
                     onClick={handleChangeZip}
-                    className="text-sm text-primary hover:text-primary-hover underline underline-offset-2"
+                    className="text-xs sm:text-sm text-primary hover:text-primary-hover underline underline-offset-2"
                   >
                     ← Try a different ZIP code
                   </button>
@@ -438,22 +438,22 @@ export default function BookingZip() {
 
               {/* Waitlist Success */}
               {formMode === 'waitlist-success' && (
-                <div className="space-y-6 animate-fade-in text-center py-4">
-                  <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle className="w-10 h-10 text-primary" />
+                <div className="space-y-4 sm:space-y-6 animate-fade-in text-center py-2 sm:py-4">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-primary" />
                   </div>
                   
                   <div className="space-y-2">
-                    <h2 className="text-xl font-semibold text-foreground">
+                    <h2 className="text-lg sm:text-xl font-semibold text-foreground">
                       Thanks for joining, {firstName}!
                     </h2>
-                    <p className="text-muted-foreground">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       We've added you to our waitlist for ZIP code {zipCode}. 
                       You'll be the first to know when we start servicing your area.
                     </p>
                   </div>
 
-                  <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
+                  <div className="bg-muted/50 rounded-lg p-3 sm:p-4 text-xs sm:text-sm text-muted-foreground">
                     <p>📧 Check your email for a confirmation</p>
                     <p className="mt-1">We'll reach out in the coming months!</p>
                   </div>
@@ -461,7 +461,7 @@ export default function BookingZip() {
                   <Button 
                     onClick={handleChangeZip}
                     variant="outline"
-                    className="mt-4"
+                    className="mt-2 sm:mt-4 text-sm"
                   >
                     Check Another ZIP Code
                   </Button>
@@ -472,22 +472,21 @@ export default function BookingZip() {
 
           {/* Membership Promo Card - Only show when not on waitlist success */}
           {formMode !== 'waitlist-success' && (
-            <Card className="mt-12 border-2 border-primary/40 bg-gradient-lavender shadow-card">
-              <CardContent className="pt-6 pb-6">
-                <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+            <Card className="mt-6 sm:mt-12 border-2 border-primary/40 bg-gradient-lavender shadow-card">
+              <CardContent className="pt-4 pb-4 sm:pt-6 sm:pb-6 px-4 sm:px-6">
+                <div className="flex flex-col md:flex-row items-center gap-3 sm:gap-4 md:gap-6">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
-                      <Crown className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
+                      <Crown className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-white" />
                     </div>
                   </div>
-                  <div className="flex-1 text-center md:text-left space-y-2">
-                    <h3 className="text-lg md:text-xl font-semibold">Join Our Membership Program</h3>
-                    <p className="text-sm md:text-base text-muted-foreground">
+                  <div className="flex-1 text-center md:text-left space-y-1 sm:space-y-2">
+                    <h3 className="text-base sm:text-lg md:text-xl font-semibold">Join Our Membership Program</h3>
+                    <p className="text-xs sm:text-sm md:text-base text-muted-foreground">
                       Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
-                      Perfect for regular cleaning schedules.
                     </p>
                   </div>
-                  <Button onClick={() => navigate("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
+                  <Button onClick={() => navigate("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-10 sm:h-11 md:h-12 text-sm sm:text-base">
                     Learn More
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>

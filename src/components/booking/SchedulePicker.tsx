@@ -130,59 +130,59 @@ export function SchedulePicker({
 
   return (
     <Card className="border-primary/20 overflow-hidden shadow-lg">
-      <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pb-4">
-        <CardTitle className="text-xl flex items-center gap-2">
-          <CalendarIcon className="w-5 h-5 text-primary" />
+      <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pb-3 sm:pb-4 px-3 sm:px-6">
+        <CardTitle className="text-base sm:text-xl flex items-center gap-1.5 sm:gap-2">
+          <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           Pick Your Date & Time
         </CardTitle>
-        <CardDescription>
-          Select a convenient appointment slot (3+ days advance booking required)
+        <CardDescription className="text-xs sm:text-sm">
+          Select an appointment slot (3+ days advance required)
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
         {/* Step 1: Date Selection - Horizontal scroll card layout */}
-        <div className="p-4 md:p-6 border-b">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">1</span>
+        <div className="p-3 sm:p-4 md:p-6 border-b">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <p className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 sm:gap-2">
+              <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] sm:text-xs font-bold">1</span>
               Select Date
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 sm:gap-1">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={goToPreviousMonth}
                 disabled={isBefore(endOfMonth(addMonths(currentMonth, -1)), minDate)}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
-              <span className="text-sm font-medium min-w-[120px] text-center">
-                {format(currentMonth, "MMMM yyyy")}
+              <span className="text-xs sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center">
+                {format(currentMonth, "MMM yyyy")}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={goToNextMonth}
                 disabled={!isBefore(startOfMonth(addMonths(currentMonth, 1)), endDate)}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </div>
           </div>
           
           {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-1 sm:mb-2">
             {WEEKDAYS.map((day) => (
-              <div key={day} className="text-center text-xs font-medium text-muted-foreground py-1">
+              <div key={day} className="text-center text-[10px] sm:text-xs font-medium text-muted-foreground py-0.5 sm:py-1">
                 {day}
               </div>
             ))}
           </div>
           
           {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {calendarDays.map((day, idx) => {
               if (!day) {
                 return <div key={`padding-${idx}`} className="aspect-square" />;
@@ -199,7 +199,7 @@ export function SchedulePicker({
                   onClick={() => !disabled && onDateSelect(day)}
                   disabled={disabled}
                   className={cn(
-                    "aspect-square rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all relative",
+                    "aspect-square rounded-md sm:rounded-lg flex flex-col items-center justify-center text-xs sm:text-sm font-medium transition-all relative",
                     "hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/50",
                     disabled && "opacity-30 cursor-not-allowed hover:bg-transparent",
                     !isCurrentMonth && "opacity-50",
@@ -210,7 +210,7 @@ export function SchedulePicker({
                 >
                   <span>{format(day, "d")}</span>
                   {isToday && !isSelected && (
-                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-primary" />
+                    <span className="absolute bottom-0.5 sm:bottom-1 w-1 h-1 rounded-full bg-primary" />
                   )}
                 </button>
               );
@@ -219,47 +219,47 @@ export function SchedulePicker({
         </div>
 
         {/* Step 2: Time Selection */}
-        <div className="p-4 md:p-6">
-          <p className="text-sm font-semibold flex items-center gap-2 mb-4">
+        <div className="p-3 sm:p-4 md:p-6">
+          <p className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 sm:gap-2 mb-3 sm:mb-4">
             <span className={cn(
-              "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors",
+              "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold transition-colors",
               selectedDate ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
             )}>2</span>
             Select Time
           </p>
           
           {!selectedDate ? (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Clock className="w-10 h-10 mb-3 opacity-30" />
-              <p className="text-sm">Select a date first to see available times</p>
+            <div className="flex flex-col items-center justify-center py-5 sm:py-8 text-muted-foreground">
+              <Clock className="w-8 h-8 sm:w-10 sm:h-10 mb-2 sm:mb-3 opacity-30" />
+              <p className="text-xs sm:text-sm">Select a date first to see times</p>
             </div>
           ) : isLoading ? (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {["morning", "afternoon", "evening"].map((period) => (
                 <div key={period} className="space-y-2">
-                  <Skeleton className="h-5 w-20" />
-                  <div className="grid grid-cols-4 gap-2">
+                  <Skeleton className="h-4 sm:h-5 w-16 sm:w-20" />
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
                     {[1, 2, 3, 4].map((i) => (
-                      <Skeleton key={i} className="h-12 rounded-lg" />
+                      <Skeleton key={i} className="h-10 sm:h-12 rounded-md sm:rounded-lg" />
                     ))}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {(["morning", "afternoon", "evening"] as const).map((period) => {
                 const config = PERIOD_CONFIG[period];
                 const Icon = config.icon;
                 const slots = slotsByPeriod[period] || [];
                 
                 return (
-                  <div key={period} className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Icon className={cn("w-4 h-4", config.color)} />
+                  <div key={period} className="space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium text-muted-foreground">
+                      <Icon className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", config.color)} />
                       {config.label}
                     </div>
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 sm:gap-2">
                       {slots.map((slot) => {
                         const status = getSlotStatus(slot.id);
                         const isSelected = selectedTime === slot.id;
@@ -274,7 +274,7 @@ export function SchedulePicker({
                             }}
                             disabled={!status.available}
                             className={cn(
-                              "relative py-2.5 px-2 rounded-lg border text-sm font-medium transition-all",
+                              "relative py-2 sm:py-2.5 px-1.5 sm:px-2 rounded-md sm:rounded-lg border text-xs sm:text-sm font-medium transition-all",
                               "hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/50",
                               isSelected 
                                 ? "border-primary bg-primary text-primary-foreground shadow-md" 
@@ -285,7 +285,7 @@ export function SchedulePicker({
                           >
                             {slot.label}
                             {status.label === "Few left" && status.available && !isSelected && (
-                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                              <span className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-amber-500 animate-pulse" />
                             )}
                           </button>
                         );
@@ -300,30 +300,30 @@ export function SchedulePicker({
 
         {/* Selection Summary & Continue */}
         {showContinue && (
-          <div className="border-t bg-gradient-to-r from-muted/50 to-muted/30 p-4 md:p-6">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="text-center md:text-left">
+          <div className="border-t bg-gradient-to-r from-muted/50 to-muted/30 p-3 sm:p-4 md:p-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
+              <div className="text-center md:text-left w-full md:w-auto">
                 {isScheduleComplete ? (
-                  <div className="flex items-center gap-3 text-sm animate-scale-in">
-                    <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
-                      {format(selectedDate!, "EEE, MMM d, yyyy")}
+                  <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs sm:text-sm animate-scale-in">
+                    <Badge className="bg-primary/15 text-primary border-0 py-1 sm:py-1.5 px-2 sm:px-3">
+                      <CalendarIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5" />
+                      {format(selectedDate!, "EEE, MMM d")}
                     </Badge>
-                    <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <Clock className="w-3.5 h-3.5 mr-1.5" />
+                    <Badge className="bg-primary/15 text-primary border-0 py-1 sm:py-1.5 px-2 sm:px-3">
+                      <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5" />
                       {selectedTime}
                     </Badge>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {selectedDate ? "Now select a time slot above" : "Select a date and time to continue"}
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    {selectedDate ? "Now select a time slot" : "Select date and time to continue"}
                   </p>
                 )}
               </div>
               <Button
                 size="lg"
                 className={cn(
-                  "w-full md:w-auto font-semibold min-w-[200px] transition-all",
+                  "w-full md:w-auto font-semibold min-w-[160px] sm:min-w-[200px] h-10 sm:h-11 text-sm sm:text-base transition-all",
                   isScheduleComplete ? "bg-gradient-primary shadow-lg hover:shadow-xl" : "bg-muted text-muted-foreground"
                 )}
                 onClick={onContinue}
