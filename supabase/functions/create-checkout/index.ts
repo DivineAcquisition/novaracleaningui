@@ -80,8 +80,9 @@ serve(async (req) => {
 
     // === SERVER-SIDE VALIDATION ===
     const validationErrors: string[] = [];
+    const isMembershipSignup = membershipPlan && membershipPlan !== 'none';
     
-    // Validate contact information
+    // Validate contact information (always required)
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       validationErrors.push("Valid email is required");
     }
@@ -95,19 +96,23 @@ serve(async (req) => {
       validationErrors.push("Valid 10-digit phone number is required");
     }
     
-    // Validate address components
-    if (!address || address.trim().length < 5) {
-      validationErrors.push("Complete street address is required");
+    // Validate address components - SKIP for membership signups (collected after payment)
+    if (!isMembershipSignup) {
+      if (!address || address.trim().length < 5) {
+        validationErrors.push("Complete street address is required");
+      }
+      if (address && !/\d+/.test(address)) {
+        validationErrors.push("Address must include a street number");
+      }
+      if (!city || city.trim().length < 2) {
+        validationErrors.push("Valid city name is required");
+      }
+      if (!state || !/^[A-Z]{2}$/i.test(state)) {
+        validationErrors.push("Valid 2-letter state code is required");
+      }
     }
-    if (address && !/\d+/.test(address)) {
-      validationErrors.push("Address must include a street number");
-    }
-    if (!city || city.trim().length < 2) {
-      validationErrors.push("Valid city name is required");
-    }
-    if (!state || !/^[A-Z]{2}$/i.test(state)) {
-      validationErrors.push("Valid 2-letter state code is required");
-    }
+    
+    // ZIP code always required (collected at start of booking)
     if (!zipCode || !/^\d{5}$/.test(zipCode)) {
       validationErrors.push("Valid 5-digit ZIP code is required");
     }
@@ -127,7 +132,7 @@ serve(async (req) => {
     }
     
     if (validationErrors.length > 0) {
-      logStep("Validation failed", { errors: validationErrors });
+      logStep("Validation failed", { errors: validationErrors, isMembershipSignup });
       return new Response(
         JSON.stringify({ 
           error: "Validation failed", 
@@ -140,7 +145,7 @@ serve(async (req) => {
       );
     }
     
-    logStep("Validation passed");
+    logStep("Validation passed", { isMembershipSignup });
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
@@ -312,9 +317,9 @@ serve(async (req) => {
         first_name: firstName,
         last_name: lastName,
         phone,
-        address,
-        city,
-        state,
+        address: address || null,
+        city: city || null,
+        state: state || null,
         zip_code: zipCode,
         home_size_id: homeSizeId,
         service_type: serviceType,
