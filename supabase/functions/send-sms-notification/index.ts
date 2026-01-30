@@ -6,14 +6,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Twilio credentials
+const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER"); // Your verified toll-free number
+
+// Fallback to MessageBird if Twilio not configured
 const messageBirdAccessKey = Deno.env.get("MESSAGEBIRD_ACCESS_KEY");
 const messageBirdOriginator = Deno.env.get("MESSAGEBIRD_ORIGINATOR");
 
 interface SMSRequest {
   toPhone: string;
   message: string;
-  type: "job_offer" | "reminder" | "confirmation" | "verification";
+  type: "job_offer" | "reminder" | "confirmation" | "verification" | "booking_update" | "contractor_verification" | "welcome" | "general";
   jobAssignmentId?: string;
+  bookingId?: string;
+  cleanerId?: string;
+  metadata?: Record<string, any>;
 }
 
 function normalizePhone(phone: string): string {
@@ -31,21 +40,121 @@ function normalizePhone(phone: string): string {
   }
   
   // Return as-is with + prefix if not already there
-  return digits.startsWith('+') ? digits : `+${digits}`;
+  return phone.startsWith('+') ? phone : `+${digits}`;
+}
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[SMS] ${step}${detailsStr}`);
+};
+
+/**
+ * Send SMS via Twilio
+ */
+async function sendViaTwilio(
+  to: string, 
+  message: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!twilioAccountSid || !twilioAuthToken || !twilioPhoneNumber) {
+    return { success: false, error: "Twilio credentials not configured" };
+  }
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
+  
+  const formData = new URLSearchParams();
+  formData.append("To", to);
+  formData.append("From", twilioPhoneNumber);
+  formData.append("Body", message);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${btoa(`${twilioAccountSid}:${twilioAuthToken}`)}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData.toString(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { 
+        success: false, 
+        error: data.message || data.error_message || `Twilio error: ${response.status}` 
+      };
+    }
+
+    return { success: true, messageId: data.sid };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send SMS via MessageBird (fallback)
+ */
+async function sendViaMessageBird(
+  to: string, 
+  message: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!messageBirdAccessKey || !messageBirdOriginator) {
+    return { success: false, error: "MessageBird credentials not configured" };
+  }
+
+  const url = "https://rest.messagebird.com/messages";
+  
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `AccessKey ${messageBirdAccessKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        originator: messageBirdOriginator,
+        recipients: [to],
+        body: message,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { 
+        success: false, 
+        error: data.errors?.[0]?.description || "MessageBird error" 
+      };
+    }
+
+    return { success: true, messageId: data.id };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-  let lastRequest: SMSRequest | null = null;
-  let logEntryId: string | null = null;
 
   try {
-    const { toPhone, message, type, jobAssignmentId }: SMSRequest = await req.json();
-    lastRequest = { toPhone, message, type, jobAssignmentId };
+    const { 
+      toPhone, 
+      message, 
+      type, 
+      jobAssignmentId, 
+      bookingId,
+      cleanerId,
+      metadata 
+    }: SMSRequest = await req.json();
 
-    console.log(`[SMS] Sending ${type} to ${toPhone}`);
+    if (!toPhone || !message) {
+      throw new Error("Missing required fields: toPhone, message");
+    }
+
+    const recipient = normalizePhone(toPhone);
+    logStep(`Sending ${type} SMS`, { to: recipient.slice(-4), type });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -56,56 +165,46 @@ serve(async (req) => {
     const { data: logEntry, error: logError } = await supabase
       .from("sms_logs")
       .insert({
-        to_phone: toPhone,
+        to_phone: recipient,
         message,
         type,
         job_assignment_id: jobAssignmentId,
-        status: "pending"
+        booking_id: bookingId,
+        cleaner_id: cleanerId,
+        status: "pending",
+        metadata
       })
       .select()
       .single();
 
-    if (logEntry?.id) {
-      logEntryId = logEntry.id;
-    }
     if (logError) {
       console.error("Failed to create SMS log:", logError);
     }
 
-    // Send SMS via MessageBird
-    const messageBirdUrl = "https://rest.messagebird.com/messages";
-    const recipient = normalizePhone(toPhone);
-    const requestBody = {
-      originator: messageBirdOriginator,
-      recipients: [recipient],
-      body: message,
-    };
+    // Try Twilio first (primary), then MessageBird (fallback)
+    let result = await sendViaTwilio(recipient, message);
+    let provider = "twilio";
 
-    const messageBirdResponse = await fetch(messageBirdUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `AccessKey ${messageBirdAccessKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    const messageBirdData = await messageBirdResponse.json();
-
-    if (!messageBirdResponse.ok) {
-      throw new Error(`MessageBird error: ${messageBirdData.errors?.[0]?.description || "Unknown error"}`);
+    if (!result.success && result.error?.includes("not configured")) {
+      logStep("Twilio not configured, trying MessageBird");
+      result = await sendViaMessageBird(recipient, message);
+      provider = "messagebird";
     }
 
-    console.log(`[SMS] Sent successfully. ID: ${messageBirdData.id}`);
+    if (!result.success) {
+      throw new Error(result.error || "Failed to send SMS");
+    }
+
+    logStep(`SMS sent via ${provider}`, { messageId: result.messageId });
 
     // Update log with success
-    if (logEntry) {
+    if (logEntry?.id) {
       await supabase
         .from("sms_logs")
         .update({
           status: "sent",
-          provider_message_id: messageBirdData.id,
-          cost: messageBirdData.price?.amount || 0
+          provider_message_id: result.messageId,
+          provider
         })
         .eq("id", logEntry.id);
     }
@@ -113,35 +212,14 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        messageId: messageBirdData.id,
-        status: messageBirdData.recipients?.items?.[0]?.status || "sent"
+        messageId: result.messageId,
+        provider
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: any) {
-    console.error("[SMS] Error:", error);
-
-    // Try to update log with error
-    try {
-      const { toPhone, jobAssignmentId } = await req.json();
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-      );
-
-      await supabase
-        .from("sms_logs")
-        .update({
-          status: "failed",
-          error_message: error.message
-        })
-        .eq("to_phone", toPhone)
-        .eq("job_assignment_id", jobAssignmentId)
-        .eq("status", "pending");
-    } catch (logError) {
-      console.error("[SMS] Failed to update error log:", logError);
-    }
+    logStep("ERROR", { message: error.message });
 
     return new Response(
       JSON.stringify({ error: error.message }),

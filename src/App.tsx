@@ -31,6 +31,7 @@ import WebhookTester from "./pages/admin/WebhookTester";
 import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
+import SMSDashboard from "./pages/admin/SMSDashboard";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerProfile from "./pages/cleaner/Profile";
@@ -68,6 +69,7 @@ const AdminRoutes = () => (
     <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
     <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
     <Route path="/admin/intake" element={<BookingIntake />} />
+    <Route path="/admin/sms" element={<ProtectedRoute requiredRole="admin"><SMSDashboard /></ProtectedRoute>} />
     
     {/* Redirect legacy paths */}
     <Route path="/cleaners" element={<Navigate to="/admin/cleaners" replace />} />
@@ -75,6 +77,7 @@ const AdminRoutes = () => (
     <Route path="/dispatch" element={<Navigate to="/admin/dispatch" replace />} />
     <Route path="/directory" element={<Navigate to="/admin/directory" replace />} />
     <Route path="/intake" element={<Navigate to="/admin/intake" replace />} />
+    <Route path="/sms" element={<Navigate to="/admin/sms" replace />} />
     
     <Route path="*" element={<NotFound />} />
   </Routes>

@@ -10,8 +10,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X, MessageSquare, Bell } from "lucide-react";
+import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X, MessageSquare, Bell, CheckCircle2, ShieldCheck } from "lucide-react";
 import { processAvatarImage } from "@/lib/image-compression";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 interface CleanerProfile {
   id: string;
@@ -25,6 +26,8 @@ interface CleanerProfile {
   sms_notifications_enabled: boolean | null;
   sms_quiet_hours_start: string | null;
   sms_quiet_hours_end: string | null;
+  phone_verified?: boolean;
+  phone_verified_at?: string | null;
 }
 
 export default function CleanerProfile() {
@@ -36,6 +39,13 @@ export default function CleanerProfile() {
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  // Phone verification state
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [codeSentAt, setCodeSentAt] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -187,6 +197,102 @@ export default function CleanerProfile() {
       setSaving(false);
     }
   };
+
+  // Send phone verification code
+  const handleSendVerificationCode = async () => {
+    if (!profile?.phone) {
+      toast({
+        title: "Phone required",
+        description: "Please enter your phone number first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSendingCode(true);
+
+      const { error } = await supabase.functions.invoke('send-contractor-verification-sms', {
+        body: {
+          phone: profile.phone,
+          cleanerId: profile.id,
+          firstName: profile.first_name
+        }
+      });
+
+      if (error) throw error;
+
+      setShowVerification(true);
+      setCodeSentAt(new Date());
+      toast({
+        title: "Code sent!",
+        description: `A verification code has been sent to ${profile.phone}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to send code",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  // Verify the code
+  const handleVerifyCode = async () => {
+    if (verificationCode.length !== 6) {
+      toast({
+        title: "Invalid code",
+        description: "Please enter the 6-digit code.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setVerifyingCode(true);
+
+      const { data, error } = await supabase.functions.invoke('verify-contractor-phone', {
+        body: {
+          phone: profile?.phone,
+          code: verificationCode,
+          cleanerId: profile?.id
+        }
+      });
+
+      if (error) throw error;
+
+      // Update local state
+      if (profile) {
+        setProfile({ 
+          ...profile, 
+          phone_verified: true, 
+          phone_verified_at: new Date().toISOString(),
+          sms_notifications_enabled: true
+        });
+      }
+
+      setShowVerification(false);
+      setVerificationCode("");
+
+      toast({
+        title: "Phone verified! ✓",
+        description: "You'll now receive job offers via SMS.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Verification failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  // Check if can resend code (1 minute cooldown)
+  const canResendCode = !codeSentAt || (new Date().getTime() - codeSentAt.getTime()) > 60000;
 
   if (loading) {
     return (
@@ -357,6 +463,107 @@ export default function CleanerProfile() {
                     className="pl-10"
                   />
                 </div>
+              </div>
+
+              {/* Phone Verification Section */}
+              <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className={`h-5 w-5 ${profile.phone_verified ? 'text-green-600' : 'text-yellow-600'}`} />
+                    <div>
+                      <p className="font-medium">Phone Verification</p>
+                      <p className="text-sm text-muted-foreground">
+                        {profile.phone_verified 
+                          ? `Verified on ${new Date(profile.phone_verified_at!).toLocaleDateString()}`
+                          : 'Verify your phone to receive SMS job offers'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  {profile.phone_verified ? (
+                    <div className="flex items-center gap-1 text-green-600 bg-green-100 px-3 py-1 rounded-full">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="text-sm font-medium">Verified</span>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleSendVerificationCode}
+                      disabled={sendingCode || !profile.phone}
+                      size="sm"
+                    >
+                      {sendingCode ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        'Verify Phone'
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Verification Code Input */}
+                {showVerification && !profile.phone_verified && (
+                  <div className="pt-4 border-t space-y-4">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Enter the 6-digit code sent to <strong>{profile.phone}</strong>
+                      </p>
+                      <div className="flex justify-center mb-4">
+                        <InputOTP
+                          maxLength={6}
+                          value={verificationCode}
+                          onChange={(value) => setVerificationCode(value)}
+                        >
+                          <InputOTPGroup>
+                            <InputOTPSlot index={0} />
+                            <InputOTPSlot index={1} />
+                            <InputOTPSlot index={2} />
+                            <InputOTPSlot index={3} />
+                            <InputOTPSlot index={4} />
+                            <InputOTPSlot index={5} />
+                          </InputOTPGroup>
+                        </InputOTP>
+                      </div>
+                      <div className="flex justify-center gap-2">
+                        <Button
+                          onClick={handleVerifyCode}
+                          disabled={verifyingCode || verificationCode.length !== 6}
+                        >
+                          {verifyingCode ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Verifying...
+                            </>
+                          ) : (
+                            'Verify Code'
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleSendVerificationCode}
+                          disabled={sendingCode || !canResendCode}
+                        >
+                          Resend Code
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Code expires in 10 minutes
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!profile.phone_verified && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Why verify?</strong> Phone verification is required to receive job offers via SMS. 
+                      You'll be able to accept or decline jobs by simply replying to text messages.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
 

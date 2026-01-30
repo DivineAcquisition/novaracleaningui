@@ -370,6 +370,12 @@ serve(async (req) => {
     // STAGE 5: Send SMS notifications to cleaners
     logStep("Sending SMS notifications");
     const smsPromises = createdAssignments.map(async (assignment: any) => {
+      // Check if phone is verified and SMS is enabled
+      if (!assignment.cleaners.phone_verified) {
+        console.log(`[SMS] Skipping ${assignment.cleaners.first_name} - Phone not verified`);
+        return;
+      }
+
       if (!assignment.cleaners.sms_notifications_enabled) {
         console.log(`[SMS] Skipping ${assignment.cleaners.first_name} - SMS disabled`);
         return;
@@ -380,22 +386,28 @@ serve(async (req) => {
         month: 'short', 
         day: 'numeric' 
       });
+      const jobTimeFormatted = new Date(job.start_datetime).toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
       const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
       const token = btoa(assignment.id).substring(0, 10);
       const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
       
-      const message = `🧹 New Job Offer!
+      // More concise message for toll-free compliance
+      const message = `🧹 NOVARA JOB OFFER
 
-Date: ${jobDateFormatted}
-Location: ${job.city}, ${job.zip}
-Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
-Distance: ${assignment.distance_miles.toFixed(1)} miles
+📅 ${jobDateFormatted} at ${jobTimeFormatted}
+📍 ${job.city}, ${job.zip}
+💰 $${estimatedPay} (${job.duration_est_hours}hrs)
+🚗 ${assignment.distance_miles.toFixed(1)} mi away
 
-Respond within 15 min:
-Accept: ${baseUrl}?id=${assignment.id}&action=accept&token=${token}
-Decline: ${baseUrl}?id=${assignment.id}&action=decline&token=${token}
+Reply ACCEPT or DECLINE
+Or tap to respond:
+${baseUrl}?id=${assignment.id}&a=a&t=${token}
 
-Or open app to view details.`;
+⏰ Respond in 15 min`;
 
       try {
         await supabase.functions.invoke("send-sms-notification", {
@@ -403,9 +415,16 @@ Or open app to view details.`;
             toPhone: assignment.cleaners.phone,
             message,
             type: "job_offer",
-            jobAssignmentId: assignment.id
+            jobAssignmentId: assignment.id,
+            cleanerId: assignment.cleaner_id,
+            metadata: {
+              jobId: jobId,
+              role: assignment.role,
+              estimatedPay
+            }
           }
         });
+        logStep(`SMS sent to ${assignment.cleaners.first_name}`);
       } catch (smsError) {
         console.error(`[SMS] Failed to send to ${assignment.cleaners.first_name}:`, smsError);
       }

@@ -99,11 +99,46 @@ serve(async (req) => {
       })
       .eq('id', assignment.cleaner_id);
 
-    // If accepted, update cleaner scores
+    // If accepted, update cleaner scores and send confirmation SMS
     if (action === "accept") {
       await supabase.functions.invoke("update-cleaner-scores", {
         body: { cleanerId: assignment.cleaner_id }
       });
+
+      // Send confirmation SMS
+      if (assignment.cleaners.phone_verified && assignment.cleaners.sms_notifications_enabled) {
+        const jobDate = new Date(assignment.jobs.start_datetime).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        });
+        const jobTime = new Date(assignment.jobs.start_datetime).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+
+        try {
+          await supabase.functions.invoke("send-sms-notification", {
+            body: {
+              toPhone: assignment.cleaners.phone,
+              message: `✅ JOB CONFIRMED!
+
+📅 ${jobDate} at ${jobTime}
+📍 ${assignment.jobs.address || assignment.jobs.city}, ${assignment.jobs.zip}
+
+Check the app for customer details and notes. Arrive 5 min early!
+
+Questions? Reply HELP`,
+              type: "confirmation",
+              jobAssignmentId: assignment.id,
+              cleanerId: assignment.cleaner_id
+            }
+          });
+        } catch (smsError) {
+          console.error("[SMS] Failed to send confirmation:", smsError);
+        }
+      }
     }
 
     console.log(`[RESPOND] Updated assignment to ${newStatus}`);
