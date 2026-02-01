@@ -37,6 +37,7 @@ import CleanerAvailability from "./pages/cleaner/Availability";
 import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
+import MemberBooking from "./pages/portal/MemberBooking";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -94,6 +95,10 @@ const App = () => (
               <Route path="/cleaner/onboard" element={<OnboardingLanding />} /> {/* Legacy route */}
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               <Route path="/sms-consent" element={<SmsConsent />} />
+              
+              {/* Customer Portal - Member Booking */}
+              <Route path="/portal/book" element={<MemberBooking />} />
+              
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

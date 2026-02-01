@@ -399,7 +399,7 @@ export default function Account() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xl font-semibold">{membershipCredits.credits_per_month}</p>
@@ -416,6 +416,17 @@ export default function Account() {
                   <p className="text-xs text-muted-foreground">Next Refresh</p>
                 </div>
               </div>
+              
+              {/* Use Credit Button */}
+              {membershipCredits.credits_remaining > 0 && (
+                <Button 
+                  className="w-full bg-gradient-primary hover:opacity-90 shadow-lavender h-12 text-lg"
+                  onClick={() => navigate("/portal/book")}
+                >
+                  <Calendar className="w-5 h-5 mr-2" />
+                  Use Credit to Book a Cleaning
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
