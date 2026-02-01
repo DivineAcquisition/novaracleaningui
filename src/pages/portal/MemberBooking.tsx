@@ -78,6 +78,14 @@ export default function MemberBooking() {
     bathrooms: '',
   });
 
+  // Contact info state
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+
+  // Service type state
+  const [serviceType, setServiceType] = useState<'standard' | 'deep'>('standard');
+  const DEEP_CLEAN_UPSELL = 6500; // $65 in cents
+
   // Schedule state
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
@@ -86,21 +94,27 @@ export default function MemberBooking() {
 
   // Cleaner state
   const [selectedCleanerId, setSelectedCleanerId] = useState<string | null>(null);
+  const [selectedCleanerName, setSelectedCleanerName] = useState<string>('');
   const [specialInstructions, setSpecialInstructions] = useState('');
 
-  // Load saved addresses
+  // Load saved addresses and customer phone
   useEffect(() => {
-    const fetchAddresses = async () => {
+    const fetchCustomerData = async () => {
       if (!user?.id) return;
 
       // Find customer by email
       const { data: customer } = await supabase
         .from('customers')
-        .select('id')
+        .select('id, phone')
         .eq('email', user.email)
         .single();
 
       if (!customer) return;
+
+      // Set phone if available
+      if (customer.phone) {
+        setPhone(customer.phone);
+      }
 
       const { data: addresses } = await supabase
         .from('addresses')
@@ -116,16 +130,26 @@ export default function MemberBooking() {
       }
     };
 
-    fetchAddresses();
+    fetchCustomerData();
   }, [user]);
 
-  // Redirect if not a member or no credits
+  // Redirect if not logged in or not a member
   useEffect(() => {
-    if (!creditsLoading && !subscription?.subscribed) {
+    if (creditsLoading) return;
+    
+    // Not logged in - redirect to auth
+    if (!user) {
+      toast.error('Please sign in to access member booking');
+      navigate('/auth', { state: { returnTo: '/portal/book' } });
+      return;
+    }
+    
+    // Not a member - redirect to membership page
+    if (!subscription?.subscribed) {
       toast.error('You need an active membership to use credits');
       navigate('/membership');
     }
-  }, [creditsLoading, subscription, navigate]);
+  }, [creditsLoading, user, subscription, navigate]);
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId);
 
@@ -134,19 +158,46 @@ export default function MemberBooking() {
     return addressForm.zip;
   };
 
+  // Phone number formatting and validation
+  const formatPhoneNumber = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    setPhone(formatted);
+    setPhoneError('');
+  };
+
+  const validatePhone = () => {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10) {
+      setPhoneError('Please enter a valid 10-digit phone number');
+      return false;
+    }
+    return true;
+  };
+
   const canProceed = () => {
+    const phoneDigits = phone.replace(/\D/g, '');
+    const hasValidPhone = phoneDigits.length >= 10;
+    
     switch (currentStep) {
-      case 0: // Address
+      case 0: // Address + Phone
         if (isNewAddress) {
           return (
             addressForm.street &&
             addressForm.city &&
             addressForm.state &&
             addressForm.zip &&
-            addressForm.sqft_tier
+            addressForm.sqft_tier &&
+            hasValidPhone
           );
         }
-        return selectedAddressId !== null;
+        return selectedAddressId !== null && hasValidPhone;
       case 1: // Schedule
         return selectedDate && selectedTimeSlot;
       case 2: // Cleaner (optional)
@@ -159,6 +210,11 @@ export default function MemberBooking() {
   };
 
   const handleNext = () => {
+    // Validate phone on step 0
+    if (currentStep === 0 && !validatePhone()) {
+      return;
+    }
+    
     if (currentStep < STEPS.length - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -193,6 +249,8 @@ export default function MemberBooking() {
         .eq('email', user.email)
         .single();
 
+      const phoneDigits = phone.replace(/\D/g, '');
+
       if (!customer) {
         const nameParts = (user.email || '').split('@')[0].split('.');
         const { data: newCustomer, error: customerError } = await supabase
@@ -201,12 +259,20 @@ export default function MemberBooking() {
             email: user.email!,
             first_name: nameParts[0] || 'Customer',
             last_name: nameParts[1] || '',
+            phone: phoneDigits,
           })
           .select()
           .single();
 
         if (customerError) throw customerError;
         customer = newCustomer;
+      } else if (!customer.phone || customer.phone !== phoneDigits) {
+        // Update customer phone if changed or missing
+        await supabase
+          .from('customers')
+          .update({ phone: phoneDigits })
+          .eq('id', customer.id);
+        customer.phone = phoneDigits;
       }
 
       // Handle address
@@ -239,13 +305,21 @@ export default function MemberBooking() {
         throw new Error('No address selected');
       }
 
+      // Build dispatch notes with cleaner request if applicable
+      const dispatchNotes = selectedCleanerId 
+        ? `REQUESTED CLEANER: ${selectedCleanerName} (ID: ${selectedCleanerId})` 
+        : null;
+
+      // Calculate upsell price for deep clean
+      const upsellAmount = serviceType === 'deep' ? DEEP_CLEAN_UPSELL : 0;
+
       // Create the booking
       const bookingData = {
         customer_id: customer.id,
         email: user.email!,
         first_name: customer.first_name,
         last_name: customer.last_name,
-        phone: customer.phone || '',
+        phone: phoneDigits,
         address: `${addressData.street}${addressData.unit ? ` ${addressData.unit}` : ''}`,
         city: addressData.city,
         state: addressData.state,
@@ -256,16 +330,18 @@ export default function MemberBooking() {
         service_date: format(selectedDate!, 'yyyy-MM-dd'),
         time_slot: selectedTimeSlot,
         arrival_window: selectedTimeSlot,
-        service_type: 'standard',
+        service_type: serviceType,
         membership_plan: credits.membership_plan,
         uses_credit: true,
-        base_price_cents: 0,
-        deposit_cents: 0,
-        total_estimate_cents: 0,
-        status: 'confirmed',
+        base_price_cents: upsellAmount,
+        deposit_cents: upsellAmount, // Full upsell amount charged at booking
+        total_estimate_cents: upsellAmount,
+        status: upsellAmount > 0 ? 'pending_payment' : 'confirmed', // Needs payment if upsell
         access_notes: specialInstructions || null,
+        dispatch_notes: dispatchNotes,
         booking_channel: 'portal',
-        cleaner_id: selectedCleanerId || null,
+        // cleaner_id left null - will be assigned by dispatch system
+        // The requested cleaner preference is stored in dispatch_notes
       };
 
       const { data: booking, error: bookingError } = await supabase
@@ -299,7 +375,15 @@ export default function MemberBooking() {
         });
       }
 
-      // Send confirmation email
+      // Handle deep clean upsell payment
+      if (serviceType === 'deep') {
+        toast.success('Booking created! Redirecting to payment...');
+        // Redirect to checkout for the upsell payment
+        navigate(`/book/checkout?booking_id=${booking.id}&upsell=deep`);
+        return;
+      }
+
+      // Send confirmation email for standard clean (no payment needed)
       try {
         await supabase.functions.invoke('send-booking-email', {
           body: { bookingId: booking.id, type: 'confirmation' },
@@ -319,12 +403,14 @@ export default function MemberBooking() {
   };
 
   // Loading state
-  if (creditsLoading) {
+  if (creditsLoading || !user) {
     return (
       <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading your membership...</p>
+          <p className="text-muted-foreground">
+            {!user ? 'Checking authentication...' : 'Loading your membership...'}
+          </p>
         </div>
       </div>
     );
@@ -672,6 +758,108 @@ export default function MemberBooking() {
                     </div>
                   </div>
                 )}
+
+                {/* Phone Number - Required for all bookings */}
+                <Separator className="my-4" />
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="flex items-center gap-2">
+                    Phone Number <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="(972) 555-0123"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    className={phoneError ? 'border-destructive' : ''}
+                  />
+                  {phoneError && (
+                    <p className="text-sm text-destructive">{phoneError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    We'll send booking confirmations and updates via SMS
+                  </p>
+                </div>
+
+                {/* Service Type Selection */}
+                <Separator className="my-4" />
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Service Type</Label>
+                  <div className="grid gap-3">
+                    {/* Standard Clean - Free with credit */}
+                    <Card
+                      className={cn(
+                        'cursor-pointer transition-all hover:shadow-md',
+                        serviceType === 'standard'
+                          ? 'border-2 border-primary bg-primary/5'
+                          : 'border hover:border-primary/50'
+                      )}
+                      onClick={() => setServiceType('standard')}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              'w-10 h-10 rounded-full flex items-center justify-center',
+                              serviceType === 'standard' ? 'bg-primary text-white' : 'bg-muted'
+                            )}>
+                              <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">Standard Clean</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Regular maintenance cleaning
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Badge className="bg-success text-white">Included</Badge>
+                            <p className="text-xs text-muted-foreground mt-1">with credit</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Deep Clean - $65 upsell */}
+                    <Card
+                      className={cn(
+                        'cursor-pointer transition-all hover:shadow-md',
+                        serviceType === 'deep'
+                          ? 'border-2 border-primary bg-primary/5'
+                          : 'border hover:border-primary/50'
+                      )}
+                      onClick={() => setServiceType('deep')}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              'w-10 h-10 rounded-full flex items-center justify-center',
+                              serviceType === 'deep' ? 'bg-primary text-white' : 'bg-muted'
+                            )}>
+                              <Star className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">Deep Clean</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Thorough top-to-bottom cleaning
+                              </p>
+                              <ul className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                <li>• Inside appliances & cabinets</li>
+                                <li>• Baseboards & door frames</li>
+                                <li>• Detailed bathroom scrub</li>
+                              </ul>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-primary">+$65</p>
+                            <p className="text-xs text-muted-foreground">upsell</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -702,7 +890,10 @@ export default function MemberBooking() {
                 zipCode={getAddressZip()}
                 customerEmail={user?.email || undefined}
                 selectedCleanerId={selectedCleanerId}
-                onSelectCleaner={setSelectedCleanerId}
+                onSelectCleaner={(cleanerId, cleanerName) => {
+                  setSelectedCleanerId(cleanerId);
+                  setSelectedCleanerName(cleanerName || '');
+                }}
               />
 
               <Card>
@@ -736,6 +927,28 @@ export default function MemberBooking() {
                   <CardDescription>Review your booking details before confirming</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Service Type Summary */}
+                  <div className="flex items-start gap-3">
+                    <Star className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">
+                          {serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean'}
+                        </p>
+                        {serviceType === 'deep' && (
+                          <Badge variant="secondary">+$65 upsell</Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {serviceType === 'deep' 
+                          ? 'Thorough top-to-bottom cleaning with detailed attention'
+                          : 'Regular maintenance cleaning'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   {/* Address Summary */}
                   <div className="flex items-start gap-3">
                     <MapPin className="w-5 h-5 text-primary mt-0.5" />
@@ -773,7 +986,7 @@ export default function MemberBooking() {
                     <User className="w-5 h-5 text-primary mt-0.5" />
                     <div>
                       <p className="font-medium">
-                        {selectedCleanerId ? 'Requested Cleaner' : 'No Preference'}
+                        {selectedCleanerId ? `Requested: ${selectedCleanerName}` : 'No Preference'}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {selectedCleanerId
@@ -797,19 +1010,38 @@ export default function MemberBooking() {
 
                   <Separator />
 
-                  {/* Credit Usage */}
-                  <div className="flex items-center justify-between bg-success/10 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="w-5 h-5 text-success" />
-                      <div>
-                        <p className="font-medium text-success">Using 1 Membership Credit</p>
-                        <p className="text-sm text-muted-foreground">
-                          {credits?.credits_remaining! - 1} credit
-                          {credits?.credits_remaining! - 1 !== 1 ? 's' : ''} remaining after booking
-                        </p>
+                  {/* Credit Usage & Pricing */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-success/10 rounded-lg p-4">
+                      <div className="flex items-center gap-3">
+                        <CreditCard className="w-5 h-5 text-success" />
+                        <div>
+                          <p className="font-medium text-success">Using 1 Membership Credit</p>
+                          <p className="text-sm text-muted-foreground">
+                            {credits?.credits_remaining! - 1} credit
+                            {credits?.credits_remaining! - 1 !== 1 ? 's' : ''} remaining after booking
+                          </p>
+                        </div>
                       </div>
+                      <p className="text-xl font-bold text-success">
+                        {serviceType === 'standard' ? '$0' : 'Credit Applied'}
+                      </p>
                     </div>
-                    <p className="text-2xl font-bold text-success">$0</p>
+
+                    {serviceType === 'deep' && (
+                      <div className="flex items-center justify-between bg-primary/10 rounded-lg p-4">
+                        <div className="flex items-center gap-3">
+                          <Star className="w-5 h-5 text-primary" />
+                          <div>
+                            <p className="font-medium text-primary">Deep Clean Upgrade</p>
+                            <p className="text-sm text-muted-foreground">
+                              Due now to confirm booking
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-2xl font-bold text-primary">$65</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -836,12 +1068,17 @@ export default function MemberBooking() {
               <Button
                 onClick={handleSubmitBooking}
                 disabled={isSubmitting}
-                className="bg-success hover:bg-success/90"
+                className={serviceType === 'deep' ? 'bg-gradient-primary' : 'bg-success hover:bg-success/90'}
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Booking...
+                    {serviceType === 'deep' ? 'Processing...' : 'Booking...'}
+                  </>
+                ) : serviceType === 'deep' ? (
+                  <>
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Continue to Payment ($65)
                   </>
                 ) : (
                   <>

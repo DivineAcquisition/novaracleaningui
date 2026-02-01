@@ -12,7 +12,7 @@ interface CleanerSelectorProps {
   zipCode?: string;
   customerEmail?: string;
   selectedCleanerId: string | null;
-  onSelectCleaner: (cleanerId: string | null) => void;
+  onSelectCleaner: (cleanerId: string | null, cleanerName?: string) => void;
 }
 
 export function CleanerSelector({
@@ -62,7 +62,10 @@ export function CleanerSelector({
             : 'border hover:border-primary/50',
           isPreviousCleaner && !isSelected && 'border-success/30 bg-success/5'
         )}
-        onClick={() => onSelectCleaner(isSelected ? null : cleaner.id)}
+        onClick={() => onSelectCleaner(
+          isSelected ? null : cleaner.id,
+          isSelected ? undefined : `${cleaner.first_name} ${cleaner.last_name.charAt(0)}.`
+        )}
       >
         {isSelected && (
           <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-md">
@@ -170,7 +173,7 @@ export function CleanerSelector({
             ? 'border-2 border-primary bg-primary/5 shadow-lg'
             : 'border hover:border-primary/50'
         )}
-        onClick={() => onSelectCleaner(null)}
+        onClick={() => onSelectCleaner(null, undefined)}
       >
         <CardContent className="p-4">
           <div className="flex items-center gap-3">
