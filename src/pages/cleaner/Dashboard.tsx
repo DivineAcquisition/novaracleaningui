@@ -1,274 +1,303 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { User, Settings, Calendar } from "lucide-react";
-import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
-import { DashboardStats } from "@/components/cleaner/DashboardStats";
-import { ProfileCompletionWizard } from "@/components/cleaner/ProfileCompletionWizard";
-import JobOffers from "./JobOffers";
-import { UpcomingJobs } from "@/components/cleaner/UpcomingJobs";
-import { CompletedJobs } from "@/components/cleaner/CompletedJobs";
-import { EarningsPayouts } from "@/components/cleaner/EarningsPayouts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { 
+  Loader2, 
+  LogOut, 
+  ExternalLink, 
+  CheckCircle2, 
+  AlertCircle,
+  DollarSign,
+  User,
+  CreditCard,
+  Settings
+} from "lucide-react";
+
+interface CleanerProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  avatar_url: string | null;
+  status: string;
+  stripe_account_id: string | null;
+  payouts_enabled: boolean;
+  onboarding_complete: boolean;
+}
 
 export default function CleanerDashboard() {
   const navigate = useNavigate();
-  const [cleaner, setCleaner] = useState<any>(null);
-  const [stats, setStats] = useState({
-    totalEarnings: 0,
-    jobsCompleted: 0,
-    averageRating: 0,
-    totalRatings: 0,
-    acceptanceRate: 0,
-  });
-  const [upcomingJobs, setUpcomingJobs] = useState<any[]>([]);
-  const [completedBookings, setCompletedBookings] = useState<any[]>([]);
-  const [payouts, setPayouts] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<CleanerProfile | null>(null);
+  const [stripeLoading, setStripeLoading] = useState(false);
 
   useEffect(() => {
-    fetchCleanerData();
-
-    // Set up real-time subscriptions
-    const jobAssignmentsChannel = supabase
-      .channel('job_assignments_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'job_assignments'
-        },
-        () => {
-          console.log('Job assignments changed, refreshing data');
-          fetchCleanerData();
-        }
-      )
-      .subscribe();
-
-    const bookingsChannel = supabase
-      .channel('bookings_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'bookings'
-        },
-        () => {
-          console.log('Bookings changed, refreshing data');
-          fetchCleanerData();
-        }
-      )
-      .subscribe();
-
-    const payoutsChannel = supabase
-      .channel('payouts_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'payouts'
-        },
-        () => {
-          console.log('Payouts changed, refreshing data');
-          fetchCleanerData();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(jobAssignmentsChannel);
-      supabase.removeChannel(bookingsChannel);
-      supabase.removeChannel(payoutsChannel);
-    };
+    checkAuthAndLoadProfile();
   }, []);
 
-  const fetchCleanerData = async () => {
+  const checkAuthAndLoadProfile = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
         navigate("/cleaner/auth");
         return;
       }
 
-      // Fetch cleaner profile
-      const { data: cleanerData, error: cleanerError } = await supabase
+      const { data: cleaner, error } = await supabase
         .from("cleaners")
         .select("*")
-        .eq("user_id", user.id)
-        .single();
+        .eq("user_id", session.user.id)
+        .maybeSingle();
 
-      if (cleanerError || !cleanerData) {
-        // User is authenticated but not a cleaner - redirect to home
-        navigate("/");
+      if (error) throw error;
+
+      if (!cleaner || !cleaner.onboarding_complete) {
+        navigate("/cleaner/onboarding");
         return;
       }
-      
-      setCleaner(cleanerData);
 
-      // Fetch stats
-      setStats({
-        totalEarnings: cleanerData.total_earnings_cents || 0,
-        jobsCompleted: cleanerData.completed_bookings || 0,
-        averageRating: cleanerData.average_rating || 0,
-        totalRatings: cleanerData.total_ratings || 0,
-        acceptanceRate: cleanerData.acceptance_rate || 0,
-      });
-
-      // Fetch upcoming jobs (confirmed assignments)
-      const { data: upcomingData } = await supabase
-        .from("job_assignments")
-        .select(`
-          *,
-          job:jobs(*)
-        `)
-        .eq("cleaner_id", cleanerData.id)
-        .eq("status", "Confirmed")
-        .gte("job.start_datetime", new Date().toISOString())
-        .order("job.start_datetime", { ascending: true })
-        .limit(10);
-
-      if (upcomingData) {
-        setUpcomingJobs(upcomingData.map(a => ({
-          ...a.job,
-          role: a.role,
-          estimated_pay_cents: a.estimated_pay_cents,
-        })));
-      }
-
-      // Fetch completed bookings
-      const { data: completedData } = await supabase
-        .from("bookings")
-        .select("*")
-        .eq("cleaner_id", cleanerData.id)
-        .eq("status", "completed")
-        .order("completed_at", { ascending: false })
-        .limit(20);
-
-      if (completedData) {
-        setCompletedBookings(completedData);
-      }
-
-      // Fetch payouts
-      const { data: payoutsData } = await supabase
-        .from("payouts")
-        .select(`
-          *,
-          booking:bookings(address, city, service_type)
-        `)
-        .eq("cleaner_id", cleanerData.id)
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (payoutsData) {
-        setPayouts(payoutsData);
-      }
+      setProfile(cleaner as CleanerProfile);
     } catch (error) {
-      console.error("Error fetching cleaner data:", error);
+      console.error("Error loading profile:", error);
+      toast.error("Failed to load profile");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (isLoading) {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/cleaner/auth");
+  };
+
+  const openStripeConnect = async () => {
+    if (!profile?.stripe_account_id) {
+      // Need to set up Stripe first
+      setStripeLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          "initiate-cleaner-stripe-connect"
+        );
+
+        if (error) throw error;
+        if (data?.url) {
+          window.location.href = data.url;
+        }
+      } catch (error: any) {
+        toast.error("Failed to initiate Stripe setup");
+        console.error(error);
+      } finally {
+        setStripeLoading(false);
+      }
+      return;
+    }
+
+    // Redirect to Stripe Express Dashboard
+    setStripeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-stripe-login-link",
+        {
+          body: { stripe_account_id: profile.stripe_account_id }
+        }
+      );
+
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      } else {
+        // Fallback to Stripe dashboard
+        window.open("https://dashboard.stripe.com", "_blank");
+      }
+    } catch (error) {
+      // Fallback: open Stripe Express dashboard directly
+      window.open("https://connect.stripe.com/express_login", "_blank");
+    } finally {
+      setStripeLoading(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  const showWizard = cleaner && !cleaner.onboarding_complete;
+  if (!profile) {
+    return null;
+  }
+
+  const stripeStatus = profile.payouts_enabled 
+    ? "active" 
+    : profile.stripe_account_id 
+      ? "pending" 
+      : "not_setup";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Profile Completion Wizard */}
-      {showWizard && (
-        <ProfileCompletionWizard
-          open={showWizard}
-          cleaner={cleaner}
-          onComplete={fetchCleanerData}
-        />
-      )}
-
-      {/* Header - Compact for mobile */}
-      <div className="border-b sticky top-0 bg-background/95 backdrop-blur-sm z-10">
-        <div className="container mx-auto px-3 py-2 sm:px-4 sm:py-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-lg sm:text-xl font-bold truncate">
-                Hi, {cleaner?.first_name}!
-              </h1>
-              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
-                Manage your jobs and earnings
-              </p>
-            </div>
-            <div className="flex gap-1.5 sm:gap-2 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 sm:px-3"
-                onClick={() => navigate("/cleaner/availability")}
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {profile.avatar_url ? (
+              <img 
+                src={profile.avatar_url} 
+                alt="Avatar" 
+                className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="w-5 h-5 text-primary" />
+              </div>
+            )}
+            <div>
+              <p className="font-semibold text-sm">{profile.first_name} {profile.last_name}</p>
+              <Badge 
+                variant="secondary" 
+                className={profile.status === "active" ? "bg-green-500/10 text-green-600 text-xs" : "text-xs"}
               >
-                <Calendar className="w-4 h-4 sm:mr-1.5" />
-                <span className="hidden sm:inline text-xs">Schedule</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 sm:px-3"
-                onClick={() => navigate("/cleaner/profile")}
-              >
-                <User className="w-4 h-4 sm:mr-1.5" />
-                <span className="hidden sm:inline text-xs">Profile</span>
-              </Button>
+                {profile.status === "active" ? "Active" : profile.status}
+              </Badge>
             </div>
           </div>
+          <Button variant="ghost" size="icon" onClick={handleSignOut}>
+            <LogOut className="w-5 h-5" />
+          </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Main Content - Compact spacing for mobile */}
-      <div className="container mx-auto px-3 py-3 sm:px-4 sm:py-4 space-y-3 sm:space-y-4">
-        <OnboardingChecklist cleaner={cleaner} onRefresh={fetchCleanerData} />
-        
-        <DashboardStats stats={stats} />
+      {/* Main Content */}
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-4">
+        {/* Welcome Card */}
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-primary to-purple-600 text-white">
+          <CardContent className="p-6">
+            <h1 className="text-xl font-bold mb-2">Welcome back!</h1>
+            <p className="text-white/80 text-sm">
+              Manage your earnings and view financial metrics in your Stripe dashboard.
+            </p>
+          </CardContent>
+        </Card>
 
-        <Tabs defaultValue="offers" className="space-y-3 sm:space-y-4">
-          <TabsList className="grid w-full grid-cols-4 h-9">
-            <TabsTrigger value="offers" className="text-xs sm:text-sm px-1 sm:px-2">
-              <span className="hidden sm:inline">Active </span>Offers
-            </TabsTrigger>
-            <TabsTrigger value="upcoming" className="text-xs sm:text-sm px-1 sm:px-2">
-              <span className="hidden sm:inline">Up</span>coming
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="text-xs sm:text-sm px-1 sm:px-2">
-              <span className="hidden sm:inline">Comple</span>ted
-            </TabsTrigger>
-            <TabsTrigger value="earnings" className="text-xs sm:text-sm px-1 sm:px-2">
-              Earn<span className="hidden sm:inline">ings</span>
-            </TabsTrigger>
-          </TabsList>
+        {/* Stripe Connect Status */}
+        <Card className="border-0 shadow-lg">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-primary" />
+                Payments & Earnings
+              </CardTitle>
+              {stripeStatus === "active" && (
+                <Badge className="bg-green-500/10 text-green-600 border-0">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Connected
+                </Badge>
+              )}
+              {stripeStatus === "pending" && (
+                <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-0">
+                  <AlertCircle className="w-3 h-3 mr-1" />
+                  Pending
+                </Badge>
+              )}
+            </div>
+            <CardDescription>
+              {stripeStatus === "active" 
+                ? "View your earnings, payouts, and financial reports"
+                : stripeStatus === "pending"
+                  ? "Complete your Stripe setup to start receiving payouts"
+                  : "Set up Stripe to receive payments for your work"
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <Button 
+              onClick={openStripeConnect}
+              disabled={stripeLoading}
+              className="w-full h-12"
+              variant={stripeStatus === "active" ? "default" : "outline"}
+            >
+              {stripeLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Loading...
+                </>
+              ) : stripeStatus === "active" ? (
+                <>
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Open Stripe Dashboard
+                  <ExternalLink className="w-4 h-4 ml-2" />
+                </>
+              ) : (
+                <>
+                  <Settings className="w-4 h-4 mr-2" />
+                  {stripeStatus === "pending" ? "Complete Setup" : "Set Up Payments"}
+                </>
+              )}
+            </Button>
 
-          <TabsContent value="offers">
-            <JobOffers />
-          </TabsContent>
+            {stripeStatus === "active" && (
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                Your Stripe dashboard shows earnings, payouts, tax info, and more
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
-          <TabsContent value="upcoming">
-            <UpcomingJobs jobs={upcomingJobs} />
-          </TabsContent>
+        {/* Info Card */}
+        <Card className="border-0 shadow-lg bg-blue-500/5 border-blue-500/20">
+          <CardContent className="p-4">
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                <DollarSign className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Your Pay Rate</p>
+                <p className="text-2xl font-bold text-blue-600">$18/hour</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  You'll receive assignments via email and SMS
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="completed">
-            <CompletedJobs jobs={completedBookings} />
-          </TabsContent>
+        {/* Profile Summary */}
+        <Card className="border-0 shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <User className="w-5 h-5 text-primary" />
+              Profile Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Email</p>
+                <p className="font-medium truncate">{profile.email}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Phone</p>
+                <p className="font-medium">{profile.phone}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="earnings">
-            <EarningsPayouts payouts={payouts} />
-          </TabsContent>
-        </Tabs>
-      </div>
+        {/* Help Text */}
+        <p className="text-xs text-center text-muted-foreground px-4">
+          Need help? Contact support@novaracleaning.com
+        </p>
+      </main>
     </div>
   );
 }

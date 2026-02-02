@@ -30,13 +30,8 @@ import BookingIntake from "./pages/admin/BookingIntake";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
-import CleanerProfile from "./pages/cleaner/Profile";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
-import OnboardingLanding from "./pages/cleaner/OnboardingLanding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
-import CleanerAvailability from "./pages/cleaner/Availability";
-import MobileDashboard from "./pages/cleaner/MobileDashboard";
-import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
 import AdminAuth from "./pages/admin/Auth";
@@ -124,17 +119,16 @@ const App = () => (
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin/intake" element={<BookingIntake />} />
+              {/* Cleaner Portal - Simplified */}
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/auth/callback" element={<CleanerAuthCallback />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
-              <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
-              <Route path="/cleaner/mobile-dashboard" element={<MobileDashboard />} />
-              <Route path="/cleaner/job-offers" element={<MobileJobOffers />} />
-              <Route path="/cleaner/availability" element={<CleanerAvailability />} />
-              <Route path="/cleaner/profile" element={<CleanerProfile />} />
-              <Route path="/cleaner/onboarding-landing" element={<OnboardingLanding />} />
-              <Route path="/cleaner/onboard" element={<OnboardingLanding />} /> {/* Legacy route */}
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
+              <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+              {/* Legacy routes redirect to dashboard */}
+              <Route path="/cleaner/profile" element={<Navigate to="/cleaner/dashboard" replace />} />
+              <Route path="/cleaner/onboarding-landing" element={<Navigate to="/cleaner/onboarding" replace />} />
+              <Route path="/cleaner/onboard" element={<Navigate to="/cleaner/onboarding" replace />} />
               <Route path="/sms-consent" element={<SmsConsent />} />
               
               {/* Customer Portal - Member Booking */}
