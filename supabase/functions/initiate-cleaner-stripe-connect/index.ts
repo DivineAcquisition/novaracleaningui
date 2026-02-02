@@ -100,10 +100,12 @@ serve(async (req) => {
     }
 
     // Create account link for onboarding
+    // Use relative URLs that work in any environment
+    const baseUrl = Deno.env.get("FRONTEND_URL") || "https://contractor.novaracleaning.com";
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=refresh`,
-      return_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=complete`,
+      refresh_url: `${baseUrl}/cleaner/profile?stripe=refresh`,
+      return_url: `${baseUrl}/cleaner/profile?stripe=complete`,
       type: "account_onboarding",
     });
 

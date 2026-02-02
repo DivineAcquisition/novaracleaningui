@@ -238,29 +238,29 @@ export default function CleanerAuth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 px-4 py-12">
-      <div className="w-full max-w-md space-y-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 px-3 py-6 sm:px-4 sm:py-8">
+      <div className="w-full max-w-sm space-y-4 sm:space-y-6">
         <div className="text-center">
-          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-20 h-20 rounded-2xl mb-6 shadow-lavender" />
-          <h1 className="text-4xl font-bold mb-2">Novara Cleaning</h1>
-          <p className="text-muted-foreground text-lg">Cleaner Portal</p>
+          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-14 h-14 sm:w-16 sm:h-16 rounded-xl mb-3 shadow-lavender" />
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1">Novara Cleaning</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Contractor Portal</p>
         </div>
 
-        <Card className="shadow-xl border-primary/20">
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-2xl">Welcome Back</CardTitle>
-            <CardDescription className="text-base">
-              Sign in to access your cleaner dashboard
+        <Card className="shadow-lg border-primary/20">
+          <CardHeader className="space-y-1 pb-3 pt-4 px-4 sm:px-6">
+            <CardTitle className="text-lg sm:text-xl">Welcome Back</CardTitle>
+            <CardDescription className="text-sm">
+              Sign in to access your dashboard
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 px-4 sm:px-6">
             <Button
               type="button"
               variant="outline"
-              className="w-full h-11 mb-6"
+              className="w-full h-10 mb-4"
               onClick={signInWithGoogle}
             >
-              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -269,7 +269,7 @@ export default function CleanerAuth() {
               Continue with Google
             </Button>
             
-            <div className="relative my-6">
+            <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
               </div>
@@ -279,9 +279,9 @@ export default function CleanerAuth() {
             </div>
           </CardContent>
           <form onSubmit={handleSignIn}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signin-email">Email</Label>
+            <CardContent className="space-y-3 px-4 sm:px-6 pt-0">
+              <div className="space-y-1.5">
+                <Label htmlFor="signin-email" className="text-sm">Email</Label>
                 <Input
                   id="signin-email"
                   type="email"
@@ -290,11 +290,11 @@ export default function CleanerAuth() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
-                  className="h-11"
+                  className="h-10 text-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="signin-password">Password</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="signin-password" className="text-sm">Password</Label>
                 <Input
                   id="signin-password"
                   type="password"
@@ -303,20 +303,20 @@ export default function CleanerAuth() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={loading}
-                  className="h-11"
+                  className="h-10 text-sm"
                 />
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4 pb-6">
+            <CardFooter className="flex flex-col gap-3 pb-4 px-4 sm:px-6">
               <Button 
                 type="submit" 
-                className="w-full h-11 bg-gradient-primary hover:opacity-90 shadow-lavender" 
+                className="w-full h-10" 
                 disabled={loading}
               >
-                {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Sign In
               </Button>
-              <div className="flex items-center justify-between text-sm w-full">
+              <div className="flex items-center justify-between text-xs sm:text-sm w-full">
                 <Link to="/cleaner/reset-password" className="text-primary hover:underline font-medium">
                   Forgot password?
                 </Link>
@@ -324,14 +324,23 @@ export default function CleanerAuth() {
                   Customer Login
                 </Link>
               </div>
-              <div className="text-center text-sm text-muted-foreground">
-                New cleaners must be invited by an administrator
+              
+              <div className="w-full pt-2 border-t">
+                <Link to="/cleaner/onboarding-landing">
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    className="w-full h-10"
+                  >
+                    New Contractor? Sign Up
+                  </Button>
+                </Link>
               </div>
             </CardFooter>
           </form>
         </Card>
 
-        <div className="text-center mt-6 text-sm text-muted-foreground">
+        <div className="text-center text-xs text-muted-foreground">
           <Link to="/" className="text-primary hover:underline">
             ← Back to Home
           </Link>

@@ -53,27 +53,27 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
   ];
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 mb-4">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4 mb-3 sm:mb-4">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <Card key={card.title} className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
+          <Card key={card.title} className="p-2.5 sm:p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground truncate">
                   {card.title}
                 </p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <h3 className="text-xl font-bold">{card.value}</h3>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <h3 className="text-base sm:text-lg font-bold truncate">{card.value}</h3>
                   {card.subtitle && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground hidden sm:inline">
                       {card.subtitle}
                     </span>
                   )}
                 </div>
               </div>
-              <div className={`p-2 rounded-full ${card.bgColor}`}>
-                <Icon className={`w-4 h-4 ${card.color}`} />
+              <div className={`p-1.5 sm:p-2 rounded-full ${card.bgColor} flex-shrink-0`}>
+                <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${card.color}`} />
               </div>
             </div>
           </Card>

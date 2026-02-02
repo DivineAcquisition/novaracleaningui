@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Sparkles, CheckCircle2, KeyRound } from "lucide-react";
+import { Mail, Sparkles, KeyRound, ArrowLeft, DollarSign, Calendar, Shield } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 export default function OnboardingLanding() {
   const navigate = useNavigate();
@@ -145,144 +146,171 @@ export default function OnboardingLanding() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md border-border/50 shadow-lg">
-        <CardHeader className="text-center space-y-3">
-          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            {step === 'code' ? (
-              <KeyRound className="w-8 h-8 text-primary" />
-            ) : (
-              <Sparkles className="w-8 h-8 text-primary" />
-            )}
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center px-3 py-6 sm:px-4 sm:py-8">
+      <div className="w-full max-w-sm space-y-4">
+        {/* Logo and Title */}
+        <div className="text-center">
+          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-12 h-12 sm:w-14 sm:h-14 rounded-xl mb-3 shadow-lavender" />
+          <h1 className="text-xl sm:text-2xl font-bold mb-1">Become a Contractor</h1>
+          <p className="text-sm text-muted-foreground">Join Novara Cleaning</p>
+        </div>
+
+        {/* Benefits - Only show on email step */}
+        {step === 'email' && (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-2 rounded-lg bg-primary/5">
+              <DollarSign className="w-5 h-5 mx-auto text-primary mb-1" />
+              <p className="text-xs font-medium">$18/hr</p>
+            </div>
+            <div className="p-2 rounded-lg bg-primary/5">
+              <Calendar className="w-5 h-5 mx-auto text-primary mb-1" />
+              <p className="text-xs font-medium">Flex Hours</p>
+            </div>
+            <div className="p-2 rounded-lg bg-primary/5">
+              <Shield className="w-5 h-5 mx-auto text-primary mb-1" />
+              <p className="text-xs font-medium">Weekly Pay</p>
+            </div>
           </div>
-          <CardTitle className="text-3xl font-bold">
-            {step === 'code' ? "Enter Verification Code" : "Join Our Team"}
-          </CardTitle>
-          <CardDescription className="text-base">
-            {step === 'code'
-              ? "Enter the 6-digit code sent to your email"
-              : "Enter your email to begin the onboarding process"
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {step === 'code' ? (
-            <form onSubmit={handleCodeVerify} className="space-y-6">
-              <div className="space-y-4">
-                <Label htmlFor="code" className="text-sm font-medium text-center block">
-                  Verification Code
-                </Label>
-                <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={code} onChange={setCode}>
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
+        )}
+
+        <Card className="shadow-lg border-primary/20">
+          <CardHeader className="text-center space-y-1 pb-3 pt-4 px-4 sm:px-6">
+            <div className="mx-auto w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              {step === 'code' ? (
+                <KeyRound className="w-5 h-5 text-primary" />
+              ) : (
+                <Sparkles className="w-5 h-5 text-primary" />
+              )}
+            </div>
+            <CardTitle className="text-lg sm:text-xl font-bold">
+              {step === 'code' ? "Enter Code" : "Get Started"}
+            </CardTitle>
+            <CardDescription className="text-sm">
+              {step === 'code'
+                ? "Check your email for the 6-digit code"
+                : "Enter your email to begin"
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-6 pb-4">
+            {step === 'code' ? (
+              <form onSubmit={handleCodeVerify} className="space-y-4">
+                <div className="space-y-3">
+                  <Label htmlFor="code" className="text-sm font-medium text-center block">
+                    Verification Code
+                  </Label>
+                  <div className="flex justify-center">
+                    <InputOTP maxLength={6} value={code} onChange={setCode}>
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Sent to {email}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Sent to {email}. Expires in 15 minutes.
-                </p>
-              </div>
 
-              <Button
-                type="submit"
-                className="w-full h-12 text-lg"
-                disabled={verifying || code.length !== 6}
-              >
-                {verifying ? "Verifying..." : "Verify Code"}
-              </Button>
+                <Button
+                  type="submit"
+                  className="w-full h-10"
+                  disabled={verifying || code.length !== 6}
+                >
+                  {verifying ? "Verifying..." : "Verify Code"}
+                </Button>
 
-              <div className="space-y-2">
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUseDifferentEmail}
+                    className="w-full h-10"
+                    disabled={verifying}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Different Email
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleResendCode}
+                    className="w-full h-9 text-sm"
+                    disabled={isLoading || verifying}
+                  >
+                    {isLoading ? "Sending..." : "Resend Code"}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleEmailSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-sm font-medium">
+                    Email Address
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="your.email@example.com"
+                      className="pl-9 h-10 text-sm"
+                      disabled={isLoading}
+                      autoFocus
+                      required
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    We'll send a 6-digit verification code
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-10"
+                  disabled={isLoading || !email}
+                >
+                  {isLoading ? "Sending Code..." : "Continue"}
+                </Button>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      Already a contractor?
+                    </span>
+                  </div>
+                </div>
+
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleUseDifferentEmail}
-                  className="w-full"
-                  disabled={verifying}
+                  onClick={() => navigate("/cleaner/auth")}
+                  className="w-full h-10"
+                  disabled={isLoading}
                 >
-                  Use Different Email
+                  Sign In
                 </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleResendCode}
-                  className="w-full"
-                  disabled={isLoading || verifying}
-                >
-                  {isLoading ? "Sending..." : "Resend Code"}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleEmailSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email Address
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your.email@example.com"
-                    className="pl-10 h-12"
-                    disabled={isLoading}
-                    autoFocus
-                    required
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  We'll send you a 6-digit verification code
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full h-12 text-lg"
-                disabled={isLoading || !email}
-              >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin">⏳</span>
-                    Sending Code...
-                  </span>
-                ) : (
-                  "Continue"
-                )}
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">
-                    Already have an account?
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/cleaner/auth")}
-                className="w-full"
-                disabled={isLoading}
-              >
-                Sign In
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+        <div className="text-center text-xs text-muted-foreground">
+          <Link to="/" className="text-primary hover:underline">
+            ← Back to Home
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

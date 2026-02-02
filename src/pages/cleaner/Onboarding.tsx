@@ -501,66 +501,68 @@ export default function CleanerOnboarding() {
   }
 
   const progressPercentage = (currentStep / 4) * 100;
-  const stepTitles = ["Personal Information", "Location & Travel", "Work Preferences", "Review & Submit"];
+  const stepTitles = ["Personal Info", "Location", "Preferences", "Review"];
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto pt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Cleaner Onboarding</CardTitle>
-            <CardDescription>
-              Step {currentStep} of 4: {stepTitles[currentStep - 1]}
+    <div className="min-h-screen bg-background px-3 py-4 sm:p-4">
+      <div className="max-w-lg mx-auto pt-2 sm:pt-6">
+        <Card className="shadow-lg">
+          <CardHeader className="pb-3 pt-4 px-4 sm:px-6">
+            <CardTitle className="text-lg sm:text-xl">Contractor Onboarding</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
+              Step {currentStep}/4: {stepTitles[currentStep - 1]}
             </CardDescription>
-            <Progress value={progressPercentage} className="mt-4" />
+            <Progress value={progressPercentage} className="mt-3 h-1.5" />
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <CardContent className="px-4 sm:px-6 pb-4">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
               
               {/* Step 1: Personal Information */}
               {currentStep === 1 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Personal Information</h3>
+                <div className="space-y-3 sm:space-y-4">
+                  <h3 className="text-base sm:text-lg font-semibold">Personal Information</h3>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="firstName">First Name *</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="firstName" className="text-sm">First Name *</Label>
                       <Input
                         id="firstName"
                         required
                         value={formData.firstName}
                         onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                        className="h-10 text-sm"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="lastName">Last Name *</Label>
+                    <div className="space-y-1">
+                      <Label htmlFor="lastName" className="text-sm">Last Name *</Label>
                       <Input
                         id="lastName"
                         required
                         value={formData.lastName}
                         onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                        className="h-10 text-sm"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <Label htmlFor="email">Email *</Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="email" className="text-sm">Email *</Label>
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
                       disabled
                       readOnly
-                      className="bg-muted"
+                      className="bg-muted h-10 text-sm"
                     />
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3 text-primary" />
-                      Verified via email link
+                      Verified
                     </p>
                   </div>
 
-                  <div>
-                    <Label htmlFor="phone">Phone *</Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="phone" className="text-sm">Phone *</Label>
                     <Input
                       id="phone"
                       type="tel"
@@ -568,17 +570,18 @@ export default function CleanerOnboarding() {
                       value={formData.phone}
                       onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                       placeholder="(555) 123-4567"
+                      className="h-10 text-sm"
                     />
                   </div>
 
-                  <div className="space-y-4">
-                    <Label htmlFor="avatar">Profile Photo (Optional)</Label>
-                    <div className="flex items-center gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="avatar" className="text-sm">Photo (Optional)</Label>
+                    <div className="flex items-center gap-3">
                       {avatarPreview && (
                         <img 
                           src={avatarPreview} 
                           alt="Preview" 
-                          className="w-24 h-24 rounded-full object-cover border-2 border-border"
+                          className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-border flex-shrink-0"
                         />
                       )}
                       <Input
@@ -586,11 +589,11 @@ export default function CleanerOnboarding() {
                         type="file"
                         accept="image/*"
                         onChange={handleImageChange}
-                        className="flex-1"
+                        className="flex-1 h-10 text-sm"
                       />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Upload a professional photo. This will be shown to customers. Max 5MB.
+                    <p className="text-xs text-muted-foreground">
+                      Professional photo shown to customers. Max 5MB.
                     </p>
                   </div>
                 </div>
@@ -598,15 +601,15 @@ export default function CleanerOnboarding() {
 
               {/* Step 2: Location & Travel */}
               {currentStep === 2 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
+                <div className="space-y-3 sm:space-y-4">
+                  <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
                     Location & Travel
                   </h3>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="state">State *</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="state" className="text-sm">State *</Label>
                       <select
                         id="state"
                         required
@@ -614,14 +617,14 @@ export default function CleanerOnboarding() {
                         value={formData.state}
                         onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
                       >
-                        <option value="">Select state</option>
+                        <option value="">Select</option>
                         {US_STATES.map(state => (
                           <option key={state} value={state}>{state}</option>
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <Label htmlFor="homeZip">Home ZIP Code *</Label>
+                    <div className="space-y-1">
+                      <Label htmlFor="homeZip" className="text-sm">ZIP Code *</Label>
                       <Input
                         id="homeZip"
                         required
@@ -629,18 +632,19 @@ export default function CleanerOnboarding() {
                         value={formData.homeZip}
                         onChange={(e) => setFormData(prev => ({ ...prev, homeZip: e.target.value }))}
                         placeholder="12345"
+                        className="h-10 text-sm"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <Label htmlFor="maxTravelMiles">
-                      Max Travel Distance (miles) *
+                  <div className="space-y-1">
+                    <Label htmlFor="maxTravelMiles" className="text-sm">
+                      Max Travel Distance *
                     </Label>
                     <select
                       id="maxTravelMiles"
                       required
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={formData.maxTravelMiles}
                       onChange={(e) => setFormData(prev => ({ ...prev, maxTravelMiles: parseInt(e.target.value) }))}
                     >
@@ -656,25 +660,25 @@ export default function CleanerOnboarding() {
 
               {/* Step 3: Work Preferences */}
               {currentStep === 3 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Work Preferences</h3>
+                <div className="space-y-3 sm:space-y-4">
+                  <h3 className="text-base sm:text-lg font-semibold">Work Preferences</h3>
                   
-                  <div>
-                    <Label>Preferred Work Days *</Label>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Select the days you're available to work
+                  <div className="space-y-2">
+                    <Label className="text-sm">Preferred Work Days *</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Select available days
                     </p>
                     <ToggleGroup 
                       type="multiple" 
                       value={formData.preferredWorkDays}
                       onValueChange={(value) => setFormData(prev => ({ ...prev, preferredWorkDays: value }))}
-                      className="justify-start flex-wrap"
+                      className="justify-start flex-wrap gap-1"
                     >
                       {DAYS_OF_WEEK.map(day => (
                         <ToggleGroupItem 
                           key={day} 
                           value={day}
-                          className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                          className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground h-8 px-2.5 text-xs sm:text-sm"
                         >
                           {day}
                         </ToggleGroupItem>
@@ -682,30 +686,30 @@ export default function CleanerOnboarding() {
                     </ToggleGroup>
                   </div>
 
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm font-medium">Pay Rate</p>
-                    <p className="text-2xl font-bold text-primary">$18.00/hour</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Standard hourly rate for all cleaners
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-xs font-medium">Pay Rate</p>
+                    <p className="text-xl font-bold text-primary">$18/hr</p>
+                    <p className="text-xs text-muted-foreground">
+                      Standard rate for all contractors
                     </p>
                   </div>
 
-                  <div className="space-y-4">
-                    <Label>Your Skills & Specialties *</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Select all services you're comfortable providing (select at least one)
+                  <div className="space-y-2">
+                    <Label className="text-sm">Skills & Specialties *</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Select at least one
                     </p>
                     <ToggleGroup 
                       type="multiple" 
                       value={formData.skillset}
                       onValueChange={(value) => setFormData(prev => ({ ...prev, skillset: value }))}
-                      className="grid grid-cols-1 md:grid-cols-2 gap-2 justify-start"
+                      className="grid grid-cols-1 gap-1.5"
                     >
                       {SKILLSET_OPTIONS.map((skill) => (
                         <ToggleGroupItem 
                           key={skill} 
                           value={skill}
-                          className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground justify-start"
+                          className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground justify-start h-9 text-xs sm:text-sm"
                         >
                           {skill}
                         </ToggleGroupItem>
@@ -717,40 +721,40 @@ export default function CleanerOnboarding() {
 
               {/* Step 4: Review & Submit */}
               {currentStep === 4 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
-                    Review Your Information
+                <div className="space-y-3 sm:space-y-4">
+                  <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                    Review Info
                   </h3>
 
-                  <div className="space-y-6 bg-muted/50 p-6 rounded-lg">
+                  <div className="space-y-4 bg-muted/50 p-3 sm:p-4 rounded-lg">
                     <div>
-                      <h4 className="font-semibold text-foreground mb-2">Personal Information</h4>
-                      <div className="space-y-1 text-sm text-muted-foreground">
+                      <h4 className="font-semibold text-foreground text-sm mb-1">Personal</h4>
+                      <div className="space-y-0.5 text-xs text-muted-foreground">
                         <p><span className="font-medium">Name:</span> {formData.firstName} {formData.lastName}</p>
                         <p><span className="font-medium">Email:</span> {formData.email}</p>
                         <p><span className="font-medium">Phone:</span> {formData.phone}</p>
-                        {avatarPreview && <p className="font-medium">✓ Profile photo uploaded</p>}
+                        {avatarPreview && <p className="font-medium text-primary">✓ Photo uploaded</p>}
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="font-semibold text-foreground mb-2">Location & Travel</h4>
-                      <div className="space-y-1 text-sm text-muted-foreground">
+                      <h4 className="font-semibold text-foreground text-sm mb-1">Location</h4>
+                      <div className="space-y-0.5 text-xs text-muted-foreground">
                         <p><span className="font-medium">State:</span> {formData.state}</p>
-                        <p><span className="font-medium">ZIP Code:</span> {formData.homeZip}</p>
-                        <p><span className="font-medium">Max Travel:</span> {formData.maxTravelMiles} miles</p>
+                        <p><span className="font-medium">ZIP:</span> {formData.homeZip}</p>
+                        <p><span className="font-medium">Travel:</span> {formData.maxTravelMiles} mi</p>
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="font-semibold text-foreground mb-2">Work Preferences</h4>
-                      <div className="space-y-2 text-sm text-muted-foreground">
+                      <h4 className="font-semibold text-foreground text-sm mb-1">Preferences</h4>
+                      <div className="space-y-2 text-xs text-muted-foreground">
                         <div>
-                          <span className="font-medium">Preferred Days:</span>
+                          <span className="font-medium">Days:</span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {formData.preferredWorkDays.map((day) => (
-                              <span key={day} className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">
+                              <span key={day} className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-xs">
                                 {day}
                               </span>
                             ))}
@@ -760,7 +764,7 @@ export default function CleanerOnboarding() {
                           <span className="font-medium">Skills:</span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {formData.skillset.map((skill) => (
-                              <span key={skill} className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">
+                              <span key={skill} className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-xs">
                                 {skill}
                               </span>
                             ))}
@@ -773,15 +777,16 @@ export default function CleanerOnboarding() {
               )}
 
               {/* Navigation Buttons */}
-              <div className="flex justify-between gap-4 pt-4">
+              <div className="flex justify-between gap-3 pt-3 sm:pt-4">
                 {currentStep > 1 && (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleBack}
                     disabled={isLoading}
+                    className="h-10"
                   >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    <ArrowLeft className="mr-1.5 h-4 w-4" />
                     Back
                   </Button>
                 )}
@@ -790,26 +795,28 @@ export default function CleanerOnboarding() {
                   <Button
                     type="button"
                     onClick={handleNext}
-                    className="ml-auto"
+                    className="ml-auto h-10"
                   >
                     Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Button>
                 ) : (
                   <Button 
                     type="submit" 
-                    className="ml-auto" 
+                    className="ml-auto h-10" 
                     disabled={isLoading}
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating Profile...
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        <span className="hidden sm:inline">Creating...</span>
+                        <span className="sm:hidden">...</span>
                       </>
                     ) : (
                       <>
-                        Complete Onboarding
-                        <CheckCircle2 className="ml-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Complete Onboarding</span>
+                        <span className="sm:hidden">Complete</span>
+                        <CheckCircle2 className="ml-1.5 h-4 w-4" />
                       </>
                     )}
                   </Button>

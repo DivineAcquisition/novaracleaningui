@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X, MessageSquare, Bell } from "lucide-react";
+import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X, MessageSquare, Bell, CreditCard, ExternalLink, CheckCircle2, LogOut } from "lucide-react";
 import { processAvatarImage } from "@/lib/image-compression";
 
 interface CleanerProfile {
@@ -25,14 +25,17 @@ interface CleanerProfile {
   sms_notifications_enabled: boolean | null;
   sms_quiet_hours_start: string | null;
   sms_quiet_hours_end: string | null;
+  stripe_account_id: string | null;
+  payouts_enabled: boolean | null;
 }
 
 export default function CleanerProfile() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [stripeLoading, setStripeLoading] = useState(false);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -43,7 +46,56 @@ export default function CleanerProfile() {
       return;
     }
     fetchProfile();
+    
+    // Check for Stripe return
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('stripe') === 'complete') {
+      checkStripeStatus();
+      window.history.replaceState({}, '', '/cleaner/profile');
+    }
   }, [user, navigate]);
+
+  const checkStripeStatus = async () => {
+    if (!profile?.id) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('check-cleaner-status', {
+        body: { cleanerId: profile.id }
+      });
+      if (!error && data?.success) {
+        toast({
+          title: "Stripe Connected!",
+          description: "Your payment setup is complete.",
+        });
+        fetchProfile();
+      }
+    } catch (error) {
+      console.error('Error checking Stripe status:', error);
+    }
+  };
+
+  const handleStripeConnect = async () => {
+    setStripeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('initiate-cleaner-stripe-connect');
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start Stripe setup",
+        variant: "destructive",
+      });
+    } finally {
+      setStripeLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/cleaner/auth");
+  };
 
   const fetchProfile = async () => {
     try {
@@ -205,42 +257,41 @@ export default function CleanerProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 py-8 px-4">
-      <div className="container max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 py-4 px-3 sm:py-8 sm:px-4">
+      <div className="container max-w-lg mx-auto">
         <Button
           variant="ghost"
           onClick={() => navigate("/cleaner/dashboard")}
-          className="mb-6"
+          className="mb-4 h-9"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
+          Back
         </Button>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile Settings</CardTitle>
-            <CardDescription>
-              Manage your profile information and availability
+        <Card className="shadow-lg">
+          <CardHeader className="pb-3 pt-4 px-4 sm:px-6">
+            <CardTitle className="text-lg sm:text-xl">Profile Settings</CardTitle>
+            <CardDescription className="text-sm">
+              Manage your account
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-4 sm:space-y-5 px-4 sm:px-6 pb-4">
             {/* Professional Photo Warning */}
             {!profile.avatar_url && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="text-xs">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Professional photo required!</strong> You must upload a clear face photo to receive job assignments. 
-                  This helps customers recognize you. A selfie is acceptable as long as your face is clearly visible.
+                  <strong>Photo required!</strong> Upload a clear face photo to receive job assignments.
                 </AlertDescription>
               </Alert>
             )}
 
             {/* Avatar Section */}
-            <div className="flex flex-col items-center space-y-4">
+            <div className="flex flex-col items-center space-y-3">
               <div className="relative">
-                <Avatar className="w-32 h-32 border-2 border-border">
+                <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-border">
                   <AvatarImage src={avatarPreview || profile.avatar_url || undefined} />
-                  <AvatarFallback className="text-2xl">
+                  <AvatarFallback className="text-lg">
                     {profile.first_name[0]}{profile.last_name[0]}
                   </AvatarFallback>
                 </Avatar>
@@ -248,127 +299,162 @@ export default function CleanerProfile() {
                   <Button
                     variant="destructive"
                     size="icon"
-                    className="absolute -top-2 -right-2 h-8 w-8 rounded-full"
+                    className="absolute -top-1 -right-1 h-6 w-6 rounded-full"
                     onClick={handleCancelUpload}
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3" />
                   </Button>
                 )}
               </div>
               
               <div className="flex gap-2">
-                <div>
-                  <input
-                    type="file"
-                    id="avatar-upload"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageChange}
-                    disabled={uploading}
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => document.getElementById('avatar-upload')?.click()}
-                    disabled={uploading}
-                  >
-                    <Camera className="mr-2 h-4 w-4" />
-                    {avatarPreview ? "Choose Different" : "Choose Photo"}
-                  </Button>
-                </div>
+                <input
+                  type="file"
+                  id="avatar-upload"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                  disabled={uploading}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('avatar-upload')?.click()}
+                  disabled={uploading}
+                  className="h-9"
+                >
+                  <Camera className="mr-1.5 h-4 w-4" />
+                  {avatarPreview ? "Change" : "Choose"}
+                </Button>
                 
                 {avatarPreview && (
                   <Button
+                    size="sm"
                     onClick={handleAvatarUpload}
                     disabled={uploading}
+                    className="h-9"
                   >
                     {uploading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                     ) : (
-                      <Save className="mr-2 h-4 w-4" />
+                      <Save className="mr-1.5 h-4 w-4" />
                     )}
-                    Upload Photo
+                    Upload
                   </Button>
                 )}
               </div>
+            </div>
 
-              <p className="text-xs text-center text-muted-foreground max-w-md">
-                Upload a clear, professional photo showing your face. This helps build trust with customers. 
-                Even a selfie works as long as your face is visible and well-lit.
-              </p>
+            {/* Stripe Connect Section */}
+            <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Payment Setup</h3>
+              </div>
+              
+              {profile.stripe_account_id && profile.payouts_enabled ? (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Stripe Connected - Ready to receive payments</span>
+                </div>
+              ) : profile.stripe_account_id ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Stripe setup incomplete. Complete setup to receive payments.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={handleStripeConnect}
+                    disabled={stripeLoading}
+                    className="h-9"
+                  >
+                    {stripeLoading ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-1.5 h-4 w-4" />
+                    )}
+                    Complete Setup
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Connect Stripe to receive payments for completed jobs.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={handleStripeConnect}
+                    disabled={stripeLoading}
+                    className="h-9"
+                  >
+                    {stripeLoading ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-1.5 h-4 w-4" />
+                    )}
+                    Setup Stripe
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Contact Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Contact Information</h3>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Contact Info</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="firstName"
-                      value={profile.first_name}
-                      onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="firstName" className="text-xs">First Name</Label>
+                  <Input
+                    id="firstName"
+                    value={profile.first_name}
+                    onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
+                    className="h-10 text-sm"
+                  />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="lastName"
-                      value={profile.last_name}
-                      onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <Label htmlFor="lastName" className="text-xs">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    value={profile.last_name}
+                    onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
+                    className="h-10 text-sm"
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    value={profile.email}
-                    disabled
-                    className="pl-10 bg-muted"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Email cannot be changed. Contact admin if needed.
-                </p>
+              <div className="space-y-1">
+                <Label htmlFor="email" className="text-xs">Email</Label>
+                <Input
+                  id="email"
+                  value={profile.email}
+                  disabled
+                  className="h-10 text-sm bg-muted"
+                />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={profile.phone}
-                    onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label htmlFor="phone" className="text-xs">Phone</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={profile.phone}
+                  onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                  className="h-10 text-sm"
+                />
               </div>
             </div>
 
             {/* Availability Settings */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Availability</h3>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Availability</h3>
               
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="available">Available for Bookings</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Turn off to temporarily stop receiving new bookings
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="space-y-0.5">
+                  <Label htmlFor="available" className="text-sm">Available for Jobs</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Turn off to pause receiving offers
                   </p>
                 </div>
                 <Switch
@@ -380,8 +466,8 @@ export default function CleanerProfile() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="maxBookings">Max Weekly Bookings</Label>
+              <div className="space-y-1">
+                <Label htmlFor="maxBookings" className="text-xs">Max Weekly Bookings</Label>
                 <Input
                   id="maxBookings"
                   type="number"
@@ -391,63 +477,41 @@ export default function CleanerProfile() {
                   onChange={(e) =>
                     setProfile({ ...profile, max_weekly_bookings: parseInt(e.target.value) })
                   }
+                  className="h-10 text-sm"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Maximum number of bookings you can accept per week
-                </p>
               </div>
             </div>
 
             {/* SMS Notification Settings */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-primary" />
+                <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                  <MessageSquare className="h-4 w-4 text-primary" />
                   SMS Notifications
                 </h3>
                 <Link to="/sms-consent">
-                  <Button variant="outline" size="sm">
-                    <Bell className="mr-2 h-4 w-4" />
-                    Manage Consent
+                  <Button variant="ghost" size="sm" className="h-8 text-xs">
+                    <Bell className="mr-1 h-3 w-3" />
+                    Manage
                   </Button>
                 </Link>
               </div>
               
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="smsEnabled">SMS Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {profile.sms_notifications_enabled 
-                      ? "You'll receive SMS updates for jobs and bookings" 
-                      : "SMS notifications are currently disabled"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {profile.sms_notifications_enabled ? (
-                    <span className="text-success text-sm font-medium">Enabled</span>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">Disabled</span>
-                  )}
-                </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span className="text-sm">SMS Status</span>
+                {profile.sms_notifications_enabled ? (
+                  <span className="text-green-600 text-sm font-medium">Enabled</span>
+                ) : (
+                  <span className="text-muted-foreground text-sm">Disabled</span>
+                )}
               </div>
-
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  To change your SMS preferences or view consent details, visit the{" "}
-                  <Link to="/sms-consent" className="text-primary hover:underline font-medium">
-                    SMS Consent page
-                  </Link>
-                  . Reply STOP to any message to opt out.
-                </AlertDescription>
-              </Alert>
             </div>
 
             {/* Save Button */}
             <Button
               onClick={handleSaveProfile}
               disabled={saving}
-              className="w-full"
+              className="w-full h-10"
             >
               {saving ? (
                 <>
@@ -460,6 +524,16 @@ export default function CleanerProfile() {
                   Save Changes
                 </>
               )}
+            </Button>
+
+            {/* Sign Out */}
+            <Button
+              variant="outline"
+              onClick={handleSignOut}
+              className="w-full h-10"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign Out
             </Button>
           </CardContent>
         </Card>

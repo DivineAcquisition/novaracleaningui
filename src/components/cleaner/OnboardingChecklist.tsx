@@ -29,10 +29,16 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
   // Check Stripe Connect status on mount and when returning from Stripe
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('stripe') === 'complete') {
+    const stripeStatus = params.get('stripe');
+    if (stripeStatus === 'complete' || stripeStatus === 'refresh') {
       checkStripeStatus();
       // Clean up URL
       window.history.replaceState({}, '', '/cleaner/dashboard');
+      
+      if (stripeStatus === 'refresh') {
+        // User needs to re-do Stripe onboarding
+        toast.info("Please complete Stripe setup to receive payments");
+      }
     }
   }, []);
 
@@ -107,44 +113,44 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
 
   return (
     <>
-      <Card className="p-4 mb-4 border-primary/20 bg-gradient-to-r from-primary/5 to-background">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-base font-semibold">
-              {allComplete ? "✅ All Set!" : "Complete Your Setup"}
+      <Card className="p-3 sm:p-4 mb-3 sm:mb-4 border-primary/20 bg-gradient-to-r from-primary/5 to-background">
+        <div className="flex items-center justify-between mb-2 sm:mb-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm sm:text-base font-semibold truncate">
+              {allComplete ? "✅ All Set!" : "Complete Setup"}
             </h3>
             <p className="text-xs text-muted-foreground">
               {allComplete 
-                ? "You're ready to receive job offers" 
-                : `${completedCount} of ${checklist.length} steps complete`
+                ? "Ready for job offers" 
+                : `${completedCount}/${checklist.length} done`
               }
             </p>
           </div>
           {allComplete && (
-            <Button variant="ghost" size="sm" onClick={() => setIsDismissed(true)}>
+            <Button variant="ghost" size="sm" onClick={() => setIsDismissed(true)} className="h-7 px-2 text-xs">
               Dismiss
             </Button>
           )}
         </div>
 
-        <Progress value={progress} className="mb-3 h-2" />
+        <Progress value={progress} className="mb-2 sm:mb-3 h-1.5" />
 
-        <div className="space-y-2">
+        <div className="space-y-1.5 sm:space-y-2">
           {checklist.map((item) => {
             const Icon = item.icon;
             return (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-2 rounded-lg bg-background/50 border"
+                className="flex items-center justify-between p-2 rounded-lg bg-background/50 border gap-2"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                   {item.completed ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-muted-foreground" />
+                    <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
                   )}
-                  <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className={`text-sm ${item.completed ? "text-muted-foreground" : ""}`}>
+                  <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className={`text-xs sm:text-sm truncate ${item.completed ? "text-muted-foreground" : ""}`}>
                     {item.label}
                   </span>
                 </div>
@@ -154,9 +160,11 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
                     size="sm"
                     onClick={item.onAction}
                     disabled={item.id === "stripe" && isInitiatingStripe}
+                    className="h-7 px-2 sm:px-3 text-xs flex-shrink-0"
                   >
-                    {item.actionLabel}
-                    {item.id === "stripe" && <ExternalLink className="ml-2 w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{item.actionLabel}</span>
+                    <span className="sm:hidden">Setup</span>
+                    {item.id === "stripe" && <ExternalLink className="ml-1 sm:ml-2 w-3 h-3" />}
                   </Button>
                 )}
               </div>
