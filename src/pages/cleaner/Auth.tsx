@@ -5,29 +5,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-import { z } from "zod";
+import { toast } from "sonner";
+import { Loader2, Mail, Lock } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { z } from "zod";
 
-const emailSchema = z.string().trim().email({ message: "Invalid email address" });
-const passwordSchema = z.string().min(6, { message: "Password must be at least 6 characters" });
+const emailSchema = z.string().email("Please enter a valid email address");
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 export default function CleanerAuth() {
   const navigate = useNavigate();
-  const { user, signInWithGoogle } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    // If user is already logged in, redirect to cleaner dashboard
     if (user) {
       checkCleanerProfile();
     }
-  }, [user, navigate]);
+  }, [user]);
 
   const checkCleanerProfile = async () => {
     if (!user) return;
@@ -35,380 +34,266 @@ export default function CleanerAuth() {
     try {
       const { data, error } = await supabase
         .from("cleaners")
-        .select("id")
+        .select("id, onboarding_complete")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (error) throw error;
 
       if (data) {
-        navigate("/cleaner/dashboard");
+        if (!data.onboarding_complete) {
+          navigate("/cleaner/onboarding");
+        } else {
+          navigate("/cleaner/dashboard");
+        }
       } else {
-        toast({
-          title: "Access Denied",
-          description: "You don't have a cleaner account. Please contact admin.",
-          variant: "destructive",
-        });
-        await supabase.auth.signOut();
+        // User exists but no cleaner profile - redirect to onboarding
+        navigate("/cleaner/onboarding");
       }
     } catch (error: any) {
       console.error("Error checking cleaner profile:", error);
     }
   };
 
+  const validateInputs = () => {
+    try {
+      emailSchema.parse(email);
+      passwordSchema.parse(password);
+      return true;
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      }
+      return false;
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      // Validate inputs
-      const emailValidation = emailSchema.safeParse(email);
-      if (!emailValidation.success) {
-        toast({
-          title: "Invalid Email",
-          description: emailValidation.error.errors[0].message,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+    
+    if (!validateInputs()) return;
+    
+    setIsLoading(true);
+    
+    const { error } = await signIn(email, password);
+    
+    if (error) {
+      if (error.message.includes("Invalid login credentials")) {
+        toast.error("Invalid email or password");
+      } else if (error.message.includes("Email not confirmed")) {
+        toast.error("Please check your email and confirm your account.");
+      } else {
+        toast.error(error.message || "Failed to sign in");
       }
-
-      const passwordValidation = passwordSchema.safeParse(password);
-      if (!passwordValidation.success) {
-        toast({
-          title: "Invalid Password",
-          description: passwordValidation.error.errors[0].message,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: emailValidation.data,
-        password: passwordValidation.data,
-      });
-
-      if (error) {
-        if (error.message.includes("Invalid login credentials")) {
-          toast({
-            title: "Sign In Failed",
-            description: "Invalid email or password. Please try again.",
-            variant: "destructive",
-          });
-        } else if (error.message.includes("Email not confirmed")) {
-          toast({
-            title: "Email Not Confirmed",
-            description: "Please check your email and confirm your account.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Sign In Failed",
-            description: error.message,
-            variant: "destructive",
-          });
-        }
-        return;
-      }
-
-      if (data.user) {
-        // Check if user has a cleaner profile and if onboarding is complete
-        const { data: cleanerData, error: cleanerError } = await supabase
-          .from("cleaners")
-          .select("id, email, onboarding_complete")
-          .eq("user_id", data.user.id)
-          .maybeSingle();
-
-        if (cleanerError) throw cleanerError;
-
-        if (!cleanerData) {
-          toast({
-            title: "Access Denied",
-            description: "You don't have a cleaner account. Please contact admin.",
-            variant: "destructive",
-          });
-          await supabase.auth.signOut();
-          return;
-        }
-
-        // Check if onboarding is complete
-        if (!cleanerData.onboarding_complete) {
-          toast({
-            title: "Complete Your Profile",
-            description: "Please complete your onboarding to access the dashboard.",
-          });
-          navigate("/cleaner/onboarding");
-          return;
-        }
-
-        toast({
-          title: "Welcome back!",
-          description: "Successfully signed in to your cleaner account.",
-        });
-        navigate("/cleaner/dashboard");
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "An unexpected error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    } else {
+      toast.success("Welcome back!");
+      // checkCleanerProfile will be called by useEffect when user state updates
     }
+    
+    setIsLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      // Validate inputs
-      const emailValidation = emailSchema.safeParse(email);
-      if (!emailValidation.success) {
-        toast({
-          title: "Invalid Email",
-          description: emailValidation.error.errors[0].message,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+    
+    if (!validateInputs()) return;
+    
+    setIsLoading(true);
+    
+    const { data, error } = await signUp(email, password);
+    
+    if (error) {
+      if (error.message.includes("already registered")) {
+        toast.error("This email is already registered. Please sign in instead.");
+      } else {
+        toast.error(error.message || "Failed to sign up");
       }
-
-      const passwordValidation = passwordSchema.safeParse(password);
-      if (!passwordValidation.success) {
-        toast({
-          title: "Invalid Password",
-          description: passwordValidation.error.errors[0].message,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Create auth account - no pre-checks needed, onboarding will handle profile creation
-      const redirectUrl = `${window.location.origin}/cleaner/onboarding`;
-      const { data, error } = await supabase.auth.signUp({
-        email: emailValidation.data,
-        password: passwordValidation.data,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            is_cleaner: true, // Tag this as a cleaner account
-          },
-        },
-      });
-
-      if (error) {
-        if (error.message.includes("User already registered")) {
-          toast({
-            title: "Account Exists",
-            description: "This email is already registered. Please sign in instead.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Sign Up Failed",
-            description: error.message,
-            variant: "destructive",
-          });
-        }
-        return;
-      }
-
-      if (data.user) {
-        toast({
-          title: "Account Created!",
-          description: "Please complete your profile to get started.",
-        });
-        
-        // Redirect to onboarding to complete profile
-        navigate("/cleaner/onboarding");
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "An unexpected error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    } else if (data?.user?.identities?.length === 0) {
+      toast.error("This email is already registered. Please sign in or reset your password.");
+    } else if (data?.user && !data?.session) {
+      toast.success("Account created! Please check your email to verify your account.");
+    } else if (data?.session) {
+      toast.success("Account created! Complete your profile to get started.");
+      navigate("/cleaner/onboarding");
     }
+    
+    setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 px-4 py-6">
-      <div className="w-full max-w-sm space-y-4">
-        <div className="text-center">
-          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-12 h-12 rounded-xl mb-3 shadow-lavender" />
-          <h1 className="text-2xl font-bold mb-1">Cleaner Portal</h1>
-          <p className="text-muted-foreground text-sm">Novara Cleaning</p>
-        </div>
+    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
+      <Card className="max-w-sm w-full shadow-xl border-primary/20">
+        <CardHeader className="text-center space-y-1 pb-3 pt-5">
+          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-12 h-12 rounded-xl mb-2 shadow-lavender" />
+          <CardTitle className="text-2xl font-bold">Cleaner Portal</CardTitle>
+          <CardDescription className="text-sm">
+            Sign in to manage your jobs
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="px-5 pb-5">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-10 mb-4"
+            onClick={signInWithGoogle}
+          >
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Continue with Google
+          </Button>
+          
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
 
-        <Card className="shadow-xl border-primary/20">
-          <CardContent className="pt-5 px-5 pb-5">
-            <Tabs defaultValue="signin" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-2 h-9">
-                <TabsTrigger value="signin" className="text-sm">Sign In</TabsTrigger>
-                <TabsTrigger value="signup" className="text-sm">Join Us</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="signin" className="space-y-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-10"
-                  onClick={signInWithGoogle}
-                >
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  Continue with Google
-                </Button>
-                
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSignIn} className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="signin-email" className="text-sm">Email</Label>
+          <Tabs defaultValue="signin" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2 h-9">
+              <TabsTrigger value="signin" className="text-sm">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="text-sm">Sign Up</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="signin">
+              <form onSubmit={handleSignIn} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="signin-email" className="text-sm">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signin-email"
                       type="email"
-                      placeholder="your.email@example.com"
+                      placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      className="pl-9 h-10"
+                      disabled={isLoading}
                       required
-                      disabled={loading}
-                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="signin-password" className="text-sm">Password</Label>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="signin-password" className="text-sm">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signin-password"
                       type="password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      className="pl-9 h-10"
+                      disabled={isLoading}
                       required
-                      disabled={loading}
-                      className="h-10"
                     />
                   </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    size="lg"
-                    disabled={loading}
-                  >
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Sign In
-                  </Button>
-                  <div className="flex items-center justify-between text-xs">
-                    <Link to="/cleaner/reset-password" className="text-primary hover:underline">
-                      Forgot password?
-                    </Link>
-                    <Link to="/auth" className="text-muted-foreground hover:text-primary">
-                      Customer Login
-                    </Link>
-                  </div>
-                </form>
-              </TabsContent>
+                </div>
 
-              <TabsContent value="signup" className="space-y-4">
-                <div className="text-center pb-2">
-                  <p className="text-sm text-muted-foreground">
-                    Join our team of professional cleaners
-                  </p>
+                <div className="flex items-center justify-between text-xs">
+                  <Link to="/cleaner/reset-password" className="text-primary hover:underline">
+                    Forgot Password?
+                  </Link>
+                  <Link to="/auth" className="text-muted-foreground hover:text-primary">
+                    Customer Login
+                  </Link>
                 </div>
 
                 <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-10"
-                  onClick={signInWithGoogle}
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={isLoading}
                 >
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  Sign Up with Google
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    "Sign In"
+                  )}
                 </Button>
-                
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSignUp} className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="signup-email" className="text-sm">Email</Label>
+              </form>
+            </TabsContent>
+            
+            <TabsContent value="signup">
+              <form onSubmit={handleSignUp} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="signup-email" className="text-sm">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signup-email"
                       type="email"
-                      placeholder="your.email@example.com"
+                      placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      className="pl-9 h-10"
+                      disabled={isLoading}
                       required
-                      disabled={loading}
-                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="signup-password" className="text-sm">Password</Label>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="signup-password" className="text-sm">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
                       type="password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      className="pl-9 h-10"
+                      disabled={isLoading}
                       required
-                      disabled={loading}
-                      className="h-10"
                     />
-                    <p className="text-xs text-muted-foreground">Min. 6 characters</p>
                   </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    size="lg"
-                    disabled={loading}
-                  >
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Create Account
-                  </Button>
-                  <p className="text-xs text-center text-muted-foreground">
-                    After signup, complete onboarding to start accepting jobs
+                  <p className="text-xs text-muted-foreground">
+                    Min. 6 characters
                   </p>
-                </form>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+                </div>
 
-        <div className="text-center text-xs text-muted-foreground">
-          <Link to="/" className="text-primary hover:underline">
-            ← Back to Home
-          </Link>
-        </div>
-      </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
+                </Button>
+
+                <p className="text-xs text-center text-muted-foreground">
+                  You'll complete your profile after signing up
+                </p>
+              </form>
+            </TabsContent>
+          </Tabs>
+
+          <div className="mt-4 text-center">
+            <Link to="/" className="text-xs text-muted-foreground hover:text-primary">
+              ← Back to Home
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
