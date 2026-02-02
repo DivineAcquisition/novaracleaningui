@@ -2,19 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowRight, ArrowLeft, Home, Bed, Bath, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-const DWELLING_TYPES = ["House", "Apartment", "Condo", "Townhouse"];
+const DWELLING_TYPES = [
+  { id: "House", icon: "ri-home-4-line", label: "House" },
+  { id: "Apartment", icon: "ri-building-2-line", label: "Apartment" },
+  { id: "Condo", icon: "ri-building-line", label: "Condo" },
+  { id: "Townhouse", icon: "ri-building-4-line", label: "Townhouse" },
+];
 
 export default function BookingDetails() {
   const router = useRouter();
@@ -74,74 +79,94 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-2xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
+      {/* Header */}
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <Link href="/" className="flex items-center gap-2.5 w-fit">
+            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
+              <i className="ri-sparkling-2-fill text-white text-lg"></i>
+            </div>
+            <span className="font-semibold text-lg">NovaraCleaning</span>
+          </Link>
+        </div>
+      </header>
+
+      <main className="container max-w-2xl mx-auto px-4 py-8 md:py-12">
         {/* Progress */}
         <div className="mb-8">
-          <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-            <span>Step 5 of 5</span>
-            <span>Property Details</span>
+          <div className="flex items-center justify-between text-sm mb-3">
+            <span className="text-muted-foreground">Step 5 of 5</span>
+            <span className="font-medium">Property Details</span>
           </div>
-          <div className="h-2 bg-muted rounded-full">
-            <div className="h-full bg-primary rounded-full" style={{ width: "100%" }} />
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary glow-primary-sm rounded-full transition-all duration-500" style={{ width: "100%" }} />
           </div>
         </div>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Home className="w-5 h-5" />
-              Property Details
-            </CardTitle>
-            <CardDescription>Help us prepare for your cleaning</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Property Type */}
-            <div className="space-y-3">
-              <Label>Property Type</Label>
-              <RadioGroup
-                value={dwellingType}
-                onValueChange={setDwellingType}
-                className="grid grid-cols-2 gap-3"
-              >
-                {DWELLING_TYPES.map((type) => (
-                  <div key={type} className="flex items-center">
-                    <RadioGroupItem value={type} id={type} className="peer sr-only" />
-                    <Label
-                      htmlFor={type}
-                      className="flex w-full items-center justify-center p-3 border rounded-lg cursor-pointer hover:bg-muted/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
-                    >
-                      {type}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </div>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <i className="ri-file-list-3-line text-primary text-3xl"></i>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Property Details</h1>
+          <p className="text-muted-foreground">Help us prepare for your cleaning</p>
+        </div>
 
-            {/* Rooms */}
+        {/* Property Type */}
+        <Card className="card-premium mb-6">
+          <CardContent className="p-5">
+            <Label className="text-sm font-medium mb-3 block">Property Type</Label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {DWELLING_TYPES.map((type) => {
+                const isSelected = dwellingType === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => setDwellingType(type.id)}
+                    className={cn(
+                      "p-4 rounded-xl border-2 text-center transition-all duration-200",
+                      isSelected
+                        ? "border-primary bg-primary/5 glow-primary-sm"
+                        : "border-border hover:border-primary/50"
+                    )}
+                  >
+                    <i className={cn(type.icon, "text-2xl mb-2", isSelected ? "text-primary" : "text-muted-foreground")}></i>
+                    <p className={cn("text-sm font-medium", isSelected && "text-primary")}>{type.label}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Room Details */}
+        <Card className="card-premium mb-6">
+          <CardContent className="p-5">
+            <Label className="text-sm font-medium mb-3 block">Room Details</Label>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="bedrooms" className="flex items-center gap-2">
-                  <Bed className="w-4 h-4" />
+              <div>
+                <Label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="ri-hotel-bed-line"></i>
                   Bedrooms
                 </Label>
                 <Input
-                  id="bedrooms"
                   type="number"
                   min="0"
                   max="10"
                   value={bedrooms}
                   onChange={(e) => setBedrooms(e.target.value)}
                   placeholder="0"
+                  className="h-12 text-lg border-2 focus:border-primary"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="bathrooms" className="flex items-center gap-2">
-                  <Bath className="w-4 h-4" />
+              <div>
+                <Label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="ri-drop-line"></i>
                   Bathrooms
                 </Label>
                 <Input
-                  id="bathrooms"
                   type="number"
                   min="0"
                   max="10"
@@ -149,70 +174,86 @@ export default function BookingDetails() {
                   value={bathrooms}
                   onChange={(e) => setBathrooms(e.target.value)}
                   placeholder="0"
+                  className="h-12 text-lg border-2 focus:border-primary"
                 />
               </div>
             </div>
+          </CardContent>
+        </Card>
 
+        {/* Additional Info */}
+        <Card className="card-premium mb-8">
+          <CardContent className="p-5 space-y-5">
             {/* Pets */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3 p-4 rounded-xl border border-border/50 bg-muted/30">
               <Checkbox
                 id="pets"
                 checked={hasPets}
                 onCheckedChange={(checked) => setHasPets(checked as boolean)}
               />
-              <Label htmlFor="pets">I have pets</Label>
+              <Label htmlFor="pets" className="flex items-center gap-2 cursor-pointer">
+                <i className="ri-bear-smile-line text-lg text-muted-foreground"></i>
+                I have pets
+              </Label>
             </div>
 
             {/* Access Instructions */}
-            <div className="space-y-2">
-              <Label htmlFor="access">Access Instructions</Label>
+            <div>
+              <Label className="text-sm font-medium mb-2 flex items-center gap-2">
+                <i className="ri-key-line text-muted-foreground"></i>
+                Access Instructions
+              </Label>
               <Textarea
-                id="access"
                 value={accessInstructions}
                 onChange={(e) => setAccessInstructions(e.target.value)}
                 placeholder="e.g., Code for lockbox is 1234, key under mat..."
                 rows={2}
+                className="border-2 focus:border-primary resize-none"
               />
             </div>
 
             {/* Special Instructions */}
-            <div className="space-y-2">
-              <Label htmlFor="special">Special Instructions (optional)</Label>
+            <div>
+              <Label className="text-sm font-medium mb-2 flex items-center gap-2">
+                <i className="ri-sticky-note-line text-muted-foreground"></i>
+                Special Instructions (optional)
+              </Label>
               <Textarea
-                id="special"
                 value={specialInstructions}
                 onChange={(e) => setSpecialInstructions(e.target.value)}
                 placeholder="Any areas to focus on or avoid?"
                 rows={3}
+                className="border-2 focus:border-primary resize-none"
               />
             </div>
           </CardContent>
         </Card>
 
+        {/* Navigation */}
         <div className="flex gap-3">
-          <Button variant="outline" onClick={handleBack}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
+          <Button variant="outline" onClick={handleBack} className="h-12 px-6">
+            <i className="ri-arrow-left-line mr-2"></i>
             Back
           </Button>
           <Button
-            className="flex-1"
+            className="flex-1 h-12 glow-primary-sm"
             onClick={handleContinue}
             disabled={isProcessing || !bedrooms || !bathrooms || !dwellingType}
           >
             {isProcessing ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <i className="ri-loader-4-line animate-spin mr-2"></i>
                 Completing...
               </>
             ) : (
               <>
                 Complete Booking
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <i className="ri-check-line ml-2"></i>
               </>
             )}
           </Button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

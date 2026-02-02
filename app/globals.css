@@ -251,6 +251,64 @@ All colors MUST be HSL.
     font-weight: 500;
   }
   
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(260 100% 50% / 0.3), 0 0 40px hsl(260 100% 50% / 0.15);
+  }
+  
+  .glow-primary-sm {
+    box-shadow: 0 0 10px hsl(260 100% 50% / 0.25), 0 0 20px hsl(260 100% 50% / 0.1);
+  }
+  
+  .glow-primary-lg {
+    box-shadow: 0 0 30px hsl(260 100% 50% / 0.35), 0 0 60px hsl(260 100% 50% / 0.2);
+  }
+  
+  .glow-success {
+    box-shadow: 0 0 20px hsl(142 76% 36% / 0.3), 0 0 40px hsl(142 76% 36% / 0.15);
+  }
+  
+  .glow-accent {
+    box-shadow: 0 0 20px hsl(244 100% 81% / 0.4), 0 0 40px hsl(244 100% 81% / 0.2);
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 20px hsl(260 100% 50% / 0.5);
+  }
+  
+  .border-glow {
+    box-shadow: 0 0 0 1px hsl(260 100% 50% / 0.3), 0 0 15px hsl(260 100% 50% / 0.2);
+  }
+  
+  .card-glow {
+    box-shadow: 0 4px 20px hsl(260 20% 30% / 0.08), 0 0 30px hsl(260 100% 50% / 0.08);
+  }
+  
+  .card-glow-hover:hover {
+    box-shadow: 0 8px 30px hsl(260 20% 30% / 0.12), 0 0 40px hsl(260 100% 50% / 0.12);
+  }
+  
+  /* Premium card styles */
+  .card-premium {
+    @apply bg-card border border-border/50 rounded-2xl;
+    box-shadow: 0 4px 20px hsl(260 20% 30% / 0.06), 0 0 0 1px hsl(260 100% 50% / 0.05);
+  }
+  
+  .card-premium-hover {
+    @apply card-premium transition-all duration-300;
+  }
+  
+  .card-premium-hover:hover {
+    @apply border-primary/40;
+    box-shadow: 0 8px 30px hsl(260 20% 30% / 0.1), 0 0 30px hsl(260 100% 50% / 0.1);
+    transform: translateY(-2px);
+  }
+  
+  .card-selected {
+    @apply border-2 border-primary bg-primary/5;
+    box-shadow: 0 0 0 4px hsl(260 100% 50% / 0.1), 0 8px 30px hsl(260 20% 30% / 0.1);
+  }
+  
   /* Mobile-specific safe area utilities */
   .safe-area-top {
     padding-top: env(safe-area-inset-top);

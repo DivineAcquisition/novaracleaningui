@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import "remixicon/fonts/remixicon.css";
 import { Providers } from "@/components/providers";
 
 const inter = Inter({ 

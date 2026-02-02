@@ -2,13 +2,15 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, ArrowLeft, MapPin, Calendar, Clock, Home, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING } from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -94,120 +96,160 @@ export default function BookingCheckout() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-4xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
+      {/* Header */}
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <Link href="/" className="flex items-center gap-2.5 w-fit">
+            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
+              <i className="ri-sparkling-2-fill text-white text-lg"></i>
+            </div>
+            <span className="font-semibold text-lg">NovaraCleaning</span>
+          </Link>
+        </div>
+      </header>
+
+      <main className="container max-w-5xl mx-auto px-4 py-8 md:py-12">
         {/* Progress */}
         <div className="mb-8">
-          <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-            <span>Step 4 of 5</span>
-            <span>Address & Review</span>
+          <div className="flex items-center justify-between text-sm mb-3">
+            <span className="text-muted-foreground">Step 4 of 5</span>
+            <span className="font-medium">Address & Review</span>
           </div>
-          <div className="h-2 bg-muted rounded-full">
-            <div className="h-full bg-primary rounded-full" style={{ width: "80%" }} />
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary glow-primary-sm rounded-full transition-all duration-500" style={{ width: "80%" }} />
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Address Form */}
-          <div className="md:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="w-5 h-5" />
-                  Service Address
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address">Street Address</Label>
-                  <Input
-                    id="address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="123 Main St"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input
-                      id="city"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="Dallas"
-                    />
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Main Form */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Contact Summary */}
+            <Card className="card-premium">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                    <i className="ri-check-double-line text-green-600 text-xl"></i>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
-                    <Input
-                      id="state"
-                      value={state}
-                      onChange={(e) => setState(e.target.value)}
-                      placeholder="TX"
-                    />
-                  </div>
+                  <h3 className="font-semibold text-lg">Contact Information</h3>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Contact Information</CardTitle>
-              </CardHeader>
-              <CardContent>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Name</p>
+                    <p className="text-muted-foreground mb-1">Name</p>
                     <p className="font-medium">{bookingData.firstName} {bookingData.lastName}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Email</p>
+                    <p className="text-muted-foreground mb-1">Email</p>
                     <p className="font-medium">{bookingData.email}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Phone</p>
+                    <p className="text-muted-foreground mb-1">Phone</p>
                     <p className="font-medium">{bookingData.phone}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">ZIP Code</p>
+                    <p className="text-muted-foreground mb-1">ZIP Code</p>
                     <p className="font-medium">{bookingData.zipCode}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Address Form */}
+            <Card className="card-premium">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <i className="ri-map-pin-line text-primary text-xl"></i>
+                  </div>
+                  <h3 className="font-semibold text-lg">Service Address</h3>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Street Address</Label>
+                    <div className="relative">
+                      <i className="ri-home-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                      <Input
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        placeholder="123 Main Street"
+                        className="pl-10 h-12 border-2 focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">City</Label>
+                      <Input
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="Dallas"
+                        className="h-12 border-2 focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">State</Label>
+                      <Input
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        placeholder="TX"
+                        className="h-12 border-2 focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Security Badges */}
+            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <i className="ri-shield-check-line text-green-500 text-lg"></i>
+                <span>Secure Booking</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <i className="ri-lock-line text-green-500 text-lg"></i>
+                <span>256-bit Encryption</span>
+              </div>
+            </div>
           </div>
 
           {/* Order Summary */}
           <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Home className="w-4 h-4 text-muted-foreground" />
+            <Card className="card-premium card-glow sticky top-24">
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-lg mb-4">Order Summary</h3>
+                
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <i className="ri-home-4-line text-muted-foreground"></i>
                     <span>{selectedHomeSize?.label}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-center gap-2 text-sm">
+                    <Badge variant="secondary" className="gap-1">
+                      <i className="ri-sparkling-line"></i>
+                      {bookingData.serviceType}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <i className="ri-calendar-line text-muted-foreground"></i>
                     <span>
                       {bookingData.serviceDate &&
                         format(new Date(bookingData.serviceDate + "T12:00:00"), "EEEE, MMM d")}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-center gap-2 text-sm">
+                    <i className="ri-time-line text-muted-foreground"></i>
                     <span>{bookingData.timeSlot}</span>
                   </div>
                 </div>
 
-                <Separator />
+                <Separator className="my-4" />
 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">{bookingData.serviceType}</span>
-                    <span>${pricing.subtotal}</span>
+                    <span className="text-muted-foreground">Service Total</span>
+                    <span className="font-medium">${pricing.subtotal}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Due at service</span>
@@ -215,42 +257,50 @@ export default function BookingCheckout() {
                   </div>
                 </div>
 
-                <Separator />
+                <Separator className="my-4" />
 
-                <div className="flex justify-between font-semibold">
-                  <span>Due Today (25% deposit)</span>
-                  <span>${pricing.deposit}</span>
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <p className="font-semibold">Due Today</p>
+                    <p className="text-xs text-muted-foreground">25% deposit</p>
+                  </div>
+                  <p className="text-2xl font-bold text-primary">${pricing.deposit}</p>
                 </div>
 
                 <Button
-                  className="w-full"
+                  className="w-full h-12 glow-primary-sm"
                   onClick={handleContinue}
                   disabled={isProcessing || !address || !city || !state}
                 >
                   {isProcessing ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <i className="ri-loader-4-line animate-spin mr-2"></i>
                       Processing...
                     </>
                   ) : (
                     <>
                       Continue
-                      <ArrowRight className="w-4 h-4 ml-2" />
+                      <i className="ri-arrow-right-line ml-2"></i>
                     </>
                   )}
                 </Button>
+
+                <p className="text-xs text-center text-muted-foreground mt-3">
+                  You won&apos;t be charged until the next step
+                </p>
               </CardContent>
             </Card>
           </div>
         </div>
 
+        {/* Back Button */}
         <div className="mt-6">
-          <Button variant="ghost" onClick={handleBack}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+          <Button variant="ghost" onClick={handleBack} className="gap-2">
+            <i className="ri-arrow-left-line"></i>
+            Back to service selection
           </Button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

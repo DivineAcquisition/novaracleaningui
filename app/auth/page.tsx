@@ -7,10 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, Sparkles } from "lucide-react";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -121,39 +120,42 @@ export default function Auth() {
 
   if (isCheckingSession) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background flex items-center justify-center">
+        <i className="ri-loader-4-line text-3xl animate-spin text-primary"></i>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
       {/* Header */}
-      <header className="border-b">
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80">
         <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
+          <Link href="/" className="flex items-center gap-2.5 w-fit">
+            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
+              <i className="ri-sparkling-2-fill text-white text-lg"></i>
             </div>
-            <span className="font-semibold">NovaraCleaning</span>
+            <span className="font-semibold text-lg">NovaraCleaning</span>
           </Link>
         </div>
       </header>
 
       <div className="container max-w-md mx-auto px-4 py-12">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2">Customer Portal</h1>
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <i className="ri-user-line text-primary text-3xl"></i>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Customer Portal</h1>
           <p className="text-muted-foreground">Sign in to manage your bookings</p>
         </div>
 
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="card-premium card-glow">
+          <CardContent className="p-6">
             {/* Google Button */}
             <Button
               type="button"
               variant="outline"
-              className="w-full mb-4"
+              className="w-full h-12 mb-5 border-2"
               onClick={handleGoogleSignIn}
               disabled={isLoading}
             >
@@ -166,17 +168,17 @@ export default function Auth() {
               Continue with Google
             </Button>
 
-            <div className="relative my-4">
+            <div className="relative my-5">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t" />
+                <div className="w-full border-t border-border/50" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-xs text-muted-foreground">or</span>
+                <span className="bg-card px-3 text-xs text-muted-foreground">or continue with email</span>
               </div>
             </div>
 
             <Tabs defaultValue="signin">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsList className="grid w-full grid-cols-2 mb-5">
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
@@ -184,39 +186,54 @@ export default function Auth() {
               <TabsContent value="signin">
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
-                    <Input
-                      id="signin-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
+                    <Label className="text-sm font-medium">Email</Label>
+                    <div className="relative">
+                      <i className="ri-mail-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-9 h-11 border-2 focus:border-primary"
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="signin-password">Password</Label>
+                      <Label className="text-sm font-medium">Password</Label>
                       <Link href="/reset-password" className="text-xs text-primary hover:underline">
                         Forgot password?
                       </Link>
                     </div>
-                    <Input
-                      id="signin-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
+                    <div className="relative">
+                      <i className="ri-lock-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-9 h-11 border-2 focus:border-primary"
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Sign In
+                  <Button type="submit" className="w-full h-11 glow-primary-sm" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin mr-2"></i>
+                        Signing in...
+                      </>
+                    ) : (
+                      <>
+                        Sign In
+                        <i className="ri-arrow-right-line ml-2"></i>
+                      </>
+                    )}
                   </Button>
                 </form>
               </TabsContent>
@@ -224,35 +241,53 @@ export default function Auth() {
               <TabsContent value="signup">
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
+                    <Label className="text-sm font-medium">Email</Label>
+                    <div className="relative">
+                      <i className="ri-mail-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-9 h-11 border-2 focus:border-primary"
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">At least 6 characters</p>
+                    <Label className="text-sm font-medium">Password</Label>
+                    <div className="relative">
+                      <i className="ri-lock-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-9 h-11 border-2 focus:border-primary"
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <i className="ri-information-line"></i>
+                      At least 6 characters
+                    </p>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Create Account
+                  <Button type="submit" className="w-full h-11 glow-primary-sm" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin mr-2"></i>
+                        Creating account...
+                      </>
+                    ) : (
+                      <>
+                        Create Account
+                        <i className="ri-arrow-right-line ml-2"></i>
+                      </>
+                    )}
                   </Button>
                 </form>
               </TabsContent>
@@ -260,15 +295,17 @@ export default function Auth() {
           </CardContent>
         </Card>
 
-        <div className="mt-6 text-center space-y-2">
+        <div className="mt-6 text-center space-y-3">
           <p className="text-sm text-muted-foreground">
             Are you a cleaner?{" "}
-            <Link href="/cleaner/auth" className="text-primary hover:underline">
-              Cleaner Portal →
+            <Link href="/cleaner/auth" className="text-primary hover:underline font-medium">
+              <i className="ri-team-line mr-1"></i>
+              Cleaner Portal
             </Link>
           </p>
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground block">
-            ← Back to home
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1">
+            <i className="ri-arrow-left-line"></i>
+            Back to home
           </Link>
         </div>
       </div>

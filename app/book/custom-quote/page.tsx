@@ -5,34 +5,30 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Home, Phone, Mail, User, Loader2, CheckCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function CustomQuote() {
   const router = useRouter();
-  const { bookingData } = useBooking();
+  const { bookingData, setCurrentStep } = useBooking();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: bookingData.firstName || "",
-    lastName: bookingData.lastName || "",
-    email: bookingData.email || "",
-    phone: bookingData.phone || "",
-    squareFootage: "",
-    propertyType: "",
-    additionalDetails: "",
-  });
+  const [firstName, setFirstName] = useState(bookingData.firstName || "");
+  const [lastName, setLastName] = useState(bookingData.lastName || "");
+  const [email, setEmail] = useState(bookingData.email || "");
+  const [phone, setPhone] = useState(bookingData.phone || "");
+  const [address, setAddress] = useState("");
+  const [squareFootage, setSquareFootage] = useState("");
+  const [additionalDetails, setAdditionalDetails] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.firstName || !formData.email || !formData.phone) {
+    if (!firstName || !lastName || !email || !phone || !address || !squareFootage) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -41,184 +37,181 @@ export default function CustomQuote() {
 
     try {
       const { error } = await supabase.from("custom_quotes").insert({
-        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
-        email: formData.email,
-        phone: formData.phone,
-        address: bookingData.zipCode || "Not provided",
-        sqft: parseInt(formData.squareFootage.replace(/,/g, "")) || 5000,
-        notes: `Property Type: ${formData.propertyType}\n${formData.additionalDetails}`,
+        full_name: `${firstName} ${lastName}`,
+        email,
+        phone,
+        address,
+        sqft: parseInt(squareFootage) || 5000,
+        notes: `First Name: ${firstName}, Last Name: ${lastName}. Additional Details: ${additionalDetails}`,
         status: "pending",
       });
 
       if (error) throw error;
 
-      setIsSubmitted(true);
-      toast.success("Quote request submitted!");
+      toast.success("Quote request submitted! We'll be in touch soon.");
+      setCurrentStep(1);
+      router.push("/");
     } catch (error: any) {
-      console.error("Quote submission error:", error);
-      toast.error("Failed to submit. Please try again.");
+      console.error("Custom quote error:", error);
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="container mx-auto px-4 py-4">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <span className="font-semibold">NovaraCleaning</span>
-            </Link>
-          </div>
-        </header>
-
-        <div className="container max-w-md mx-auto px-4 py-12">
-          <Card>
-            <CardContent className="pt-6 text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-              </div>
-              <h2 className="text-xl font-bold mb-2">Request Received!</h2>
-              <p className="text-muted-foreground mb-6">
-                We&apos;ll contact you within 24 hours with a custom quote for your property.
-              </p>
-              <Button onClick={() => router.push("/")} className="w-full">
-                Return Home
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  const handleBack = () => {
+    setCurrentStep(2);
+    router.push("/book/sqft");
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
+    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
+      {/* Header */}
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
+          <Link href="/" className="flex items-center gap-2.5 w-fit">
+            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
+              <i className="ri-sparkling-2-fill text-white text-lg"></i>
             </div>
-            <span className="font-semibold">NovaraCleaning</span>
+            <span className="font-semibold text-lg">NovaraCleaning</span>
           </Link>
         </div>
       </header>
 
-      <div className="container max-w-md mx-auto px-4 py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Home className="w-5 h-5" />
-              Large Property Quote
-            </CardTitle>
-            <CardDescription>
-              For homes over 5,000 sq ft, we provide personalized quotes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+      <main className="container max-w-xl mx-auto px-4 py-8 md:py-12">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-4">
+            <i className="ri-building-2-fill text-accent text-3xl"></i>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Request Custom Quote</h1>
+          <p className="text-muted-foreground">
+            For homes over 5,000 sq ft, we&apos;ll create a personalized quote
+          </p>
+        </div>
+
+        <Card className="card-premium card-glow">
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name *</Label>
-                  <Input
-                    id="firstName"
-                    value={formData.firstName}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
-                    placeholder="John"
-                    required
-                  />
+                  <Label className="text-sm font-medium">First Name</Label>
+                  <div className="relative">
+                    <i className="ri-user-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                    <Input
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="John"
+                      className="pl-9 h-12 border-2 focus:border-primary"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
+                  <Label className="text-sm font-medium">Last Name</Label>
                   <Input
-                    id="lastName"
-                    value={formData.lastName}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
                     placeholder="Doe"
+                    className="h-12 border-2 focus:border-primary"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="john@example.com"
-                  required
-                />
+                <Label className="text-sm font-medium">Email</Label>
+                <div className="relative">
+                  <i className="ri-mail-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="john@example.com"
+                    className="pl-9 h-12 border-2 focus:border-primary"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone *</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                  placeholder="(555) 123-4567"
-                  required
-                />
+                <Label className="text-sm font-medium">Phone</Label>
+                <div className="relative">
+                  <i className="ri-phone-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                  <Input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(555) 123-4567"
+                    className="pl-9 h-12 border-2 focus:border-primary"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="sqft">Approximate Square Footage</Label>
-                <Input
-                  id="sqft"
-                  value={formData.squareFootage}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, squareFootage: e.target.value }))}
-                  placeholder="e.g., 6,500"
-                />
+                <Label className="text-sm font-medium">Address</Label>
+                <div className="relative">
+                  <i className="ri-map-pin-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                  <Input
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="123 Main St, Dallas, TX"
+                    className="pl-9 h-12 border-2 focus:border-primary"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="propertyType">Property Type</Label>
-                <Input
-                  id="propertyType"
-                  value={formData.propertyType}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, propertyType: e.target.value }))}
-                  placeholder="e.g., Single family home, Estate"
-                />
+                <Label className="text-sm font-medium">Approximate Square Footage</Label>
+                <div className="relative">
+                  <i className="ri-ruler-line absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+                  <Input
+                    type="number"
+                    value={squareFootage}
+                    onChange={(e) => setSquareFootage(e.target.value)}
+                    placeholder="6000"
+                    className="pl-9 h-12 border-2 focus:border-primary"
+                    min="5000"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="details">Additional Details</Label>
+                <Label className="text-sm font-medium">Additional Details (optional)</Label>
                 <Textarea
-                  id="details"
-                  value={formData.additionalDetails}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, additionalDetails: e.target.value }))}
-                  placeholder="Tell us about any special requirements..."
-                  rows={3}
+                  value={additionalDetails}
+                  onChange={(e) => setAdditionalDetails(e.target.value)}
+                  placeholder="Tell us about your home, special requirements, or services needed..."
+                  rows={4}
+                  className="border-2 focus:border-primary resize-none"
                 />
               </div>
 
               <div className="flex gap-3 pt-2">
-                <Button type="button" variant="outline" onClick={() => router.push("/book/sqft")}>
-                  <ArrowLeft className="w-4 h-4 mr-2" />
+                <Button type="button" variant="outline" onClick={handleBack} className="h-12 px-6">
+                  <i className="ri-arrow-left-line mr-2"></i>
                   Back
                 </Button>
-                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                <Button type="submit" className="flex-1 h-12 glow-primary-sm" disabled={isSubmitting}>
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <i className="ri-loader-4-line animate-spin mr-2"></i>
                       Submitting...
                     </>
                   ) : (
-                    "Request Quote"
+                    <>
+                      Submit Request
+                      <i className="ri-send-plane-fill ml-2"></i>
+                    </>
                   )}
                 </Button>
               </div>
             </form>
           </CardContent>
         </Card>
-      </div>
+
+        <p className="text-sm text-center text-muted-foreground mt-6">
+          <i className="ri-time-line mr-1"></i>
+          We typically respond within 24 hours
+        </p>
+      </main>
     </div>
   );
 }

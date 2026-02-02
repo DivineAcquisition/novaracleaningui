@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -29,7 +28,7 @@ export default function BookingZip() {
     setIsValidating(true);
 
     try {
-      const { data: coverage } = await supabase
+      await supabase
         .from("service_coverage_zones")
         .select("city, state")
         .eq("zip_code", zipCode)
@@ -50,73 +49,80 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
       {/* Header */}
-      <header className="border-b">
+      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
+          <Link href="/" className="flex items-center gap-2.5 w-fit">
+            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
+              <i className="ri-sparkling-2-fill text-white text-lg"></i>
             </div>
-            <span className="font-semibold">NovaraCleaning</span>
+            <span className="font-semibold text-lg">NovaraCleaning</span>
           </Link>
         </div>
       </header>
 
-      <div className="container max-w-md mx-auto px-4 py-12">
+      <main className="container max-w-md mx-auto px-4 py-12 md:py-16">
         {/* Progress */}
         <div className="mb-8">
-          <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-            <span>Step 1 of 5</span>
-            <span>Location</span>
+          <div className="flex items-center justify-between text-sm mb-3">
+            <span className="text-muted-foreground">Step 1 of 5</span>
+            <span className="font-medium">Location</span>
           </div>
-          <div className="h-2 bg-muted rounded-full">
-            <div className="h-full bg-primary rounded-full" style={{ width: "20%" }} />
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary glow-primary-sm rounded-full transition-all duration-500" style={{ width: "20%" }} />
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="w-5 h-5" />
-              Check Availability
-            </CardTitle>
-            <CardDescription>
-              Enter your ZIP code to see if we service your area
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <i className="ri-map-pin-fill text-primary text-3xl"></i>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Check Availability</h1>
+          <p className="text-muted-foreground">Enter your ZIP code to see if we service your area</p>
+        </div>
+
+        <Card className="card-premium card-glow">
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="zip">ZIP Code</Label>
-                <Input
-                  id="zip"
-                  type="text"
-                  placeholder="Enter ZIP code"
-                  value={zipCode}
-                  onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                  maxLength={5}
-                  autoFocus
-                />
+                <Label className="text-sm font-medium">ZIP Code</Label>
+                <div className="relative">
+                  <i className="ri-map-pin-line absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground text-lg"></i>
+                  <Input
+                    type="text"
+                    placeholder="Enter ZIP code"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    className="pl-11 h-14 text-lg border-2 focus:border-primary"
+                    maxLength={5}
+                    autoFocus
+                  />
+                </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={zipCode.length !== 5 || isValidating}>
+              <Button 
+                type="submit" 
+                className="w-full h-12 glow-primary-sm" 
+                disabled={zipCode.length !== 5 || isValidating}
+              >
                 {isValidating ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <i className="ri-loader-4-line animate-spin mr-2"></i>
                     Checking...
                   </>
                 ) : (
                   <>
                     Continue
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <i className="ri-arrow-right-line ml-2"></i>
                   </>
                 )}
               </Button>
             </form>
           </CardContent>
         </Card>
-      </div>
+      </main>
     </div>
   );
 }

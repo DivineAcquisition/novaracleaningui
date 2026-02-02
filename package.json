@@ -60,6 +60,7 @@
     "react-resizable-panels": "^2.1.9",
     "react-swipeable": "^7.0.2",
     "recharts": "^2.15.4",
+    "remixicon": "^4.9.1",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
@@ -68,6 +69,7 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
