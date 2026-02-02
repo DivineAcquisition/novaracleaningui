@@ -140,7 +140,9 @@ serve(async (req) => {
     }
 
     try {
-      const { error: emailError } = await resend.emails.send({
+      logStep("Attempting to send email via Resend", { to: normalizedEmail });
+      
+      const emailResult = await resend.emails.send({
         from: "Novara Cleaning <hello@novaracleaning.com>",
         to: [normalizedEmail],
         subject: "Your Cleaner Verification Code",
@@ -148,14 +150,37 @@ serve(async (req) => {
         text,
       });
 
-      if (emailError) {
-        logStep("Email send failed", { error: emailError });
-        throw new Error(`Failed to send email: ${emailError.message}`);
+      logStep("Resend response", { result: emailResult });
+
+      if (emailResult.error) {
+        logStep("Email send failed", { error: emailResult.error });
+        throw new Error(`Email service error: ${emailResult.error.message || JSON.stringify(emailResult.error)}`);
       }
-    } catch (emailException) {
-      const emailError = emailException instanceof Error ? emailException : new Error(String(emailException));
-      logStep("Email exception", { error: emailError.message });
-      throw new Error("Failed to send verification email. Please try again.");
+      
+      if (!emailResult.data?.id) {
+        logStep("No email ID returned", { result: emailResult });
+        throw new Error("Email send failed - no confirmation received");
+      }
+      
+      logStep("Email sent successfully", { emailId: emailResult.data.id });
+    } catch (emailException: any) {
+      logStep("Email exception", { 
+        message: emailException?.message,
+        name: emailException?.name,
+        stack: emailException?.stack
+      });
+      
+      // More specific error messages based on common Resend errors
+      const errMsg = emailException?.message || "";
+      if (errMsg.includes("domain") || errMsg.includes("verified")) {
+        throw new Error("Email domain not verified. Please contact support.");
+      } else if (errMsg.includes("rate") || errMsg.includes("limit")) {
+        throw new Error("Too many emails sent. Please wait a moment and try again.");
+      } else if (errMsg.includes("invalid") && errMsg.includes("email")) {
+        throw new Error("Invalid email address format.");
+      } else {
+        throw new Error(`Email service error: ${errMsg || "Unknown error"}`);
+      }
     }
 
     logStep("Verification email sent successfully", { email: normalizedEmail });
@@ -172,9 +197,15 @@ serve(async (req) => {
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logStep("ERROR", { message: errorMessage, stack: errorStack });
+    
+    // Return more specific error for debugging (remove in production)
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ 
+        error: errorMessage,
+        debug_info: process.env.NODE_ENV !== 'production' ? errorStack : undefined
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

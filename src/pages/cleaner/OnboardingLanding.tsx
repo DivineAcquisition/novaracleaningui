@@ -58,18 +58,29 @@ export default function OnboardingLanding() {
 
       console.log("[LANDING] Send code response:", { data, error });
 
-      if (error) {
-        console.error("[LANDING] Failed to send code:", error);
+      // Check for error in response data (edge function returns 200 but with error in body)
+      if (error || data?.error) {
+        const errorMsg = error?.message || data?.error || "Unknown error";
+        console.error("[LANDING] Failed to send code:", errorMsg);
         
-        // Check for specific error types
-        const errorMsg = error.message || "";
-        if (errorMsg.includes("email") || errorMsg.includes("invalid")) {
-          toast.error("Invalid email address. Please check and try again.");
+        // Show the actual error message from the server for debugging
+        if (errorMsg.includes("domain") || errorMsg.includes("verified")) {
+          toast.error("Email service configuration issue. Please contact support.");
         } else if (errorMsg.includes("rate") || errorMsg.includes("limit")) {
           toast.error("Too many attempts. Please wait a few minutes and try again.");
+        } else if (errorMsg.includes("invalid") || errorMsg.includes("email")) {
+          toast.error("Invalid email address. Please check and try again.");
         } else {
-          toast.error("Failed to send verification code. Please try again.");
+          // Show the actual error for debugging
+          toast.error(errorMsg);
         }
+        return;
+      }
+      
+      // Check if the function returned success
+      if (!data?.success) {
+        console.error("[LANDING] Unexpected response:", data);
+        toast.error("Failed to send code. Please try again.");
         return;
       }
 
