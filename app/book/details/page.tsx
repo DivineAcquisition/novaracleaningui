@@ -1,45 +1,75 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageTransition } from "@/components/booking/PageTransition";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 const DWELLING_TYPES = [
-  { id: "House", icon: "ri-home-4-line", label: "House" },
-  { id: "Apartment", icon: "ri-building-2-line", label: "Apartment" },
-  { id: "Condo", icon: "ri-building-line", label: "Condo" },
-  { id: "Townhouse", icon: "ri-building-4-line", label: "Townhouse" },
+  { value: 'house', label: 'House' },
+  { value: 'apartment', label: 'Apartment' },
+  { value: 'condo', label: 'Condo' },
+  { value: 'office_space', label: 'Office Space' },
+  { value: 'townhouse', label: 'Townhouse' },
+  { value: 'mansion', label: 'Mansion' },
 ];
 
-export default function BookingDetails() {
+const PETS_OPTIONS = [
+  { value: 'none', label: 'No Pets' },
+  { value: 'dog', label: 'Dog(s)' },
+  { value: 'cat', label: 'Cat(s)' },
+  { value: 'multiple', label: 'Multiple Pets' },
+  { value: 'other', label: 'Other Pets' },
+];
+
+const FLOORING_TYPES = [
+  { value: 'hardwood', label: 'Hardwood' },
+  { value: 'carpet', label: 'Carpet' },
+  { value: 'tile', label: 'Tile' },
+  { value: 'laminate', label: 'Laminate' },
+  { value: 'vinyl', label: 'Vinyl/LVP' },
+  { value: 'mixed', label: 'Mixed Flooring' },
+  { value: 'other', label: 'Other' },
+];
+
+function PropertyDetailsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const bookingId = searchParams.get("booking_id");
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
+  
+  const [bedrooms, setBedrooms] = useState<string>("");
+  const [bathrooms, setBathrooms] = useState<string>("");
+  const [dwellingType, setDwellingType] = useState<string>("");
+  const [flooringType, setFlooringType] = useState<string>("");
+  const [pets, setPets] = useState<string>("none");
+  const [accessNotes, setAccessNotes] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [bedrooms, setBedrooms] = useState(bookingData.bedrooms?.toString() || "");
-  const [bathrooms, setBathrooms] = useState(bookingData.bathrooms?.toString() || "");
-  const [dwellingType, setDwellingType] = useState(bookingData.dwellingType || "");
-  const [hasPets, setHasPets] = useState(false);
-  const [specialInstructions, setSpecialInstructions] = useState("");
-  const [accessInstructions, setAccessInstructions] = useState("");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleContinue = async () => {
     if (!bedrooms || !bathrooms || !dwellingType) {
       toast.error("Please fill in all required fields");
       return;
     }
 
-    setIsProcessing(true);
+    const currentBookingId = bookingId || bookingData.bookingId;
+    if (!currentBookingId) {
+      toast.error("Invalid booking");
+      router.push("/book/sqft");
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       const { error } = await supabase
@@ -48,12 +78,12 @@ export default function BookingDetails() {
           bedrooms: parseInt(bedrooms),
           bathrooms: parseFloat(bathrooms),
           dwelling_type: dwellingType,
-          special_instructions: specialInstructions,
-          access_instructions: accessInstructions,
-          has_pets: hasPets,
+          flooring_type: flooringType || null,
+          pets,
+          access_notes: accessNotes || null,
           status: "confirmed",
         })
-        .eq("id", bookingData.bookingId);
+        .eq("id", currentBookingId);
 
       if (error) throw error;
 
@@ -63,197 +93,177 @@ export default function BookingDetails() {
         dwellingType,
       });
 
+      toast.success("Details saved successfully!");
       setCurrentStep(6);
-      router.push("/book/confirmation");
-    } catch (error: any) {
-      console.error("Details error:", error);
-      toast.error("Something went wrong. Please try again.");
+      router.push("/book/confirmation?booking_id=" + currentBookingId);
+    } catch (error) {
+      console.error("Error saving details:", error);
+      toast.error("Failed to save details. Please try again.");
     } finally {
-      setIsProcessing(false);
+      setIsSubmitting(false);
     }
   };
 
-  const handleBack = () => {
-    setCurrentStep(4);
-    router.push("/book/checkout");
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
-      {/* Header */}
-      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="flex items-center gap-2.5 w-fit">
-            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
-              <i className="ri-sparkling-2-fill text-white text-lg"></i>
+    <PageTransition direction="forward">
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
+        <Card className="max-w-lg w-full shadow-lg animate-fade-in">
+          <CardHeader className="text-center space-y-4 pb-6">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <i className="ri-checkbox-circle-line text-primary text-3xl"></i>
             </div>
-            <span className="font-semibold text-lg">NovaraCleaning</span>
-          </Link>
-        </div>
-      </header>
+            <CardTitle className="text-lg md:text-xl font-semibold">Property & Address Details</CardTitle>
+            <CardDescription className="text-sm">
+              Complete your booking with property information
+            </CardDescription>
+          </CardHeader>
 
-      <main className="container max-w-2xl mx-auto px-4 py-8 md:py-12">
-        {/* Progress */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between text-sm mb-3">
-            <span className="text-muted-foreground">Step 5 of 5</span>
-            <span className="font-medium">Property Details</span>
-          </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary glow-primary-sm rounded-full transition-all duration-500" style={{ width: "100%" }} />
-          </div>
-        </div>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Property Details */}
+              <div className="space-y-4">
+                <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
+                  <i className="ri-home-4-line text-primary"></i>
+                  Property Information
+                </h3>
+              
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bedrooms">
+                      Bedrooms <span className="text-destructive">*</span>
+                    </Label>
+                    <Select value={bedrooms} onValueChange={setBedrooms}>
+                      <SelectTrigger id="bedrooms" className="h-12">
+                        <SelectValue placeholder="Select bedrooms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                          <SelectItem key={num} value={num.toString()}>
+                            {num} {num === 1 ? 'bedroom' : 'bedrooms'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <i className="ri-file-list-3-line text-primary text-3xl"></i>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">Property Details</h1>
-          <p className="text-muted-foreground">Help us prepare for your cleaning</p>
-        </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bathrooms">
+                      Bathrooms <span className="text-destructive">*</span>
+                    </Label>
+                    <Select value={bathrooms} onValueChange={setBathrooms}>
+                      <SelectTrigger id="bathrooms" className="h-12">
+                        <SelectValue placeholder="Select bathrooms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((num) => (
+                          <SelectItem key={num} value={num.toString()}>
+                            {num} {num === 1 ? 'bathroom' : 'bathrooms'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-        {/* Property Type */}
-        <Card className="card-premium mb-6">
-          <CardContent className="p-5">
-            <Label className="text-sm font-medium mb-3 block">Property Type</Label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {DWELLING_TYPES.map((type) => {
-                const isSelected = dwellingType === type.id;
-                return (
-                  <button
-                    key={type.id}
-                    type="button"
-                    onClick={() => setDwellingType(type.id)}
-                    className={cn(
-                      "p-4 rounded-xl border-2 text-center transition-all duration-200",
-                      isSelected
-                        ? "border-primary bg-primary/5 glow-primary-sm"
-                        : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    <i className={cn(type.icon, "text-2xl mb-2", isSelected ? "text-primary" : "text-muted-foreground")}></i>
-                    <p className={cn("text-sm font-medium", isSelected && "text-primary")}>{type.label}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="dwellingType">
+                    Dwelling Type <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={dwellingType} onValueChange={setDwellingType}>
+                    <SelectTrigger id="dwellingType" className="h-12">
+                      <SelectValue placeholder="Select dwelling type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DWELLING_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-        {/* Room Details */}
-        <Card className="card-premium mb-6">
-          <CardContent className="p-5">
-            <Label className="text-sm font-medium mb-3 block">Room Details</Label>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                  <i className="ri-hotel-bed-line"></i>
-                  Bedrooms
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={bedrooms}
-                  onChange={(e) => setBedrooms(e.target.value)}
-                  placeholder="0"
-                  className="h-12 text-lg border-2 focus:border-primary"
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="flooringType">Primary Flooring Type</Label>
+                  <Select value={flooringType} onValueChange={setFlooringType}>
+                    <SelectTrigger id="flooringType" className="h-12">
+                      <SelectValue placeholder="Select flooring type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FLOORING_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="pets">Pets at Property</Label>
+                  <Select value={pets} onValueChange={setPets}>
+                    <SelectTrigger id="pets" className="h-12">
+                      <SelectValue placeholder="Select pets" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PETS_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="accessNotes">Access Notes</Label>
+                  <Textarea
+                    id="accessNotes"
+                    value={accessNotes}
+                    onChange={(e) => setAccessNotes(e.target.value)}
+                    placeholder="Gate code, key location, parking instructions, or any special entry instructions..."
+                    className="min-h-[80px] resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional: Provide entry instructions for our cleaning team
+                  </p>
+                </div>
               </div>
-              <div>
-                <Label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                  <i className="ri-drop-line"></i>
-                  Bathrooms
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="10"
-                  step="0.5"
-                  value={bathrooms}
-                  onChange={(e) => setBathrooms(e.target.value)}
-                  placeholder="0"
-                  className="h-12 text-lg border-2 focus:border-primary"
-                />
-              </div>
-            </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                disabled={isSubmitting || !bedrooms || !bathrooms || !dwellingType}
+                className="w-full h-12 md:h-14 text-base font-semibold"
+              >
+                {isSubmitting ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin mr-2"></i>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    Complete Booking
+                    <i className="ri-arrow-right-line ml-2"></i>
+                  </>
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
+      </div>
+    </PageTransition>
+  );
+}
 
-        {/* Additional Info */}
-        <Card className="card-premium mb-8">
-          <CardContent className="p-5 space-y-5">
-            {/* Pets */}
-            <div className="flex items-center space-x-3 p-4 rounded-xl border border-border/50 bg-muted/30">
-              <Checkbox
-                id="pets"
-                checked={hasPets}
-                onCheckedChange={(checked) => setHasPets(checked as boolean)}
-              />
-              <Label htmlFor="pets" className="flex items-center gap-2 cursor-pointer">
-                <i className="ri-bear-smile-line text-lg text-muted-foreground"></i>
-                I have pets
-              </Label>
-            </div>
-
-            {/* Access Instructions */}
-            <div>
-              <Label className="text-sm font-medium mb-2 flex items-center gap-2">
-                <i className="ri-key-line text-muted-foreground"></i>
-                Access Instructions
-              </Label>
-              <Textarea
-                value={accessInstructions}
-                onChange={(e) => setAccessInstructions(e.target.value)}
-                placeholder="e.g., Code for lockbox is 1234, key under mat..."
-                rows={2}
-                className="border-2 focus:border-primary resize-none"
-              />
-            </div>
-
-            {/* Special Instructions */}
-            <div>
-              <Label className="text-sm font-medium mb-2 flex items-center gap-2">
-                <i className="ri-sticky-note-line text-muted-foreground"></i>
-                Special Instructions (optional)
-              </Label>
-              <Textarea
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                placeholder="Any areas to focus on or avoid?"
-                rows={3}
-                className="border-2 focus:border-primary resize-none"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Navigation */}
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={handleBack} className="h-12 px-6">
-            <i className="ri-arrow-left-line mr-2"></i>
-            Back
-          </Button>
-          <Button
-            className="flex-1 h-12 glow-primary-sm"
-            onClick={handleContinue}
-            disabled={isProcessing || !bedrooms || !bathrooms || !dwellingType}
-          >
-            {isProcessing ? (
-              <>
-                <i className="ri-loader-4-line animate-spin mr-2"></i>
-                Completing...
-              </>
-            ) : (
-              <>
-                Complete Booking
-                <i className="ri-check-line ml-2"></i>
-              </>
-            )}
-          </Button>
-        </div>
-      </main>
-    </div>
+export default function PropertyDetails() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <i className="ri-loader-4-line text-3xl animate-spin text-primary"></i>
+      </div>
+    }>
+      <PropertyDetailsContent />
+    </Suspense>
   );
 }

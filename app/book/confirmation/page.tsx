@@ -1,22 +1,27 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import confetti from "canvas-confetti";
+import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 
-export default function BookingConfirmation() {
+function ConfirmationContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { bookingData, resetBookingData } = useBooking();
+  const bookingId = searchParams.get("booking_id");
+  
+  const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
 
+  // Confetti celebration
   useEffect(() => {
-    // Celebrate with confetti
     const duration = 3 * 1000;
     const animationEnd = Date.now() + duration;
     const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
@@ -25,7 +30,7 @@ export default function BookingConfirmation() {
       return Math.random() * (max - min) + min;
     }
 
-    const interval: NodeJS.Timeout = setInterval(function() {
+    const interval = setInterval(function() {
       const timeLeft = animationEnd - Date.now();
 
       if (timeLeft <= 0) {
@@ -51,18 +56,18 @@ export default function BookingConfirmation() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleNewBooking = () => {
+  const handleReturnHome = () => {
     resetBookingData();
     router.push("/");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-primary/[0.02] to-background">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 pb-24 md:pb-8">
       {/* Header */}
-      <header className="border-b border-border/50 backdrop-blur-sm bg-background/80 sticky top-0 z-50">
+      <header className="border-b border-border/50 bg-background/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="flex items-center gap-2.5 w-fit">
-            <div className="w-9 h-9 rounded-xl bg-primary glow-primary-sm flex items-center justify-center">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
               <i className="ri-sparkling-2-fill text-white text-lg"></i>
             </div>
             <span className="font-semibold text-lg">NovaraCleaning</span>
@@ -70,20 +75,20 @@ export default function BookingConfirmation() {
         </div>
       </header>
 
-      <main className="container max-w-2xl mx-auto px-4 py-12">
+      <div className="container max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Success Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-full bg-green-500 glow-success flex items-center justify-center mx-auto mb-6">
+        <div className="text-center space-y-4 animate-fade-in">
+          <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto shadow-lg">
             <i className="ri-check-line text-white text-4xl"></i>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold mb-3">Booking Confirmed! 🎉</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Booking Confirmed! 🎉</h1>
           <p className="text-muted-foreground">
-            A confirmation email has been sent to {bookingData.email}
+            We&apos;ve sent a confirmation email to <span className="font-medium">{bookingData.email}</span>
           </p>
         </div>
 
         {/* Booking Details Card */}
-        <Card className="card-premium card-glow overflow-hidden mb-6">
+        <Card className="border-primary/20 shadow-lg overflow-hidden animate-fade-in">
           <div className="bg-gradient-to-r from-primary to-primary/80 p-4 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -107,7 +112,7 @@ export default function BookingConfirmation() {
                   <p className="text-sm text-muted-foreground">Date</p>
                   <p className="font-semibold">
                     {bookingData.serviceDate &&
-                      format(new Date(bookingData.serviceDate + "T12:00:00"), "EEEE, MMMM d, yyyy")}
+                      format(new Date(bookingData.serviceDate + "T12:00:00"), "EEEE, MMMM d")}
                   </p>
                 </div>
               </div>
@@ -147,7 +152,7 @@ export default function BookingConfirmation() {
               <div>
                 <p className="text-sm text-muted-foreground">Home Details</p>
                 <p className="font-semibold">
-                  {bookingData.bedrooms} bed, {bookingData.bathrooms} bath • {bookingData.dwellingType}
+                  {homeSize?.label} • {bookingData.bedrooms} bed, {bookingData.bathrooms} bath
                 </p>
               </div>
             </div>
@@ -168,76 +173,117 @@ export default function BookingConfirmation() {
           </CardContent>
         </Card>
 
-        {/* What's Next */}
-        <Card className="card-premium mb-8">
+        {/* What Happens Next */}
+        <Card className="animate-fade-in">
           <CardContent className="p-6">
             <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
               <i className="ri-rocket-line text-primary"></i>
-              What&apos;s Next?
+              What happens next?
             </h3>
-            <ol className="space-y-4">
-              <li className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                  1
+            
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <i className="ri-mail-line text-primary"></i>
                 </div>
                 <div>
-                  <p className="font-medium">Check your email</p>
+                  <h4 className="font-semibold mb-1">Confirmation Email</h4>
                   <p className="text-sm text-muted-foreground">
-                    You&apos;ll receive booking confirmation and receipt
+                    We&apos;ve sent a confirmation email with all your booking details.
                   </p>
                 </div>
-              </li>
-              <li className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                  2
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <i className="ri-notification-line text-primary"></i>
                 </div>
                 <div>
-                  <p className="font-medium">We&apos;ll text you</p>
+                  <h4 className="font-semibold mb-1">Reminder</h4>
                   <p className="text-sm text-muted-foreground">
-                    Reminder the day before to confirm your appointment
+                    You&apos;ll receive a reminder 24 hours before your scheduled cleaning.
                   </p>
                 </div>
-              </li>
-              <li className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                  3
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <i className="ri-team-line text-primary"></i>
                 </div>
                 <div>
-                  <p className="font-medium">Our team arrives</p>
+                  <h4 className="font-semibold mb-1">Cleaning Day</h4>
                   <p className="text-sm text-muted-foreground">
-                    On time with all supplies and equipment
+                    Our premium team will arrive during your selected time window.
                   </p>
                 </div>
-              </li>
-            </ol>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Link href="/account" className="flex-1">
-            <Button className="w-full h-12 glow-primary-sm">
-              View My Account
-              <i className="ri-arrow-right-line ml-2"></i>
-            </Button>
-          </Link>
-          <Button variant="outline" className="flex-1 h-12" onClick={handleNewBooking}>
-            Book Another Cleaning
-          </Button>
-        </div>
+        {/* Account Creation CTA */}
+        <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20 animate-fade-in">
+          <CardContent className="p-6 text-center space-y-4">
+            <i className="ri-user-add-line text-primary text-3xl"></i>
+            <div>
+              <h3 className="font-semibold text-lg">Want to Manage Your Bookings?</h3>
+              <p className="text-sm text-muted-foreground">
+                Create an account to track bookings, manage payments, and update future appointments
+              </p>
+            </div>
+            <Link href="/auth">
+              <Button className="w-full max-w-xs">
+                <i className="ri-user-add-line mr-2"></i>
+                Create Account
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
 
-        {/* Referral */}
-        <div className="text-center mt-8">
-          <p className="text-sm text-muted-foreground mb-2">
-            <i className="ri-heart-fill text-red-500 mr-1"></i>
-            Love Novara? Share with friends and earn $25!
+        {/* Support Info */}
+        <div className="text-center space-y-4 animate-fade-in">
+          <p className="text-sm text-muted-foreground">
+            Need to make changes? Contact us at{" "}
+            <a href="mailto:support@novaracleaning.com" className="text-primary hover:underline">
+              support@novaracleaning.com
+            </a>
           </p>
-          <Button variant="ghost" size="sm" className="gap-2">
-            <i className="ri-share-line"></i>
-            Share & Earn
+          
+          {/* Desktop Button */}
+          <Button
+            size="lg"
+            className="hidden md:inline-flex h-14 px-8 text-base font-semibold"
+            onClick={handleReturnHome}
+          >
+            <i className="ri-home-line mr-2"></i>
+            Return to Home
           </Button>
         </div>
-      </main>
+      </div>
+
+      {/* Mobile Bottom Button */}
+      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-xl z-50 p-4 animate-slide-up">
+        <Button
+          size="lg"
+          className="w-full h-14 text-base font-semibold"
+          onClick={handleReturnHome}
+        >
+          <i className="ri-home-line mr-2"></i>
+          Return to Home
+        </Button>
+      </div>
     </div>
+  );
+}
+
+export default function BookingConfirmation() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <i className="ri-loader-4-line text-3xl animate-spin text-primary"></i>
+      </div>
+    }>
+      <ConfirmationContent />
+    </Suspense>
   );
 }

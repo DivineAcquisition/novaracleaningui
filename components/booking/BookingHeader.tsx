@@ -1,7 +1,6 @@
 "use client";
 
-import { Globe, Phone } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 interface BookingHeaderProps {
@@ -19,36 +18,29 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
         {/* Top Row: Logo and Actions */}
         <div className="flex items-center justify-between mb-4">
           {/* Logo */}
-          <div className="flex items-center">
-            <img 
-              src="/novara-logo.png" 
-              alt="Novara" 
-              className="h-12 w-12 rounded-lg object-contain"
-            />
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+              <i className="ri-sparkling-2-fill text-white text-lg"></i>
+            </div>
+            <span className="font-semibold text-lg hidden sm:block">NovaraCleaning</span>
+          </Link>
 
-          {/* Action Buttons - Always visible */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
-              onClick={() => window.open('/', '_blank')}
+            <Link 
+              href="/"
+              className="inline-flex items-center justify-center rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm border border-border hover:bg-muted transition-colors"
             >
-              <Globe className="w-3 h-3 sm:w-4 sm:h-4" />
+              <i className="ri-global-line text-sm"></i>
               <span className="hidden xs:inline">Website</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
-              asChild
+            </Link>
+            <a 
+              href="tel:+19725590223"
+              className="inline-flex items-center justify-center rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm border border-border hover:bg-muted transition-colors"
             >
-              <a href="tel:+19725590223">
-                <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden xs:inline">Call</span>
-              </a>
-            </Button>
+              <i className="ri-phone-line text-sm"></i>
+              <span className="hidden xs:inline">Call</span>
+            </a>
           </div>
         </div>
 

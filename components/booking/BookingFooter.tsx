@@ -25,7 +25,7 @@ export function BookingFooter() {
             </a>
           </div>
           <p className="text-center sm:text-right">
-            © 2025 NovaraCleaning. All Rights Reserved.
+            © {new Date().getFullYear()} NovaraCleaning. All Rights Reserved.
           </p>
         </div>
       </div>

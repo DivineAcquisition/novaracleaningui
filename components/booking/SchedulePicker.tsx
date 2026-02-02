@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar as CalendarIcon, Clock, ChevronRight, ChevronLeft, Loader2, Sun, Sunset, Moon } from "lucide-react";
 import { format, addDays, isWeekend, isBefore, startOfDay, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAvailability } from "@/hooks/use-availability";
@@ -39,9 +38,9 @@ const TIME_SLOTS = [
 ];
 
 const PERIOD_CONFIG = {
-  morning: { label: "Morning", icon: Sun, color: "text-amber-500" },
-  afternoon: { label: "Afternoon", icon: Sunset, color: "text-orange-500" },
-  evening: { label: "Evening", icon: Moon, color: "text-indigo-500" },
+  morning: { label: "Morning", icon: "ri-sun-line", color: "text-amber-500" },
+  afternoon: { label: "Afternoon", icon: "ri-sun-foggy-line", color: "text-orange-500" },
+  evening: { label: "Evening", icon: "ri-moon-line", color: "text-indigo-500" },
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -134,7 +133,7 @@ export function SchedulePicker({
     <Card className="border-primary/20 overflow-hidden shadow-lg">
       <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pb-4">
         <CardTitle className="text-xl flex items-center gap-2">
-          <CalendarIcon className="w-5 h-5 text-primary" />
+          <i className="ri-calendar-line text-primary"></i>
           Pick Your Date & Time
         </CardTitle>
         <CardDescription>
@@ -142,7 +141,7 @@ export function SchedulePicker({
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        {/* Step 1: Date Selection - Horizontal scroll card layout */}
+        {/* Step 1: Date Selection */}
         <div className="p-4 md:p-6 border-b">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold flex items-center gap-2">
@@ -157,7 +156,7 @@ export function SchedulePicker({
                 onClick={goToPreviousMonth}
                 disabled={isBefore(endOfMonth(addMonths(currentMonth, -1)), minDate)}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <i className="ri-arrow-left-s-line"></i>
               </Button>
               <span className="text-sm font-medium min-w-[120px] text-center">
                 {format(currentMonth, "MMMM yyyy")}
@@ -169,7 +168,7 @@ export function SchedulePicker({
                 onClick={goToNextMonth}
                 disabled={!isBefore(startOfMonth(addMonths(currentMonth, 1)), endDate)}
               >
-                <ChevronRight className="h-4 w-4" />
+                <i className="ri-arrow-right-s-line"></i>
               </Button>
             </div>
           </div>
@@ -232,7 +231,7 @@ export function SchedulePicker({
           
           {!selectedDate ? (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Clock className="w-10 h-10 mb-3 opacity-30" />
+              <i className="ri-time-line text-4xl mb-3 opacity-30"></i>
               <p className="text-sm">Select a date first to see available times</p>
             </div>
           ) : isLoading ? (
@@ -252,13 +251,12 @@ export function SchedulePicker({
             <div className="space-y-4">
               {(["morning", "afternoon", "evening"] as const).map((period) => {
                 const config = PERIOD_CONFIG[period];
-                const Icon = config.icon;
                 const slots = slotsByPeriod[period] || [];
                 
                 return (
                   <div key={period} className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Icon className={cn("w-4 h-4", config.color)} />
+                      <i className={cn(config.icon, config.color)}></i>
                       {config.label}
                     </div>
                     <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
@@ -306,13 +304,13 @@ export function SchedulePicker({
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-center md:text-left">
                 {isScheduleComplete ? (
-                  <div className="flex items-center gap-3 text-sm animate-scale-in">
+                  <div className="flex items-center gap-3 text-sm">
                     <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
+                      <i className="ri-calendar-line mr-1.5"></i>
                       {format(selectedDate!, "EEE, MMM d, yyyy")}
                     </Badge>
                     <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <Clock className="w-3.5 h-3.5 mr-1.5" />
+                      <i className="ri-time-line mr-1.5"></i>
                       {selectedTime}
                     </Badge>
                   </div>
@@ -326,20 +324,20 @@ export function SchedulePicker({
                 size="lg"
                 className={cn(
                   "w-full md:w-auto font-semibold min-w-[200px] transition-all",
-                  isScheduleComplete ? "bg-gradient-primary shadow-lg hover:shadow-xl" : "bg-muted text-muted-foreground"
+                  isScheduleComplete ? "shadow-lg hover:shadow-xl" : "bg-muted text-muted-foreground"
                 )}
                 onClick={onContinue}
                 disabled={!isScheduleComplete || continueDisabled || isProcessing}
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <i className="ri-loader-4-line animate-spin mr-2"></i>
                     Processing...
                   </>
                 ) : (
                   <>
                     Continue to Checkout
-                    <ChevronRight className="w-4 h-4 ml-1" />
+                    <i className="ri-arrow-right-s-line ml-1"></i>
                   </>
                 )}
               </Button>
