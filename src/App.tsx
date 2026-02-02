@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { DomainRouter } from "@/components/DomainRouter";
 import Index from "./pages/Index";
 import Demo from "./pages/Demo";
 import Auth from "./pages/Auth";
@@ -50,7 +51,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
-            <Routes>
+            <DomainRouter>
+              <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
               <Route path="/auth" element={<Auth />} />
@@ -97,6 +99,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </DomainRouter>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>

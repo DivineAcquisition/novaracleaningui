@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import logo from "@/assets/logo.png";
+import { isContractorDomain } from "@/components/DomainRouter";
 
 const emailSchema = z.string().trim().email({ message: "Invalid email address" });
 const passwordSchema = z.string().min(6, { message: "Password must be at least 6 characters" });
@@ -21,6 +22,7 @@ export default function CleanerAuth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const isContractor = isContractorDomain();
 
   useEffect(() => {
     // If user is already logged in, redirect to cleaner dashboard
@@ -320,9 +322,11 @@ export default function CleanerAuth() {
                 <Link to="/cleaner/reset-password" className="text-primary hover:underline font-medium">
                   Forgot password?
                 </Link>
-                <Link to="/auth" className="text-muted-foreground hover:text-primary font-medium">
-                  Customer Login
-                </Link>
+                {!isContractor && (
+                  <Link to="/auth" className="text-muted-foreground hover:text-primary font-medium">
+                    Customer Login
+                  </Link>
+                )}
               </div>
               
               <div className="w-full pt-2 border-t">

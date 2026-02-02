@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Mail, Sparkles, KeyRound, ArrowLeft, DollarSign, Calendar, Shield } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { isContractorDomain } from "@/components/DomainRouter";
 
 export default function OnboardingLanding() {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function OnboardingLanding() {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const isContractor = isContractorDomain();
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -305,11 +307,13 @@ export default function OnboardingLanding() {
           </CardContent>
         </Card>
 
-        <div className="text-center text-xs text-muted-foreground">
-          <Link to="/" className="text-primary hover:underline">
-            ← Back to Home
-          </Link>
-        </div>
+        {!isContractor && (
+          <div className="text-center text-xs text-muted-foreground">
+            <Link to="/" className="text-primary hover:underline">
+              ← Back to Home
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
