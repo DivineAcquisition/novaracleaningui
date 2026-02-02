@@ -38,8 +38,10 @@ import MobileDashboard from "./pages/cleaner/MobileDashboard";
 import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
+import AdminAuth from "./pages/admin/Auth";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DomainRestricted } from "./components/auth/DomainRestricted";
+import { DomainRouter } from "./components/auth/DomainRouter";
 
 // Allowed domains for the public booking flow
 const BOOKING_ALLOWED_DOMAINS = ['try.novaracleaning.com'];
@@ -55,6 +57,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <BookingProvider>
+            <DomainRouter>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
@@ -113,6 +116,7 @@ const App = () => (
                   <CustomQuote />
                 </DomainRestricted>
               } />
+              <Route path="/admin/auth" element={<AdminAuth />} />
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
               <Route path="/admin/webhook-tester" element={<ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>} />
@@ -137,6 +141,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </DomainRouter>
           </BookingProvider>
         </AuthProvider>
       </BrowserRouter>
