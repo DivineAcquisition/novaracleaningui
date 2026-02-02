@@ -76,23 +76,20 @@ export default function UpdatePassword() {
 
   if (passwordUpdated) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
-        <Card className="max-w-md w-full shadow-xl border-primary/20">
-          <CardContent className="pt-6">
-            <div className="space-y-6 text-center">
-              <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
-                <CheckCircle2 className="w-8 h-8 text-white" />
+      <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
+        <Card className="max-w-sm w-full shadow-xl border-primary/20">
+          <CardContent className="pt-5 pb-5">
+            <div className="space-y-4 text-center">
+              <div className="mx-auto w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
+                <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Password Updated!</h2>
-                <p className="text-muted-foreground">
-                  Your password has been successfully updated.
-                </p>
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold">Password Updated!</h2>
                 <p className="text-sm text-muted-foreground">
                   Redirecting to your account...
                 </p>
               </div>
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+              <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" />
             </div>
           </CardContent>
         </Card>
@@ -101,28 +98,28 @@ export default function UpdatePassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
-      <Card className="max-w-md w-full shadow-xl border-primary/20">
-        <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-3xl font-bold">Update Password</CardTitle>
-          <CardDescription className="text-base">
-            Choose a new password for your account
+    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
+      <Card className="max-w-sm w-full shadow-xl border-primary/20">
+        <CardHeader className="text-center space-y-1 pb-3 pt-5">
+          <CardTitle className="text-2xl font-bold">Update Password</CardTitle>
+          <CardDescription className="text-sm">
+            Choose a new password
           </CardDescription>
         </CardHeader>
         
-        <CardContent>
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">New Password</Label>
+        <CardContent className="px-5 pb-5">
+          <form onSubmit={handleUpdatePassword} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-sm">New Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 h-12"
+                  className="pl-9 pr-9 h-10"
                   disabled={isLoading}
                   required
                 />
@@ -131,18 +128,18 @@ export default function UpdatePassword() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               {password && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Password strength:</span>
+                    <span className="text-muted-foreground">Strength:</span>
                     <span className="font-medium">{passwordStrength.label}</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
+                  <div className="w-full bg-muted rounded-full h-1.5">
                     <div
-                      className={`h-2 rounded-full transition-all ${passwordStrength.color}`}
+                      className={`h-1.5 rounded-full transition-all ${passwordStrength.color}`}
                       style={{ width: `${passwordStrength.strength}%` }}
                     />
                   </div>
@@ -150,17 +147,17 @@ export default function UpdatePassword() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="confirm-password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10 h-12"
+                  className="pl-9 h-10"
                   disabled={isLoading}
                   required
                 />
@@ -172,13 +169,14 @@ export default function UpdatePassword() {
 
             <Button
               type="submit"
-              className="w-full h-12 bg-gradient-primary hover:opacity-90 shadow-lavender"
+              className="w-full"
+              size="lg"
               disabled={isLoading || password !== confirmPassword}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                  Updating password...
+                  <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                  Updating...
                 </>
               ) : (
                 "Update Password"
@@ -186,7 +184,7 @@ export default function UpdatePassword() {
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">
-              Password must be at least 6 characters long
+              Min. 6 characters
             </p>
           </form>
         </CardContent>

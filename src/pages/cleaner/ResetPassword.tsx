@@ -45,53 +45,50 @@ export default function CleanerResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
-      <Card className="max-w-md w-full shadow-xl border-primary/20">
-        <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-3xl font-bold">Reset Password</CardTitle>
-          <CardDescription className="text-base">
+    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
+      <Card className="max-w-sm w-full shadow-xl border-primary/20">
+        <CardHeader className="text-center space-y-1 pb-3 pt-5">
+          <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
+          <CardDescription className="text-sm">
             {emailSent 
               ? "Check your email for the reset link"
-              : "Enter your email to receive a password reset link"
+              : "We'll send you a reset link"
             }
           </CardDescription>
         </CardHeader>
         
-        <CardContent>
+        <CardContent className="px-5 pb-5">
           {emailSent ? (
-            <div className="space-y-6 text-center">
-              <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
-                <CheckCircle2 className="w-8 h-8 text-white" />
+            <div className="space-y-4 text-center">
+              <div className="mx-auto w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
+                <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
-              <div className="space-y-2">
-                <p className="font-medium">Email sent successfully!</p>
-                <p className="text-sm text-muted-foreground">
-                  We've sent a password reset link to <strong>{email}</strong>
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Please check your inbox and click the link to reset your password.
+              <div className="space-y-1">
+                <p className="font-medium text-sm">Email sent!</p>
+                <p className="text-xs text-muted-foreground">
+                  Reset link sent to <strong>{email}</strong>
                 </p>
               </div>
               <Link to="/cleaner/auth">
-                <Button variant="outline" className="w-full">
-                  <ArrowLeft className="mr-2 w-4 h-4" />
+                <Button variant="outline" className="w-full" size="sm">
+                  <ArrowLeft className="mr-1 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>
             </div>
           ) : (
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+            <form onSubmit={handleResetPassword} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 h-12"
+                    className="pl-9 h-10"
                     disabled={isLoading}
                     required
                   />
@@ -100,13 +97,14 @@ export default function CleanerResetPassword() {
 
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-primary hover:opacity-90 shadow-lavender"
+                className="w-full"
+                size="lg"
                 disabled={isLoading}
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                    Sending reset link...
+                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                    Sending...
                   </>
                 ) : (
                   "Send Reset Link"
@@ -114,8 +112,8 @@ export default function CleanerResetPassword() {
               </Button>
 
               <Link to="/cleaner/auth">
-                <Button variant="ghost" className="w-full">
-                  <ArrowLeft className="mr-2 w-4 h-4" />
+                <Button variant="ghost" className="w-full" size="sm">
+                  <ArrowLeft className="mr-1 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>
