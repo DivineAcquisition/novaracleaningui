@@ -29,22 +29,46 @@ export default function OnboardingLanding() {
     }
 
     setIsLoading(true);
-    console.log("[LANDING] Sending verification code to:", email);
+    console.log("[LANDING] Checking if email exists:", email);
 
     try {
-      const { error } = await supabase.functions.invoke('send-cleaner-verification-code', {
-        body: { email, firstName: "" }
+      // First check if this email already has a cleaner profile
+      const { data: existingCleaner } = await supabase
+        .from("cleaners")
+        .select("id, onboarding_complete")
+        .eq("email", email.toLowerCase().trim())
+        .maybeSingle();
+
+      if (existingCleaner) {
+        console.log("[LANDING] Cleaner profile already exists for:", email);
+        toast.error("An account with this email already exists. Please sign in instead.");
+        setIsLoading(false);
+        // Redirect to sign in after a short delay
+        setTimeout(() => {
+          navigate("/cleaner/auth");
+        }, 1500);
+        return;
+      }
+
+      console.log("[LANDING] Sending verification code to:", email);
+
+      const { data, error } = await supabase.functions.invoke('send-cleaner-verification-code', {
+        body: { email: email.toLowerCase().trim(), firstName: "" }
       });
 
-      console.log("[LANDING] Send code response:", { error });
+      console.log("[LANDING] Send code response:", { data, error });
 
       if (error) {
         console.error("[LANDING] Failed to send code:", error);
         
-        if (error.message?.includes("email")) {
+        // Check for specific error types
+        const errorMsg = error.message || "";
+        if (errorMsg.includes("email") || errorMsg.includes("invalid")) {
           toast.error("Invalid email address. Please check and try again.");
+        } else if (errorMsg.includes("rate") || errorMsg.includes("limit")) {
+          toast.error("Too many attempts. Please wait a few minutes and try again.");
         } else {
-          toast.error(error.message || "Failed to send verification code");
+          toast.error("Failed to send verification code. Please try again.");
         }
         return;
       }
@@ -52,9 +76,15 @@ export default function OnboardingLanding() {
       console.log("[LANDING] Verification code sent successfully");
       setStep('code');
       toast.success("Check your email for the 6-digit code!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("[LANDING] Email verification exception:", error);
-      toast.error("Connection error. Please check your internet and try again.");
+      
+      // More specific error handling
+      if (error?.message?.includes("fetch") || error?.message?.includes("network")) {
+        toast.error("Connection error. Please check your internet and try again.");
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +103,7 @@ export default function OnboardingLanding() {
 
     try {
       const { data, error } = await supabase.functions.invoke('verify-cleaner-code', {
-        body: { email, code }
+        body: { email: email.toLowerCase().trim(), code }
       });
 
       console.log("[LANDING] Verification response:", {
@@ -84,12 +114,15 @@ export default function OnboardingLanding() {
       if (error || !data?.access_token || !data?.refresh_token) {
         console.error("[LANDING] Verification failed:", error);
         
-        if (error?.message?.includes("expired")) {
+        const errorMsg = error?.message || "";
+        if (errorMsg.includes("expired")) {
           toast.error("Code expired. Please request a new one.");
-        } else if (error?.message?.includes("already used")) {
+        } else if (errorMsg.includes("already used") || errorMsg.includes("used")) {
           toast.error("Code already used. Please request a new one.");
+        } else if (errorMsg.includes("Invalid")) {
+          toast.error("Invalid code. Please check and try again.");
         } else {
-          toast.error(error?.message || "Invalid code. Please try again.");
+          toast.error("Verification failed. Please try again.");
         }
         return;
       }
@@ -109,6 +142,30 @@ export default function OnboardingLanding() {
       }
 
       console.log("[LANDING] Session established successfully");
+
+      // Check if this user already has a cleaner profile
+      const { data: existingCleaner } = await supabase
+        .from("cleaners")
+        .select("id, onboarding_complete")
+        .eq("email", email.toLowerCase().trim())
+        .maybeSingle();
+
+      if (existingCleaner) {
+        // User already has a profile, redirect appropriately
+        if (existingCleaner.onboarding_complete) {
+          toast.success("Welcome back! Redirecting to dashboard...");
+          setTimeout(() => {
+            navigate("/cleaner/dashboard");
+          }, 500);
+        } else {
+          toast.success("Continuing your onboarding...");
+          setTimeout(() => {
+            navigate("/cleaner/onboarding");
+          }, 500);
+        }
+        return;
+      }
+
       toast.success("Email verified! Redirecting to onboarding...");
       
       // Small delay to ensure session is fully established
@@ -117,7 +174,7 @@ export default function OnboardingLanding() {
         navigate("/cleaner/onboarding");
       }, 500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("[LANDING] Code verification exception:", error);
       toast.error("Connection error. Please check your internet and try again.");
     } finally {

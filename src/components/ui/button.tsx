@@ -5,21 +5,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground border-t-2 border-t-white/40 border-b-2 border-b-black/20 border-x-0 hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground border-t-2 border-t-white/30 border-b-2 border-b-black/20 border-x-0 hover:bg-destructive/90",
-        outline: "border-2 border-border bg-background border-t-white/60 hover:bg-accent/50 hover:border-primary/40",
-        secondary: "bg-secondary text-secondary-foreground border-t-2 border-t-white/50 border-b-2 border-b-black/10 border-x-0 hover:bg-secondary/80",
+        default: "bg-gradient-to-b from-primary via-primary to-primary/90 text-primary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),inset_0_-1px_0_0_rgba(0,0,0,0.1),0_1px_3px_0_rgba(0,0,0,0.1)] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),inset_0_-1px_0_0_rgba(0,0,0,0.15),0_2px_4px_0_rgba(0,0,0,0.15)] active:shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.15)]",
+        destructive: "bg-gradient-to-b from-destructive via-destructive to-destructive/90 text-destructive-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),inset_0_-1px_0_0_rgba(0,0,0,0.1),0_1px_3px_0_rgba(0,0,0,0.1)] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_2px_4px_0_rgba(0,0,0,0.15)]",
+        outline: "border-2 border-border bg-background shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_1px_2px_0_rgba(0,0,0,0.05)] hover:bg-accent/50 hover:border-primary/40",
+        secondary: "bg-gradient-to-b from-secondary via-secondary to-secondary/90 text-secondary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.5),inset_0_-1px_0_0_rgba(0,0,0,0.05),0_1px_2px_0_rgba(0,0,0,0.05)] hover:from-secondary/90 hover:to-secondary/80",
         ghost: "hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline hover:text-primary-hover",
       },
       size: {
         default: "h-10 px-5 py-2.5",
-        sm: "h-8 rounded-md px-3 py-1.5 text-xs",
-        lg: "h-11 rounded-lg px-6 py-3",
+        sm: "h-8 rounded-lg px-3 py-1.5 text-xs",
+        lg: "h-11 rounded-xl px-6 py-3",
         icon: "h-10 w-10",
       },
     },

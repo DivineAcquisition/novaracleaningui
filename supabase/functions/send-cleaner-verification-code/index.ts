@@ -31,36 +31,66 @@ serve(async (req) => {
       throw new Error("Email is required");
     }
 
-    logStep("Generating verification code", { email });
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Invalid email format");
+    }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    const normalizedEmail = email.toLowerCase().trim();
+    logStep("Generating verification code", { email: normalizedEmail });
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseKey) {
+      logStep("Missing Supabase configuration");
+      throw new Error("Server configuration error");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Generate 6-digit code
     const code = generateCode();
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes expiry
 
+    // Delete any existing unused codes for this email to prevent duplicates
+    await supabase
+      .from("cleaner_verification_codes")
+      .delete()
+      .eq("email", normalizedEmail)
+      .eq("used", false);
+
     // Store code in database
     const { error: insertError } = await supabase
       .from("cleaner_verification_codes")
       .insert({
-        email,
+        email: normalizedEmail,
         code,
         expires_at: expiresAt.toISOString(),
         used: false,
       });
 
     if (insertError) {
+      logStep("Database insert error", { error: insertError.message, code: insertError.code });
+      // If table doesn't exist or other DB error, provide helpful message
+      if (insertError.code === "42P01") {
+        throw new Error("Service temporarily unavailable. Please try again later.");
+      }
       throw new Error(`Failed to store verification code: ${insertError.message}`);
     }
 
-    logStep("Code stored in database", { email, expiresAt });
+    logStep("Code stored in database", { email: normalizedEmail, expiresAt });
 
     // Send email with verification code
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendApiKey) {
+      logStep("Missing RESEND_API_KEY");
+      throw new Error("Email service not configured");
+    }
+    
+    const resend = new Resend(resendApiKey);
     
     let html = "";
     try {
@@ -77,14 +107,23 @@ serve(async (req) => {
     } catch (error) {
       const renderError = error instanceof Error ? error : new Error(String(error));
       logStep("Render error", { error: renderError.message });
-      throw new Error(`Failed to render email: ${renderError.message}`);
+      // Fallback to simple HTML
+      html = `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>Your Verification Code</h2>
+          <p>Hi ${firstName || "there"},</p>
+          <p>Your Novara Cleaning verification code is:</p>
+          <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #7C3AED;">${code}</p>
+          <p>This code expires in 15 minutes.</p>
+        </div>
+      `;
     }
 
     const text = `Your Novara verification code is ${code}. It expires in 15 minutes.`;
 
     // Debug mode: return HTML without sending
     if (debug) {
-      logStep("Debug mode: returning HTML without sending", { email });
+      logStep("Debug mode: returning HTML without sending", { email: normalizedEmail });
       return new Response(
         JSON.stringify({ 
           success: true,
@@ -100,20 +139,26 @@ serve(async (req) => {
       );
     }
 
-    const { error: emailError } = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
-      to: [email],
-      subject: "Your Cleaner Verification Code",
-      html,
-      text,
-    });
+    try {
+      const { error: emailError } = await resend.emails.send({
+        from: "Novara Cleaning <hello@novaracleaning.com>",
+        to: [normalizedEmail],
+        subject: "Your Cleaner Verification Code",
+        html,
+        text,
+      });
 
-    if (emailError) {
-      logStep("Email send failed", { error: emailError });
-      throw new Error(`Failed to send email: ${emailError.message}`);
+      if (emailError) {
+        logStep("Email send failed", { error: emailError });
+        throw new Error(`Failed to send email: ${emailError.message}`);
+      }
+    } catch (emailException) {
+      const emailError = emailException instanceof Error ? emailException : new Error(String(emailException));
+      logStep("Email exception", { error: emailError.message });
+      throw new Error("Failed to send verification email. Please try again.");
     }
 
-    logStep("Verification email sent successfully", { email });
+    logStep("Verification email sent successfully", { email: normalizedEmail });
 
     return new Response(
       JSON.stringify({ 
