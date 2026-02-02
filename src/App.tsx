@@ -39,6 +39,10 @@ import MobileJobOffers from "./pages/cleaner/MobileJobOffers";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { DomainRestricted } from "./components/auth/DomainRestricted";
+
+// Allowed domains for the public booking flow
+const BOOKING_ALLOWED_DOMAINS = ['try.novaracleaning.com'];
 
 const queryClient = new QueryClient();
 
@@ -61,13 +65,40 @@ const App = () => (
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               
-              {/* New simplified booking flow */}
-              <Route path="/book/zip" element={<BookingZip />} />
-              <Route path="/book/sqft" element={<BookingHome />} />
-              <Route path="/book/offer" element={<BookingOffer />} />
-              <Route path="/book/checkout" element={<BookingCheckout />} />
-              <Route path="/book/details" element={<PropertyDetails />} />
-              <Route path="/book/confirmation" element={<BookingSuccess />} />
+              {/* Public booking flow - ONLY accessible from try.novaracleaning.com */}
+              <Route path="/book/zip" element={
+                <DomainRestricted 
+                  allowedDomains={BOOKING_ALLOWED_DOMAINS}
+                  fallbackMessage="The booking flow is only available on try.novaracleaning.com"
+                >
+                  <BookingZip />
+                </DomainRestricted>
+              } />
+              <Route path="/book/sqft" element={
+                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                  <BookingHome />
+                </DomainRestricted>
+              } />
+              <Route path="/book/offer" element={
+                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                  <BookingOffer />
+                </DomainRestricted>
+              } />
+              <Route path="/book/checkout" element={
+                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                  <BookingCheckout />
+                </DomainRestricted>
+              } />
+              <Route path="/book/details" element={
+                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                  <PropertyDetails />
+                </DomainRestricted>
+              } />
+              <Route path="/book/confirmation" element={
+                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                  <BookingSuccess />
+                </DomainRestricted>
+              } />
               
               {/* Legacy redirects for backwards compatibility */}
               <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
@@ -77,7 +108,11 @@ const App = () => (
               <Route path="/book/success" element={<Navigate to="/book/confirmation" replace />} />
               <Route path="/book/additional-details" element={<Navigate to="/book/details" replace />} />
               
-              <Route path="/book/custom-quote" element={<CustomQuote />} />
+              <Route path="/book/custom-quote" element={
+                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                  <CustomQuote />
+                </DomainRestricted>
+              } />
               <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
               <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
               <Route path="/admin/webhook-tester" element={<ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>} />
