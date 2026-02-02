@@ -28,6 +28,7 @@ import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
 import CleanerAuth from "./pages/cleaner/Auth";
+import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerProfile from "./pages/cleaner/Profile";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
@@ -124,6 +125,7 @@ const App = () => (
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin/intake" element={<BookingIntake />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
+              <Route path="/cleaner/auth/callback" element={<CleanerAuthCallback />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
               <Route path="/cleaner/mobile-dashboard" element={<MobileDashboard />} />

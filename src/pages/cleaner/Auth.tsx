@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,41 +16,58 @@ const passwordSchema = z.string().min(6, "Password must be at least 6 characters
 
 export default function CleanerAuth() {
   const navigate = useNavigate();
-  const { user, signIn, signUp, signInWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // Check for existing session on mount
   useEffect(() => {
-    if (user) {
-      checkCleanerProfile();
-    }
-  }, [user]);
+    checkExistingSession();
+  }, []);
 
-  const checkCleanerProfile = async () => {
-    if (!user) return;
-
+  const checkExistingSession = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // User is already logged in, check if they have a cleaner profile
+        await handlePostAuth(session.user.id);
+      }
+    } catch (error) {
+      console.error("Session check error:", error);
+    } finally {
+      setIsCheckingSession(false);
+    }
+  };
+
+  const handlePostAuth = async (userId: string) => {
+    try {
+      // Check if user has a cleaner profile
+      const { data: cleaner, error } = await supabase
         .from("cleaners")
         .select("id, onboarding_complete")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error checking cleaner profile:", error);
+        return;
+      }
 
-      if (data) {
-        if (!data.onboarding_complete) {
-          navigate("/cleaner/onboarding");
+      if (cleaner) {
+        // Has cleaner profile
+        if (cleaner.onboarding_complete) {
+          navigate("/cleaner/dashboard", { replace: true });
         } else {
-          navigate("/cleaner/dashboard");
+          navigate("/cleaner/onboarding", { replace: true });
         }
       } else {
-        // User exists but no cleaner profile - redirect to onboarding
-        navigate("/cleaner/onboarding");
+        // No cleaner profile - redirect to onboarding to create one
+        navigate("/cleaner/onboarding", { replace: true });
       }
-    } catch (error: any) {
-      console.error("Error checking cleaner profile:", error);
+    } catch (error) {
+      console.error("Post-auth error:", error);
     }
   };
 
@@ -75,22 +91,32 @@ export default function CleanerAuth() {
     
     setIsLoading(true);
     
-    const { error } = await signIn(email, password);
-    
-    if (error) {
-      if (error.message.includes("Invalid login credentials")) {
-        toast.error("Invalid email or password");
-      } else if (error.message.includes("Email not confirmed")) {
-        toast.error("Please check your email and confirm your account.");
-      } else {
-        toast.error(error.message || "Failed to sign in");
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          toast.error("Invalid email or password");
+        } else if (error.message.includes("Email not confirmed")) {
+          toast.error("Please check your email and confirm your account.");
+        } else {
+          toast.error(error.message || "Failed to sign in");
+        }
+        return;
       }
-    } else {
-      toast.success("Welcome back!");
-      // checkCleanerProfile will be called by useEffect when user state updates
+
+      if (data.user) {
+        toast.success("Welcome back!");
+        await handlePostAuth(data.user.id);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -100,25 +126,76 @@ export default function CleanerAuth() {
     
     setIsLoading(true);
     
-    const { data, error } = await signUp(email, password);
-    
-    if (error) {
-      if (error.message.includes("already registered")) {
-        toast.error("This email is already registered. Please sign in instead.");
-      } else {
-        toast.error(error.message || "Failed to sign up");
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Redirect to cleaner onboarding after email verification
+          emailRedirectTo: `${window.location.origin}/cleaner/onboarding`,
+          data: {
+            is_cleaner: true,
+          },
+        },
+      });
+      
+      if (error) {
+        if (error.message.includes("already registered")) {
+          toast.error("This email is already registered. Please sign in instead.");
+        } else {
+          toast.error(error.message || "Failed to sign up");
+        }
+        return;
       }
-    } else if (data?.user?.identities?.length === 0) {
-      toast.error("This email is already registered. Please sign in or reset your password.");
-    } else if (data?.user && !data?.session) {
-      toast.success("Account created! Please check your email to verify your account.");
-    } else if (data?.session) {
-      toast.success("Account created! Complete your profile to get started.");
-      navigate("/cleaner/onboarding");
+
+      if (data?.user?.identities?.length === 0) {
+        toast.error("This email is already registered. Please sign in or reset your password.");
+      } else if (data?.user && !data?.session) {
+        toast.success("Account created! Please check your email to verify your account.");
+      } else if (data?.session) {
+        toast.success("Account created! Complete your profile to get started.");
+        navigate("/cleaner/onboarding", { replace: true });
+      }
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // IMPORTANT: Redirect to cleaner-specific callback, not customer callback
+          redirectTo: `${window.location.origin}/cleaner/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        toast.error(error.message || "Failed to sign in with Google");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    }
+  };
+
+  // Show loading while checking session
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Checking session...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
@@ -136,7 +213,8 @@ export default function CleanerAuth() {
             type="button"
             variant="outline"
             className="w-full h-10 mb-4"
-            onClick={signInWithGoogle}
+            onClick={handleGoogleSignIn}
+            disabled={isLoading}
           >
             <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
