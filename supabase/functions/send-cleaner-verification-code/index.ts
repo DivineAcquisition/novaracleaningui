@@ -56,30 +56,46 @@ serve(async (req) => {
     expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes expiry
 
     // Delete any existing unused codes for this email to prevent duplicates
-    await supabase
+    const { error: deleteError } = await supabase
       .from("cleaner_verification_codes")
       .delete()
       .eq("email", normalizedEmail)
       .eq("used", false);
+    
+    if (deleteError) {
+      logStep("Delete old codes warning (non-fatal)", { error: deleteError.message });
+      // Continue anyway - this is not critical
+    }
 
     // Store code in database
-    const { error: insertError } = await supabase
+    const { data: insertData, error: insertError } = await supabase
       .from("cleaner_verification_codes")
       .insert({
         email: normalizedEmail,
         code,
         expires_at: expiresAt.toISOString(),
         used: false,
-      });
+      })
+      .select()
+      .single();
 
     if (insertError) {
-      logStep("Database insert error", { error: insertError.message, code: insertError.code });
+      logStep("Database insert error", { 
+        error: insertError.message, 
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint
+      });
       // If table doesn't exist or other DB error, provide helpful message
       if (insertError.code === "42P01") {
-        throw new Error("Service temporarily unavailable. Please try again later.");
+        throw new Error("Database table not found. Please contact support.");
+      } else if (insertError.code === "42501") {
+        throw new Error("Database permission error. Please contact support.");
       }
-      throw new Error(`Failed to store verification code: ${insertError.message}`);
+      throw new Error(`Database error: ${insertError.message}`);
     }
+    
+    logStep("Code inserted successfully", { id: insertData?.id });
 
     logStep("Code stored in database", { email: normalizedEmail, expiresAt });
 
@@ -142,10 +158,14 @@ serve(async (req) => {
     try {
       logStep("Attempting to send email via Resend", { to: normalizedEmail });
       
+      // Use Resend's test domain for reliability, or custom domain if verified
+      const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "Novara Cleaning <onboarding@resend.dev>";
+      logStep("Using from email", { from: fromEmail });
+      
       const emailResult = await resend.emails.send({
-        from: "Novara Cleaning <hello@novaracleaning.com>",
+        from: fromEmail,
         to: [normalizedEmail],
-        subject: "Your Cleaner Verification Code",
+        subject: "Your Novara Cleaning Verification Code",
         html,
         text,
       });
