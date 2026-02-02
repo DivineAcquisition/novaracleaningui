@@ -103,24 +103,24 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
-      <Card className="max-w-md w-full shadow-xl border-primary/20">
-        <CardHeader className="text-center space-y-2">
-          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-16 h-16 rounded-2xl mb-4 shadow-lavender" />
-          <CardTitle className="text-3xl font-bold">Welcome</CardTitle>
-          <CardDescription className="text-base">
-            Sign in to manage your bookings and subscriptions
+    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
+      <Card className="max-w-sm w-full shadow-xl border-primary/20">
+        <CardHeader className="text-center space-y-1 pb-3 pt-5">
+          <img src={logo} alt="NovaraCleaning Logo" className="mx-auto w-12 h-12 rounded-xl mb-2 shadow-lavender" />
+          <CardTitle className="text-2xl font-bold">Welcome</CardTitle>
+          <CardDescription className="text-sm">
+            Sign in to manage your bookings
           </CardDescription>
         </CardHeader>
         
-        <CardContent>
+        <CardContent className="px-5 pb-5">
           <Button
             type="button"
             variant="outline"
-            className="w-full h-12 mb-6"
+            className="w-full h-10 mb-4"
             onClick={signInWithGoogle}
           >
-            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -129,51 +129,51 @@ export default function Auth() {
             Continue with Google
           </Button>
           
-          <div className="relative my-6">
+          <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+              <span className="bg-background px-2 text-muted-foreground">Or</span>
             </div>
           </div>
 
-          <Tabs defaultValue="signin" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+          <Tabs defaultValue="signin" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2 h-9">
+              <TabsTrigger value="signin" className="text-sm">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="text-sm">Sign Up</TabsTrigger>
             </TabsList>
             
             <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
+              <form onSubmit={handleSignIn} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="signin-email" className="text-sm">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signin-email"
                       type="email"
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12"
+                      className="pl-9 h-10"
                       disabled={isLoading}
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="signin-password" className="text-sm">Password</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signin-password"
                       type="password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 h-12"
+                      className="pl-9 h-10"
                       disabled={isLoading}
                       required
                     />
@@ -181,19 +181,20 @@ export default function Auth() {
                 </div>
 
                 <div className="text-right">
-                  <Link to="/reset-password" className="text-sm text-primary hover:underline">
+                  <Link to="/reset-password" className="text-xs text-primary hover:underline">
                     Forgot Password?
                   </Link>
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full h-12 bg-gradient-primary hover:opacity-90 shadow-lavender"
+                  className="w-full"
+                  size="lg"
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                      <Loader2 className="mr-2 w-4 h-4 animate-spin" />
                       Signing in...
                     </>
                   ) : (
@@ -204,53 +205,54 @@ export default function Auth() {
             </TabsContent>
             
             <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+              <form onSubmit={handleSignUp} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="signup-email" className="text-sm">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signup-email"
                       type="email"
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12"
+                      className="pl-9 h-10"
                       disabled={isLoading}
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="signup-password" className="text-sm">Password</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
                       type="password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 h-12"
+                      className="pl-9 h-10"
                       disabled={isLoading}
                       required
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Password must be at least 6 characters
+                    Min. 6 characters
                   </p>
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full h-12 bg-gradient-primary hover:opacity-90 shadow-lavender"
+                  className="w-full"
+                  size="lg"
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                      Creating account...
+                      <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                      Creating...
                     </>
                   ) : (
                     "Create Account"

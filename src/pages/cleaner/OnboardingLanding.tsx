@@ -146,32 +146,29 @@ export default function OnboardingLanding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md border-border/50 shadow-lg">
-        <CardHeader className="text-center space-y-3">
-          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+      <Card className="w-full max-w-sm border-border/50 shadow-lg">
+        <CardHeader className="text-center space-y-2 pb-4 pt-5">
+          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
             {step === 'code' ? (
-              <KeyRound className="w-8 h-8 text-primary" />
+              <KeyRound className="w-6 h-6 text-primary" />
             ) : (
-              <Sparkles className="w-8 h-8 text-primary" />
+              <Sparkles className="w-6 h-6 text-primary" />
             )}
           </div>
-          <CardTitle className="text-3xl font-bold">
-            {step === 'code' ? "Enter Verification Code" : "Join Our Team"}
+          <CardTitle className="text-2xl font-bold">
+            {step === 'code' ? "Verify Email" : "Join Our Team"}
           </CardTitle>
-          <CardDescription className="text-base">
+          <CardDescription className="text-sm">
             {step === 'code'
-              ? "Enter the 6-digit code sent to your email"
-              : "Enter your email to begin the onboarding process"
+              ? "Enter the 6-digit code we sent"
+              : "Start your journey as a Novara cleaner"
             }
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 pb-5">
           {step === 'code' ? (
-            <form onSubmit={handleCodeVerify} className="space-y-6">
-              <div className="space-y-4">
-                <Label htmlFor="code" className="text-sm font-medium text-center block">
-                  Verification Code
-                </Label>
+            <form onSubmit={handleCodeVerify} className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex justify-center">
                   <InputOTP maxLength={6} value={code} onChange={setCode}>
                     <InputOTPGroup>
@@ -185,85 +182,80 @@ export default function OnboardingLanding() {
                   </InputOTP>
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  Sent to {email}. Expires in 15 minutes.
+                  Sent to {email}
                 </p>
               </div>
 
               <Button
                 type="submit"
-                className="w-full h-12 text-lg"
+                className="w-full"
+                size="lg"
                 disabled={verifying || code.length !== 6}
               >
                 {verifying ? "Verifying..." : "Verify Code"}
               </Button>
 
-              <div className="space-y-2">
+              <div className="flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleUseDifferentEmail}
-                  className="w-full"
+                  className="flex-1"
+                  size="sm"
                   disabled={verifying}
                 >
-                  Use Different Email
+                  Change Email
                 </Button>
 
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={handleResendCode}
-                  className="w-full"
+                  className="flex-1"
+                  size="sm"
                   disabled={isLoading || verifying}
                 >
-                  {isLoading ? "Sending..." : "Resend Code"}
+                  {isLoading ? "Sending..." : "Resend"}
                 </Button>
               </div>
             </form>
           ) : (
-            <form onSubmit={handleEmailSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email Address
-                </Label>
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm">Email Address</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your.email@example.com"
-                    className="pl-10 h-12"
+                    className="pl-9 h-10"
                     disabled={isLoading}
                     autoFocus
                     required
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  We'll send you a 6-digit verification code
+                  We'll send a verification code
                 </p>
               </div>
 
               <Button
                 type="submit"
-                className="w-full h-12 text-lg"
+                className="w-full"
+                size="lg"
                 disabled={isLoading || !email}
               >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin">⏳</span>
-                    Sending Code...
-                  </span>
-                ) : (
-                  "Continue"
-                )}
+                {isLoading ? "Sending Code..." : "Continue"}
               </Button>
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t border-border" />
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
+                <div className="relative flex justify-center text-xs">
                   <span className="bg-card px-2 text-muted-foreground">
                     Already have an account?
                   </span>
@@ -275,6 +267,7 @@ export default function OnboardingLanding() {
                 variant="outline"
                 onClick={() => navigate("/cleaner/auth")}
                 className="w-full"
+                size="sm"
                 disabled={isLoading}
               >
                 Sign In
