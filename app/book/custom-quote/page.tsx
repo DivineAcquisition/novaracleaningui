@@ -2,25 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Home,
-  Phone,
-  Mail,
-  User,
-  CheckCircle,
-  Loader2,
-  ArrowLeft,
-  Building,
-} from "lucide-react";
-import { BookingHeader } from "@/components/booking/BookingHeader";
-import { BookingFooter } from "@/components/booking/BookingFooter";
-import { motion } from "framer-motion";
+import { ArrowLeft, Home, Phone, Mail, User, Loader2, CheckCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -51,7 +40,6 @@ export default function CustomQuote() {
     setIsSubmitting(true);
 
     try {
-      // Submit custom quote request
       const { error } = await supabase.from("custom_quotes").insert({
         full_name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email,
@@ -76,201 +64,147 @@ export default function CustomQuote() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-gradient-hero">
-        <BookingHeader currentStep={2} totalSteps={6} stepLabel="Custom Quote" />
+      <div className="min-h-screen bg-background">
+        <header className="border-b">
+          <div className="container mx-auto px-4 py-4">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <span className="font-semibold">NovaraCleaning</span>
+            </Link>
+          </div>
+        </header>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="container max-w-lg mx-auto px-4 py-12"
-        >
-          <Card className="text-center border-0 shadow-xl">
-            <CardContent className="p-8">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", delay: 0.2 }}
-                className="mx-auto w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-6"
-              >
-                <CheckCircle className="w-10 h-10 text-white" />
-              </motion.div>
-
-              <h1 className="text-2xl font-bold mb-2">Request Received!</h1>
+        <div className="container max-w-md mx-auto px-4 py-12">
+          <Card>
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">Request Received!</h2>
               <p className="text-muted-foreground mb-6">
                 We&apos;ll contact you within 24 hours with a custom quote for your property.
               </p>
-
-              <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
-                <p className="text-sm text-muted-foreground mb-1">Submitted for:</p>
-                <p className="font-medium">
-                  {formData.firstName} {formData.lastName}
-                </p>
-                <p className="text-sm text-muted-foreground">{formData.email}</p>
-              </div>
-
-              <Button onClick={() => router.push("/")} className="w-full bg-gradient-primary">
+              <Button onClick={() => router.push("/")} className="w-full">
                 Return Home
               </Button>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-24">
-      <BookingHeader currentStep={2} totalSteps={6} stepLabel="Custom Quote" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="container max-w-lg mx-auto px-4 py-8"
-      >
-        <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            className="mx-auto w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center mb-4 shadow-lg"
-          >
-            <Building className="w-8 h-8 text-white" />
-          </motion.div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">Large Property Quote</h1>
-          <p className="text-muted-foreground">
-            For homes over 5,000 sq ft, we provide personalized quotes
-          </p>
+    <div className="min-h-screen bg-background">
+      <header className="border-b">
+        <div className="container mx-auto px-4 py-4">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <span className="font-semibold">NovaraCleaning</span>
+          </Link>
         </div>
+      </header>
 
-        <Card className="border-0 shadow-xl">
+      <div className="container max-w-md mx-auto px-4 py-8">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Tell us about your property</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Home className="w-5 h-5" />
+              Large Property Quote
+            </CardTitle>
+            <CardDescription>
+              For homes over 5,000 sq ft, we provide personalized quotes
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="firstName">First Name *</Label>
-                  <div className="relative mt-1">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, firstName: e.target.value }))
-                      }
-                      className="pl-10"
-                      placeholder="John"
-                      required
-                    />
-                  </div>
+                  <Input
+                    id="firstName"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="John"
+                    required
+                  />
                 </div>
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <div className="relative mt-1">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="lastName"
-                      value={formData.lastName}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, lastName: e.target.value }))
-                      }
-                      className="pl-10"
-                      placeholder="Doe"
-                    />
-                  </div>
+                  <Input
+                    id="lastName"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Doe"
+                  />
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="email">Email *</Label>
-                <div className="relative mt-1">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                    className="pl-10"
-                    placeholder="john@example.com"
-                    required
-                  />
-                </div>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+                  placeholder="john@example.com"
+                  required
+                />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="phone">Phone *</Label>
-                <div className="relative mt-1">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                    className="pl-10"
-                    placeholder="(555) 123-4567"
-                    required
-                  />
-                </div>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="(555) 123-4567"
+                  required
+                />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="sqft">Approximate Square Footage</Label>
-                <div className="relative mt-1">
-                  <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="sqft"
-                    value={formData.squareFootage}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, squareFootage: e.target.value }))
-                    }
-                    className="pl-10"
-                    placeholder="e.g., 6,500"
-                  />
-                </div>
+                <Input
+                  id="sqft"
+                  value={formData.squareFootage}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, squareFootage: e.target.value }))}
+                  placeholder="e.g., 6,500"
+                />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="propertyType">Property Type</Label>
                 <Input
                   id="propertyType"
                   value={formData.propertyType}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, propertyType: e.target.value }))
-                  }
-                  className="mt-1"
-                  placeholder="e.g., Single family home, Estate, etc."
+                  onChange={(e) => setFormData((prev) => ({ ...prev, propertyType: e.target.value }))}
+                  placeholder="e.g., Single family home, Estate"
                 />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="details">Additional Details</Label>
                 <Textarea
                   id="details"
                   value={formData.additionalDetails}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, additionalDetails: e.target.value }))
-                  }
-                  className="mt-1"
+                  onChange={(e) => setFormData((prev) => ({ ...prev, additionalDetails: e.target.value }))}
                   placeholder="Tell us about any special requirements..."
-                  rows={4}
+                  rows={3}
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push("/book/sqft")}
-                  className="flex-1"
-                >
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => router.push("/book/sqft")}>
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 bg-gradient-primary"
-                >
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -284,9 +218,7 @@ export default function CustomQuote() {
             </form>
           </CardContent>
         </Card>
-      </motion.div>
-
-      <BookingFooter />
+      </div>
     </div>
   );
 }

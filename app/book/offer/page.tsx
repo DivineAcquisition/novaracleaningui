@@ -1,50 +1,39 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Check, Clock, Calendar, ArrowRight, Gift } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowRight, ArrowLeft, Sparkles, CalendarIcon, Clock, Check } from "lucide-react";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING } from "@/lib/pricing-system";
+import { format, addDays, isBefore, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
-import { BookingHeader } from "@/components/booking/BookingHeader";
-import { BookingFooter } from "@/components/booking/BookingFooter";
-import { SchedulePicker } from "@/components/booking/SchedulePicker";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
-import { motion } from "framer-motion";
-import { format } from "date-fns";
 
-const DEEP_CLEAN_DISCOUNT = 50;
-
-const DEEP_CLEAN_FEATURES = [
-  "40-point Deep Clean checklist",
-  "2-person professional team",
-  "All supplies included",
-  "48-hour re-clean guarantee",
-];
-
-const RECURRING_FEATURES = [
-  "15% off every clean",
-  "Same trusted team",
-  "Priority scheduling",
-  "Cancel anytime",
+const TIME_SLOTS = [
+  { id: "8:00 AM - 10:00 AM", label: "8:00 AM - 10:00 AM" },
+  { id: "10:00 AM - 12:00 PM", label: "10:00 AM - 12:00 PM" },
+  { id: "1:00 PM - 3:00 PM", label: "1:00 PM - 3:00 PM" },
+  { id: "3:00 PM - 5:00 PM", label: "3:00 PM - 5:00 PM" },
 ];
 
 export default function BookingOffer() {
   const router = useRouter();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
-  const [selectedService, setSelectedService] = useState<"deep" | "recurring" | null>(
-    bookingData.serviceType === "recurring" ? "recurring" : bookingData.serviceType ? "deep" : null
+  
+  const [selectedService, setSelectedService] = useState<"deep" | "recurring">(
+    bookingData.membershipPlan !== "none" ? "recurring" : "deep"
   );
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + "T12:00:00") : undefined
   );
-  const [selectedTime, setSelectedTime] = useState<string>(bookingData.timeSlot || "");
-
-  const handleTimeSelect = (date: Date, timeSlot: string, startTime: string, endTime: string) => {
-    setSelectedTime(timeSlot);
-  };
+  const [selectedTime, setSelectedTime] = useState(bookingData.timeSlot || "");
 
   const selectedHomeSize = useMemo(() => {
     return HOME_SIZE_RANGES.find((h) => h.id === bookingData.homeSizeId);
@@ -53,25 +42,16 @@ export default function BookingOffer() {
   const prices = useMemo(() => {
     const basePrice = selectedHomeSize?.standardPrice || 150;
     const deepCleanPrice = basePrice + SERVICE_TIER_PRICING.deep.addition;
-    const discountedDeepClean = deepCleanPrice - DEEP_CLEAN_DISCOUNT;
     const recurringPrice = Math.round(basePrice * 0.85);
 
     return {
-      deep: {
-        original: deepCleanPrice,
-        discounted: discountedDeepClean,
-        deposit: Math.round(discountedDeepClean * 0.25),
-      },
-      recurring: {
-        original: basePrice,
-        discounted: recurringPrice,
-        deposit: Math.round(recurringPrice * 0.25),
-      },
+      deep: deepCleanPrice,
+      recurring: recurringPrice,
     };
   }, [selectedHomeSize]);
 
   const handleContinue = () => {
-    if (!selectedService || !selectedDate || !selectedTime) return;
+    if (!selectedDate || !selectedTime) return;
 
     updateBookingData({
       serviceType: selectedService === "deep" ? "Deep Clean" : "Standard Clean",
@@ -88,205 +68,149 @@ export default function BookingOffer() {
     router.push("/book/sqft");
   };
 
-  const canContinue = selectedService && selectedDate && selectedTime;
+  const canContinue = selectedDate && selectedTime;
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-24">
-      <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="container max-w-4xl mx-auto px-4 py-8"
-      >
-        {/* Header */}
-        <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-primary text-white rounded-full text-sm font-medium mb-4"
-          >
-            <Gift className="w-4 h-4" />
-            New Year Special - Save $50!
-          </motion.div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">Choose Your Service</h1>
-          <p className="text-muted-foreground">
-            {selectedHomeSize?.label} • {selectedHomeSize?.bedroomRange}
-          </p>
+    <div className="min-h-screen bg-background">
+      <div className="container max-w-2xl mx-auto px-4 py-8">
+        {/* Progress */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+            <span>Step 3 of 5</span>
+            <span>Service & Schedule</span>
+          </div>
+          <div className="h-2 bg-muted rounded-full">
+            <div className="h-full bg-primary rounded-full" style={{ width: "60%" }} />
+          </div>
         </div>
 
-        {/* Service Options */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          {/* Deep Clean Option */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card
-              className={cn(
-                "cursor-pointer transition-all duration-300 relative overflow-hidden h-full",
-                selectedService === "deep"
-                  ? "border-primary border-2 ring-4 ring-primary/20 shadow-xl"
-                  : "border-border hover:border-primary/50 hover:shadow-lg hover:-translate-y-1"
-              )}
-              onClick={() => setSelectedService("deep")}
+        {/* Service Selection */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              Choose Your Service
+            </CardTitle>
+            <CardDescription>
+              {selectedHomeSize?.label} • {selectedHomeSize?.bedroomRange}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup
+              value={selectedService}
+              onValueChange={(v) => setSelectedService(v as "deep" | "recurring")}
+              className="space-y-3"
             >
-              {selectedService === "deep" && (
-                <div className="absolute top-3 right-3">
-                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" />
+              <div className="flex items-center">
+                <RadioGroupItem value="deep" id="deep" className="peer sr-only" />
+                <Label
+                  htmlFor="deep"
+                  className="flex flex-1 items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">One-Time Deep Clean</p>
+                      <Badge variant="secondary">Popular</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Thorough cleaning with 40-point checklist
+                    </p>
                   </div>
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <Badge className="w-fit bg-amber-500/10 text-amber-600 border-amber-500/20 mb-2">
-                  Most Popular
-                </Badge>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  One-Time Deep Clean
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-primary">
-                      ${prices.deep.discounted}
-                    </span>
-                    <span className="text-lg text-muted-foreground line-through">
-                      ${prices.deep.original}
-                    </span>
-                  </div>
-                  <p className="text-sm text-green-600 font-medium">Save $50 today!</p>
-                </div>
-                <ul className="space-y-2">
-                  {DEEP_CLEAN_FEATURES.map((feature, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-4 pt-4 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Only <span className="font-semibold text-foreground">${prices.deep.deposit}</span> deposit today
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+                  <p className="text-lg font-semibold">${prices.deep}</p>
+                </Label>
+              </div>
 
-          {/* Recurring Option */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card
-              className={cn(
-                "cursor-pointer transition-all duration-300 relative overflow-hidden h-full",
-                selectedService === "recurring"
-                  ? "border-primary border-2 ring-4 ring-primary/20 shadow-xl"
-                  : "border-border hover:border-primary/50 hover:shadow-lg hover:-translate-y-1"
-              )}
-              onClick={() => setSelectedService("recurring")}
-            >
-              {selectedService === "recurring" && (
-                <div className="absolute top-3 right-3">
-                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" />
+              <div className="flex items-center">
+                <RadioGroupItem value="recurring" id="recurring" className="peer sr-only" />
+                <Label
+                  htmlFor="recurring"
+                  className="flex flex-1 items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">Recurring Service</p>
+                      <Badge className="bg-green-100 text-green-700">Save 15%</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Bi-weekly cleaning with the same team
+                    </p>
                   </div>
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <Badge className="w-fit bg-green-500/10 text-green-600 border-green-500/20 mb-2">
-                  Best Value
-                </Badge>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  Recurring Service
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-primary">
-                      ${prices.recurring.discounted}
-                    </span>
-                    <span className="text-lg text-muted-foreground line-through">
-                      ${prices.recurring.original}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/clean</span>
+                  <div className="text-right">
+                    <p className="text-lg font-semibold">${prices.recurring}</p>
+                    <p className="text-xs text-muted-foreground">/clean</p>
                   </div>
-                  <p className="text-sm text-green-600 font-medium">15% off every clean</p>
-                </div>
-                <ul className="space-y-2">
-                  {RECURRING_FEATURES.map((feature, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-4 pt-4 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Only <span className="font-semibold text-foreground">${prices.recurring.deposit}</span> deposit today
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
+                </Label>
+              </div>
+            </RadioGroup>
+          </CardContent>
+        </Card>
 
-        {/* Schedule Picker */}
-        {selectedService && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  Select Date & Time
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SchedulePicker
-                  selectedDate={selectedDate}
-                  selectedTime={selectedTime}
-                  onDateSelect={setSelectedDate}
-                  onTimeSelect={handleTimeSelect}
-                />
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
+        {/* Schedule Selection */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5" />
+              Select Date & Time
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !selectedDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    disabled={(date) => isBefore(date, startOfDay(new Date()))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Time</Label>
+              <Select value={selectedTime} onValueChange={setSelectedTime}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a time slot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_SLOTS.map((slot) => (
+                    <SelectItem key={slot.id} value={slot.id}>
+                      {slot.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Navigation */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="flex justify-between"
-        >
+        <div className="flex gap-3">
           <Button variant="outline" onClick={handleBack}>
-            ← Back
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
           </Button>
-          <Button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className="bg-gradient-primary min-w-[200px]"
-          >
-            Continue to Checkout
+          <Button className="flex-1" onClick={handleContinue} disabled={!canContinue}>
+            Continue
             <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
-        </motion.div>
-      </motion.div>
-
-      <BookingFooter />
+        </div>
+      </div>
     </div>
   );
 }

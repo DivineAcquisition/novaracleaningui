@@ -4,34 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Home,
-  Bed,
-  Bath,
-  ArrowRight,
-  Dog,
-  Key,
-  Loader2,
-  ClipboardList,
-} from "lucide-react";
-import { BookingHeader } from "@/components/booking/BookingHeader";
-import { BookingFooter } from "@/components/booking/BookingFooter";
-import { motion } from "framer-motion";
+import { ArrowRight, ArrowLeft, Home, Bed, Bath, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-const DWELLING_TYPES = [
-  { id: "house", label: "House", icon: Home },
-  { id: "apartment", label: "Apartment", icon: Home },
-  { id: "condo", label: "Condo", icon: Home },
-  { id: "townhouse", label: "Townhouse", icon: Home },
-];
+const DWELLING_TYPES = ["House", "Apartment", "Condo", "Townhouse"];
 
 export default function BookingDetails() {
   const router = useRouter();
@@ -54,7 +37,6 @@ export default function BookingDetails() {
     setIsProcessing(true);
 
     try {
-      // Update booking in database
       const { error } = await supabase
         .from("bookings")
         .update({
@@ -64,6 +46,7 @@ export default function BookingDetails() {
           special_instructions: specialInstructions,
           access_instructions: accessInstructions,
           has_pets: hasPets,
+          status: "confirmed",
         })
         .eq("id", bookingData.bookingId);
 
@@ -91,205 +74,145 @@ export default function BookingDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero pb-24">
-      <BookingHeader currentStep={5} totalSteps={6} stepLabel="Details" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="container max-w-2xl mx-auto px-4 py-8"
-      >
-        <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            className="mx-auto w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center mb-4 shadow-lg"
-          >
-            <ClipboardList className="w-8 h-8 text-white" />
-          </motion.div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">Property Details</h1>
-          <p className="text-muted-foreground">
-            Help us prepare for your cleaning
-          </p>
+    <div className="min-h-screen bg-background">
+      <div className="container max-w-2xl mx-auto px-4 py-8">
+        {/* Progress */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+            <span>Step 5 of 5</span>
+            <span>Property Details</span>
+          </div>
+          <div className="h-2 bg-muted rounded-full">
+            <div className="h-full bg-primary rounded-full" style={{ width: "100%" }} />
+          </div>
         </div>
 
-        <div className="space-y-6">
-          {/* Property Type */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Home className="w-5 h-5 text-primary" />
-                  Property Type
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <RadioGroup
-                  value={dwellingType}
-                  onValueChange={setDwellingType}
-                  className="grid grid-cols-2 gap-3"
-                >
-                  {DWELLING_TYPES.map((type) => (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Home className="w-5 h-5" />
+              Property Details
+            </CardTitle>
+            <CardDescription>Help us prepare for your cleaning</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Property Type */}
+            <div className="space-y-3">
+              <Label>Property Type</Label>
+              <RadioGroup
+                value={dwellingType}
+                onValueChange={setDwellingType}
+                className="grid grid-cols-2 gap-3"
+              >
+                {DWELLING_TYPES.map((type) => (
+                  <div key={type} className="flex items-center">
+                    <RadioGroupItem value={type} id={type} className="peer sr-only" />
                     <Label
-                      key={type.id}
-                      htmlFor={type.id}
-                      className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                        dwellingType === type.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
+                      htmlFor={type}
+                      className="flex w-full items-center justify-center p-3 border rounded-lg cursor-pointer hover:bg-muted/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
                     >
-                      <RadioGroupItem value={type.id} id={type.id} />
-                      <span className="font-medium">{type.label}</span>
+                      {type}
                     </Label>
-                  ))}
-                </RadioGroup>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Rooms */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Room Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="bedrooms" className="flex items-center gap-2 mb-2">
-                      <Bed className="w-4 h-4 text-muted-foreground" />
-                      Bedrooms
-                    </Label>
-                    <Input
-                      id="bedrooms"
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={bedrooms}
-                      onChange={(e) => setBedrooms(e.target.value)}
-                      placeholder="0"
-                      className="h-12 text-lg"
-                    />
                   </div>
-                  <div>
-                    <Label htmlFor="bathrooms" className="flex items-center gap-2 mb-2">
-                      <Bath className="w-4 h-4 text-muted-foreground" />
-                      Bathrooms
-                    </Label>
-                    <Input
-                      id="bathrooms"
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      value={bathrooms}
-                      onChange={(e) => setBathrooms(e.target.value)}
-                      placeholder="0"
-                      className="h-12 text-lg"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+                ))}
+              </RadioGroup>
+            </div>
 
-          {/* Additional Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            {/* Rooms */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bedrooms" className="flex items-center gap-2">
+                  <Bed className="w-4 h-4" />
+                  Bedrooms
+                </Label>
+                <Input
+                  id="bedrooms"
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={bedrooms}
+                  onChange={(e) => setBedrooms(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bathrooms" className="flex items-center gap-2">
+                  <Bath className="w-4 h-4" />
+                  Bathrooms
+                </Label>
+                <Input
+                  id="bathrooms"
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="0.5"
+                  value={bathrooms}
+                  onChange={(e) => setBathrooms(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {/* Pets */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="pets"
+                checked={hasPets}
+                onCheckedChange={(checked) => setHasPets(checked as boolean)}
+              />
+              <Label htmlFor="pets">I have pets</Label>
+            </div>
+
+            {/* Access Instructions */}
+            <div className="space-y-2">
+              <Label htmlFor="access">Access Instructions</Label>
+              <Textarea
+                id="access"
+                value={accessInstructions}
+                onChange={(e) => setAccessInstructions(e.target.value)}
+                placeholder="e.g., Code for lockbox is 1234, key under mat..."
+                rows={2}
+              />
+            </div>
+
+            {/* Special Instructions */}
+            <div className="space-y-2">
+              <Label htmlFor="special">Special Instructions (optional)</Label>
+              <Textarea
+                id="special"
+                value={specialInstructions}
+                onChange={(e) => setSpecialInstructions(e.target.value)}
+                placeholder="Any areas to focus on or avoid?"
+                rows={3}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={handleBack}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={handleContinue}
+            disabled={isProcessing || !bedrooms || !bathrooms || !dwellingType}
           >
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Additional Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Pets */}
-                <div className="flex items-center space-x-3 p-4 border rounded-xl">
-                  <Checkbox
-                    id="pets"
-                    checked={hasPets}
-                    onCheckedChange={(checked) => setHasPets(checked as boolean)}
-                  />
-                  <Label htmlFor="pets" className="flex items-center gap-2 cursor-pointer">
-                    <Dog className="w-4 h-4 text-muted-foreground" />
-                    I have pets
-                  </Label>
-                </div>
-
-                {/* Access Instructions */}
-                <div>
-                  <Label htmlFor="access" className="flex items-center gap-2 mb-2">
-                    <Key className="w-4 h-4 text-muted-foreground" />
-                    Access Instructions
-                  </Label>
-                  <Textarea
-                    id="access"
-                    value={accessInstructions}
-                    onChange={(e) => setAccessInstructions(e.target.value)}
-                    placeholder="e.g., Code for lockbox is 1234, key under mat..."
-                    rows={2}
-                  />
-                </div>
-
-                {/* Special Instructions */}
-                <div>
-                  <Label htmlFor="special" className="mb-2 block">
-                    Special Instructions (optional)
-                  </Label>
-                  <Textarea
-                    id="special"
-                    value={specialInstructions}
-                    onChange={(e) => setSpecialInstructions(e.target.value)}
-                    placeholder="Any areas to focus on or avoid?"
-                    rows={3}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Navigation */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="flex justify-between pt-4"
-          >
-            <Button variant="outline" onClick={handleBack}>
-              ← Back
-            </Button>
-            <Button
-              onClick={handleContinue}
-              disabled={isProcessing || !bedrooms || !bathrooms || !dwellingType}
-              className="bg-gradient-primary min-w-[200px]"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  Complete Booking
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </>
-              )}
-            </Button>
-          </motion.div>
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Completing...
+              </>
+            ) : (
+              <>
+                Complete Booking
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </>
+            )}
+          </Button>
         </div>
-      </motion.div>
-
-      <BookingFooter />
+      </div>
     </div>
   );
 }
