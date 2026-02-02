@@ -1,5 +1,3 @@
-"use client";
-
 export function BookingFooter() {
   return (
     <footer className="mt-auto py-6 px-4 border-t border-border/40 bg-background/60">
@@ -25,7 +23,7 @@ export function BookingFooter() {
             </a>
           </div>
           <p className="text-center sm:text-right">
-            © {new Date().getFullYear()} NovaraCleaning. All Rights Reserved.
+            © 2025 NovaraCleaning. All Rights Reserved.
           </p>
         </div>
       </div>

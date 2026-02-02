@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Gift, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PromoBanner } from "@/components/booking/PromoBanner";
@@ -16,6 +17,20 @@ import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING } from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { toast } from "sonner";
+
+const BOOKING_STEPS = [
+  { number: 1, label: "Location", path: "/book/zip" },
+  { number: 2, label: "Home Size", path: "/book/sqft" },
+  { number: 3, label: "Service", path: "/book/offer" },
+  { number: 4, label: "Checkout", path: "/book/checkout" },
+  { number: 5, label: "Details", path: "/book/details" },
+  { number: 6, label: "Confirm", path: "/book/confirmation" },
+];
+
+// New Year's Special - Ends Jan 7, 2025
+const OFFER_END_DATE = new Date('2025-01-07T23:59:59');
+const DEEP_CLEAN_DISCOUNT = 50;
+const RECURRING_DISCOUNT_PERCENT = 15;
 
 // Deep clean features
 const DEEP_CLEAN_FEATURES = [
@@ -39,6 +54,7 @@ export default function BookingOffer() {
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showDeepCleanModal, setShowDeepCleanModal] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [daysRemaining, setDaysRemaining] = useState(0);
   const [selectedService, setSelectedService] = useState<'deep' | 'recurring' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
@@ -53,12 +69,13 @@ export default function BookingOffer() {
   const prices = useMemo(() => {
     const basePrice = selectedHomeSize?.standardPrice || 150;
     const deepCleanPrice = basePrice + SERVICE_TIER_PRICING.deep.addition;
-    const discountedDeepCleanPrice = deepCleanPrice - 50;
+    const discountedDeepCleanPrice = deepCleanPrice - DEEP_CLEAN_DISCOUNT;
     const depositAmount = Math.round(discountedDeepCleanPrice * 0.25);
 
-    const recurringPrice = basePrice;
-    const discountedRecurringPrice = Math.round(recurringPrice * 0.85);
+    const recurringPrice = basePrice; // Standard clean for recurring
+    const discountedRecurringPrice = Math.round(recurringPrice * (1 - RECURRING_DISCOUNT_PERCENT / 100));
     const recurringDeposit = Math.round(discountedRecurringPrice * 0.25);
+    const recurringSavings = recurringPrice - discountedRecurringPrice;
 
     return {
       deepClean: {
@@ -70,17 +87,30 @@ export default function BookingOffer() {
         original: recurringPrice,
         discounted: discountedRecurringPrice,
         deposit: recurringDeposit,
+        savings: recurringSavings,
       },
     };
   }, [selectedHomeSize]);
 
+  // Calculate days remaining
+  useEffect(() => {
+    const now = new Date();
+    const diff = OFFER_END_DATE.getTime() - now.getTime();
+    const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    setDaysRemaining(days);
+  }, []);
+
+  // Check for custom quote requirement (5000+ sq ft)
+  const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
+
   const handleSelectDeepClean = () => {
     setSelectedService('deep');
     updateBookingData({
-      serviceType: 'Deep Clean',
+      serviceType: 'deep',
       membershipPlan: 'none',
       promoCode: 'NEWYEAR50',
     });
+    // Scroll to scheduler
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -89,10 +119,11 @@ export default function BookingOffer() {
   const handleSelectRecurring = () => {
     setSelectedService('recurring');
     updateBookingData({
-      serviceType: 'Standard Clean',
+      serviceType: 'standard',
       membershipPlan: 'biweekly',
       promoCode: 'NEWYEAR15',
     });
+    // Scroll to scheduler
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -112,9 +143,60 @@ export default function BookingOffer() {
     router.push("/book/sqft");
   };
 
+  // Custom Quote View
+  if (requiresCustomQuote) {
+    return (
+      <PageTransition direction="forward">
+        <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+          <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
+          
+          <div className="container max-w-2xl mx-auto px-4 py-8 space-y-6">
+            <Card className="border-2 border-primary/30">
+              <CardContent className="pt-8 pb-8 text-center space-y-6">
+                <h1 className="text-2xl md:text-3xl font-bold">Custom Quote Required</h1>
+                <p className="text-muted-foreground">
+                  Your home requires a customized quote to ensure accurate pricing.
+                </p>
+                
+                <div className="grid grid-cols-2 gap-4 text-left">
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="font-semibold">Deep Clean</p>
+                    <p className="text-sm text-muted-foreground">Starting at $500</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="font-semibold">Recurring Service</p>
+                    <p className="text-sm text-muted-foreground">Starting at $400/visit</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-center gap-2 text-lg font-semibold text-primary">
+                  <Phone className="w-5 h-5" />
+                  <a href="tel:9725590223">(972) 559-0223</a>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button asChild size="lg" className="bg-gradient-primary">
+                    <a href="tel:9725590223">
+                      <Phone className="w-4 h-4 mr-2" />
+                      Call Now
+                    </a>
+                  </Button>
+                  <Button variant="ghost" size="lg" onClick={handleBack}>
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition direction="forward">
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 pb-32 md:pb-8">
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
         <PromoBanner />
 
@@ -139,7 +221,7 @@ export default function BookingOffer() {
             <Card className="relative overflow-hidden border-2 border-primary/30 hover:border-primary/60 transition-all duration-300 hover:shadow-xl">
               <div className="absolute top-3 left-3">
                 <Badge className="bg-amber-500 text-black font-bold">
-                  <i className="ri-gift-fill mr-1"></i>
+                  <Gift className="w-3 h-3 mr-1" />
                   $50 Off — New Year Special
                 </Badge>
               </div>
@@ -164,7 +246,7 @@ export default function BookingOffer() {
                   {DEEP_CLEAN_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-sm">
                       <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-                        <i className="ri-check-line text-primary text-xs"></i>
+                        <Check className="w-3 h-3 text-primary" />
                       </div>
                       <span>{feature}</span>
                     </li>
@@ -174,11 +256,11 @@ export default function BookingOffer() {
                 <div className="space-y-2 pt-2">
                   <Button 
                     size="lg" 
-                    className="w-full font-semibold"
+                    className="w-full bg-gradient-primary font-semibold"
                     onClick={handleSelectDeepClean}
                   >
                     Get Started — ${prices.deepClean.deposit} Today
-                    <i className="ri-arrow-right-s-line ml-1"></i>
+                    <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                   <Button 
                     variant="ghost" 
@@ -194,72 +276,74 @@ export default function BookingOffer() {
 
             {/* Card B: Recurring Maintenance (Most Popular) */}
             <div className="relative">
-              {/* Most Popular Pill */}
+              {/* Most Popular Pill - positioned outside the card */}
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                <Badge className="bg-green-600 text-white font-bold shadow-lg px-4 py-1.5">
+                <Badge className="bg-success text-white font-bold shadow-lg px-4 py-1.5">
                   Most Popular
                 </Badge>
               </div>
               
-              <Card className="overflow-hidden border-2 border-green-500/30 hover:border-green-500/60 transition-all duration-300 hover:shadow-xl h-full">
-                <CardContent className="pt-14 pb-6 px-5 space-y-5">
-                  <div>
-                    <h3 className="text-2xl font-bold">Novara Membership</h3>
-                    <p className="text-muted-foreground">Keep your home guest-ready, always</p>
+              <Card className="overflow-hidden border-2 border-success/30 hover:border-success/60 transition-all duration-300 hover:shadow-xl">
+              
+              <CardContent className="pt-14 pb-6 px-5 space-y-5">
+                <div>
+                  <h3 className="text-2xl font-bold">Novara Membership</h3>
+                  <p className="text-muted-foreground">Keep your home guest-ready, always</p>
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-success">$189</span>
+                    <span className="text-muted-foreground">/month</span>
                   </div>
-                  
-                  <div className="space-y-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-green-600">$189</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                    <p className="text-sm text-green-600 font-medium">
-                      Includes 1 cleaning per month + member perks
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Pay only ${prices.recurring.deposit} today (25% deposit)
-                    </p>
-                  </div>
-                  
-                  <ul className="space-y-2.5">
-                    {RECURRING_FEATURES.map((feature, idx) => (
-                      <li key={idx} className="flex items-center gap-2 text-sm">
-                        <div className="w-5 h-5 rounded-full bg-green-500/15 flex items-center justify-center flex-shrink-0">
-                          <i className="ri-check-line text-green-600 text-xs"></i>
-                        </div>
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  
-                  <div className="space-y-2 pt-2">
-                    <Button 
-                      size="lg" 
-                      className="w-full bg-green-600 hover:bg-green-600/90 font-semibold"
-                      onClick={handleSelectRecurring}
-                    >
-                      Get Started — ${prices.recurring.deposit} Today
-                      <i className="ri-arrow-right-s-line ml-1"></i>
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="w-full"
-                      onClick={() => setShowRecurringModal(true)}
-                    >
-                      What&apos;s Included?
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  <p className="text-sm text-success font-medium">
+                    Includes 1 cleaning per month + member perks
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Pay only ${prices.recurring.deposit} today (25% deposit)
+                  </p>
+                </div>
+                
+                <ul className="space-y-2.5">
+                  {RECURRING_FEATURES.map((feature, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-sm">
+                      <div className="w-5 h-5 rounded-full bg-success/15 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-success" />
+                      </div>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                
+                <div className="space-y-2 pt-2">
+                  <Button 
+                    size="lg" 
+                    className="w-full bg-success hover:bg-success/90 font-semibold"
+                    onClick={handleSelectRecurring}
+                  >
+                    Get Started — ${prices.recurring.deposit} Today
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => setShowRecurringModal(true)}
+                  >
+                    What&apos;s Included?
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
             </div>
           </div>
 
-          {/* Schedule Picker */}
+          {/* Schedule Picker - Shows after service selection with animation */}
           {selectedService && (
             <div 
               id="schedule-section" 
               className="scroll-mt-4 animate-fade-in"
+              style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
             >
               <SchedulePicker
                 selectedDate={selectedDate}
@@ -290,7 +374,7 @@ export default function BookingOffer() {
           {/* Back Navigation */}
           <div className="flex justify-center">
             <Button variant="ghost" onClick={handleBack} className="text-muted-foreground">
-              <i className="ri-arrow-left-line mr-2"></i>
+              <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Home Size
             </Button>
           </div>
@@ -320,7 +404,7 @@ export default function BookingOffer() {
                   "2-person professional team",
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <i className="ri-check-line text-primary flex-shrink-0"></i>
+                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     <span className="text-sm">{item}</span>
                   </div>
                 ))}
@@ -356,12 +440,12 @@ export default function BookingOffer() {
                   "Easy pause or cancel anytime",
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <i className="ri-check-line text-green-600 flex-shrink-0"></i>
+                    <Check className="w-4 h-4 text-success flex-shrink-0" />
                     <span className="text-sm">{item}</span>
                   </div>
                 ))}
               </div>
-              <Button className="w-full bg-green-600 hover:bg-green-600/90" onClick={() => { setShowRecurringModal(false); handleSelectRecurring(); }}>
+              <Button className="w-full bg-success hover:bg-success/90" onClick={() => { setShowRecurringModal(false); handleSelectRecurring(); }}>
                 Select Recurring Service
               </Button>
             </div>

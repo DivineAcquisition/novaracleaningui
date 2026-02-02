@@ -28,6 +28,7 @@ export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
   const router = useRouter();
 
   const handleStepClick = (stepNumber: number) => {
+    // Only allow navigation to completed steps (steps before current)
     if (stepNumber < currentStep) {
       const route = STEP_ROUTES[stepNumber];
       if (route) {
@@ -39,13 +40,16 @@ export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
   return (
     <div className="hidden md:block w-full max-w-4xl mx-auto px-4 py-6">
       <div className="relative">
+        {/* Progress Line Background */}
         <div className="absolute top-5 left-0 right-0 h-0.5 bg-border" />
         
+        {/* Active Progress Line */}
         <div
           className="absolute top-5 left-0 h-0.5 bg-primary transition-all duration-500 ease-out"
           style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
         />
 
+        {/* Steps */}
         <div className="relative flex justify-between">
           {steps.map((step) => {
             const isCompleted = currentStep > step.number;
