@@ -33,6 +33,7 @@ import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import CleanerOnboardingLanding from "./pages/cleaner/OnboardingLanding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
+import CleanerAssessment from "./pages/cleaner/Assessment";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
 import AdminAuth from "./pages/admin/Auth";
@@ -240,6 +241,11 @@ const App = () => (
               <Route path="/cleaner/dashboard" element={
                 <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
                   <CleanerDashboard />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/assessment" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerAssessment />
                 </DomainRestricted>
               } />
               

@@ -19,7 +19,10 @@ import {
   Car,
   Power,
   MapPin,
-  Info
+  Info,
+  Award,
+  ClipboardCheck,
+  ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +40,9 @@ interface CleanerProfile {
   stripe_account_id: string | null;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
+  is_trained: boolean;
+  assessment_score: number | null;
+  assessment_attempts: number;
 }
 
 const DAYS_OF_WEEK = [
@@ -417,6 +423,85 @@ export default function CleanerDashboard() {
                   Weekly payouts via Stripe
                 </p>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Assessment Card */}
+        <Card className={cn(
+          "border shadow-sm",
+          profile.is_trained 
+            ? "border-green-500/20 bg-gradient-to-br from-green-500/5 to-emerald-500/5" 
+            : "border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-orange-500/5"
+        )}>
+          <CardHeader className="pb-2 px-4 pt-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                {profile.is_trained ? (
+                  <Award className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ClipboardCheck className="w-4 h-4 text-amber-600" />
+                )}
+                Training Assessment
+              </CardTitle>
+              {profile.is_trained && (
+                <Badge className="bg-green-500/10 text-green-600 border border-green-500/20 text-[10px] px-1.5 py-0 h-4">
+                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                  Trained
+                </Badge>
+              )}
+            </div>
+            <CardDescription className="text-xs">
+              {profile.is_trained 
+                ? "You qualify for premium, higher-paying jobs"
+                : "Pass with 80% to unlock premium jobs"
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 pt-0">
+            {profile.is_trained ? (
+              <div className="bg-card rounded-lg p-3 border border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Your Score</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {profile.assessment_score}/10
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
+                    <Award className="w-4 h-4 text-green-600" />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Trained cleaners get priority for bigger jobs
+                </p>
+              </div>
+            ) : (
+              <>
+                {profile.assessment_attempts > 0 && (
+                  <div className="bg-card rounded-lg p-2.5 border border-border mb-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Last Score</span>
+                      <span className="font-semibold text-amber-600">
+                        {profile.assessment_score || 0}/10
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {profile.assessment_attempts} attempt{profile.assessment_attempts > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                )}
+                <Button 
+                  onClick={() => navigate("/cleaner/assessment")}
+                  className="w-full h-10 text-sm border border-amber-500/20 bg-amber-500 hover:bg-amber-600 text-white"
+                >
+                  {profile.assessment_attempts > 0 ? "Retake Assessment" : "Take Assessment"}
+                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                </Button>
+                <p className="text-[10px] text-muted-foreground text-center mt-2">
+                  Optional • 10 questions • ~5 minutes
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
