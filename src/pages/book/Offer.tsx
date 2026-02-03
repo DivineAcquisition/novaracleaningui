@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Gift, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
+import { Gift, Check, ArrowLeft, Phone, ChevronRight, MapPin, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PromoBanner } from "@/components/booking/PromoBanner";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, DEPOSIT_AMOUNT, getZoneModifier, MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -63,17 +63,31 @@ export default function BookingOffer() {
     return HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   }, [bookingData.homeSizeId]);
 
-  // Calculate prices
+  // Get zone modifier
+  const zoneModifier = useMemo(() => {
+    if (bookingData.pricingZone?.modifier) {
+      return bookingData.pricingZone.modifier;
+    }
+    return bookingData.zipCode ? getZoneModifier(bookingData.zipCode) : 1.0;
+  }, [bookingData.zipCode, bookingData.pricingZone]);
+
+  // Calculate prices with zone modifier
   const prices = useMemo(() => {
-    const basePrice = selectedHomeSize?.standardPrice || 150;
+    const basePrice = Math.round((selectedHomeSize?.standardPrice || 150) * zoneModifier);
     const deepCleanPrice = basePrice + SERVICE_TIER_PRICING.deep.addition;
     const discountedDeepCleanPrice = deepCleanPrice - DEEP_CLEAN_DISCOUNT;
     const depositAmount = Math.round(discountedDeepCleanPrice * 0.25);
 
-    const recurringPrice = basePrice; // Standard clean for recurring
-    const discountedRecurringPrice = Math.round(recurringPrice * (1 - RECURRING_DISCOUNT_PERCENT / 100));
+    // Get membership price for bi-weekly if available
+    const membershipPrices = MEMBERSHIP_PRICES.monthly;
+    const membershipPriceInfo = membershipPrices[bookingData.homeSizeId as keyof typeof membershipPrices];
+    const recurringPrice = membershipPriceInfo 
+      ? Math.round(membershipPriceInfo.price * zoneModifier)
+      : Math.round(basePrice * 0.86); // ~14% discount fallback
+    
+    const discountedRecurringPrice = recurringPrice; // Already discounted via membership pricing
     const recurringDeposit = Math.round(discountedRecurringPrice * 0.25);
-    const recurringSavings = recurringPrice - discountedRecurringPrice;
+    const recurringSavings = basePrice - discountedRecurringPrice;
 
     return {
       deepClean: {
@@ -82,13 +96,17 @@ export default function BookingOffer() {
         deposit: depositAmount,
       },
       recurring: {
-        original: recurringPrice,
+        original: basePrice,
         discounted: discountedRecurringPrice,
+        monthlyPrice: recurringPrice,
         deposit: recurringDeposit,
         savings: recurringSavings,
+        savingsPercent: Math.round((1 - recurringPrice / basePrice) * 100),
       },
+      zoneModifier,
+      isZoneAdjusted: zoneModifier !== 1.0,
     };
-  }, [selectedHomeSize]);
+  }, [selectedHomeSize, zoneModifier, bookingData.homeSizeId]);
 
   // Calculate days remaining
   useEffect(() => {
@@ -208,6 +226,32 @@ export default function BookingOffer() {
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
               Choose your service and lock in your New Year savings.
             </p>
+            
+            {/* Zone Badge */}
+            {bookingData.pricingZone && (
+              <div className="flex items-center justify-center gap-2">
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "px-3 py-1",
+                    bookingData.pricingZone.id === 'A' && "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300 text-amber-700",
+                    bookingData.pricingZone.id === 'C' && "bg-green-50 border-green-300 text-green-700"
+                  )}
+                >
+                  <MapPin className="w-3 h-3 mr-1" />
+                  {bookingData.pricingZone.name} Zone
+                  {bookingData.pricingZone.id === 'A' && <Sparkles className="w-3 h-3 ml-1" />}
+                </Badge>
+                {prices.isZoneAdjusted && (
+                  <span className="text-xs text-muted-foreground">
+                    {zoneModifier > 1 
+                      ? `(+${Math.round((zoneModifier - 1) * 100)}% premium area)`
+                      : `(${Math.round((1 - zoneModifier) * 100)}% outer area discount)`
+                    }
+                  </span>
+                )}
+              </div>
+            )}
             
             {/* Trust Badge */}
             <GoogleGuaranteedBadge variant="compact" />

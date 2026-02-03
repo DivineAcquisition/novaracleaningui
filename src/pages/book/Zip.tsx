@@ -2,13 +2,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { useBooking } from "@/contexts/BookingContext";
-import { ArrowRight, Crown, CheckCircle, Clock, MapPin } from "lucide-react";
+import { useBooking, PricingZone } from "@/contexts/BookingContext";
+import { ArrowRight, Crown, CheckCircle, Clock, MapPin, Sparkles } from "lucide-react";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
+import { getZoneForZipCode, PRICING_ZONES } from "@/lib/pricing-system";
 
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
@@ -20,6 +22,7 @@ export default function BookingZip() {
   const [isValidating, setIsValidating] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('zip');
   const [cityState, setCityState] = useState("");
+  const [pricingZone, setPricingZone] = useState<PricingZone | null>(null);
   
   // Contact form state
   const [firstName, setFirstName] = useState("");
@@ -42,13 +45,32 @@ export default function BookingZip() {
       .eq('is_active', true)
       .single();
     
+    // Fetch pricing zone from Supabase (with local fallback)
+    let zone: PricingZone = getZoneForZipCode(zipCode);
+    try {
+      const { data: zoneData } = await supabase
+        .rpc('get_pricing_zone', { p_zip_code: zipCode });
+      
+      if (zoneData && zoneData.length > 0) {
+        zone = {
+          id: zoneData[0].zone_id,
+          name: zoneData[0].zone_name,
+          modifier: parseFloat(zoneData[0].modifier),
+          areas: PRICING_ZONES[zoneData[0].zone_id as keyof typeof PRICING_ZONES]?.areas || [],
+        };
+      }
+    } catch (err) {
+      console.error('Error fetching zone:', err);
+    }
+    
+    setPricingZone(zone);
     setIsValidating(false);
     
     if (coverage) {
       // ZIP is in service area - show contact form
       setCityState(`${coverage.city}, ${coverage.state}`);
       setFormMode('contact');
-      updateBookingData({ zipCode });
+      updateBookingData({ zipCode, pricingZone: zone });
     } else {
       // ZIP is NOT in service area - show waitlist form
       setCityState("");
@@ -143,6 +165,7 @@ export default function BookingZip() {
     setEmail("");
     setPhone("");
     setCityState("");
+    setPricingZone(null);
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,13 +243,29 @@ export default function BookingZip() {
                   {/* Success Message */}
                   <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
                     <CheckCircle className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
-                    <div className="text-left">
-                      <p className="font-semibold text-foreground">
-                        Great news! We service {cityState}
-                      </p>
+                    <div className="text-left flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-foreground">
+                          Great news! We service {cityState}
+                        </p>
+                        {pricingZone && pricingZone.id === 'A' && (
+                          <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white border-0">
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            Premium Zone
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground">
                         Enter your details to claim your New Year discount
                       </p>
+                      {pricingZone && pricingZone.modifier !== 1.0 && (
+                        <p className="text-xs text-primary mt-1">
+                          {pricingZone.modifier > 1 
+                            ? `Premium area pricing (+${Math.round((pricingZone.modifier - 1) * 100)}%)`
+                            : `Outer area discount (${Math.round((1 - pricingZone.modifier) * 100)}% off)`
+                          }
+                        </p>
+                      )}
                     </div>
                   </div>
 

@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+export interface PricingZone {
+  id: string;
+  name: string;
+  modifier: number;
+  areas?: string[];
+}
+
 export interface BookingData {
   zipCode: string;
   homeSizeId: string;
@@ -28,6 +35,10 @@ export interface BookingData {
   bookingId?: string;
   referralCode?: string;
   promoCode?: string;
+  // New pricing fields
+  pricingZone?: PricingZone;
+  frequency?: 'one_time' | 'monthly' | 'biweekly' | 'weekly';
+  sqft?: number;
 }
 
 interface BookingContextType {
@@ -54,6 +65,7 @@ const initialBookingData: BookingData = {
   phone: '',
   serviceDuration: 0,
   paymentOption: 'deposit',
+  frequency: 'one_time',
 };
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
