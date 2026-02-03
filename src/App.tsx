@@ -31,6 +31,7 @@ import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
+import CleanerOnboardingLanding from "./pages/cleaner/OnboardingLanding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
@@ -119,16 +120,18 @@ const App = () => (
               <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
               <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
               <Route path="/admin/intake" element={<BookingIntake />} />
-              {/* Cleaner Portal - Simplified */}
+              {/* Cleaner Portal */}
+              <Route path="/cleaner" element={<CleanerOnboardingLanding />} />
+              <Route path="/cleaner/join" element={<CleanerOnboardingLanding />} />
               <Route path="/cleaner/auth" element={<CleanerAuth />} />
               <Route path="/cleaner/auth/callback" element={<CleanerAuthCallback />} />
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
-              {/* Legacy routes redirect to dashboard */}
+              {/* Legacy routes */}
               <Route path="/cleaner/profile" element={<Navigate to="/cleaner/dashboard" replace />} />
-              <Route path="/cleaner/onboarding-landing" element={<Navigate to="/cleaner/onboarding" replace />} />
-              <Route path="/cleaner/onboard" element={<Navigate to="/cleaner/onboarding" replace />} />
+              <Route path="/cleaner/onboarding-landing" element={<CleanerOnboardingLanding />} />
+              <Route path="/cleaner/onboard" element={<CleanerOnboardingLanding />} />
               <Route path="/sms-consent" element={<SmsConsent />} />
               
               {/* Customer Portal - Member Booking */}

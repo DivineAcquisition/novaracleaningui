@@ -7,15 +7,71 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Sparkles, CheckCircle2, KeyRound } from "lucide-react";
+import { 
+  Sparkles, 
+  KeyRound, 
+  CheckCircle2, 
+  Shield, 
+  DollarSign, 
+  Calendar, 
+  Clock,
+  ArrowRight,
+  Loader2
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const BENEFITS = [
+  { icon: DollarSign, title: "Competitive Pay", desc: "$18-22/hr based on experience" },
+  { icon: Calendar, title: "Flexible Schedule", desc: "Choose your own days & hours" },
+  { icon: Clock, title: "Weekly Payouts", desc: "Fast, direct deposits via Stripe" },
+  { icon: Shield, title: "Support & Training", desc: "We've got your back" },
+];
 
 export default function OnboardingLanding() {
   const navigate = useNavigate();
+  const [step, setStep] = useState<'welcome' | 'pin' | 'email'>('welcome');
+  const [pin, setPin] = useState("");
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<'email' | 'code'>('email');
-  const [code, setCode] = useState("");
-  const [verifying, setVerifying] = useState(false);
+  const [pinError, setPinError] = useState("");
+
+  const handlePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (pin.length !== 6) {
+      setPinError("Please enter a valid 6-digit PIN");
+      return;
+    }
+
+    setIsLoading(true);
+    setPinError("");
+
+    try {
+      // Verify PIN against cleaner_onboarding_pins table
+      const { data: pinData, error: pinError } = await supabase
+        .from('cleaner_onboarding_pins')
+        .select('*')
+        .eq('pin_code', pin)
+        .eq('is_active', true)
+        .is('used_at', null)
+        .single();
+
+      if (pinError || !pinData) {
+        setPinError("Invalid or expired PIN code. Please contact your recruiter.");
+        setIsLoading(false);
+        return;
+      }
+
+      // PIN is valid, move to email step
+      toast.success("PIN verified! Enter your email to continue.");
+      setStep('email');
+    } catch (error) {
+      console.error("PIN verification error:", error);
+      setPinError("Error verifying PIN. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,18 +82,14 @@ export default function OnboardingLanding() {
     }
 
     setIsLoading(true);
-    console.log("[LANDING] Sending verification code to:", email);
 
     try {
+      // Send verification code
       const { error } = await supabase.functions.invoke('send-cleaner-verification-code', {
-        body: { email, firstName: "" }
+        body: { email, firstName: "", pin }
       });
 
-      console.log("[LANDING] Send code response:", { error });
-
       if (error) {
-        console.error("[LANDING] Failed to send code:", error);
-        
         if (error.message?.includes("email")) {
           toast.error("Invalid email address. Please check and try again.");
         } else {
@@ -46,234 +98,255 @@ export default function OnboardingLanding() {
         return;
       }
 
-      console.log("[LANDING] Verification code sent successfully");
-      setStep('code');
-      toast.success("Check your email for the 6-digit code!");
+      // Mark PIN as used
+      await supabase
+        .from('cleaner_onboarding_pins')
+        .update({ used_at: new Date().toISOString() })
+        .eq('pin_code', pin);
+
+      toast.success("Check your email for the verification link!");
+      
+      // Store email for the auth callback
+      localStorage.setItem('cleaner_onboarding_email', email);
+      
+      // Navigate to the code verification page or wait for magic link
+      navigate("/cleaner/auth?mode=verify&email=" + encodeURIComponent(email));
+      
     } catch (error) {
-      console.error("[LANDING] Email verification exception:", error);
-      toast.error("Connection error. Please check your internet and try again.");
+      console.error("Email submission error:", error);
+      toast.error("Connection error. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCodeVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (code.length !== 6) {
-      toast.error("Please enter a valid 6-digit code");
-      return;
-    }
-
-    setVerifying(true);
-    console.log("[LANDING] Verifying code for email:", email);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-cleaner-code', {
-        body: { email, code }
-      });
-
-      console.log("[LANDING] Verification response:", {
-        hasTokens: !!data?.access_token && !!data?.refresh_token,
-        error: error
-      });
-
-      if (error || !data?.access_token || !data?.refresh_token) {
-        console.error("[LANDING] Verification failed:", error);
-        
-        if (error?.message?.includes("expired")) {
-          toast.error("Code expired. Please request a new one.");
-        } else if (error?.message?.includes("already used")) {
-          toast.error("Code already used. Please request a new one.");
-        } else {
-          toast.error(error?.message || "Invalid code. Please try again.");
-        }
-        return;
-      }
-
-      console.log("[LANDING] Code verified, establishing session...");
-
-      // Establish session directly with the tokens
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      });
-
-      if (sessionError) {
-        console.error("[LANDING] Session establishment error:", sessionError);
-        toast.error("Failed to establish session. Please request a new code.");
-        return;
-      }
-
-      console.log("[LANDING] Session established successfully");
-      toast.success("Email verified! Redirecting to onboarding...");
-      
-      // Small delay to ensure session is fully established
-      setTimeout(() => {
-        console.log("[LANDING] Navigating to /cleaner/onboarding");
-        navigate("/cleaner/onboarding");
-      }, 500);
-      
-    } catch (error) {
-      console.error("[LANDING] Code verification exception:", error);
-      toast.error("Connection error. Please check your internet and try again.");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.functions.invoke('send-cleaner-verification-code', {
-        body: { email, firstName: "" }
-      });
-      
-      if (error) {
-        toast.error(error.message || "Failed to resend code");
-      } else {
-        toast.success("New code sent! Check your email.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleUseDifferentEmail = () => {
-    setStep('email');
-    setCode("");
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm border-border/50 shadow-lg">
-        <CardHeader className="text-center space-y-2 pb-4 pt-5">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-            {step === 'code' ? (
-              <KeyRound className="w-6 h-6 text-primary" />
-            ) : (
-              <Sparkles className="w-6 h-6 text-primary" />
-            )}
+  // Welcome screen with benefits
+  if (step === 'welcome') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-purple-600/20 blur-3xl opacity-50" />
+          
+          <div className="relative max-w-lg mx-auto px-4 pt-12 pb-8 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-primary to-purple-600 shadow-2xl mb-6">
+              <Sparkles className="w-10 h-10 text-white" />
+            </div>
+            
+            <h1 className="text-3xl md:text-4xl font-bold mb-3">
+              Join the Novara Team
+            </h1>
+            <p className="text-muted-foreground text-lg mb-8">
+              Earn great money, set your own schedule, and be part of something amazing.
+            </p>
           </div>
-          <CardTitle className="text-2xl font-bold">
-            {step === 'code' ? "Verify Email" : "Join Our Team"}
-          </CardTitle>
-          <CardDescription className="text-sm">
-            {step === 'code'
-              ? "Enter the 6-digit code we sent"
-              : "Start your journey as a Novara cleaner"
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-5 pb-5">
-          {step === 'code' ? (
-            <form onSubmit={handleCodeVerify} className="space-y-4">
-              <div className="space-y-3">
+        </div>
+
+        {/* Benefits Grid */}
+        <div className="max-w-lg mx-auto px-4 pb-8">
+          <div className="grid grid-cols-2 gap-3 mb-8">
+            {BENEFITS.map((benefit, index) => {
+              const Icon = benefit.icon;
+              return (
+                <div 
+                  key={index}
+                  className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="font-semibold text-sm mb-1">{benefit.title}</h3>
+                  <p className="text-xs text-muted-foreground">{benefit.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* CTA Card */}
+          <Card className="border-2 border-primary/20 shadow-xl">
+            <CardContent className="p-6 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center mx-auto mb-4">
+                <KeyRound className="w-7 h-7 text-white" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">Have a PIN Code?</h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Enter the 6-digit PIN from your recruiter to start onboarding
+              </p>
+              <Button 
+                size="lg" 
+                className="w-full h-12 text-base font-semibold"
+                onClick={() => setStep('pin')}
+              >
+                Enter PIN Code
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Already have account */}
+          <div className="text-center mt-6">
+            <p className="text-sm text-muted-foreground mb-2">Already on the team?</p>
+            <Button 
+              variant="link" 
+              onClick={() => navigate("/cleaner/auth")}
+              className="text-primary"
+            >
+              Sign in to your account
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // PIN Entry screen
+  if (step === 'pin') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm border-border/50 shadow-xl">
+          <CardHeader className="text-center space-y-3 pb-4">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-primary to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <KeyRound className="w-8 h-8 text-white" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Enter Your PIN</CardTitle>
+            <CardDescription className="text-base">
+              Enter the 6-digit code from your recruiter
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent className="px-6 pb-6">
+            <form onSubmit={handlePinSubmit} className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={code} onChange={setCode}>
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
+                  <InputOTP 
+                    maxLength={6} 
+                    value={pin} 
+                    onChange={(value) => {
+                      setPin(value);
+                      setPinError("");
+                    }}
+                  >
+                    <InputOTPGroup className="gap-2">
+                      {[0, 1, 2, 3, 4, 5].map((index) => (
+                        <InputOTPSlot 
+                          key={index} 
+                          index={index} 
+                          className={cn(
+                            "w-12 h-14 text-xl font-bold rounded-xl border-2",
+                            pinError ? "border-destructive" : "border-border"
+                          )}
+                        />
+                      ))}
                     </InputOTPGroup>
                   </InputOTP>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Sent to {email}
-                </p>
+                
+                {pinError && (
+                  <p className="text-sm text-destructive text-center">{pinError}</p>
+                )}
               </div>
 
               <Button
                 type="submit"
-                className="w-full"
-                size="lg"
-                disabled={verifying || code.length !== 6}
+                className="w-full h-12 text-base font-semibold"
+                disabled={isLoading || pin.length !== 6}
               >
-                {verifying ? "Verifying..." : "Verify Code"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 mr-2" />
+                    Verify PIN
+                  </>
+                )}
               </Button>
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleUseDifferentEmail}
-                  className="flex-1"
-                  size="sm"
-                  disabled={verifying}
-                >
-                  Change Email
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleResendCode}
-                  className="flex-1"
-                  size="sm"
-                  disabled={isLoading || verifying}
-                >
-                  {isLoading ? "Sending..." : "Resend"}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your.email@example.com"
-                    className="pl-9 h-10"
-                    disabled={isLoading}
-                    autoFocus
-                    required
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  We'll send a verification code
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={isLoading || !email}
-              >
-                {isLoading ? "Sending Code..." : "Continue"}
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-card px-2 text-muted-foreground">
-                    Already have an account?
-                  </span>
-                </div>
-              </div>
 
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => navigate("/cleaner/auth")}
+                variant="ghost"
                 className="w-full"
-                size="sm"
+                onClick={() => setStep('welcome')}
                 disabled={isLoading}
               >
-                Sign In
+                Back
               </Button>
             </form>
-          )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Email Entry screen (after PIN verified)
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm border-border/50 shadow-xl">
+        <CardHeader className="text-center space-y-3 pb-4">
+          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-8 h-8 text-white" />
+          </div>
+          <CardTitle className="text-2xl font-bold">PIN Verified!</CardTitle>
+          <CardDescription className="text-base">
+            Enter your email to complete registration
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="px-6 pb-6">
+          <form onSubmit={handleEmailSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium">
+                Email Address
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your.email@example.com"
+                className="h-12 text-base"
+                disabled={isLoading}
+                autoFocus
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                We'll send you a verification link
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-12 text-base font-semibold"
+              disabled={isLoading || !email}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  Continue
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setStep('pin');
+                setPin("");
+              }}
+              disabled={isLoading}
+            >
+              Use Different PIN
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

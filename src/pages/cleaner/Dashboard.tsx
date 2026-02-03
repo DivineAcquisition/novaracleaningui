@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { 
   Loader2, 
@@ -14,8 +16,14 @@ import {
   DollarSign,
   User,
   CreditCard,
-  Settings
+  Calendar,
+  Car,
+  Power,
+  Settings,
+  Sparkles,
+  MapPin
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface CleanerProfile {
   id: string;
@@ -25,16 +33,37 @@ interface CleanerProfile {
   phone: string;
   avatar_url: string | null;
   status: string;
+  home_zip: string;
+  max_travel_miles: number;
+  preferred_work_days: string[];
   stripe_account_id: string | null;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
 }
+
+const DAYS_OF_WEEK = [
+  { id: "Mon", label: "Mon" },
+  { id: "Tue", label: "Tue" },
+  { id: "Wed", label: "Wed" },
+  { id: "Thu", label: "Thu" },
+  { id: "Fri", label: "Fri" },
+  { id: "Sat", label: "Sat" },
+  { id: "Sun", label: "Sun" },
+];
+
+const TRAVEL_OPTIONS = [10, 15, 20, 25, 30];
 
 export default function CleanerDashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [stripeLoading, setStripeLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  // Editable settings
+  const [isActive, setIsActive] = useState(false);
+  const [workDays, setWorkDays] = useState<string[]>([]);
+  const [maxMiles, setMaxMiles] = useState(20);
 
   useEffect(() => {
     checkAuthAndLoadProfile();
@@ -63,6 +92,9 @@ export default function CleanerDashboard() {
       }
 
       setProfile(cleaner as CleanerProfile);
+      setIsActive(cleaner.status === "active");
+      setWorkDays(cleaner.preferred_work_days || []);
+      setMaxMiles(cleaner.max_travel_miles || 20);
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("Failed to load profile");
@@ -76,9 +108,48 @@ export default function CleanerDashboard() {
     navigate("/cleaner/auth");
   };
 
+  const toggleDay = async (day: string) => {
+    const newDays = workDays.includes(day)
+      ? workDays.filter(d => d !== day)
+      : [...workDays, day];
+    
+    setWorkDays(newDays);
+    await saveSettings({ preferred_work_days: newDays });
+  };
+
+  const updateMiles = async (miles: number) => {
+    setMaxMiles(miles);
+    await saveSettings({ max_travel_miles: miles });
+  };
+
+  const toggleStatus = async () => {
+    const newStatus = !isActive;
+    setIsActive(newStatus);
+    await saveSettings({ status: newStatus ? "active" : "inactive" });
+  };
+
+  const saveSettings = async (updates: Partial<CleanerProfile>) => {
+    if (!profile) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("cleaners")
+        .update(updates)
+        .eq("id", profile.id);
+
+      if (error) throw error;
+      toast.success("Settings saved");
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openStripeConnect = async () => {
     if (!profile?.stripe_account_id) {
-      // Need to set up Stripe first
       setStripeLoading(true);
       try {
         const { data, error } = await supabase.functions.invoke(
@@ -98,7 +169,6 @@ export default function CleanerDashboard() {
       return;
     }
 
-    // Redirect to Stripe Express Dashboard
     setStripeLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke(
@@ -112,11 +182,9 @@ export default function CleanerDashboard() {
       if (data?.url) {
         window.open(data.url, "_blank");
       } else {
-        // Fallback to Stripe dashboard
         window.open("https://dashboard.stripe.com", "_blank");
       }
     } catch (error) {
-      // Fallback: open Stripe Express dashboard directly
       window.open("https://connect.stripe.com/express_login", "_blank");
     } finally {
       setStripeLoading(false);
@@ -127,8 +195,10 @@ export default function CleanerDashboard() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">Loading your dashboard...</p>
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+          <p className="text-muted-foreground font-medium">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -147,28 +217,34 @@ export default function CleanerDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b">
+        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {profile.avatar_url ? (
               <img 
                 src={profile.avatar_url} 
                 alt="Avatar" 
-                className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
+                className="w-11 h-11 rounded-full object-cover ring-2 ring-primary/20"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="w-5 h-5 text-primary" />
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
+                <User className="w-5 h-5 text-white" />
               </div>
             )}
             <div>
-              <p className="font-semibold text-sm">{profile.first_name} {profile.last_name}</p>
-              <Badge 
-                variant="secondary" 
-                className={profile.status === "active" ? "bg-green-500/10 text-green-600 text-xs" : "text-xs"}
-              >
-                {profile.status === "active" ? "Active" : profile.status}
-              </Badge>
+              <p className="font-semibold">{profile.first_name} {profile.last_name}</p>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant="secondary" 
+                  className={cn(
+                    "text-xs",
+                    isActive ? "bg-green-500/10 text-green-600" : "bg-gray-500/10 text-gray-600"
+                  )}
+                >
+                  {isActive ? "Active" : "Inactive"}
+                </Badge>
+                {saving && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+              </div>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={handleSignOut}>
@@ -178,24 +254,120 @@ export default function CleanerDashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-lg mx-auto px-4 py-6 space-y-4">
-        {/* Welcome Card */}
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-primary to-purple-600 text-white">
-          <CardContent className="p-6">
-            <h1 className="text-xl font-bold mb-2">Welcome back!</h1>
-            <p className="text-white/80 text-sm">
-              Manage your earnings and view financial metrics in your Stripe dashboard.
-            </p>
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
+        
+        {/* Status Toggle */}
+        <Card className="border-0 shadow-xl overflow-hidden">
+          <div className={cn(
+            "h-1.5 transition-colors",
+            isActive ? "bg-gradient-to-r from-green-500 to-emerald-500" : "bg-gray-300"
+          )} />
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center transition-colors",
+                  isActive ? "bg-green-500/10" : "bg-muted"
+                )}>
+                  <Power className={cn(
+                    "w-6 h-6",
+                    isActive ? "text-green-600" : "text-muted-foreground"
+                  )} />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Availability Status</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {isActive ? "You're receiving job offers" : "You won't receive job offers"}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={isActive}
+                onCheckedChange={toggleStatus}
+                className="scale-110"
+              />
+            </div>
           </CardContent>
         </Card>
 
-        {/* Stripe Connect Status */}
-        <Card className="border-0 shadow-lg">
+        {/* Work Days */}
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Work Days
+            </CardTitle>
+            <CardDescription>
+              Select the days you're available to work
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex gap-2">
+              {DAYS_OF_WEEK.map((day) => (
+                <button
+                  key={day.id}
+                  onClick={() => toggleDay(day.id)}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl font-medium text-sm transition-all",
+                    workDays.includes(day.id)
+                      ? "bg-primary text-white shadow-md"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  )}
+                >
+                  {day.label.charAt(0)}
+                </button>
+              ))}
+            </div>
+            {workDays.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-3">
+                Working: {workDays.join(", ")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Travel Distance */}
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Car className="w-5 h-5 text-primary" />
+              Travel Distance
+            </CardTitle>
+            <CardDescription>
+              Maximum miles you'll travel for jobs
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex gap-2">
+              {TRAVEL_OPTIONS.map((miles) => (
+                <button
+                  key={miles}
+                  onClick={() => updateMiles(miles)}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl font-medium text-sm transition-all",
+                    maxMiles === miles
+                      ? "bg-primary text-white shadow-md"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  )}
+                >
+                  {miles}mi
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
+              <MapPin className="w-3 h-3" />
+              Based on ZIP: {profile.home_zip}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Stripe Connect - Prominent */}
+        <Card className="border-0 shadow-xl bg-gradient-to-br from-indigo-500/5 to-purple-500/5 border-indigo-500/10">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
-                Payments & Earnings
+              <CardTitle className="text-base flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-indigo-600" />
+                Earnings & Payouts
               </CardTitle>
               {stripeStatus === "active" && (
                 <Badge className="bg-green-500/10 text-green-600 border-0">
@@ -212,10 +384,10 @@ export default function CleanerDashboard() {
             </div>
             <CardDescription>
               {stripeStatus === "active" 
-                ? "View your earnings, payouts, and financial reports"
+                ? "View earnings, payouts, tax documents, and bank info"
                 : stripeStatus === "pending"
-                  ? "Complete your Stripe setup to start receiving payouts"
-                  : "Set up Stripe to receive payments for your work"
+                  ? "Complete setup to start receiving payouts"
+                  : "Connect Stripe to receive your earnings"
               }
             </CardDescription>
           </CardHeader>
@@ -223,78 +395,73 @@ export default function CleanerDashboard() {
             <Button 
               onClick={openStripeConnect}
               disabled={stripeLoading}
-              className="w-full h-12"
+              className={cn(
+                "w-full h-14 text-base font-semibold rounded-xl transition-all",
+                stripeStatus === "active" 
+                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90" 
+                  : ""
+              )}
               variant={stripeStatus === "active" ? "default" : "outline"}
             >
               {stripeLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   Loading...
                 </>
               ) : stripeStatus === "active" ? (
                 <>
-                  <DollarSign className="w-4 h-4 mr-2" />
+                  <DollarSign className="w-5 h-5 mr-2" />
                   Open Stripe Dashboard
                   <ExternalLink className="w-4 h-4 ml-2" />
                 </>
               ) : (
                 <>
-                  <Settings className="w-4 h-4 mr-2" />
+                  <Settings className="w-5 h-5 mr-2" />
                   {stripeStatus === "pending" ? "Complete Setup" : "Set Up Payments"}
                 </>
               )}
             </Button>
 
             {stripeStatus === "active" && (
-              <p className="text-xs text-muted-foreground text-center mt-3">
-                Your Stripe dashboard shows earnings, payouts, tax info, and more
-              </p>
+              <div className="mt-4 p-4 bg-card rounded-xl border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Your Pay Rate</p>
+                    <p className="text-2xl font-bold text-green-600">$18/hr</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                    <Sparkles className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Payouts are processed weekly via Stripe
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Info Card */}
-        <Card className="border-0 shadow-lg bg-blue-500/5 border-blue-500/20">
+        {/* Quick Info */}
+        <Card className="border-0 shadow-lg bg-muted/30">
           <CardContent className="p-4">
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                <DollarSign className="w-5 h-5 text-blue-600" />
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm">Your Pay Rate</p>
-                <p className="text-2xl font-bold text-blue-600">$18/hour</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  You'll receive assignments via email and SMS
-                </p>
+                <p className="font-medium text-sm mb-1">How It Works</p>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>1. You'll receive job offers via email & SMS</li>
+                  <li>2. Accept or decline based on your availability</li>
+                  <li>3. Complete the job and get paid weekly</li>
+                </ul>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Profile Summary */}
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Profile Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Email</p>
-                <p className="font-medium truncate">{profile.email}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Phone</p>
-                <p className="font-medium">{profile.phone}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Help Text */}
-        <p className="text-xs text-center text-muted-foreground px-4">
+        {/* Support Footer */}
+        <p className="text-xs text-center text-muted-foreground pb-4">
           Need help? Contact support@novaracleaning.com
         </p>
       </main>

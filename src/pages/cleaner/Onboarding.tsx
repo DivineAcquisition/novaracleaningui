@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -19,11 +19,11 @@ import {
   Mail,
   Camera,
   Calendar,
-  Briefcase,
-  DollarSign,
-  Sparkles
+  Sparkles,
+  Car,
+  Star
 } from "lucide-react";
-import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
+import { validatePhone, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
 import { cn } from "@/lib/utils";
 
@@ -36,29 +36,30 @@ const US_STATES = [
 ];
 
 const DAYS_OF_WEEK = [
-  { id: "Mon", label: "M" },
-  { id: "Tue", label: "T" },
-  { id: "Wed", label: "W" },
-  { id: "Thu", label: "T" },
-  { id: "Fri", label: "F" },
-  { id: "Sat", label: "S" },
-  { id: "Sun", label: "S" },
+  { id: "Mon", label: "Mon", full: "Monday" },
+  { id: "Tue", label: "Tue", full: "Tuesday" },
+  { id: "Wed", label: "Wed", full: "Wednesday" },
+  { id: "Thu", label: "Thu", full: "Thursday" },
+  { id: "Fri", label: "Fri", full: "Friday" },
+  { id: "Sat", label: "Sat", full: "Saturday" },
+  { id: "Sun", label: "Sun", full: "Sunday" },
 ];
 
 const SKILLSET_OPTIONS = [
-  { id: "Standard Cleaning", icon: "🏠" },
-  { id: "Deep Cleaning", icon: "✨" },
-  { id: "Move-In/Move-Out", icon: "📦" },
-  { id: "Vacation Rental", icon: "🏖️" },
-  { id: "Pet-Friendly", icon: "🐾" },
-  { id: "Eco-Friendly", icon: "🌿" },
+  { id: "Standard Cleaning", icon: "🏠", desc: "Regular home cleaning" },
+  { id: "Deep Cleaning", icon: "✨", desc: "Intensive deep cleans" },
+  { id: "Move-In/Move-Out", icon: "📦", desc: "Turnover cleaning" },
+  { id: "Vacation Rental", icon: "🏖️", desc: "Airbnb & rentals" },
+  { id: "Pet-Friendly", icon: "🐾", desc: "Pet hair & odors" },
+  { id: "Eco-Friendly", icon: "🌿", desc: "Green products" },
 ];
 
-const STEPS = [
-  { id: 1, title: "Personal Info", icon: User },
-  { id: 2, title: "Location", icon: MapPin },
-  { id: 3, title: "Availability", icon: Calendar },
-  { id: 4, title: "Review", icon: CheckCircle2 },
+const TRAVEL_OPTIONS = [
+  { value: 10, label: "10 mi", desc: "Local area" },
+  { value: 15, label: "15 mi", desc: "Nearby" },
+  { value: 20, label: "20 mi", desc: "Standard" },
+  { value: 25, label: "25 mi", desc: "Extended" },
+  { value: 30, label: "30 mi", desc: "Far reach" },
 ];
 
 export default function CleanerOnboarding() {
@@ -99,7 +100,6 @@ export default function CleanerOnboarding() {
       setUserId(session.user.id);
       setUserEmail(session.user.email || "");
       
-      // Check if already onboarded
       const { data: existingCleaner } = await supabase
         .from("cleaners")
         .select("id, onboarding_complete")
@@ -214,7 +214,6 @@ export default function CleanerOnboarding() {
     setIsLoading(true);
 
     try {
-      // Upload avatar if provided
       let avatarUrl = null;
       if (formData.avatarFile) {
         const fileExt = formData.avatarFile.name.split('.').pop();
@@ -232,7 +231,6 @@ export default function CleanerOnboarding() {
         }
       }
 
-      // Create cleaner record
       const { error: insertError } = await supabase
         .from("cleaners")
         .insert({
@@ -263,7 +261,6 @@ export default function CleanerOnboarding() {
         throw insertError;
       }
 
-      // Initiate Stripe Connect
       toast.success("Profile created! Setting up payments...");
       
       const { data: stripeData, error: stripeError } = await supabase.functions.invoke(
@@ -276,7 +273,6 @@ export default function CleanerOnboarding() {
         return;
       }
 
-      // Redirect to Stripe Connect onboarding
       window.location.href = stripeData.url;
 
     } catch (error: any) {
@@ -291,8 +287,12 @@ export default function CleanerOnboarding() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">Verifying session...</p>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          </div>
+          <p className="text-muted-foreground font-medium">Verifying session...</p>
         </div>
       </div>
     );
@@ -301,75 +301,66 @@ export default function CleanerOnboarding() {
   const progress = (currentStep / 4) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 py-8 px-4">
-      <div className="max-w-lg mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 py-6 px-4">
+      <div className="max-w-md mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-primary shadow-lg mb-4">
-            <Briefcase className="w-7 h-7 text-white" />
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-600 shadow-xl mb-4">
+            <Sparkles className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold">Join Our Team</h1>
+          <h1 className="text-2xl font-bold">Complete Your Profile</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Complete your profile to start accepting jobs
+            Step {currentStep} of 4
           </p>
         </div>
 
-        {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            {STEPS.map((step, index) => {
-              const Icon = step.icon;
-              const isActive = currentStep === step.id;
-              const isComplete = currentStep > step.id;
-              
-              return (
-                <div key={step.id} className="flex flex-col items-center flex-1">
-                  <div className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-                    isActive && "bg-primary text-white shadow-lg",
-                    isComplete && "bg-green-500 text-white",
-                    !isActive && !isComplete && "bg-muted text-muted-foreground"
-                  )}>
-                    {isComplete ? <CheckCircle2 className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
-                  </div>
-                  <span className={cn(
-                    "text-xs mt-2 font-medium",
-                    isActive && "text-primary",
-                    isComplete && "text-green-600",
-                    !isActive && !isComplete && "text-muted-foreground"
-                  )}>
-                    {step.title}
-                  </span>
-                </div>
-              );
-            })}
+        {/* Progress Bar */}
+        <div className="mb-6">
+          <Progress value={progress} className="h-2 bg-muted" />
+          <div className="flex justify-between mt-2">
+            {['Profile', 'Location', 'Schedule', 'Review'].map((label, index) => (
+              <span 
+                key={label}
+                className={cn(
+                  "text-xs font-medium transition-colors",
+                  currentStep > index + 1 ? "text-green-600" : 
+                  currentStep === index + 1 ? "text-primary" : "text-muted-foreground"
+                )}
+              >
+                {label}
+              </span>
+            ))}
           </div>
-          <Progress value={progress} className="h-2" />
         </div>
 
         {/* Form Card */}
-        <Card className="border-0 shadow-xl">
+        <Card className="border-0 shadow-2xl overflow-hidden">
           <CardContent className="p-6">
             <form onSubmit={handleSubmit}>
               {/* Step 1: Personal Info */}
               {currentStep === 1 && (
-                <div className="space-y-5">
-                  <div className="text-center mb-6">
+                <div className="space-y-6">
+                  <div className="text-center">
                     <h2 className="text-lg font-semibold">Personal Information</h2>
-                    <p className="text-sm text-muted-foreground">Tell us about yourself</p>
+                    <p className="text-sm text-muted-foreground">Let's start with the basics</p>
                   </div>
 
                   {/* Avatar Upload */}
-                  <div className="flex justify-center">
-                    <div className="relative">
+                  <div className="flex flex-col items-center">
+                    <div className="relative group">
                       <div className={cn(
-                        "w-24 h-24 rounded-full border-4 border-dashed flex items-center justify-center overflow-hidden transition-all",
-                        avatarPreview ? "border-primary" : "border-muted-foreground/30"
+                        "w-28 h-28 rounded-full border-4 flex items-center justify-center overflow-hidden transition-all",
+                        avatarPreview 
+                          ? "border-primary shadow-lg" 
+                          : "border-dashed border-muted-foreground/30 hover:border-primary/50"
                       )}>
                         {avatarPreview ? (
                           <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
-                          <Camera className="w-8 h-8 text-muted-foreground/50" />
+                          <div className="text-center">
+                            <Camera className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+                            <span className="text-xs text-muted-foreground/60 mt-1">Add Photo</span>
+                          </div>
                         )}
                       </div>
                       <input
@@ -378,14 +369,12 @@ export default function CleanerOnboarding() {
                         onChange={handleImageChange}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
-                      <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                      <div className="absolute -bottom-1 -right-1 w-9 h-9 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-background">
                         <Camera className="w-4 h-4 text-white" />
                       </div>
                     </div>
+                    <p className="text-xs text-muted-foreground mt-2">Optional - helps build trust</p>
                   </div>
-                  <p className="text-xs text-center text-muted-foreground">
-                    Add a professional photo (optional)
-                  </p>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -395,7 +384,7 @@ export default function CleanerOnboarding() {
                         <Input
                           value={formData.firstName}
                           onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                          className="pl-10 h-11"
+                          className="pl-10 h-12 rounded-xl"
                           placeholder="John"
                         />
                       </div>
@@ -407,7 +396,7 @@ export default function CleanerOnboarding() {
                         <Input
                           value={formData.lastName}
                           onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                          className="pl-10 h-11"
+                          className="pl-10 h-12 rounded-xl"
                           placeholder="Doe"
                         />
                       </div>
@@ -421,7 +410,7 @@ export default function CleanerOnboarding() {
                       <Input
                         value={userEmail}
                         disabled
-                        className="pl-10 h-11 bg-muted/50"
+                        className="pl-10 h-12 rounded-xl bg-muted/50"
                       />
                     </div>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -438,7 +427,7 @@ export default function CleanerOnboarding() {
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                        className="pl-10 h-11"
+                        className="pl-10 h-12 rounded-xl"
                         placeholder="(555) 123-4567"
                       />
                     </div>
@@ -448,10 +437,10 @@ export default function CleanerOnboarding() {
 
               {/* Step 2: Location */}
               {currentStep === 2 && (
-                <div className="space-y-5">
-                  <div className="text-center mb-6">
+                <div className="space-y-6">
+                  <div className="text-center">
                     <h2 className="text-lg font-semibold">Your Location</h2>
-                    <p className="text-sm text-muted-foreground">Where are you based?</p>
+                    <p className="text-sm text-muted-foreground">Where will you be working from?</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -460,9 +449,9 @@ export default function CleanerOnboarding() {
                       <select
                         value={formData.state}
                         onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
-                        className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm"
+                        className="w-full h-12 rounded-xl border border-input bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                       >
-                        <option value="">Select</option>
+                        <option value="">Select state</option>
                         {US_STATES.map(state => (
                           <option key={state} value={state}>{state}</option>
                         ))}
@@ -476,40 +465,47 @@ export default function CleanerOnboarding() {
                           value={formData.homeZip}
                           onChange={(e) => setFormData(prev => ({ ...prev, homeZip: e.target.value }))}
                           maxLength={5}
-                          className="pl-10 h-11"
+                          className="pl-10 h-12 rounded-xl"
                           placeholder="12345"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Max Travel Distance</Label>
-                    <select
-                      value={formData.maxTravelMiles}
-                      onChange={(e) => setFormData(prev => ({ ...prev, maxTravelMiles: parseInt(e.target.value) }))}
-                      className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm"
-                    >
-                      <option value={10}>10 miles</option>
-                      <option value={15}>15 miles</option>
-                      <option value={20}>20 miles</option>
-                      <option value={25}>25 miles</option>
-                      <option value={30}>30 miles</option>
-                    </select>
-                    <p className="text-xs text-muted-foreground">
-                      You'll only receive jobs within this radius
-                    </p>
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Car className="w-4 h-4" />
+                      How far will you travel?
+                    </Label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {TRAVEL_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, maxTravelMiles: option.value }))}
+                          className={cn(
+                            "p-3 rounded-xl border-2 text-center transition-all",
+                            formData.maxTravelMiles === option.value
+                              ? "border-primary bg-primary/5 shadow-sm"
+                              : "border-border hover:border-primary/50"
+                          )}
+                        >
+                          <p className="font-bold text-sm">{option.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{option.desc}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Pay Rate Display */}
-                  <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl p-4 border border-green-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                        <DollarSign className="w-5 h-5 text-green-600" />
+                  {/* Pay Rate Preview */}
+                  <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-2xl p-5 border border-green-500/20">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                        <Star className="w-6 h-6 text-green-600" />
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Your Pay Rate</p>
-                        <p className="text-2xl font-bold text-green-600">$18/hour</p>
+                        <p className="text-sm text-muted-foreground">Starting Pay Rate</p>
+                        <p className="text-3xl font-bold text-green-600">$18<span className="text-lg">/hr</span></p>
                       </div>
                     </div>
                   </div>
@@ -518,50 +514,63 @@ export default function CleanerOnboarding() {
 
               {/* Step 3: Availability & Skills */}
               {currentStep === 3 && (
-                <div className="space-y-5">
-                  <div className="text-center mb-6">
+                <div className="space-y-6">
+                  <div className="text-center">
                     <h2 className="text-lg font-semibold">Availability & Skills</h2>
-                    <p className="text-sm text-muted-foreground">When can you work?</p>
+                    <p className="text-sm text-muted-foreground">Set your schedule and expertise</p>
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-sm font-medium">Available Days</Label>
-                    <div className="flex gap-2 justify-center">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Available Days
+                    </Label>
+                    <div className="grid grid-cols-7 gap-2">
                       {DAYS_OF_WEEK.map((day) => (
                         <button
                           key={day.id}
                           type="button"
                           onClick={() => toggleDay(day.id)}
                           className={cn(
-                            "w-10 h-10 rounded-full font-medium text-sm transition-all",
+                            "aspect-square rounded-xl font-semibold text-sm transition-all flex flex-col items-center justify-center",
                             formData.preferredWorkDays.includes(day.id)
                               ? "bg-primary text-white shadow-lg"
                               : "bg-muted text-muted-foreground hover:bg-muted/80"
                           )}
                         >
-                          {day.label}
+                          <span>{day.label.charAt(0)}</span>
                         </button>
                       ))}
                     </div>
+                    {formData.preferredWorkDays.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: {formData.preferredWorkDays.join(", ")}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-sm font-medium">Your Skills</Label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <Label className="text-sm font-medium">Your Cleaning Skills</Label>
+                    <div className="grid grid-cols-2 gap-3">
                       {SKILLSET_OPTIONS.map((skill) => (
                         <button
                           key={skill.id}
                           type="button"
                           onClick={() => toggleSkill(skill.id)}
                           className={cn(
-                            "p-3 rounded-xl border-2 text-left transition-all",
+                            "p-4 rounded-xl border-2 text-left transition-all",
                             formData.skillset.includes(skill.id)
-                              ? "border-primary bg-primary/5"
-                              : "border-transparent bg-muted/50 hover:bg-muted"
+                              ? "border-primary bg-primary/5 shadow-sm"
+                              : "border-border hover:border-primary/50 bg-card"
                           )}
                         >
-                          <span className="text-lg">{skill.icon}</span>
-                          <p className="text-xs font-medium mt-1">{skill.id}</p>
+                          <div className="flex items-start gap-3">
+                            <span className="text-2xl">{skill.icon}</span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{skill.id}</p>
+                              <p className="text-xs text-muted-foreground">{skill.desc}</p>
+                            </div>
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -571,63 +580,71 @@ export default function CleanerOnboarding() {
 
               {/* Step 4: Review */}
               {currentStep === 4 && (
-                <div className="space-y-5">
-                  <div className="text-center mb-6">
-                    <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                      <Sparkles className="w-8 h-8 text-green-500" />
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-lg">
+                      <CheckCircle2 className="w-8 h-8 text-white" />
                     </div>
                     <h2 className="text-lg font-semibold">Review Your Profile</h2>
-                    <p className="text-sm text-muted-foreground">Make sure everything looks good</p>
+                    <p className="text-sm text-muted-foreground">You're almost there!</p>
                   </div>
 
-                  <div className="space-y-4 bg-muted/30 rounded-xl p-4">
-                    <div className="flex items-center gap-3">
+                  <div className="bg-muted/30 rounded-2xl p-5 space-y-4">
+                    {/* Profile Header */}
+                    <div className="flex items-center gap-4">
                       {avatarPreview ? (
-                        <img src={avatarPreview} className="w-12 h-12 rounded-full object-cover" />
+                        <img src={avatarPreview} className="w-16 h-16 rounded-full object-cover ring-2 ring-primary/20" />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                          <User className="w-6 h-6 text-muted-foreground" />
+                        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="w-8 h-8 text-primary/50" />
                         </div>
                       )}
                       <div>
-                        <p className="font-semibold">{formData.firstName} {formData.lastName}</p>
+                        <p className="text-lg font-semibold">{formData.firstName} {formData.lastName}</p>
                         <p className="text-sm text-muted-foreground">{userEmail}</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="h-px bg-border" />
+
+                    {/* Details Grid */}
+                    <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-muted-foreground">Phone</p>
+                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Phone</p>
                         <p className="font-medium">{formData.phone}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Location</p>
+                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Location</p>
                         <p className="font-medium">{formData.homeZip}, {formData.state}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Travel Range</p>
+                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Travel Range</p>
                         <p className="font-medium">{formData.maxTravelMiles} miles</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Pay Rate</p>
+                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Pay Rate</p>
                         <p className="font-medium text-green-600">$18/hour</p>
                       </div>
                     </div>
 
+                    <div className="h-px bg-border" />
+
+                    {/* Days */}
                     <div>
-                      <p className="text-sm text-muted-foreground mb-2">Available Days</p>
+                      <p className="text-muted-foreground text-xs uppercase tracking-wide mb-2">Available Days</p>
                       <div className="flex gap-1 flex-wrap">
                         {formData.preferredWorkDays.map(day => (
-                          <Badge key={day} variant="secondary" className="text-xs">{day}</Badge>
+                          <Badge key={day} variant="secondary" className="text-xs px-3">{day}</Badge>
                         ))}
                       </div>
                     </div>
 
+                    {/* Skills */}
                     <div>
-                      <p className="text-sm text-muted-foreground mb-2">Skills</p>
+                      <p className="text-muted-foreground text-xs uppercase tracking-wide mb-2">Skills</p>
                       <div className="flex gap-1 flex-wrap">
                         {formData.skillset.map(skill => (
-                          <Badge key={skill} className="text-xs bg-primary/10 text-primary border-0">
+                          <Badge key={skill} className="text-xs px-3 bg-primary/10 text-primary border-0">
                             {skill}
                           </Badge>
                         ))}
@@ -635,9 +652,10 @@ export default function CleanerOnboarding() {
                     </div>
                   </div>
 
+                  {/* Stripe Info */}
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <strong>Next step:</strong> After submitting, you'll be redirected to Stripe to set up your payment account for receiving payouts.
+                      <span className="font-semibold">Next step:</span> Set up your Stripe account to receive weekly payouts directly to your bank.
                     </p>
                   </div>
                 </div>
@@ -650,7 +668,7 @@ export default function CleanerOnboarding() {
                     type="button"
                     variant="outline"
                     onClick={handleBack}
-                    className="flex-1 h-11"
+                    className="flex-1 h-12 rounded-xl"
                     disabled={isLoading}
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />
@@ -662,7 +680,7 @@ export default function CleanerOnboarding() {
                   <Button
                     type="button"
                     onClick={handleNext}
-                    className="flex-1 h-11"
+                    className="flex-1 h-12 rounded-xl"
                     disabled={isLoading}
                   >
                     Continue
@@ -671,7 +689,7 @@ export default function CleanerOnboarding() {
                 ) : (
                   <Button
                     type="submit"
-                    className="flex-1 h-11"
+                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary to-purple-600 hover:opacity-90"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -682,7 +700,7 @@ export default function CleanerOnboarding() {
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Complete & Setup Payments
+                        Complete & Set Up Payments
                       </>
                     )}
                   </Button>
