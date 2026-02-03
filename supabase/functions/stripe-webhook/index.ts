@@ -240,11 +240,11 @@ serve(async (req) => {
           }
         }
 
-          // Send confirmation emails
-          logStep("Sending confirmation emails", { email: booking.email });
+          // Send confirmation emails AND SMS
+          logStep("Sending confirmation emails and SMS", { email: booking.email, phone: booking.phone });
           
           try {
-            // Send booking confirmation
+            // Send booking confirmation email
             await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
               method: 'POST',
               headers: {
@@ -301,6 +301,42 @@ serve(async (req) => {
             });
 
             logStep("Confirmation emails sent successfully");
+            
+            // Send SMS booking confirmation to customer
+            if (booking.phone) {
+              try {
+                const formattedDate = new Date(booking.service_date).toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                });
+                
+                const serviceTypeLabels: Record<string, string> = {
+                  standard: 'Standard',
+                  deep: 'Deep Clean',
+                  moveInOut: 'Move In/Out',
+                };
+                
+                const smsMessage = `Novara: Your ${serviceTypeLabels[booking.service_type] || 'cleaning'} on ${formattedDate} is confirmed! We'll send a reminder 24hrs before. Questions? Reply HELP or call (972) 559-0223`;
+                
+                await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms-notification`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                  },
+                  body: JSON.stringify({
+                    toPhone: booking.phone,
+                    message: smsMessage,
+                    type: 'confirmation',
+                  }),
+                });
+                
+                logStep("SMS booking confirmation sent successfully", { phone: booking.phone });
+              } catch (smsError) {
+                logStep("Error sending booking SMS (non-blocking)", { error: smsError });
+              }
+            }
           } catch (emailError) {
             logStep("Error sending emails (non-blocking)", { error: emailError });
           }

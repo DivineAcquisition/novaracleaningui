@@ -18,11 +18,11 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PAYMENT-INTENT] ${step}${detailsStr}`);
 };
 
-// Service pricing configuration (cents)
+// Service pricing configuration (cents) - Updated Feb 2026
 const SERVICE_TIER_PRICING = {
   standard: 0,
-  deep: 5000, // $50
-  moveInOut: 12000, // $120
+  deep: 5000, // $50 (or use multiplier approach: basePrice * 0.5)
+  moveInOut: 12000, // $120 (or use multiplier approach: basePrice * 1.0)
 };
 
 const ADD_ON_PRICING = {
@@ -32,18 +32,38 @@ const ADD_ON_PRICING = {
 };
 
 // Match frontend HOME_SIZE_RANGES IDs and prices (standardPrice * 100)
+// Updated to match Feb 2026 pricing v2.0
 const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 15000,
-  "1000_1500": 18750,
-  "1501_2000": 22500,
-  "2001_2500": 26250,
-  "2501_3000": 30000,
-  "3001_3500": 33750,
-  "3501_4000": 37500,
-  "4001_4500": 41250,
-  "4501_5000": 45000,
-  "5000_plus": 0,
+  "0_999": 15000,    // $150
+  "1000_1500": 18900, // $189
+  "1501_2000": 23900, // $239
+  "2001_2500": 27900, // $279
+  "2501_3000": 33900, // $339
+  "3001_3500": 37900, // $379
+  "3501_4000": 43900, // $439
+  "4001_4500": 48900, // $489
+  "4501_5000": 53900, // $539
+  "5000_plus": 0,     // Custom quote required
 };
+
+// Zone pricing modifiers (for Maryland service area)
+const ZONE_MODIFIERS: Record<string, number> = {
+  A: 1.15, // Premium: Bethesda, Potomac, Chevy Chase, Rockville, Silver Spring
+  B: 1.0,  // Standard: Rest of MoCo, PG County, Columbia, Ellicott City
+  C: 0.90, // Outer: Frederick, Hagerstown, Annapolis, Baltimore suburbs
+};
+
+// Premium zone ZIP codes
+const ZONE_A_ZIPS = ['20814', '20815', '20816', '20817', '20854', '20859', '20850', '20851', '20852', '20901', '20902', '20903', '20904', '20910'];
+// Outer zone ZIP codes
+const ZONE_C_ZIPS = ['21701', '21702', '21703', '21740', '21742', '21401', '21403', '21117', '21208', '21228', '21244'];
+
+// Helper function to get zone modifier for a ZIP code
+function getZoneModifier(zipCode: string): number {
+  if (ZONE_A_ZIPS.includes(zipCode)) return ZONE_MODIFIERS.A;
+  if (ZONE_C_ZIPS.includes(zipCode)) return ZONE_MODIFIERS.C;
+  return ZONE_MODIFIERS.B; // Default to Standard zone
+}
 
 const DEPOSIT_AMOUNT = 3900; // $39
 const NEW_CUSTOMER_DISCOUNT = 6000; // $60
@@ -115,8 +135,8 @@ serve(async (req) => {
     );
 
     // Calculate pricing to match frontend logic (values in cents)
-    const basePrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string];
-    if (basePrice === undefined) {
+    const rawBasePrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string];
+    if (rawBasePrice === undefined) {
       logStep("Invalid home size ID", { homeSizeId: bookingData.homeSizeId, validIds: Object.keys(HOME_SIZE_PRICING) });
       return new Response(
         JSON.stringify({ 
@@ -127,6 +147,12 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    // Apply zone pricing modifier based on ZIP code
+    const zoneModifier = bookingData.zipCode ? getZoneModifier(bookingData.zipCode) : 1.0;
+    const basePrice = Math.round(rawBasePrice * zoneModifier);
+    logStep("Zone pricing applied", { zipCode: bookingData.zipCode, zoneModifier, rawBasePrice, adjustedBasePrice: basePrice });
+    
     const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING] ?? 0;
 
     // Prepare add-ons (Move-In/Out includes fridge & oven already)
