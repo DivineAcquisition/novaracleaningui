@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -302,7 +302,7 @@ export default function CleanerAssessment() {
     
     return (
       <div className="min-h-screen bg-background py-6 px-4">
-        <div className="max-w-sm mx-auto">
+        <div className="max-w-xl mx-auto">
           <Card className="border border-border shadow-md">
             <CardHeader className="text-center pb-4">
               <div className={cn(
@@ -359,13 +359,12 @@ export default function CleanerAssessment() {
                     </div>
                   </div>
 
-                  <Button 
-                    className="w-full h-11 text-sm border border-primary/20"
-                    onClick={() => navigate("/cleaner/dashboard")}
-                  >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Dashboard
-                  </Button>
+                  <Link to="/cleaner/dashboard" className="block">
+                    <Button className="w-full h-11 text-sm border border-primary/20">
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      Back to Dashboard
+                    </Button>
+                  </Link>
                 </>
               ) : (
                 <>
@@ -391,10 +390,10 @@ export default function CleanerAssessment() {
                     </div>
                   </div>
 
-                  {/* Review Answers */}
+                  {/* Review Answers - Desktop: 2 columns */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase">Review Answers</p>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                       {ASSESSMENT_QUESTIONS.map((q) => {
                         const isCorrect = answers[q.id] === q.correctAnswer;
                         return (
@@ -414,7 +413,7 @@ export default function CleanerAssessment() {
                                 <XCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
                               )}
                               <div>
-                                <p className="font-medium line-clamp-1">Q{q.id}: {q.question.slice(0, 40)}...</p>
+                                <p className="font-medium line-clamp-1">Q{q.id}: {q.question.slice(0, 35)}...</p>
                                 {!isCorrect && (
                                   <p className="text-[10px] text-muted-foreground mt-0.5">
                                     Correct: {q.correctAnswer}
@@ -429,14 +428,15 @@ export default function CleanerAssessment() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button 
-                      variant="outline"
-                      className="flex-1 h-10 text-sm border border-border"
-                      onClick={() => navigate("/cleaner/dashboard")}
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-                      Dashboard
-                    </Button>
+                    <Link to="/cleaner/dashboard" className="flex-1">
+                      <Button 
+                        variant="outline"
+                        className="w-full h-10 text-sm border border-border"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+                        Dashboard
+                      </Button>
+                    </Link>
                     <Button 
                       className="flex-1 h-10 text-sm border border-primary/20"
                       onClick={retakeAssessment}
@@ -467,19 +467,20 @@ export default function CleanerAssessment() {
 
   return (
     <div className="min-h-screen bg-background py-4 px-4">
-      <div className="max-w-sm mx-auto">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-8 px-2 border border-border"
-              onClick={() => navigate("/cleaner/dashboard")}
-            >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              Exit
-            </Button>
+            <Link to="/cleaner/dashboard">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 px-2 border border-border"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                Exit
+              </Button>
+            </Link>
             <Badge variant="secondary" className="text-xs border border-border">
               {answeredCount}/{ASSESSMENT_QUESTIONS.length} answered
             </Badge>
@@ -487,48 +488,95 @@ export default function CleanerAssessment() {
           <Progress value={progress} className="h-1.5" />
         </div>
 
-        {/* Question Card */}
-        <Card className="border border-border shadow-md">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                <span className="text-sm font-bold text-primary">{question.id}</span>
+        {/* Desktop: Two column layout */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Question Card - Takes 2 columns on desktop */}
+          <Card className="border border-border shadow-md md:col-span-2">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <span className="text-sm font-bold text-primary">{question.id}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">of {ASSESSMENT_QUESTIONS.length}</span>
               </div>
-              <span className="text-xs text-muted-foreground">of {ASSESSMENT_QUESTIONS.length}</span>
-            </div>
-            <CardTitle className="text-base leading-snug">{question.question}</CardTitle>
-          </CardHeader>
-          
-          <CardContent className="space-y-2">
-            {question.options.map((option) => {
-              const isSelected = answers[question.id] === option.key;
-              return (
-                <button
-                  key={option.key}
-                  onClick={() => selectAnswer(question.id, option.key)}
-                  className={cn(
-                    "w-full p-3 rounded-lg border text-left transition-all",
-                    isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 border text-xs font-semibold",
+              <CardTitle className="text-base md:text-lg leading-snug">{question.question}</CardTitle>
+            </CardHeader>
+            
+            <CardContent className="space-y-2">
+              {question.options.map((option) => {
+                const isSelected = answers[question.id] === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    onClick={() => selectAnswer(question.id, option.key)}
+                    className={cn(
+                      "w-full p-3 md:p-4 rounded-lg border text-left transition-all",
                       isSelected
-                        ? "bg-primary text-white border-primary"
-                        : "bg-muted text-muted-foreground border-border"
-                    )}>
-                      {option.key}
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 border text-xs font-semibold",
+                        isSelected
+                          ? "bg-primary text-white border-primary"
+                          : "bg-muted text-muted-foreground border-border"
+                      )}>
+                        {option.key}
+                      </div>
+                      <p className="text-sm md:text-base">{option.text}</p>
                     </div>
-                    <p className="text-sm">{option.text}</p>
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Sidebar - Question Navigator (visible on desktop, at bottom on mobile) */}
+          <div className="md:col-span-1 order-last md:order-none">
+            <Card className="border border-border shadow-sm sticky top-4">
+              <CardHeader className="pb-2 px-4 pt-4">
+                <CardTitle className="text-sm">Questions</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                <div className="grid grid-cols-5 gap-1.5">
+                  {ASSESSMENT_QUESTIONS.map((q, index) => {
+                    const isAnswered = !!answers[q.id];
+                    const isCurrent = index === currentQuestion;
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => setCurrentQuestion(index)}
+                        className={cn(
+                          "aspect-square rounded-md text-xs font-medium border transition-all flex items-center justify-center",
+                          isCurrent && "ring-2 ring-primary ring-offset-1",
+                          isAnswered 
+                            ? "bg-primary/10 text-primary border-primary/30" 
+                            : "bg-muted text-muted-foreground border-border"
+                        )}
+                      >
+                        {q.id}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                    <span>Progress</span>
+                    <span>{answeredCount}/{ASSESSMENT_QUESTIONS.length}</span>
                   </div>
-                </button>
-              );
-            })}
-          </CardContent>
-        </Card>
+                  <Progress value={(answeredCount / ASSESSMENT_QUESTIONS.length) * 100} className="h-1.5" />
+                </div>
+
+                <p className="text-[10px] text-muted-foreground mt-3 text-center">
+                  80% required to pass
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
         {/* Navigation */}
         <div className="flex gap-2 mt-4">
@@ -572,34 +620,8 @@ export default function CleanerAssessment() {
           )}
         </div>
 
-        {/* Question Navigator */}
-        <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-border">
-          <p className="text-[10px] text-muted-foreground uppercase mb-2">Quick Nav</p>
-          <div className="flex flex-wrap gap-1.5">
-            {ASSESSMENT_QUESTIONS.map((q, index) => {
-              const isAnswered = !!answers[q.id];
-              const isCurrent = index === currentQuestion;
-              return (
-                <button
-                  key={q.id}
-                  onClick={() => setCurrentQuestion(index)}
-                  className={cn(
-                    "w-7 h-7 rounded-md text-xs font-medium border transition-all",
-                    isCurrent && "ring-2 ring-primary ring-offset-1",
-                    isAnswered 
-                      ? "bg-primary/10 text-primary border-primary/30" 
-                      : "bg-muted text-muted-foreground border-border"
-                  )}
-                >
-                  {q.id}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <p className="text-[10px] text-center text-muted-foreground mt-4">
-          NovaraCleaning Contractor Assessment • 80% required to pass
+          NovaraCleaning Contractor Assessment
         </p>
       </div>
     </div>

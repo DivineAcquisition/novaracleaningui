@@ -299,7 +299,7 @@ export default function CleanerOnboarding() {
 
   return (
     <div className="min-h-screen bg-background py-4 px-4">
-      <div className="max-w-sm mx-auto">
+      <div className="max-w-lg mx-auto">
         {/* Header */}
         <div className="text-center mb-4">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-purple-600 shadow-md mb-3">

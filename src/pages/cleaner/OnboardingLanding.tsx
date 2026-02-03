@@ -143,67 +143,72 @@ export default function OnboardingLanding() {
       <div className="min-h-screen bg-background">
         {/* Hero */}
         <div className="bg-gradient-to-br from-primary/10 via-background to-purple-500/10 px-4 pt-10 pb-6">
-          <div className="max-w-sm mx-auto text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-600 shadow-lg mb-4">
-              <Sparkles className="w-8 h-8 text-white" />
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-primary to-purple-600 shadow-lg mb-4">
+              <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-white" />
             </div>
-            <h1 className="text-2xl font-bold mb-2">Join Novara</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">Join Novara</h1>
+            <p className="text-sm md:text-base text-muted-foreground">
               Start earning as a professional cleaner
             </p>
           </div>
         </div>
 
-        <div className="max-w-sm mx-auto px-4 py-6 space-y-5">
-          {/* Benefits */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {BENEFITS.map((benefit, index) => {
-              const Icon = benefit.icon;
-              return (
-                <div 
-                  key={index}
-                  className="bg-card rounded-xl p-3.5 border border-border shadow-sm"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <Icon className="w-4 h-4 text-primary" />
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          {/* Desktop: Side by side layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Benefits */}
+            <div className="grid grid-cols-2 gap-2.5 md:gap-3">
+              {BENEFITS.map((benefit, index) => {
+                const Icon = benefit.icon;
+                return (
+                  <div 
+                    key={index}
+                    className="bg-card rounded-xl p-3.5 md:p-4 border border-border shadow-sm"
+                  >
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
+                      <Icon className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                    </div>
+                    <h3 className="font-semibold text-sm">{benefit.title}</h3>
+                    <p className="text-xs text-muted-foreground">{benefit.desc}</p>
                   </div>
-                  <h3 className="font-semibold text-sm">{benefit.title}</h3>
-                  <p className="text-xs text-muted-foreground">{benefit.desc}</p>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
 
-          {/* CTA Card */}
-          <Card className="border border-primary/20 shadow-md">
-            <CardContent className="p-5 text-center">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center mx-auto mb-3">
-                <Mail className="w-6 h-6 text-white" />
+            {/* CTA Card */}
+            <div className="space-y-4">
+              <Card className="border border-primary/20 shadow-md">
+                <CardContent className="p-5 md:p-6 text-center">
+                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center mx-auto mb-3">
+                    <Mail className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                  </div>
+                  <h2 className="text-lg md:text-xl font-bold mb-1">Get Started</h2>
+                  <p className="text-xs md:text-sm text-muted-foreground mb-4">
+                    Enter your email to receive a verification code
+                  </p>
+                  <Button 
+                    className="w-full h-11 md:h-12 text-sm font-semibold border border-primary/20"
+                    onClick={() => setStep('email')}
+                  >
+                    Continue with Email
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Sign in link */}
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground mb-1">Already on the team?</p>
+                <Button 
+                  variant="link" 
+                  onClick={() => navigate("/cleaner/auth")}
+                  className="text-primary text-sm h-auto p-0"
+                >
+                  Sign in to your account
+                </Button>
               </div>
-              <h2 className="text-lg font-bold mb-1">Get Started</h2>
-              <p className="text-xs text-muted-foreground mb-4">
-                Enter your email to receive a verification code
-              </p>
-              <Button 
-                className="w-full h-11 text-sm font-semibold border border-primary/20"
-                onClick={() => setStep('email')}
-              >
-                Continue with Email
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Sign in link */}
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground mb-1">Already on the team?</p>
-            <Button 
-              variant="link" 
-              onClick={() => navigate("/cleaner/auth")}
-              className="text-primary text-sm h-auto p-0"
-            >
-              Sign in to your account
-            </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -214,7 +219,7 @@ export default function OnboardingLanding() {
   if (step === 'email') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-sm border border-border shadow-lg">
+        <Card className="w-full max-w-md border border-border shadow-lg">
           <CardHeader className="text-center space-y-2 pb-3">
             <div className="mx-auto w-14 h-14 bg-gradient-to-br from-primary to-purple-600 rounded-xl flex items-center justify-center shadow-md">
               <Mail className="w-7 h-7 text-white" />
@@ -291,7 +296,7 @@ export default function OnboardingLanding() {
   // Code Verification screen
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm border border-border shadow-lg">
+      <Card className="w-full max-w-md border border-border shadow-lg">
         <CardHeader className="text-center space-y-2 pb-3">
           <div className="mx-auto w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
             <KeyRound className="w-7 h-7 text-white" />

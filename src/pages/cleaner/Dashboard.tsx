@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,9 +40,9 @@ interface CleanerProfile {
   stripe_account_id: string | null;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
-  is_trained: boolean;
-  assessment_score: number | null;
-  assessment_attempts: number;
+  is_trained?: boolean;
+  assessment_score?: number | null;
+  assessment_attempts?: number;
 }
 
 const DAYS_OF_WEEK = [
@@ -212,11 +212,15 @@ export default function CleanerDashboard() {
       ? "pending" 
       : "not_setup";
 
+  const isTrained = profile.is_trained === true;
+  const assessmentScore = profile.assessment_score ?? null;
+  const assessmentAttempts = profile.assessment_attempts ?? 0;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
-        <div className="max-w-sm mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             {profile.avatar_url ? (
               <img 
@@ -243,6 +247,12 @@ export default function CleanerDashboard() {
                 >
                   {isActive ? "Active" : "Inactive"}
                 </Badge>
+                {isTrained && (
+                  <Badge className="text-[10px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                    <Award className="w-2.5 h-2.5 mr-0.5" />
+                    Trained
+                  </Badge>
+                )}
                 {saving && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground" />}
               </div>
             </div>
@@ -254,279 +264,289 @@ export default function CleanerDashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-sm mx-auto px-4 py-4 space-y-3">
-        
-        {/* Status Toggle */}
-        <Card className="border border-border shadow-sm overflow-hidden">
-          <div className={cn(
-            "h-1 transition-colors",
-            isActive ? "bg-gradient-to-r from-green-500 to-emerald-500" : "bg-muted"
-          )} />
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center border",
-                  isActive ? "bg-green-500/10 border-green-500/20" : "bg-muted border-border"
-                )}>
-                  <Power className={cn("w-5 h-5", isActive ? "text-green-600" : "text-muted-foreground")} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm">Availability</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {isActive ? "Receiving jobs" : "Not receiving jobs"}
-                  </p>
-                </div>
-              </div>
-              <Switch checked={isActive} onCheckedChange={toggleStatus} />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Work Days */}
-        <Card className="border border-border shadow-sm">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-primary" />
-              Work Days
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            <div className="flex gap-1.5">
-              {DAYS_OF_WEEK.map((day) => (
-                <button
-                  key={day.id}
-                  onClick={() => toggleDay(day.id)}
-                  className={cn(
-                    "flex-1 py-2.5 rounded-lg font-semibold text-xs transition-all border",
-                    workDays.includes(day.id)
-                      ? "bg-primary text-white border-primary"
-                      : "bg-muted text-muted-foreground border-border hover:border-primary/50"
-                  )}
-                >
-                  {day.label}
-                </button>
-              ))}
-            </div>
-            {workDays.length > 0 && (
-              <p className="text-[10px] text-muted-foreground mt-2">
-                {workDays.join(", ")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Travel Distance */}
-        <Card className="border border-border shadow-sm">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm flex items-center gap-1.5">
-              <Car className="w-4 h-4 text-primary" />
-              Travel Distance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            <div className="flex gap-1.5">
-              {TRAVEL_OPTIONS.map((miles) => (
-                <button
-                  key={miles}
-                  onClick={() => updateMiles(miles)}
-                  className={cn(
-                    "flex-1 py-2.5 rounded-lg font-semibold text-xs transition-all border",
-                    maxMiles === miles
-                      ? "bg-primary text-white border-primary"
-                      : "bg-muted text-muted-foreground border-border hover:border-primary/50"
-                  )}
-                >
-                  {miles}mi
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground">
-              <MapPin className="w-2.5 h-2.5" />
-              From ZIP: {profile.home_zip}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Stripe Connect */}
-        <Card className="border border-indigo-500/20 shadow-sm bg-gradient-to-br from-indigo-500/5 to-purple-500/5">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                <CreditCard className="w-4 h-4 text-indigo-600" />
-                Earnings
-              </CardTitle>
-              {stripeStatus === "active" && (
-                <Badge className="bg-green-500/10 text-green-600 border border-green-500/20 text-[10px] px-1.5 py-0 h-4">
-                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
-                  Connected
-                </Badge>
-              )}
-              {stripeStatus === "pending" && (
-                <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] px-1.5 py-0 h-4">
-                  <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
-                  Pending
-                </Badge>
-              )}
-            </div>
-            <CardDescription className="text-xs">
-              {stripeStatus === "active" 
-                ? "View earnings, payouts & tax docs"
-                : stripeStatus === "pending"
-                  ? "Complete setup to receive payouts"
-                  : "Connect Stripe to get paid"
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            <Button 
-              onClick={openStripeConnect}
-              disabled={stripeLoading}
-              className={cn(
-                "w-full h-11 text-sm font-semibold border",
-                stripeStatus === "active" 
-                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500/20 text-white" 
-                  : "border-border"
-              )}
-              variant={stripeStatus === "active" ? "default" : "outline"}
-            >
-              {stripeLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Loading...
-                </>
-              ) : stripeStatus === "active" ? (
-                <>
-                  <DollarSign className="w-4 h-4 mr-1.5" />
-                  Open Stripe Dashboard
-                  <ExternalLink className="w-3 h-3 ml-1.5" />
-                </>
-              ) : (
-                <>
-                  {stripeStatus === "pending" ? "Complete Setup" : "Set Up Payments"}
-                </>
-              )}
-            </Button>
-
-            {stripeStatus === "active" && (
-              <div className="mt-3 p-3 bg-card rounded-lg border border-border">
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        {/* Desktop: 2-column grid, Mobile: single column */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          {/* Left Column */}
+          <div className="space-y-4">
+            {/* Status Toggle */}
+            <Card className="border border-border shadow-sm overflow-hidden">
+              <div className={cn(
+                "h-1 transition-colors",
+                isActive ? "bg-gradient-to-r from-green-500 to-emerald-500" : "bg-muted"
+              )} />
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Pay Rate</p>
-                    <p className="text-lg font-bold text-green-600">$18/hr</p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
-                    <DollarSign className="w-4 h-4 text-green-600" />
-                  </div>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Weekly payouts via Stripe
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Assessment Card */}
-        <Card className={cn(
-          "border shadow-sm",
-          profile.is_trained 
-            ? "border-green-500/20 bg-gradient-to-br from-green-500/5 to-emerald-500/5" 
-            : "border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-orange-500/5"
-        )}>
-          <CardHeader className="pb-2 px-4 pt-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                {profile.is_trained ? (
-                  <Award className="w-4 h-4 text-green-600" />
-                ) : (
-                  <ClipboardCheck className="w-4 h-4 text-amber-600" />
-                )}
-                Training Assessment
-              </CardTitle>
-              {profile.is_trained && (
-                <Badge className="bg-green-500/10 text-green-600 border border-green-500/20 text-[10px] px-1.5 py-0 h-4">
-                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
-                  Trained
-                </Badge>
-              )}
-            </div>
-            <CardDescription className="text-xs">
-              {profile.is_trained 
-                ? "You qualify for premium, higher-paying jobs"
-                : "Pass with 80% to unlock premium jobs"
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            {profile.is_trained ? (
-              <div className="bg-card rounded-lg p-3 border border-border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Your Score</p>
-                    <p className="text-lg font-bold text-green-600">
-                      {profile.assessment_score}/10
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
-                    <Award className="w-4 h-4 text-green-600" />
-                  </div>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Trained cleaners get priority for bigger jobs
-                </p>
-              </div>
-            ) : (
-              <>
-                {profile.assessment_attempts > 0 && (
-                  <div className="bg-card rounded-lg p-2.5 border border-border mb-2.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Last Score</span>
-                      <span className="font-semibold text-amber-600">
-                        {profile.assessment_score || 0}/10
-                      </span>
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center border",
+                      isActive ? "bg-green-500/10 border-green-500/20" : "bg-muted border-border"
+                    )}>
+                      <Power className={cn("w-5 h-5", isActive ? "text-green-600" : "text-muted-foreground")} />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {profile.assessment_attempts} attempt{profile.assessment_attempts > 1 ? 's' : ''}
+                    <div>
+                      <h3 className="font-semibold text-sm">Availability</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {isActive ? "Receiving jobs" : "Not receiving jobs"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={isActive} onCheckedChange={toggleStatus} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Work Days */}
+            <Card className="border border-border shadow-sm">
+              <CardHeader className="pb-2 px-4 pt-4">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  Work Days
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                <div className="flex gap-1.5">
+                  {DAYS_OF_WEEK.map((day) => (
+                    <button
+                      key={day.id}
+                      onClick={() => toggleDay(day.id)}
+                      className={cn(
+                        "flex-1 py-2.5 rounded-lg font-semibold text-xs transition-all border",
+                        workDays.includes(day.id)
+                          ? "bg-primary text-white border-primary"
+                          : "bg-muted text-muted-foreground border-border hover:border-primary/50"
+                      )}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+                {workDays.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    {workDays.join(", ")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Travel Distance */}
+            <Card className="border border-border shadow-sm">
+              <CardHeader className="pb-2 px-4 pt-4">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <Car className="w-4 h-4 text-primary" />
+                  Travel Distance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                <div className="flex gap-1.5">
+                  {TRAVEL_OPTIONS.map((miles) => (
+                    <button
+                      key={miles}
+                      onClick={() => updateMiles(miles)}
+                      className={cn(
+                        "flex-1 py-2.5 rounded-lg font-semibold text-xs transition-all border",
+                        maxMiles === miles
+                          ? "bg-primary text-white border-primary"
+                          : "bg-muted text-muted-foreground border-border hover:border-primary/50"
+                      )}
+                    >
+                      {miles}mi
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground">
+                  <MapPin className="w-2.5 h-2.5" />
+                  From ZIP: {profile.home_zip}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column */}
+          <div className="space-y-4">
+            {/* Stripe Connect */}
+            <Card className="border border-indigo-500/20 shadow-sm bg-gradient-to-br from-indigo-500/5 to-purple-500/5">
+              <CardHeader className="pb-2 px-4 pt-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-indigo-600" />
+                    Earnings
+                  </CardTitle>
+                  {stripeStatus === "active" && (
+                    <Badge className="bg-green-500/10 text-green-600 border border-green-500/20 text-[10px] px-1.5 py-0 h-4">
+                      <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                      Connected
+                    </Badge>
+                  )}
+                  {stripeStatus === "pending" && (
+                    <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] px-1.5 py-0 h-4">
+                      <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
+                      Pending
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription className="text-xs">
+                  {stripeStatus === "active" 
+                    ? "View earnings, payouts & tax docs"
+                    : stripeStatus === "pending"
+                      ? "Complete setup to receive payouts"
+                      : "Connect Stripe to get paid"
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                <Button 
+                  onClick={openStripeConnect}
+                  disabled={stripeLoading}
+                  className={cn(
+                    "w-full h-11 text-sm font-semibold border",
+                    stripeStatus === "active" 
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500/20 text-white" 
+                      : "border-border"
+                  )}
+                  variant={stripeStatus === "active" ? "default" : "outline"}
+                >
+                  {stripeLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : stripeStatus === "active" ? (
+                    <>
+                      <DollarSign className="w-4 h-4 mr-1.5" />
+                      Open Stripe Dashboard
+                      <ExternalLink className="w-3 h-3 ml-1.5" />
+                    </>
+                  ) : (
+                    <>
+                      {stripeStatus === "pending" ? "Complete Setup" : "Set Up Payments"}
+                    </>
+                  )}
+                </Button>
+
+                {stripeStatus === "active" && (
+                  <div className="mt-3 p-3 bg-card rounded-lg border border-border">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase">Pay Rate</p>
+                        <p className="text-lg font-bold text-green-600">$18/hr</p>
+                      </div>
+                      <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
+                        <DollarSign className="w-4 h-4 text-green-600" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Weekly payouts via Stripe
                     </p>
                   </div>
                 )}
-                <Button 
-                  onClick={() => navigate("/cleaner/assessment")}
-                  className="w-full h-10 text-sm border border-amber-500/20 bg-amber-500 hover:bg-amber-600 text-white"
-                >
-                  {profile.assessment_attempts > 0 ? "Retake Assessment" : "Take Assessment"}
-                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                </Button>
-                <p className="text-[10px] text-muted-foreground text-center mt-2">
-                  Optional • 10 questions • ~5 minutes
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        {/* Info Card */}
-        <Card className="border border-border shadow-sm bg-muted/30">
-          <CardContent className="p-3">
-            <div className="flex items-start gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 flex-shrink-0">
-                <Info className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-xs mb-1">How It Works</p>
-                <ol className="text-[10px] text-muted-foreground space-y-0.5 list-decimal list-inside">
-                  <li>Receive job offers via email & SMS</li>
-                  <li>Accept or decline based on schedule</li>
-                  <li>Complete jobs and get paid weekly</li>
-                </ol>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            {/* Assessment Card */}
+            <Card className={cn(
+              "border shadow-sm",
+              isTrained 
+                ? "border-green-500/20 bg-gradient-to-br from-green-500/5 to-emerald-500/5" 
+                : "border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-orange-500/5"
+            )}>
+              <CardHeader className="pb-2 px-4 pt-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    {isTrained ? (
+                      <Award className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <ClipboardCheck className="w-4 h-4 text-amber-600" />
+                    )}
+                    Training Assessment
+                  </CardTitle>
+                  {isTrained && (
+                    <Badge className="bg-green-500/10 text-green-600 border border-green-500/20 text-[10px] px-1.5 py-0 h-4">
+                      <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                      Passed
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription className="text-xs">
+                  {isTrained 
+                    ? "You qualify for premium, higher-paying jobs"
+                    : "Pass with 80% to unlock premium jobs"
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                {isTrained ? (
+                  <div className="bg-card rounded-lg p-3 border border-border">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase">Your Score</p>
+                        <p className="text-lg font-bold text-green-600">
+                          {assessmentScore ?? 10}/10
+                        </p>
+                      </div>
+                      <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
+                        <Award className="w-4 h-4 text-green-600" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Trained cleaners get priority for bigger jobs
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {assessmentAttempts > 0 && (
+                      <div className="bg-card rounded-lg p-2.5 border border-border mb-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Last Score</span>
+                          <span className="font-semibold text-amber-600">
+                            {assessmentScore ?? 0}/10
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {assessmentAttempts} attempt{assessmentAttempts > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    )}
+                    <Link to="/cleaner/assessment" className="block">
+                      <Button 
+                        className="w-full h-10 text-sm border border-amber-500/20 bg-amber-500 hover:bg-amber-600 text-white"
+                      >
+                        {assessmentAttempts > 0 ? "Retake Assessment" : "Take Assessment"}
+                        <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    </Link>
+                    <p className="text-[10px] text-muted-foreground text-center mt-2">
+                      Optional • 10 questions • ~5 minutes
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Info Card */}
+            <Card className="border border-border shadow-sm bg-muted/30">
+              <CardContent className="p-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 flex-shrink-0">
+                    <Info className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-xs mb-1">How It Works</p>
+                    <ol className="text-[10px] text-muted-foreground space-y-0.5 list-decimal list-inside">
+                      <li>Receive job offers via email & SMS</li>
+                      <li>Accept or decline based on schedule</li>
+                      <li>Complete jobs and get paid weekly</li>
+                    </ol>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
         {/* Support */}
-        <p className="text-[10px] text-center text-muted-foreground pb-2">
+        <p className="text-[10px] text-center text-muted-foreground mt-6 pb-4">
           Need help? support@novaracleaning.com
         </p>
       </main>
