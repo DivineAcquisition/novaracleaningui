@@ -20,8 +20,7 @@ import {
   Camera,
   Calendar,
   Sparkles,
-  Car,
-  Star
+  Car
 } from "lucide-react";
 import { validatePhone, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
@@ -36,30 +35,30 @@ const US_STATES = [
 ];
 
 const DAYS_OF_WEEK = [
-  { id: "Mon", label: "Mon", full: "Monday" },
-  { id: "Tue", label: "Tue", full: "Tuesday" },
-  { id: "Wed", label: "Wed", full: "Wednesday" },
-  { id: "Thu", label: "Thu", full: "Thursday" },
-  { id: "Fri", label: "Fri", full: "Friday" },
-  { id: "Sat", label: "Sat", full: "Saturday" },
-  { id: "Sun", label: "Sun", full: "Sunday" },
+  { id: "Mon", label: "M" },
+  { id: "Tue", label: "T" },
+  { id: "Wed", label: "W" },
+  { id: "Thu", label: "T" },
+  { id: "Fri", label: "F" },
+  { id: "Sat", label: "S" },
+  { id: "Sun", label: "S" },
 ];
 
 const SKILLSET_OPTIONS = [
-  { id: "Standard Cleaning", icon: "🏠", desc: "Regular home cleaning" },
-  { id: "Deep Cleaning", icon: "✨", desc: "Intensive deep cleans" },
-  { id: "Move-In/Move-Out", icon: "📦", desc: "Turnover cleaning" },
-  { id: "Vacation Rental", icon: "🏖️", desc: "Airbnb & rentals" },
-  { id: "Pet-Friendly", icon: "🐾", desc: "Pet hair & odors" },
-  { id: "Eco-Friendly", icon: "🌿", desc: "Green products" },
+  { id: "Standard Cleaning", icon: "🏠", desc: "Regular cleans" },
+  { id: "Deep Cleaning", icon: "✨", desc: "Intensive" },
+  { id: "Move-In/Move-Out", icon: "📦", desc: "Turnover" },
+  { id: "Vacation Rental", icon: "🏖️", desc: "Airbnb" },
+  { id: "Pet-Friendly", icon: "🐾", desc: "Pet homes" },
+  { id: "Eco-Friendly", icon: "🌿", desc: "Green" },
 ];
 
 const TRAVEL_OPTIONS = [
-  { value: 10, label: "10 mi", desc: "Local area" },
-  { value: 15, label: "15 mi", desc: "Nearby" },
-  { value: 20, label: "20 mi", desc: "Standard" },
-  { value: 25, label: "25 mi", desc: "Extended" },
-  { value: 30, label: "30 mi", desc: "Far reach" },
+  { value: 10, label: "10mi" },
+  { value: 15, label: "15mi" },
+  { value: 20, label: "20mi" },
+  { value: 25, label: "25mi" },
+  { value: 30, label: "30mi" },
 ];
 
 export default function CleanerOnboarding() {
@@ -285,14 +284,12 @@ export default function CleanerOnboarding() {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto border border-border">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
-          <p className="text-muted-foreground font-medium">Verifying session...</p>
+          <p className="text-sm text-muted-foreground">Verifying session...</p>
         </div>
       </div>
     );
@@ -301,28 +298,26 @@ export default function CleanerOnboarding() {
   const progress = (currentStep / 4) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 py-6 px-4">
-      <div className="max-w-md mx-auto">
+    <div className="min-h-screen bg-background py-4 px-4">
+      <div className="max-w-sm mx-auto">
         {/* Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-600 shadow-xl mb-4">
-            <Sparkles className="w-8 h-8 text-white" />
+        <div className="text-center mb-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-purple-600 shadow-md mb-3">
+            <Sparkles className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold">Complete Your Profile</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Step {currentStep} of 4
-          </p>
+          <h1 className="text-xl font-bold">Complete Your Profile</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Step {currentStep} of 4</p>
         </div>
 
         {/* Progress Bar */}
-        <div className="mb-6">
-          <Progress value={progress} className="h-2 bg-muted" />
-          <div className="flex justify-between mt-2">
+        <div className="mb-4">
+          <Progress value={progress} className="h-1.5 bg-muted" />
+          <div className="flex justify-between mt-1.5">
             {['Profile', 'Location', 'Schedule', 'Review'].map((label, index) => (
               <span 
                 key={label}
                 className={cn(
-                  "text-xs font-medium transition-colors",
+                  "text-[10px] font-medium",
                   currentStep > index + 1 ? "text-green-600" : 
                   currentStep === index + 1 ? "text-primary" : "text-muted-foreground"
                 )}
@@ -334,33 +329,28 @@ export default function CleanerOnboarding() {
         </div>
 
         {/* Form Card */}
-        <Card className="border-0 shadow-2xl overflow-hidden">
-          <CardContent className="p-6">
+        <Card className="border border-border shadow-md">
+          <CardContent className="p-4">
             <form onSubmit={handleSubmit}>
               {/* Step 1: Personal Info */}
               {currentStep === 1 && (
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <h2 className="text-lg font-semibold">Personal Information</h2>
-                    <p className="text-sm text-muted-foreground">Let's start with the basics</p>
+                <div className="space-y-4">
+                  <div className="text-center mb-4">
+                    <h2 className="text-base font-semibold">Personal Info</h2>
+                    <p className="text-xs text-muted-foreground">Basic details</p>
                   </div>
 
                   {/* Avatar Upload */}
                   <div className="flex flex-col items-center">
-                    <div className="relative group">
+                    <div className="relative">
                       <div className={cn(
-                        "w-28 h-28 rounded-full border-4 flex items-center justify-center overflow-hidden transition-all",
-                        avatarPreview 
-                          ? "border-primary shadow-lg" 
-                          : "border-dashed border-muted-foreground/30 hover:border-primary/50"
+                        "w-20 h-20 rounded-full border-2 flex items-center justify-center overflow-hidden",
+                        avatarPreview ? "border-primary" : "border-dashed border-border"
                       )}>
                         {avatarPreview ? (
                           <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
-                          <div className="text-center">
-                            <Camera className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-                            <span className="text-xs text-muted-foreground/60 mt-1">Add Photo</span>
-                          </div>
+                          <Camera className="w-6 h-6 text-muted-foreground/40" />
                         )}
                       </div>
                       <input
@@ -369,65 +359,65 @@ export default function CleanerOnboarding() {
                         onChange={handleImageChange}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
-                      <div className="absolute -bottom-1 -right-1 w-9 h-9 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-background">
-                        <Camera className="w-4 h-4 text-white" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-7 h-7 bg-primary rounded-full flex items-center justify-center border-2 border-background">
+                        <Camera className="w-3 h-3 text-white" />
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">Optional - helps build trust</p>
+                    <p className="text-[10px] text-muted-foreground mt-1.5">Optional photo</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">First Name</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">First Name</Label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
                           value={formData.firstName}
                           onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                          className="pl-10 h-12 rounded-xl"
+                          className="pl-8 h-10 text-sm border border-border rounded-lg"
                           placeholder="John"
                         />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Last Name</Label>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Last Name</Label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
                           value={formData.lastName}
                           onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                          className="pl-10 h-12 rounded-xl"
+                          className="pl-8 h-10 text-sm border border-border rounded-lg"
                           placeholder="Doe"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Email</Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Email</Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input
                         value={userEmail}
                         disabled
-                        className="pl-10 h-12 rounded-xl bg-muted/50"
+                        className="pl-8 h-10 text-sm border border-border rounded-lg bg-muted/50"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
                       Verified
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Phone Number</Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Phone Number</Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                        className="pl-10 h-12 rounded-xl"
+                        className="pl-8 h-10 text-sm border border-border rounded-lg"
                         placeholder="(555) 123-4567"
                       />
                     </div>
@@ -437,75 +427,74 @@ export default function CleanerOnboarding() {
 
               {/* Step 2: Location */}
               {currentStep === 2 && (
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <h2 className="text-lg font-semibold">Your Location</h2>
-                    <p className="text-sm text-muted-foreground">Where will you be working from?</p>
+                <div className="space-y-4">
+                  <div className="text-center mb-4">
+                    <h2 className="text-base font-semibold">Your Location</h2>
+                    <p className="text-xs text-muted-foreground">Where you work from</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">State</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">State</Label>
                       <select
                         value={formData.state}
                         onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
-                        className="w-full h-12 rounded-xl border border-input bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm"
                       >
-                        <option value="">Select state</option>
+                        <option value="">Select</option>
                         {US_STATES.map(state => (
                           <option key={state} value={state}>{state}</option>
                         ))}
                       </select>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">ZIP Code</Label>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">ZIP Code</Label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
                           value={formData.homeZip}
                           onChange={(e) => setFormData(prev => ({ ...prev, homeZip: e.target.value }))}
                           maxLength={5}
-                          className="pl-10 h-12 rounded-xl"
+                          className="pl-8 h-10 text-sm border border-border rounded-lg"
                           placeholder="12345"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Car className="w-4 h-4" />
-                      How far will you travel?
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium flex items-center gap-1.5">
+                      <Car className="w-3.5 h-3.5" />
+                      Travel Distance
                     </Label>
-                    <div className="grid grid-cols-5 gap-2">
+                    <div className="grid grid-cols-5 gap-1.5">
                       {TRAVEL_OPTIONS.map((option) => (
                         <button
                           key={option.value}
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, maxTravelMiles: option.value }))}
                           className={cn(
-                            "p-3 rounded-xl border-2 text-center transition-all",
+                            "py-2.5 rounded-lg border text-xs font-medium transition-all",
                             formData.maxTravelMiles === option.value
-                              ? "border-primary bg-primary/5 shadow-sm"
+                              ? "border-primary bg-primary/5 text-primary"
                               : "border-border hover:border-primary/50"
                           )}
                         >
-                          <p className="font-bold text-sm">{option.label}</p>
-                          <p className="text-[10px] text-muted-foreground">{option.desc}</p>
+                          {option.label}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Pay Rate Preview */}
-                  <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-2xl p-5 border border-green-500/20">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-                        <Star className="w-6 h-6 text-green-600" />
+                  {/* Pay Rate */}
+                  <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                        <span className="text-green-600 font-bold text-sm">$</span>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Starting Pay Rate</p>
-                        <p className="text-3xl font-bold text-green-600">$18<span className="text-lg">/hr</span></p>
+                        <p className="text-xs text-muted-foreground">Starting Rate</p>
+                        <p className="text-xl font-bold text-green-600">$18/hr</p>
                       </div>
                     </div>
                   </div>
@@ -514,61 +503,61 @@ export default function CleanerOnboarding() {
 
               {/* Step 3: Availability & Skills */}
               {currentStep === 3 && (
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <h2 className="text-lg font-semibold">Availability & Skills</h2>
-                    <p className="text-sm text-muted-foreground">Set your schedule and expertise</p>
+                <div className="space-y-4">
+                  <div className="text-center mb-4">
+                    <h2 className="text-base font-semibold">Schedule & Skills</h2>
+                    <p className="text-xs text-muted-foreground">Your availability</p>
                   </div>
 
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      Available Days
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      Work Days
                     </Label>
-                    <div className="grid grid-cols-7 gap-2">
+                    <div className="grid grid-cols-7 gap-1.5">
                       {DAYS_OF_WEEK.map((day) => (
                         <button
                           key={day.id}
                           type="button"
                           onClick={() => toggleDay(day.id)}
                           className={cn(
-                            "aspect-square rounded-xl font-semibold text-sm transition-all flex flex-col items-center justify-center",
+                            "aspect-square rounded-lg font-semibold text-xs transition-all border",
                             formData.preferredWorkDays.includes(day.id)
-                              ? "bg-primary text-white shadow-lg"
-                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                              ? "bg-primary text-white border-primary"
+                              : "bg-muted text-muted-foreground border-border hover:border-primary/50"
                           )}
                         >
-                          <span>{day.label.charAt(0)}</span>
+                          {day.label}
                         </button>
                       ))}
                     </div>
                     {formData.preferredWorkDays.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Selected: {formData.preferredWorkDays.join(", ")}
+                      <p className="text-[10px] text-muted-foreground">
+                        {formData.preferredWorkDays.join(", ")}
                       </p>
                     )}
                   </div>
 
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">Your Cleaning Skills</Label>
-                    <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium">Your Skills</Label>
+                    <div className="grid grid-cols-2 gap-2">
                       {SKILLSET_OPTIONS.map((skill) => (
                         <button
                           key={skill.id}
                           type="button"
                           onClick={() => toggleSkill(skill.id)}
                           className={cn(
-                            "p-4 rounded-xl border-2 text-left transition-all",
+                            "p-3 rounded-lg border text-left transition-all",
                             formData.skillset.includes(skill.id)
-                              ? "border-primary bg-primary/5 shadow-sm"
-                              : "border-border hover:border-primary/50 bg-card"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
                           )}
                         >
-                          <div className="flex items-start gap-3">
-                            <span className="text-2xl">{skill.icon}</span>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{skill.id}</p>
-                              <p className="text-xs text-muted-foreground">{skill.desc}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{skill.icon}</span>
+                            <div>
+                              <p className="text-xs font-medium leading-tight">{skill.id.split(' ')[0]}</p>
+                              <p className="text-[10px] text-muted-foreground">{skill.desc}</p>
                             </div>
                           </div>
                         </button>
@@ -580,98 +569,94 @@ export default function CleanerOnboarding() {
 
               {/* Step 4: Review */}
               {currentStep === 4 && (
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-lg">
-                      <CheckCircle2 className="w-8 h-8 text-white" />
+                <div className="space-y-4">
+                  <div className="text-center mb-4">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-2">
+                      <CheckCircle2 className="w-6 h-6 text-white" />
                     </div>
-                    <h2 className="text-lg font-semibold">Review Your Profile</h2>
-                    <p className="text-sm text-muted-foreground">You're almost there!</p>
+                    <h2 className="text-base font-semibold">Review Profile</h2>
+                    <p className="text-xs text-muted-foreground">Almost done!</p>
                   </div>
 
-                  <div className="bg-muted/30 rounded-2xl p-5 space-y-4">
+                  <div className="bg-muted/30 rounded-xl p-4 space-y-3 border border-border">
                     {/* Profile Header */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       {avatarPreview ? (
-                        <img src={avatarPreview} className="w-16 h-16 rounded-full object-cover ring-2 ring-primary/20" />
+                        <img src={avatarPreview} className="w-12 h-12 rounded-full object-cover border border-border" />
                       ) : (
-                        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="w-8 h-8 text-primary/50" />
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center border border-border">
+                          <User className="w-6 h-6 text-primary/50" />
                         </div>
                       )}
                       <div>
-                        <p className="text-lg font-semibold">{formData.firstName} {formData.lastName}</p>
-                        <p className="text-sm text-muted-foreground">{userEmail}</p>
+                        <p className="font-semibold text-sm">{formData.firstName} {formData.lastName}</p>
+                        <p className="text-xs text-muted-foreground">{userEmail}</p>
                       </div>
                     </div>
 
                     <div className="h-px bg-border" />
 
-                    {/* Details Grid */}
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
                       <div>
-                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Phone</p>
+                        <p className="text-muted-foreground text-[10px] uppercase mb-0.5">Phone</p>
                         <p className="font-medium">{formData.phone}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Location</p>
+                        <p className="text-muted-foreground text-[10px] uppercase mb-0.5">Location</p>
                         <p className="font-medium">{formData.homeZip}, {formData.state}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Travel Range</p>
+                        <p className="text-muted-foreground text-[10px] uppercase mb-0.5">Travel</p>
                         <p className="font-medium">{formData.maxTravelMiles} miles</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Pay Rate</p>
-                        <p className="font-medium text-green-600">$18/hour</p>
+                        <p className="text-muted-foreground text-[10px] uppercase mb-0.5">Pay</p>
+                        <p className="font-medium text-green-600">$18/hr</p>
                       </div>
                     </div>
 
                     <div className="h-px bg-border" />
 
-                    {/* Days */}
                     <div>
-                      <p className="text-muted-foreground text-xs uppercase tracking-wide mb-2">Available Days</p>
+                      <p className="text-muted-foreground text-[10px] uppercase mb-1.5">Days</p>
                       <div className="flex gap-1 flex-wrap">
                         {formData.preferredWorkDays.map(day => (
-                          <Badge key={day} variant="secondary" className="text-xs px-3">{day}</Badge>
+                          <Badge key={day} variant="secondary" className="text-[10px] px-2 py-0.5 border border-border">{day}</Badge>
                         ))}
                       </div>
                     </div>
 
-                    {/* Skills */}
                     <div>
-                      <p className="text-muted-foreground text-xs uppercase tracking-wide mb-2">Skills</p>
+                      <p className="text-muted-foreground text-[10px] uppercase mb-1.5">Skills</p>
                       <div className="flex gap-1 flex-wrap">
                         {formData.skillset.map(skill => (
-                          <Badge key={skill} className="text-xs px-3 bg-primary/10 text-primary border-0">
-                            {skill}
+                          <Badge key={skill} className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary border border-primary/20">
+                            {skill.split(' ')[0]}
                           </Badge>
                         ))}
                       </div>
                     </div>
                   </div>
 
-                  {/* Stripe Info */}
-                  <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <span className="font-semibold">Next step:</span> Set up your Stripe account to receive weekly payouts directly to your bank.
+                  <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      <span className="font-semibold">Next:</span> Set up Stripe for payouts
                     </p>
                   </div>
                 </div>
               )}
 
               {/* Navigation */}
-              <div className="flex gap-3 mt-8">
+              <div className="flex gap-2 mt-5">
                 {currentStep > 1 && (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleBack}
-                    className="flex-1 h-12 rounded-xl"
+                    className="flex-1 h-10 text-sm border border-border"
                     disabled={isLoading}
                   >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
                     Back
                   </Button>
                 )}
@@ -680,27 +665,27 @@ export default function CleanerOnboarding() {
                   <Button
                     type="button"
                     onClick={handleNext}
-                    className="flex-1 h-12 rounded-xl"
+                    className="flex-1 h-10 text-sm border border-primary/20"
                     disabled={isLoading}
                   >
                     Continue
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                   </Button>
                 ) : (
                   <Button
                     type="submit"
-                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary to-purple-600 hover:opacity-90"
+                    className="flex-1 h-10 text-sm bg-gradient-to-r from-primary to-purple-600 border-0"
                     disabled={isLoading}
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Creating Profile...
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        Creating...
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Complete & Set Up Payments
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                        Complete Setup
                       </>
                     )}
                   </Button>
@@ -710,9 +695,8 @@ export default function CleanerOnboarding() {
           </CardContent>
         </Card>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          By continuing, you agree to our Terms of Service
+        <p className="text-center text-[10px] text-muted-foreground mt-4">
+          By continuing, you agree to our Terms
         </p>
       </div>
     </div>

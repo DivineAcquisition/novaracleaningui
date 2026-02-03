@@ -2,37 +2,35 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, ExternalLink } from 'lucide-react';
+import { AlertCircle, ExternalLink, Home, ArrowRight } from 'lucide-react';
+import { useDomainContext } from './DomainRouter';
 
 interface DomainRestrictedProps {
   children: ReactNode;
   allowedDomains: string[];
   redirectTo?: string;
   fallbackMessage?: string;
+  portalType?: 'booking' | 'customer' | 'admin' | 'contractor';
 }
 
 /**
  * Restricts access to children components based on the current domain.
- * Used to ensure booking flow is only accessible from try.novaracleaning.com
+ * Used to ensure routes are only accessible from their designated domains.
  */
 export function DomainRestricted({ 
   children, 
   allowedDomains, 
   redirectTo,
-  fallbackMessage = "This page is not available on this domain."
+  fallbackMessage,
+  portalType
 }: DomainRestrictedProps) {
-  const currentHostname = window.location.hostname;
+  const { isDev, hostname, getPortalUrl } = useDomainContext();
   
   // Allow localhost for development
-  const isDevelopment = currentHostname === 'localhost' || 
-                        currentHostname === '127.0.0.1' ||
-                        currentHostname.includes('localhost');
-  
-  // Check if current domain is allowed
-  const isAllowed = isDevelopment || 
+  const isAllowed = isDev || 
                     allowedDomains.some(domain => 
-                      currentHostname === domain || 
-                      currentHostname.endsWith(`.${domain}`)
+                      hostname === domain || 
+                      hostname.endsWith(`.${domain}`)
                     );
   
   if (isAllowed) {
@@ -49,29 +47,69 @@ export function DomainRestricted({
     return <Navigate to={redirectTo} replace />;
   }
 
-  // Show fallback message
+  // Determine correct portal link based on portal type
+  const getCorrectPortalLink = () => {
+    switch (portalType) {
+      case 'booking':
+        return { url: 'https://try.novaracleaning.com/book/zip', label: 'Go to Booking Site' };
+      case 'customer':
+        return { url: 'https://app.novaracleaning.com/auth', label: 'Go to Customer Portal' };
+      case 'admin':
+        return { url: 'https://admin.novaracleaning.com/admin/auth', label: 'Go to Admin Portal' };
+      case 'contractor':
+        return { url: 'https://contractor.novaracleaning.com/cleaner', label: 'Go to Contractor Portal' };
+      default:
+        return { url: 'https://try.novaracleaning.com', label: 'Go to Main Site' };
+    }
+  };
+
+  const portalLink = getCorrectPortalLink();
+
+  // Default message based on domain
+  const getMessage = () => {
+    if (fallbackMessage) return fallbackMessage;
+    
+    const domainMessages: Record<string, string> = {
+      'try.novaracleaning.com': 'This page is only available on our booking site.',
+      'app.novaracleaning.com': 'This page is only available on the customer portal.',
+      'admin.novaracleaning.com': 'This page is only available on the admin portal.',
+      'contractor.novaracleaning.com': 'This page is only available on the contractor portal.',
+    };
+    
+    return allowedDomains.length > 0 
+      ? domainMessages[allowedDomains[0]] || 'This page is not available on this domain.'
+      : 'This page is not available on this domain.';
+  };
+
+  // Show access denied UI
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4">
-      <Card className="max-w-md w-full shadow-xl border-destructive/20">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-destructive" />
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <Card className="max-w-sm w-full border border-destructive/20 shadow-lg">
+        <CardHeader className="text-center pb-4">
+          <div className="mx-auto w-14 h-14 bg-destructive/10 rounded-xl flex items-center justify-center mb-3 border border-destructive/20">
+            <AlertCircle className="w-7 h-7 text-destructive" />
           </div>
-          <CardTitle className="text-2xl">Access Restricted</CardTitle>
-          <CardDescription className="text-base">
-            {fallbackMessage}
+          <CardTitle className="text-xl">Access Restricted</CardTitle>
+          <CardDescription className="text-sm">
+            {getMessage()}
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-center space-y-4">
-          <p className="text-sm text-muted-foreground">
-            To book a cleaning, please visit our booking site:
-          </p>
+        <CardContent className="text-center space-y-3 pb-5">
           <Button 
-            onClick={() => window.location.href = 'https://try.novaracleaning.com/book/zip'}
-            className="w-full"
+            onClick={() => window.location.href = portalLink.url}
+            className="w-full h-10 text-sm border border-primary/20"
           >
             <ExternalLink className="w-4 h-4 mr-2" />
-            Go to Booking Site
+            {portalLink.label}
+          </Button>
+          
+          <Button
+            variant="ghost"
+            onClick={() => window.history.back()}
+            className="w-full h-9 text-xs border border-border"
+          >
+            <ArrowRight className="w-3 h-3 mr-1.5 rotate-180" />
+            Go Back
           </Button>
         </CardContent>
       </Card>
@@ -85,7 +123,11 @@ export function DomainRestricted({
 export function withDomainRestriction(
   Component: React.ComponentType,
   allowedDomains: string[],
-  options?: { redirectTo?: string; fallbackMessage?: string }
+  options?: { 
+    redirectTo?: string; 
+    fallbackMessage?: string;
+    portalType?: 'booking' | 'customer' | 'admin' | 'contractor';
+  }
 ) {
   return function DomainRestrictedComponent() {
     return (
@@ -93,9 +135,27 @@ export function withDomainRestriction(
         allowedDomains={allowedDomains}
         redirectTo={options?.redirectTo}
         fallbackMessage={options?.fallbackMessage}
+        portalType={options?.portalType}
       >
         <Component />
       </DomainRestricted>
     );
   };
+}
+
+/**
+ * Utility to check if current domain matches any in the list
+ */
+export function isDomainAllowed(allowedDomains: string[]): boolean {
+  const hostname = window.location.hostname;
+  const isDev = hostname === 'localhost' || 
+                hostname === '127.0.0.1' ||
+                hostname.includes('localhost');
+  
+  if (isDev) return true;
+  
+  return allowedDomains.some(domain => 
+    hostname === domain || 
+    hostname.endsWith(`.${domain}`)
+  );
 }

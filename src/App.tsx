@@ -40,11 +40,21 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DomainRestricted } from "./components/auth/DomainRestricted";
 import { DomainRouter } from "./components/auth/DomainRouter";
 
-// Allowed domains for the public booking flow
-const BOOKING_ALLOWED_DOMAINS = ['try.novaracleaning.com'];
+/**
+ * Domain Architecture:
+ * - try.novaracleaning.com → Public booking flow ONLY
+ * - app.novaracleaning.com → Customer portal ONLY (auth, account, membership, portal/*)
+ * - admin.novaracleaning.com → Admin portal ONLY
+ * - contractor.novaracleaning.com → Cleaner/contractor portal ONLY
+ */
+
+// Domain configurations
+const BOOKING_DOMAIN = ['try.novaracleaning.com'];
+const CUSTOMER_DOMAIN = ['app.novaracleaning.com'];
+const ADMIN_DOMAIN = ['admin.novaracleaning.com'];
+const CONTRACTOR_DOMAIN = ['contractor.novaracleaning.com'];
 
 const queryClient = new QueryClient();
-
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -56,88 +66,191 @@ const App = () => (
           <BookingProvider>
             <DomainRouter>
             <Routes>
+              {/* Landing - behavior varies by domain via DomainRouter */}
               <Route path="/" element={<Index />} />
-              <Route path="/demo" element={<Demo />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/account" element={<Account />} />
-              <Route path="/membership" element={<Membership />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/update-password" element={<UpdatePassword />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
               
-              {/* Public booking flow - ONLY accessible from try.novaracleaning.com */}
+              {/* ========================================
+                  PUBLIC BOOKING FLOW - try.novaracleaning.com ONLY
+                  ======================================== */}
+              <Route path="/demo" element={
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
+                  <Demo />
+                </DomainRestricted>
+              } />
               <Route path="/book/zip" element={
-                <DomainRestricted 
-                  allowedDomains={BOOKING_ALLOWED_DOMAINS}
-                  fallbackMessage="The booking flow is only available on try.novaracleaning.com"
-                >
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
                   <BookingZip />
                 </DomainRestricted>
               } />
               <Route path="/book/sqft" element={
-                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
                   <BookingHome />
                 </DomainRestricted>
               } />
               <Route path="/book/offer" element={
-                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
                   <BookingOffer />
                 </DomainRestricted>
               } />
               <Route path="/book/checkout" element={
-                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
                   <BookingCheckout />
                 </DomainRestricted>
               } />
               <Route path="/book/details" element={
-                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
                   <PropertyDetails />
                 </DomainRestricted>
               } />
               <Route path="/book/confirmation" element={
-                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
                   <BookingSuccess />
                 </DomainRestricted>
               } />
+              <Route path="/book/custom-quote" element={
+                <DomainRestricted allowedDomains={BOOKING_DOMAIN} portalType="booking">
+                  <CustomQuote />
+                </DomainRestricted>
+              } />
               
-              {/* Legacy redirects for backwards compatibility */}
+              {/* Legacy booking redirects */}
               <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
               <Route path="/book/service" element={<Navigate to="/book/offer" replace />} />
               <Route path="/book/schedule" element={<Navigate to="/book/checkout" replace />} />
               <Route path="/book/summary" element={<Navigate to="/book/checkout" replace />} />
               <Route path="/book/success" element={<Navigate to="/book/confirmation" replace />} />
               <Route path="/book/additional-details" element={<Navigate to="/book/details" replace />} />
-              
-              <Route path="/book/custom-quote" element={
-                <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
-                  <CustomQuote />
+
+              {/* ========================================
+                  CUSTOMER PORTAL - app.novaracleaning.com ONLY
+                  ======================================== */}
+              <Route path="/auth" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <Auth />
                 </DomainRestricted>
               } />
-              <Route path="/admin/auth" element={<AdminAuth />} />
-              <Route path="/admin/cleaners" element={<ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>} />
-              <Route path="/admin/webhooks" element={<ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>} />
-              <Route path="/admin/webhook-tester" element={<ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>} />
-              <Route path="/admin/dispatch" element={<ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>} />
-              <Route path="/admin/directory" element={<ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>} />
-              <Route path="/admin/intake" element={<BookingIntake />} />
-              {/* Cleaner Portal */}
-              <Route path="/cleaner" element={<CleanerOnboardingLanding />} />
-              <Route path="/cleaner/join" element={<CleanerOnboardingLanding />} />
-              <Route path="/cleaner/auth" element={<CleanerAuth />} />
-              <Route path="/cleaner/auth/callback" element={<CleanerAuthCallback />} />
-              <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
-              <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
-              <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
-              {/* Legacy routes */}
+              <Route path="/auth/callback" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <AuthCallback />
+                </DomainRestricted>
+              } />
+              <Route path="/account" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <Account />
+                </DomainRestricted>
+              } />
+              <Route path="/membership" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <Membership />
+                </DomainRestricted>
+              } />
+              <Route path="/reset-password" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <ResetPassword />
+                </DomainRestricted>
+              } />
+              <Route path="/update-password" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <UpdatePassword />
+                </DomainRestricted>
+              } />
+              <Route path="/sms-consent" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <SmsConsent />
+                </DomainRestricted>
+              } />
+              <Route path="/portal/book" element={
+                <DomainRestricted allowedDomains={CUSTOMER_DOMAIN} portalType="customer">
+                  <MemberBooking />
+                </DomainRestricted>
+              } />
+
+              {/* ========================================
+                  ADMIN PORTAL - admin.novaracleaning.com ONLY
+                  ======================================== */}
+              <Route path="/admin/auth" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <AdminAuth />
+                </DomainRestricted>
+              } />
+              <Route path="/admin/cleaners" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <ProtectedRoute requiredRole="admin"><AdminCleaners /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/webhooks" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <ProtectedRoute requiredRole="admin"><AdminWebhooks /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/webhook-tester" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <ProtectedRoute requiredRole="admin"><WebhookTester /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/dispatch" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <ProtectedRoute requiredRole="admin"><DispatchQueue /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/directory" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <ProtectedRoute requiredRole="admin"><CleanerDirectory /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/intake" element={
+                <DomainRestricted allowedDomains={ADMIN_DOMAIN} portalType="admin">
+                  <BookingIntake />
+                </DomainRestricted>
+              } />
+
+              {/* ========================================
+                  CONTRACTOR PORTAL - contractor.novaracleaning.com ONLY
+                  ======================================== */}
+              <Route path="/cleaner" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerOnboardingLanding />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/join" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerOnboardingLanding />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/auth" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerAuth />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/auth/callback" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerAuthCallback />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/reset-password" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerResetPassword />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/onboarding" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerOnboarding />
+                </DomainRestricted>
+              } />
+              <Route path="/cleaner/dashboard" element={
+                <DomainRestricted allowedDomains={CONTRACTOR_DOMAIN} portalType="contractor">
+                  <CleanerDashboard />
+                </DomainRestricted>
+              } />
+              
+              {/* Legacy cleaner routes */}
               <Route path="/cleaner/profile" element={<Navigate to="/cleaner/dashboard" replace />} />
-              <Route path="/cleaner/onboarding-landing" element={<CleanerOnboardingLanding />} />
-              <Route path="/cleaner/onboard" element={<CleanerOnboardingLanding />} />
-              <Route path="/sms-consent" element={<SmsConsent />} />
+              <Route path="/cleaner/onboarding-landing" element={<Navigate to="/cleaner" replace />} />
+              <Route path="/cleaner/onboard" element={<Navigate to="/cleaner" replace />} />
               
-              {/* Customer Portal - Member Booking */}
-              <Route path="/portal/book" element={<MemberBooking />} />
-              
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              {/* ========================================
+                  CATCH-ALL - 404 Page
+                  ======================================== */}
               <Route path="*" element={<NotFound />} />
             </Routes>
             </DomainRouter>

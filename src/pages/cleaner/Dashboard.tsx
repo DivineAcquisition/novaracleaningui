@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { 
   Loader2, 
@@ -19,9 +18,8 @@ import {
   Calendar,
   Car,
   Power,
-  Settings,
-  Sparkles,
-  MapPin
+  MapPin,
+  Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,13 +40,13 @@ interface CleanerProfile {
 }
 
 const DAYS_OF_WEEK = [
-  { id: "Mon", label: "Mon" },
-  { id: "Tue", label: "Tue" },
-  { id: "Wed", label: "Wed" },
-  { id: "Thu", label: "Thu" },
-  { id: "Fri", label: "Fri" },
-  { id: "Sat", label: "Sat" },
-  { id: "Sun", label: "Sun" },
+  { id: "Mon", label: "M" },
+  { id: "Tue", label: "T" },
+  { id: "Wed", label: "W" },
+  { id: "Thu", label: "T" },
+  { id: "Fri", label: "F" },
+  { id: "Sat", label: "S" },
+  { id: "Sun", label: "S" },
 ];
 
 const TRAVEL_OPTIONS = [10, 15, 20, 25, 30];
@@ -60,7 +58,6 @@ export default function CleanerDashboard() {
   const [stripeLoading, setStripeLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  // Editable settings
   const [isActive, setIsActive] = useState(false);
   const [workDays, setWorkDays] = useState<string[]>([]);
   const [maxMiles, setMaxMiles] = useState(20);
@@ -139,10 +136,10 @@ export default function CleanerDashboard() {
         .eq("id", profile.id);
 
       if (error) throw error;
-      toast.success("Settings saved");
+      toast.success("Saved");
     } catch (error) {
       console.error("Save error:", error);
-      toast.error("Failed to save settings");
+      toast.error("Failed to save");
     } finally {
       setSaving(false);
     }
@@ -162,7 +159,6 @@ export default function CleanerDashboard() {
         }
       } catch (error: any) {
         toast.error("Failed to initiate Stripe setup");
-        console.error(error);
       } finally {
         setStripeLoading(false);
       }
@@ -173,9 +169,7 @@ export default function CleanerDashboard() {
     try {
       const { data, error } = await supabase.functions.invoke(
         "create-stripe-login-link",
-        {
-          body: { stripe_account_id: profile.stripe_account_id }
-        }
+        { body: { stripe_account_id: profile.stripe_account_id } }
       );
 
       if (error) throw error;
@@ -193,20 +187,18 @@ export default function CleanerDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto border border-border">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
-          <p className="text-muted-foreground font-medium">Loading dashboard...</p>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
   }
 
-  if (!profile) {
-    return null;
-  }
+  if (!profile) return null;
 
   const stripeStatus = profile.payouts_enabled 
     ? "active" 
@@ -215,254 +207,242 @@ export default function CleanerDashboard() {
       : "not_setup";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
+        <div className="max-w-sm mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
             {profile.avatar_url ? (
               <img 
                 src={profile.avatar_url} 
                 alt="Avatar" 
-                className="w-11 h-11 rounded-full object-cover ring-2 ring-primary/20"
+                className="w-9 h-9 rounded-full object-cover border border-border"
               />
             ) : (
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-                <User className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
+                <User className="w-4 h-4 text-white" />
               </div>
             )}
             <div>
-              <p className="font-semibold">{profile.first_name} {profile.last_name}</p>
-              <div className="flex items-center gap-2">
+              <p className="font-semibold text-sm">{profile.first_name} {profile.last_name}</p>
+              <div className="flex items-center gap-1.5">
                 <Badge 
                   variant="secondary" 
                   className={cn(
-                    "text-xs",
-                    isActive ? "bg-green-500/10 text-green-600" : "bg-gray-500/10 text-gray-600"
+                    "text-[10px] px-1.5 py-0 h-4 border",
+                    isActive 
+                      ? "bg-green-500/10 text-green-600 border-green-500/20" 
+                      : "bg-muted text-muted-foreground border-border"
                   )}
                 >
                   {isActive ? "Active" : "Inactive"}
                 </Badge>
-                {saving && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                {saving && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground" />}
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleSignOut}>
-            <LogOut className="w-5 h-5" />
+          <Button variant="ghost" size="icon" onClick={handleSignOut} className="h-8 w-8 border border-border">
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
+      <main className="max-w-sm mx-auto px-4 py-4 space-y-3">
         
         {/* Status Toggle */}
-        <Card className="border-0 shadow-xl overflow-hidden">
+        <Card className="border border-border shadow-sm overflow-hidden">
           <div className={cn(
-            "h-1.5 transition-colors",
-            isActive ? "bg-gradient-to-r from-green-500 to-emerald-500" : "bg-gray-300"
+            "h-1 transition-colors",
+            isActive ? "bg-gradient-to-r from-green-500 to-emerald-500" : "bg-muted"
           )} />
-          <CardContent className="p-5">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className={cn(
-                  "w-12 h-12 rounded-xl flex items-center justify-center transition-colors",
-                  isActive ? "bg-green-500/10" : "bg-muted"
+                  "w-10 h-10 rounded-lg flex items-center justify-center border",
+                  isActive ? "bg-green-500/10 border-green-500/20" : "bg-muted border-border"
                 )}>
-                  <Power className={cn(
-                    "w-6 h-6",
-                    isActive ? "text-green-600" : "text-muted-foreground"
-                  )} />
+                  <Power className={cn("w-5 h-5", isActive ? "text-green-600" : "text-muted-foreground")} />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Availability Status</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {isActive ? "You're receiving job offers" : "You won't receive job offers"}
+                  <h3 className="font-semibold text-sm">Availability</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {isActive ? "Receiving jobs" : "Not receiving jobs"}
                   </p>
                 </div>
               </div>
-              <Switch
-                checked={isActive}
-                onCheckedChange={toggleStatus}
-                className="scale-110"
-              />
+              <Switch checked={isActive} onCheckedChange={toggleStatus} />
             </div>
           </CardContent>
         </Card>
 
         {/* Work Days */}
-        <Card className="border-0 shadow-xl">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
+        <Card className="border border-border shadow-sm">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-sm flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-primary" />
               Work Days
             </CardTitle>
-            <CardDescription>
-              Select the days you're available to work
-            </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex gap-2">
+          <CardContent className="px-4 pb-4 pt-0">
+            <div className="flex gap-1.5">
               {DAYS_OF_WEEK.map((day) => (
                 <button
                   key={day.id}
                   onClick={() => toggleDay(day.id)}
                   className={cn(
-                    "flex-1 py-3 rounded-xl font-medium text-sm transition-all",
+                    "flex-1 py-2.5 rounded-lg font-semibold text-xs transition-all border",
                     workDays.includes(day.id)
-                      ? "bg-primary text-white shadow-md"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      ? "bg-primary text-white border-primary"
+                      : "bg-muted text-muted-foreground border-border hover:border-primary/50"
                   )}
                 >
-                  {day.label.charAt(0)}
+                  {day.label}
                 </button>
               ))}
             </div>
             {workDays.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-3">
-                Working: {workDays.join(", ")}
+              <p className="text-[10px] text-muted-foreground mt-2">
+                {workDays.join(", ")}
               </p>
             )}
           </CardContent>
         </Card>
 
         {/* Travel Distance */}
-        <Card className="border-0 shadow-xl">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Car className="w-5 h-5 text-primary" />
+        <Card className="border border-border shadow-sm">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-sm flex items-center gap-1.5">
+              <Car className="w-4 h-4 text-primary" />
               Travel Distance
             </CardTitle>
-            <CardDescription>
-              Maximum miles you'll travel for jobs
-            </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex gap-2">
+          <CardContent className="px-4 pb-4 pt-0">
+            <div className="flex gap-1.5">
               {TRAVEL_OPTIONS.map((miles) => (
                 <button
                   key={miles}
                   onClick={() => updateMiles(miles)}
                   className={cn(
-                    "flex-1 py-3 rounded-xl font-medium text-sm transition-all",
+                    "flex-1 py-2.5 rounded-lg font-semibold text-xs transition-all border",
                     maxMiles === miles
-                      ? "bg-primary text-white shadow-md"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      ? "bg-primary text-white border-primary"
+                      : "bg-muted text-muted-foreground border-border hover:border-primary/50"
                   )}
                 >
                   {miles}mi
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
-              <MapPin className="w-3 h-3" />
-              Based on ZIP: {profile.home_zip}
+            <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground">
+              <MapPin className="w-2.5 h-2.5" />
+              From ZIP: {profile.home_zip}
             </div>
           </CardContent>
         </Card>
 
-        {/* Stripe Connect - Prominent */}
-        <Card className="border-0 shadow-xl bg-gradient-to-br from-indigo-500/5 to-purple-500/5 border-indigo-500/10">
-          <CardHeader className="pb-2">
+        {/* Stripe Connect */}
+        <Card className="border border-indigo-500/20 shadow-sm bg-gradient-to-br from-indigo-500/5 to-purple-500/5">
+          <CardHeader className="pb-2 px-4 pt-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-indigo-600" />
-                Earnings & Payouts
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-indigo-600" />
+                Earnings
               </CardTitle>
               {stripeStatus === "active" && (
-                <Badge className="bg-green-500/10 text-green-600 border-0">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                <Badge className="bg-green-500/10 text-green-600 border border-green-500/20 text-[10px] px-1.5 py-0 h-4">
+                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
                   Connected
                 </Badge>
               )}
               {stripeStatus === "pending" && (
-                <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-0">
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[10px] px-1.5 py-0 h-4">
+                  <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
                   Pending
                 </Badge>
               )}
             </div>
-            <CardDescription>
+            <CardDescription className="text-xs">
               {stripeStatus === "active" 
-                ? "View earnings, payouts, tax documents, and bank info"
+                ? "View earnings, payouts & tax docs"
                 : stripeStatus === "pending"
-                  ? "Complete setup to start receiving payouts"
-                  : "Connect Stripe to receive your earnings"
+                  ? "Complete setup to receive payouts"
+                  : "Connect Stripe to get paid"
               }
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-2">
+          <CardContent className="px-4 pb-4 pt-0">
             <Button 
               onClick={openStripeConnect}
               disabled={stripeLoading}
               className={cn(
-                "w-full h-14 text-base font-semibold rounded-xl transition-all",
+                "w-full h-11 text-sm font-semibold border",
                 stripeStatus === "active" 
-                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90" 
-                  : ""
+                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500/20 text-white" 
+                  : "border-border"
               )}
               variant={stripeStatus === "active" ? "default" : "outline"}
             >
               {stripeLoading ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Loading...
                 </>
               ) : stripeStatus === "active" ? (
                 <>
-                  <DollarSign className="w-5 h-5 mr-2" />
+                  <DollarSign className="w-4 h-4 mr-1.5" />
                   Open Stripe Dashboard
-                  <ExternalLink className="w-4 h-4 ml-2" />
+                  <ExternalLink className="w-3 h-3 ml-1.5" />
                 </>
               ) : (
                 <>
-                  <Settings className="w-5 h-5 mr-2" />
                   {stripeStatus === "pending" ? "Complete Setup" : "Set Up Payments"}
                 </>
               )}
             </Button>
 
             {stripeStatus === "active" && (
-              <div className="mt-4 p-4 bg-card rounded-xl border">
+              <div className="mt-3 p-3 bg-card rounded-lg border border-border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Your Pay Rate</p>
-                    <p className="text-2xl font-bold text-green-600">$18/hr</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">Pay Rate</p>
+                    <p className="text-lg font-bold text-green-600">$18/hr</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 text-green-600" />
+                  <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
+                    <DollarSign className="w-4 h-4 text-green-600" />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Payouts are processed weekly via Stripe
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Weekly payouts via Stripe
                 </p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Quick Info */}
-        <Card className="border-0 shadow-lg bg-muted/30">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <AlertCircle className="w-5 h-5 text-primary" />
+        {/* Info Card */}
+        <Card className="border border-border shadow-sm bg-muted/30">
+          <CardContent className="p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 flex-shrink-0">
+                <Info className="w-4 h-4 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm mb-1">How It Works</p>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  <li>1. You'll receive job offers via email & SMS</li>
-                  <li>2. Accept or decline based on your availability</li>
-                  <li>3. Complete the job and get paid weekly</li>
-                </ul>
+                <p className="font-semibold text-xs mb-1">How It Works</p>
+                <ol className="text-[10px] text-muted-foreground space-y-0.5 list-decimal list-inside">
+                  <li>Receive job offers via email & SMS</li>
+                  <li>Accept or decline based on schedule</li>
+                  <li>Complete jobs and get paid weekly</li>
+                </ol>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Support Footer */}
-        <p className="text-xs text-center text-muted-foreground pb-4">
-          Need help? Contact support@novaracleaning.com
+        {/* Support */}
+        <p className="text-[10px] text-center text-muted-foreground pb-2">
+          Need help? support@novaracleaning.com
         </p>
       </main>
     </div>
