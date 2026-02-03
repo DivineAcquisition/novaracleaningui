@@ -16,7 +16,8 @@ import {
   Award,
   AlertTriangle,
   ExternalLink,
-  RotateCcw
+  RotateCcw,
+  Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -157,11 +158,12 @@ export default function CleanerAssessment() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [cleanerId, setCleanerId] = useState<string | null>(null);
+  const [isOnboarded, setIsOnboarded] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showResults, setShowResults] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ score: number; passed: boolean } | null>(null);
+  const [result, setResult] = useState<{ score: number; passed: boolean; saved: boolean } | null>(null);
   const [previousAttempts, setPreviousAttempts] = useState(0);
   const [alreadyTrained, setAlreadyTrained] = useState(false);
 
@@ -173,38 +175,56 @@ export default function CleanerAssessment() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
+      // Assessment is freely accessible - no auth required
       if (!session) {
-        toast.error("Please sign in to take the assessment");
-        navigate("/cleaner/auth");
+        // Guest mode - can take assessment but results won't be saved
+        setIsOnboarded(false);
+        setCleanerId(null);
+        setLoading(false);
         return;
       }
 
       // Check if user has completed onboarding
       const { data: cleaner, error } = await supabase
         .from("cleaners")
-        .select("id, is_trained, assessment_attempts, assessment_score")
+        .select("id, is_trained, assessment_attempts, assessment_score, onboarding_complete")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
-      if (error || !cleaner) {
-        toast.error("Please complete onboarding before taking the assessment");
-        navigate("/cleaner/onboarding");
+      if (error) {
+        console.error("Error checking cleaner:", error);
+        setIsOnboarded(false);
+        setCleanerId(null);
+        setLoading(false);
         return;
       }
 
+      if (!cleaner || !cleaner.onboarding_complete) {
+        // User exists but hasn't completed onboarding
+        setIsOnboarded(false);
+        setCleanerId(null);
+        setLoading(false);
+        return;
+      }
+
+      // User is fully onboarded
       setCleanerId(cleaner.id);
+      setIsOnboarded(true);
       setPreviousAttempts(cleaner.assessment_attempts || 0);
       
       if (cleaner.is_trained) {
         setAlreadyTrained(true);
-        setResult({ score: cleaner.assessment_score || 10, passed: true });
+        setResult({ score: cleaner.assessment_score || 10, passed: true, saved: true });
         setShowResults(true);
       }
 
       setLoading(false);
     } catch (error) {
       console.error("Auth check error:", error);
-      navigate("/cleaner/auth");
+      // On any error, allow guest access
+      setIsOnboarded(false);
+      setCleanerId(null);
+      setLoading(false);
     }
   };
 
@@ -235,11 +255,6 @@ export default function CleanerAssessment() {
   };
 
   const submitAssessment = async () => {
-    if (!cleanerId) {
-      toast.error("Session error. Please refresh and try again.");
-      return;
-    }
-
     const answeredCount = Object.keys(answers).length;
     if (answeredCount < ASSESSMENT_QUESTIONS.length) {
       toast.error(`Please answer all questions (${answeredCount}/${ASSESSMENT_QUESTIONS.length} answered)`);
@@ -248,32 +263,47 @@ export default function CleanerAssessment() {
 
     setSubmitting(true);
     const score = calculateScore();
+    const passed = score >= PASSING_SCORE;
 
-    try {
-      const { data, error } = await supabase.rpc('submit_cleaner_assessment', {
-        p_cleaner_id: cleanerId,
-        p_answers: answers,
-        p_score: score,
-        p_total: ASSESSMENT_QUESTIONS.length
-      });
+    // Only save to database if user is onboarded
+    if (isOnboarded && cleanerId) {
+      try {
+        const { data, error } = await supabase.rpc('submit_cleaner_assessment', {
+          p_cleaner_id: cleanerId,
+          p_answers: answers,
+          p_score: score,
+          p_total: ASSESSMENT_QUESTIONS.length
+        });
 
-      if (error) throw error;
+        if (error) {
+          console.error("Submit error:", error);
+          // Still show results even if save failed
+          toast.error("Could not save results, but here's your score");
+        } else {
+          if (passed) {
+            toast.success("Congratulations! You passed and your results have been saved!");
+          } else {
+            toast.info(`You scored ${score}/10. Results saved.`);
+          }
+        }
 
-      const passed = score >= PASSING_SCORE;
-      setResult({ score, passed });
-      setShowResults(true);
-
-      if (passed) {
-        toast.success("Congratulations! You passed the assessment!");
-      } else {
-        toast.error(`You scored ${score}/10. You need 8/10 to pass.`);
+        setResult({ score, passed, saved: !error });
+      } catch (error: any) {
+        console.error("Submit error:", error);
+        setResult({ score, passed, saved: false });
       }
-    } catch (error: any) {
-      console.error("Submit error:", error);
-      toast.error("Failed to submit assessment. Please try again.");
-    } finally {
-      setSubmitting(false);
+    } else {
+      // Guest user - just show results
+      setResult({ score, passed, saved: false });
+      if (passed) {
+        toast.success(`You scored ${score}/10! Complete onboarding to save your results.`);
+      } else {
+        toast.info(`You scored ${score}/10. You need 8/10 to pass.`);
+      }
     }
+
+    setShowResults(true);
+    setSubmitting(false);
   };
 
   const retakeAssessment = () => {
@@ -322,7 +352,7 @@ export default function CleanerAssessment() {
               </CardTitle>
               <CardDescription>
                 {result.passed 
-                  ? "You're now a certified trained cleaner" 
+                  ? result.saved ? "You're now a certified trained cleaner" : "Complete onboarding to save your results"
                   : "You need 80% (8/10) to pass"
                 }
               </CardDescription>
@@ -344,7 +374,32 @@ export default function CleanerAssessment() {
                 />
               </div>
 
-              {result.passed ? (
+              {/* Not saved notice for guests */}
+              {!result.saved && !alreadyTrained && (
+                <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-sm text-blue-700">Results Not Saved</p>
+                      <p className="text-xs text-blue-600 mb-3">
+                        Complete the cleaner onboarding to save your results and unlock premium jobs.
+                      </p>
+                      <Link to="/cleaner" className="block">
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-9 text-xs border-blue-500/30 text-blue-700 hover:bg-blue-500/10"
+                        >
+                          Complete Onboarding
+                          <ArrowRight className="w-3 h-3 ml-1.5" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {result.passed && result.saved ? (
                 <>
                   {/* Trained Badge */}
                   <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/20">
@@ -368,27 +423,29 @@ export default function CleanerAssessment() {
                 </>
               ) : (
                 <>
-                  {/* Training Link */}
-                  <div className="bg-amber-500/10 rounded-xl p-4 border border-amber-500/20">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-semibold text-sm text-amber-700">Training Recommended</p>
-                        <p className="text-xs text-amber-600 mb-3">
-                          Complete our training program to improve your skills and retake the assessment.
-                        </p>
-                        <Button 
-                          variant="outline"
-                          size="sm"
-                          className="w-full h-9 text-xs border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
-                          onClick={() => window.open("https://training.novaracleaning.com", "_blank")}
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1.5" />
-                          Start Training
-                        </Button>
+                  {/* Training Link for failures */}
+                  {!result.passed && (
+                    <div className="bg-amber-500/10 rounded-xl p-4 border border-amber-500/20">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-sm text-amber-700">Training Recommended</p>
+                          <p className="text-xs text-amber-600 mb-3">
+                            Complete our training program to improve your skills and retake the assessment.
+                          </p>
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-9 text-xs border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                            onClick={() => window.open("https://training.novaracleaning.com", "_blank")}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1.5" />
+                            Start Training
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Review Answers - Desktop: 2 columns */}
                   <div className="space-y-2">
@@ -428,15 +485,26 @@ export default function CleanerAssessment() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Link to="/cleaner/dashboard" className="flex-1">
-                      <Button 
-                        variant="outline"
-                        className="w-full h-10 text-sm border border-border"
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-                        Dashboard
-                      </Button>
-                    </Link>
+                    {isOnboarded ? (
+                      <Link to="/cleaner/dashboard" className="flex-1">
+                        <Button 
+                          variant="outline"
+                          className="w-full h-10 text-sm border border-border"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+                          Dashboard
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Link to="/cleaner" className="flex-1">
+                        <Button 
+                          variant="outline"
+                          className="w-full h-10 text-sm border border-border"
+                        >
+                          Join Team
+                        </Button>
+                      </Link>
+                    )}
                     <Button 
                       className="flex-1 h-10 text-sm border border-primary/20"
                       onClick={retakeAssessment}
@@ -448,7 +516,7 @@ export default function CleanerAssessment() {
                 </>
               )}
 
-              {previousAttempts > 0 && !alreadyTrained && (
+              {previousAttempts > 0 && isOnboarded && !alreadyTrained && (
                 <p className="text-[10px] text-center text-muted-foreground">
                   Attempt #{previousAttempts + 1}
                 </p>
@@ -471,7 +539,7 @@ export default function CleanerAssessment() {
         {/* Header */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <Link to="/cleaner/dashboard">
+            <Link to={isOnboarded ? "/cleaner/dashboard" : "/cleaner"}>
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -481,12 +549,34 @@ export default function CleanerAssessment() {
                 Exit
               </Button>
             </Link>
-            <Badge variant="secondary" className="text-xs border border-border">
-              {answeredCount}/{ASSESSMENT_QUESTIONS.length} answered
-            </Badge>
+            <div className="flex items-center gap-2">
+              {!isOnboarded && (
+                <Badge variant="secondary" className="text-[10px] border border-amber-500/20 bg-amber-500/10 text-amber-600">
+                  Guest Mode
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-xs border border-border">
+                {answeredCount}/{ASSESSMENT_QUESTIONS.length}
+              </Badge>
+            </div>
           </div>
           <Progress value={progress} className="h-1.5" />
         </div>
+
+        {/* Guest notice */}
+        {!isOnboarded && currentQuestion === 0 && (
+          <div className="mb-4 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-amber-700">Guest Mode</p>
+                <p className="text-[10px] text-amber-600">
+                  Your results won't be saved. <Link to="/cleaner" className="underline">Complete onboarding</Link> to save results and unlock premium jobs.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Desktop: Two column layout */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
