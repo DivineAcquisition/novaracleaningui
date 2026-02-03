@@ -14,7 +14,7 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
 import { Skeleton } from "@/components/ui/skeleton";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, MEMBERSHIP_PRICES, MEMBERSHIP_FIRST_CLEAN_FEE, getEstimatedHours, getZoneModifier, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
@@ -678,21 +678,41 @@ export default function BookingCheckout() {
             <CardContent className="space-y-4">
               
               {/* Membership Signup Flow */}
-              {isNewMembershipSignup && <div className="space-y-4">
-                  <div className="bg-primary/5 rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">Membership: {membership?.label}</span>
-                      <Badge className="bg-primary text-white">${membership?.monthlyPrice}/mo</Badge>
+              {isNewMembershipSignup && (() => {
+                // Calculate membership price based on home size and frequency
+                const frequency = bookingData.frequency || bookingData.membershipPlan;
+                const membershipPrices = frequency && MEMBERSHIP_PRICES[frequency as keyof typeof MEMBERSHIP_PRICES];
+                const homeSizeKey = bookingData.homeSizeId as keyof typeof membershipPrices;
+                const priceInfo = membershipPrices?.[homeSizeKey];
+                const zoneModifier = bookingData.zipCode ? getZoneModifier(bookingData.zipCode) : 1.0;
+                const monthlyPrice = priceInfo ? Math.round(priceInfo.price * zoneModifier) : 0;
+                const firstCleanFee = MEMBERSHIP_FIRST_CLEAN_FEE;
+                const frequencyLabel = frequency === 'monthly' ? 'Monthly' : frequency === 'biweekly' ? 'Bi-Weekly' : 'Weekly';
+                const cleansPerMonth = frequency === 'monthly' ? 1 : frequency === 'biweekly' ? 2 : 4;
+                
+                return (
+                  <div className="space-y-4">
+                    <div className="bg-primary/5 rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{frequencyLabel} Membership</span>
+                        <Badge className="bg-primary text-white">${monthlyPrice}/mo</Badge>
+                      </div>
+                      <div className="text-sm space-y-1">
+                        <p className="text-muted-foreground">
+                          {cleansPerMonth} cleaning{cleansPerMonth > 1 ? 's' : ''}/month • Same trusted team • Cancel anytime
+                        </p>
+                        <p className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                          First month: ${monthlyPrice} + ${firstCleanFee} setup fee = <span className="font-semibold">${monthlyPrice + firstCleanFee}</span>
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {membership?.cleansPerMonth} cleaning credit/month • {membership?.discount}% off extras • Cancel anytime
-                    </p>
+                    
+                    <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isProcessing}>
+                      {isProcessing ? <><Loader2 className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
+                    </Button>
                   </div>
-                  
-                  <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isProcessing}>
-                    {isProcessing ? <><Loader2 className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
-                  </Button>
-                </div>}
+                );
+              })()}
 
               {/* Member Using Credit */}
               {isMemberUsingCredit && <div className="text-center space-y-4">

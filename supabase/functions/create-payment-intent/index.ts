@@ -18,11 +18,11 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PAYMENT-INTENT] ${step}${detailsStr}`);
 };
 
-// Service pricing configuration (cents) - Updated Feb 2026
-const SERVICE_TIER_PRICING = {
-  standard: 0,
-  deep: 5000, // $50 (or use multiplier approach: basePrice * 0.5)
-  moveInOut: 12000, // $120 (or use multiplier approach: basePrice * 1.0)
+// Service type multipliers - Feb 2026 pricing v2.0
+const SERVICE_MULTIPLIERS: Record<string, { multiplier: number; includes?: string[] }> = {
+  standard: { multiplier: 1.0 },
+  deep: { multiplier: 1.5 },
+  moveInOut: { multiplier: 2.0, includes: ['fridge', 'oven'] },
 };
 
 const ADD_ON_PRICING = {
@@ -153,23 +153,30 @@ serve(async (req) => {
     const basePrice = Math.round(rawBasePrice * zoneModifier);
     logStep("Zone pricing applied", { zipCode: bookingData.zipCode, zoneModifier, rawBasePrice, adjustedBasePrice: basePrice });
     
-    const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING] ?? 0;
+    // Get service multiplier
+    const serviceConfig = SERVICE_MULTIPLIERS[bookingData.serviceType as keyof typeof SERVICE_MULTIPLIERS] || SERVICE_MULTIPLIERS.standard;
+    const serviceMultiplier = serviceConfig.multiplier;
+    const serviceIncludes = serviceConfig.includes || [];
+    
+    // Apply service multiplier to base price
+    const serviceTierPrice = Math.round(basePrice * (serviceMultiplier - 1)); // The additional cost from multiplier
+    const adjustedBasePrice = Math.round(basePrice * serviceMultiplier);
 
-    // Prepare add-ons (Move-In/Out includes fridge & oven already)
+    // Prepare add-ons (skip if included in service type)
     const incomingAddOns: string[] = Array.isArray(bookingData.addOns) ? bookingData.addOns : [];
-    const relevantAddOns = bookingData.serviceType === 'moveInOut'
-      ? incomingAddOns.filter((a) => a !== 'fridge' && a !== 'oven')
-      : incomingAddOns;
+    const relevantAddOns = incomingAddOns.filter((a) => !serviceIncludes.includes(a));
 
     const addOnsTotal = relevantAddOns.reduce((sum, a) => sum + (ADD_ON_PRICING[a as keyof typeof ADD_ON_PRICING] ?? 0), 0);
 
-    const subtotal = basePrice + serviceTierPrice + addOnsTotal;
+    const subtotal = adjustedBasePrice + addOnsTotal;
+    logStep("Service pricing", { basePrice, serviceMultiplier, adjustedBasePrice, addOnsTotal, subtotal });
 
-    // Membership discount applies only to extras (service addition + add-ons) and only if not using credit
+    // Membership discount applies only to extras (service premium + add-ons) and only if not using credit
     const membershipPlan: string = bookingData.membershipPlan || 'none';
-    const extras = serviceTierPrice + addOnsTotal;
+    const extras = serviceTierPrice + addOnsTotal; // serviceTierPrice is the premium from multiplier
     const membershipPct = (!bookingData.useCredit && MEMBERSHIP_DISCOUNTS[membershipPlan]) ? MEMBERSHIP_DISCOUNTS[membershipPlan] : 0;
     const membershipDiscount = Math.round(extras * membershipPct);
+    logStep("Membership discount", { membershipPlan, extras, membershipPct, membershipDiscount });
 
     // Check booking history to determine booking number and new customer status
     const { data: previousBookings } = await supabaseClient

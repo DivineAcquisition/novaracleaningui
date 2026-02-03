@@ -17,7 +17,12 @@ import {
   Home,
   Users,
   Zap,
-  MapPin
+  MapPin,
+  Phone,
+  ThumbsUp,
+  Award,
+  Percent,
+  RefreshCw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -25,23 +30,23 @@ import { cn } from "@/lib/utils";
 const FEATURES = [
   {
     icon: Clock,
-    title: "On-Time Guarantee",
-    description: "We show up when we say we will, every single time"
+    title: "On-Time, Every Time",
+    description: "We show up when promised. No excuses, no waiting around."
   },
   {
     icon: Shield,
-    title: "Vetted Cleaners",
-    description: "Background-checked and professionally trained"
+    title: "Vetted & Trained",
+    description: "Background-checked, trained professionals you can trust in your home."
   },
   {
     icon: CreditCard,
-    title: "Easy Booking",
-    description: "Book in under 2 minutes, pay securely online"
+    title: "Transparent Pricing",
+    description: "Know exactly what you'll pay. No surprises, no hidden fees."
   },
   {
-    icon: Star,
-    title: "5-Star Service",
-    description: "Consistently rated excellent by our customers"
+    icon: RefreshCw,
+    title: "Satisfaction Guarantee",
+    description: "Not happy? We'll re-clean for free within 48 hours."
   }
 ];
 
@@ -55,19 +60,19 @@ const PROCESS_STEPS = [
   {
     step: 2,
     title: "Select Home Size",
-    description: "Tell us about your space",
+    description: "Get instant pricing",
     icon: Home
   },
   {
     step: 3,
     title: "Choose Service",
-    description: "Pick standard, deep, or move cleaning",
+    description: "One-time or membership",
     icon: Sparkles
   },
   {
     step: 4,
-    title: "Pick Date & Time",
-    description: "Schedule what works for you",
+    title: "Pick Your Date",
+    description: "Flexible scheduling",
     icon: Calendar
   }
 ];
@@ -75,22 +80,35 @@ const PROCESS_STEPS = [
 const TESTIMONIALS = [
   {
     name: "Sarah M.",
-    location: "Dallas, TX",
-    text: "Finally found cleaners who actually show up on time! My house has never looked better.",
+    location: "Bethesda, MD",
+    text: "After years of no-shows and mediocre cleaning, Novara is a breath of fresh air. They actually show up on time and do an incredible job.",
     rating: 5
   },
   {
     name: "Mike R.",
-    location: "Plano, TX",
-    text: "The booking process was so easy. In 2 minutes I had my first clean scheduled.",
+    location: "Rockville, MD",
+    text: "The online booking was so easy. I had my first clean scheduled in under 2 minutes. The team was professional and thorough.",
     rating: 5
   },
   {
     name: "Jennifer L.",
-    location: "Frisco, TX",
-    text: "Switched from another service and the difference is night and day. Highly recommend!",
+    location: "Silver Spring, MD",
+    text: "We switched from another service and the difference is night and day. Worth every penny for the peace of mind.",
     rating: 5
   }
+];
+
+const PRICING_PREVIEW = [
+  { size: "Studio/1BR", sqft: "Under 1,000 sq ft", price: 150 },
+  { size: "2-3 BR", sqft: "1,500-2,000 sq ft", price: 239 },
+  { size: "4 BR", sqft: "2,500-3,000 sq ft", price: 339 },
+];
+
+const STATS = [
+  { value: "2,500+", label: "Happy Customers" },
+  { value: "4.9", label: "Average Rating" },
+  { value: "98%", label: "On-Time Rate" },
+  { value: "48hr", label: "Re-Clean Guarantee" },
 ];
 
 const Index = () => {
@@ -111,7 +129,6 @@ const Index = () => {
     setError("");
 
     try {
-      // Check if ZIP is in service coverage
       const { data: coverage } = await supabase
         .from('service_coverage_zones')
         .select('city, state')
@@ -119,13 +136,9 @@ const Index = () => {
         .eq('is_active', true)
         .single();
 
-      // Update booking data with ZIP
       updateBookingData({ zipCode });
-
-      // Navigate to sqft page
       navigate("/book/sqft");
     } catch (err) {
-      // Still allow navigation even if lookup fails
       updateBookingData({ zipCode });
       navigate("/book/sqft");
     } finally {
@@ -144,10 +157,16 @@ const Index = () => {
             </div>
             <span className="font-bold text-lg">Novara</span>
           </div>
-          <Badge variant="secondary" className="text-xs border border-green-500/20 bg-green-500/10 text-green-600">
-            <Zap className="w-3 h-3 mr-1" />
-            Book in 2 min
-          </Badge>
+          <div className="flex items-center gap-3">
+            <a href="tel:3018005252" className="hidden md:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+              <Phone className="w-4 h-4" />
+              (301) 800-5252
+            </a>
+            <Badge variant="secondary" className="text-xs border border-green-500/20 bg-green-500/10 text-green-600">
+              <Zap className="w-3 h-3 mr-1" />
+              Book in 2 min
+            </Badge>
+          </div>
         </div>
       </header>
 
@@ -159,18 +178,29 @@ const Index = () => {
             {/* Left: Hero Text + ZIP Entry */}
             <div className="space-y-6">
               <Badge className="bg-primary/10 text-primary border border-primary/20">
-                Professional Home Cleaning
+                Maryland's Most Reliable Cleaning Service
               </Badge>
               
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
-                Stop Spending Your Day Off{" "}
-                <span className="text-primary">Scrubbing Bathrooms</span>
+                Finally, a Cleaning Service That{" "}
+                <span className="text-primary">Actually Shows Up</span>
               </h1>
               
               <p className="text-lg text-muted-foreground">
-                Professional cleaning that shows up on time, every time. 
-                Book in under 2 minutes and reclaim your weekends.
+                Tired of cleaners who cancel, show up late, or do a mediocre job? 
+                We get it. That's why we built Novara differently—professional teams that 
+                arrive on time, every time, with a satisfaction guarantee you can count on.
               </p>
+
+              {/* Stats Row */}
+              <div className="flex flex-wrap gap-4 py-2">
+                {STATS.map((stat, i) => (
+                  <div key={i} className="text-center">
+                    <p className="text-2xl font-bold text-primary">{stat.value}</p>
+                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
 
               {/* ZIP Entry Card */}
               <Card className="border border-border shadow-lg">
@@ -178,7 +208,7 @@ const Index = () => {
                   <form onSubmit={handleZipSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">
-                        Enter your ZIP code to get started
+                        Get your instant quote in seconds
                       </label>
                       <div className="flex gap-2">
                         <div className="relative flex-1">
@@ -188,7 +218,7 @@ const Index = () => {
                             inputMode="numeric"
                             pattern="[0-9]*"
                             maxLength={5}
-                            placeholder="12345"
+                            placeholder="Enter ZIP code"
                             value={zipCode}
                             onChange={(e) => {
                               setZipCode(e.target.value.replace(/\D/g, ''));
@@ -216,19 +246,18 @@ const Index = () => {
                     </div>
                   </form>
 
-                  {/* Quick trust signals */}
                   <div className="flex items-center gap-4 mt-4 pt-4 border-t border-border">
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                      Free quotes
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                      No commitment
+                      No credit card needed
                     </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
                       Instant pricing
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                      Cancel anytime
                     </div>
                   </div>
                 </CardContent>
@@ -241,9 +270,9 @@ const Index = () => {
                 <CardContent className="p-6">
                   <div className="text-center mb-6">
                     <Badge variant="secondary" className="mb-2 border border-border">
-                      How It Works
+                      Simple 4-Step Booking
                     </Badge>
-                    <h3 className="text-lg font-semibold">Book in 4 Simple Steps</h3>
+                    <h3 className="text-lg font-semibold">Get Your Home Cleaned Today</h3>
                   </div>
                   
                   <div className="space-y-4">
@@ -265,7 +294,7 @@ const Index = () => {
                           </div>
                           {index === 0 && (
                             <Badge className="ml-auto bg-green-500/10 text-green-600 border border-green-500/20 text-[10px]">
-                              You are here
+                              Start here
                             </Badge>
                           )}
                         </div>
@@ -273,9 +302,14 @@ const Index = () => {
                     })}
                   </div>
 
-                  <div className="mt-6 pt-6 border-t border-border text-center">
-                    <p className="text-xs text-muted-foreground">
-                      Average booking time: <span className="font-semibold text-foreground">1 min 47 sec</span>
+                  <div className="mt-6 pt-6 border-t border-border">
+                    <div className="flex items-center justify-center gap-1 mb-2">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                      ))}
+                    </div>
+                    <p className="text-xs text-center text-muted-foreground">
+                      "Best cleaning service in Maryland" — 500+ 5-star reviews
                     </p>
                   </div>
                 </CardContent>
@@ -285,11 +319,122 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Problem/Solution Section */}
+      <section className="py-12 md:py-16 border-t border-border bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+              <Badge variant="outline" className="mb-4 border-red-500/30 text-red-600 bg-red-500/10">
+                Sound Familiar?
+              </Badge>
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">
+                Tired of Unreliable Cleaners?
+              </h2>
+              <ul className="space-y-3 text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-1">✗</span>
+                  Cleaners who cancel at the last minute
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-1">✗</span>
+                  Showing up late (or not at all)
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-1">✗</span>
+                  Inconsistent quality from visit to visit
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-1">✗</span>
+                  Hidden fees and surprise charges
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-1">✗</span>
+                  Having to follow up multiple times
+                </li>
+              </ul>
+            </div>
+            <div>
+              <Badge variant="outline" className="mb-4 border-green-500/30 text-green-600 bg-green-500/10">
+                The Novara Difference
+              </Badge>
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">
+                Professional Service You Can Count On
+              </h2>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span><strong>On-time guarantee</strong> — We show up when promised</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span><strong>Same team every time</strong> — Consistency you can trust</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span><strong>Transparent pricing</strong> — Know what you pay upfront</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span><strong>48-hour re-clean guarantee</strong> — Not happy? We fix it free</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span><strong>Real communication</strong> — We respond in minutes, not days</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Preview */}
+      <section className="py-12 md:py-16 border-t border-border">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-10">
+            <Badge variant="secondary" className="mb-2 border border-border">
+              <Percent className="w-3 h-3 mr-1" />
+              Transparent Pricing
+            </Badge>
+            <h2 className="text-2xl md:text-3xl font-bold mb-2">Simple, Honest Pricing</h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              No hidden fees. No surprise charges. Just straightforward pricing based on your home size.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto mb-8">
+            {PRICING_PREVIEW.map((item, index) => (
+              <Card key={index} className="border border-border shadow-sm text-center">
+                <CardContent className="p-5">
+                  <p className="font-semibold mb-1">{item.size}</p>
+                  <p className="text-xs text-muted-foreground mb-3">{item.sqft}</p>
+                  <p className="text-3xl font-bold text-primary">${item.price}</p>
+                  <p className="text-xs text-muted-foreground">one-time clean</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              Save up to 40% with a membership plan. Prices vary by location.
+            </p>
+            <Button 
+              size="lg"
+              onClick={() => document.getElementById('hero-zip')?.focus()}
+              className="bg-gradient-to-r from-primary to-purple-600"
+            >
+              Get Your Exact Price
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section className="py-12 md:py-16 border-t border-border bg-muted/30">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-10">
-            <h2 className="text-2xl md:text-3xl font-bold mb-2">Why Choose Novara?</h2>
+            <h2 className="text-2xl md:text-3xl font-bold mb-2">Why Novara?</h2>
             <p className="text-muted-foreground">Professional cleaning you can actually count on</p>
           </div>
 
@@ -321,8 +466,8 @@ const Index = () => {
                 <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
               ))}
             </div>
-            <h2 className="text-2xl md:text-3xl font-bold mb-2">Loved by Homeowners</h2>
-            <p className="text-muted-foreground">Join thousands of happy customers</p>
+            <h2 className="text-2xl md:text-3xl font-bold mb-2">Loved by Maryland Homeowners</h2>
+            <p className="text-muted-foreground">Join thousands of happy customers across the DMV</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -334,7 +479,7 @@ const Index = () => {
                       <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                     ))}
                   </div>
-                  <p className="text-sm mb-4">"{testimonial.text}"</p>
+                  <p className="text-sm mb-4 italic">"{testimonial.text}"</p>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <Users className="w-4 h-4 text-primary" />
@@ -354,14 +499,15 @@ const Index = () => {
       {/* CTA Section */}
       <section className="py-12 md:py-16 border-t border-border bg-gradient-to-br from-primary/5 to-purple-500/5">
         <div className="max-w-2xl mx-auto px-4 text-center">
+          <Award className="w-12 h-12 text-primary mx-auto mb-4" />
           <h2 className="text-2xl md:text-3xl font-bold mb-4">
-            Ready for a Cleaner Home?
+            Ready for a Home That Sparkles?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Get your instant quote in less than 2 minutes. No commitment required.
+            Get your instant quote in seconds. No commitment required. 
+            Join thousands of Maryland homeowners who trust Novara for their cleaning needs.
           </p>
 
-          {/* Second ZIP Entry */}
           <Card className="border border-border shadow-lg max-w-md mx-auto">
             <CardContent className="p-5">
               <form onSubmit={handleZipSubmit} className="space-y-3">
@@ -369,6 +515,7 @@ const Index = () => {
                   <div className="relative flex-1">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
+                      id="hero-zip"
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -387,18 +534,33 @@ const Index = () => {
                     disabled={zipCode.length !== 5 || isValidating}
                     className="h-12 px-6 bg-gradient-to-r from-primary to-purple-600 border-0"
                   >
-                    {isValidating ? "..." : "Start"}
+                    {isValidating ? "..." : "Get Quote"}
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </div>
               </form>
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                No credit card required • Instant pricing • Cancel anytime
+              </p>
             </CardContent>
           </Card>
         </div>
       </section>
 
+      {/* Service Areas */}
+      <section className="py-8 border-t border-border bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <p className="text-sm text-muted-foreground mb-3">Proudly serving Maryland communities</p>
+          <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
+            {['Bethesda', 'Potomac', 'Chevy Chase', 'Rockville', 'Silver Spring', 'Columbia', 'Ellicott City', 'Annapolis', 'Frederick', 'Baltimore'].map((area) => (
+              <span key={area} className="px-2 py-1 bg-background rounded border border-border">{area}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="py-8 border-t border-border bg-muted/30">
+      <footer className="py-8 border-t border-border">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -406,6 +568,12 @@ const Index = () => {
                 <Sparkles className="w-3 h-3 text-white" />
               </div>
               <span className="font-semibold text-sm">Novara Cleaning</span>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <a href="tel:3018005252" className="flex items-center gap-1 hover:text-foreground">
+                <Phone className="w-3.5 h-3.5" />
+                (301) 800-5252
+              </a>
             </div>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
               <span>© 2024 Novara Cleaning</span>
