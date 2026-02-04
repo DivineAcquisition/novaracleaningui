@@ -317,22 +317,19 @@ serve(async (req) => {
                   moveInOut: 'Move In/Out',
                 };
                 
-                const smsMessage = `Novara: Your ${serviceTypeLabels[booking.service_type] || 'cleaning'} on ${formattedDate} is confirmed! We'll send a reminder 24hrs before. Questions? Reply HELP or call (972) 559-0223`;
-                
-                await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms-notification`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                // Send SMS via Twilio with response tracking
+                const twilioSmsResponse = await supabase.functions.invoke('send-twilio-sms', {
+                  body: {
+                    type: 'booking_confirmation',
+                    bookingId: booking.id,
                   },
-                  body: JSON.stringify({
-                    toPhone: booking.phone,
-                    message: smsMessage,
-                    type: 'confirmation',
-                  }),
                 });
                 
-                logStep("SMS booking confirmation sent successfully", { phone: booking.phone });
+                if (twilioSmsResponse.error) {
+                  logStep("SMS booking confirmation failed (non-blocking)", { error: twilioSmsResponse.error });
+                } else {
+                  logStep("SMS booking confirmation sent successfully", { phone: booking.phone, sid: twilioSmsResponse.data?.sid });
+                }
               } catch (smsError) {
                 logStep("Error sending booking SMS (non-blocking)", { error: smsError });
               }
@@ -561,11 +558,12 @@ serve(async (req) => {
             }
 
             // Send confirmation SMS to customer
+            // Send SMS booking confirmation via Twilio
             try {
-              logStep("Sending customer SMS confirmation");
-              const smsResponse = await supabase.functions.invoke('send-sms-notification', {
+              logStep("Sending customer SMS confirmation via Twilio");
+              const smsResponse = await supabase.functions.invoke('send-twilio-sms', {
                 body: {
-                  type: 'customer_booking_confirmation',
+                  type: 'booking_confirmation',
                   bookingId: updatedBooking.id,
                 },
               });
@@ -573,7 +571,7 @@ serve(async (req) => {
               if (smsResponse.error) {
                 logStep("Customer SMS failed (non-blocking)", { error: smsResponse.error });
               } else {
-                logStep("Customer SMS sent successfully");
+                logStep("Customer SMS sent successfully", { sid: smsResponse.data?.sid });
               }
             } catch (smsError) {
               logStep("Error sending customer SMS (non-blocking)", { error: smsError });
@@ -768,19 +766,14 @@ serve(async (req) => {
                 .single();
 
               if (customerData?.phone) {
-                const smsMessage = `Novara: ${creditsPerMonth} new cleaning credit${creditsPerMonth > 1 ? 's' : ''} added to your ${planLabels[plan]} membership! Book now: https://novaracleaning.com/book`;
+                const smsMessage = `Novara: ${creditsPerMonth} new cleaning credit${creditsPerMonth > 1 ? 's' : ''} added to your ${planLabels[plan]} membership! Book now: novaracleaning.com\n\nReply STOP to opt out.`;
 
-                await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms-notification`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-                  },
-                  body: JSON.stringify({
+                await supabase.functions.invoke('send-twilio-sms', {
+                  body: {
+                    type: 'custom',
                     toPhone: customerData.phone,
                     message: smsMessage,
-                    type: 'confirmation',
-                  }),
+                  },
                 });
 
                 logStep("SMS notification sent for credit allocation", { phone: customerData.phone });
