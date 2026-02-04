@@ -491,20 +491,94 @@ serve(async (req) => {
         const session = event.data.object as Stripe.Checkout.Session;
         logStep("Processing checkout completion", { sessionId: session.id });
         
-        // Update booking status to 'booked'
-        const { error: updateError } = await supabase
+        // Update booking status to 'confirmed'
+        const { data: updatedBooking, error: updateError } = await supabase
           .from('bookings')
           .update({ 
-            status: 'booked',
+            status: 'confirmed',
             payment_intent_id: session.payment_intent as string,
             customer_id: session.customer as string,
           })
-          .eq('checkout_session_id', session.id);
+          .eq('checkout_session_id', session.id)
+          .select('*')
+          .single();
         
         if (updateError) {
           logStep("Error updating booking", updateError);
         } else {
-          logStep("Booking confirmed", { sessionId: session.id });
+          logStep("Booking confirmed", { sessionId: session.id, bookingId: updatedBooking?.id });
+          
+          // Create customer record and generate referral code
+          if (updatedBooking) {
+            try {
+              const { data: existingCustomer } = await supabase
+                .from('customers')
+                .select('id, referral_code')
+                .eq('email', updatedBooking.email)
+                .maybeSingle();
+
+              let customerRecord = existingCustomer;
+
+              if (!existingCustomer) {
+                // Create customer record
+                const { data: newCustomer, error: customerError } = await supabase
+                  .from('customers')
+                  .insert({
+                    email: updatedBooking.email,
+                    first_name: updatedBooking.first_name,
+                    last_name: updatedBooking.last_name,
+                    phone: updatedBooking.phone,
+                    address: updatedBooking.address,
+                    city: updatedBooking.city,
+                    state: updatedBooking.state,
+                    zip: updatedBooking.zip_code,
+                  })
+                  .select()
+                  .single();
+
+                if (customerError) {
+                  logStep("Error creating customer (non-blocking)", customerError);
+                } else {
+                  customerRecord = newCustomer;
+                  logStep("Customer created", { customerId: newCustomer?.id });
+                }
+              }
+
+              // Generate referral code if customer doesn't have one
+              if (customerRecord && !customerRecord.referral_code) {
+                const referralResponse = await supabase.functions.invoke('generate-referral-code', {
+                  body: { customerId: customerRecord.id, email: updatedBooking.email },
+                });
+
+                if (referralResponse.error) {
+                  logStep("Referral code generation failed (non-blocking)", { error: referralResponse.error });
+                } else {
+                  logStep("Referral code generated", referralResponse.data);
+                }
+              }
+            } catch (customerError) {
+              logStep("Error creating customer/referral (non-blocking)", { error: customerError });
+            }
+
+            // Send confirmation SMS to customer
+            try {
+              logStep("Sending customer SMS confirmation");
+              const smsResponse = await supabase.functions.invoke('send-sms-notification', {
+                body: {
+                  type: 'customer_booking_confirmation',
+                  bookingId: updatedBooking.id,
+                },
+              });
+
+              if (smsResponse.error) {
+                logStep("Customer SMS failed (non-blocking)", { error: smsResponse.error });
+              } else {
+                logStep("Customer SMS sent successfully");
+              }
+            } catch (smsError) {
+              logStep("Error sending customer SMS (non-blocking)", { error: smsError });
+            }
+          }
         }
         break;
       }
