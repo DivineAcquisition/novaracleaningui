@@ -362,7 +362,7 @@ serve(async (req) => {
       customer: customerId,
       line_items: lineItems,
       mode,
-      success_url: `${req.headers.get("origin")}/book/confirmation?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${req.headers.get("origin")}/book/details?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get("origin")}/book/checkout`,
       metadata: {
         booking_data: JSON.stringify({

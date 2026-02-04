@@ -66,10 +66,11 @@ export default function BookingSuccess() {
       
       const bookingIdFromUrl = searchParams.get("booking_id");
       const paymentIntentParam = searchParams.get("payment_intent");
+      const sessionIdParam = searchParams.get("session_id");
       
-      // Must have either booking_id or payment_intent to access this page
-      if (!bookingIdFromUrl && !paymentIntentParam) {
-        logStep("No booking ID or payment intent found - redirecting to home");
+      // Must have either booking_id, payment_intent, or session_id to access this page
+      if (!bookingIdFromUrl && !paymentIntentParam && !sessionIdParam) {
+        logStep("No booking ID, payment intent, or session ID found - redirecting to home");
         toast.error("No booking found. Please complete the booking process.");
         navigate("/");
         return;
@@ -77,6 +78,24 @@ export default function BookingSuccess() {
 
       try {
         let bookingId = bookingIdFromUrl;
+        
+        // If we only have session_id, find the booking by checkout_session_id
+        if (!bookingId && sessionIdParam) {
+          const { data: bookingBySession, error: sessionLookupError } = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('checkout_session_id', sessionIdParam)
+            .single();
+          
+          if (sessionLookupError || !bookingBySession) {
+            logStep("Booking not found by session ID", { sessionIdParam });
+            toast.error("Booking not found. Please contact support.");
+            navigate("/");
+            return;
+          }
+          
+          bookingId = bookingBySession.id;
+        }
         
         // If we only have payment_intent, find the booking by payment_intent_id
         if (!bookingId && paymentIntentParam) {

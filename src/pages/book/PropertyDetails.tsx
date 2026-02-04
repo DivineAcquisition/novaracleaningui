@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, ArrowRight, MapPin } from "lucide-react";
+import { CheckCircle2, ArrowRight, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
@@ -42,9 +42,12 @@ const FLOORING_TYPES = [
 export default function PropertyDetails() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const bookingId = searchParams.get("booking_id");
+  const bookingIdParam = searchParams.get("booking_id");
+  const sessionIdParam = searchParams.get("session_id");
+  const paymentIntentParam = searchParams.get("payment_intent");
   const { bookingData } = useBooking();
   
+  const [bookingId, setBookingId] = useState<string | null>(bookingIdParam);
   const [address, setAddress] = useState<string>("");
   const [city, setCity] = useState<string>("");
   const [state, setState] = useState<string>("");
@@ -55,13 +58,61 @@ export default function PropertyDetails() {
   const [pets, setPets] = useState<string>("none");
   const [accessNotes, setAccessNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(!bookingIdParam);
 
+  // Look up booking by session_id or payment_intent if booking_id not provided
   useEffect(() => {
-    if (!bookingId) {
+    const lookupBooking = async () => {
+      if (bookingIdParam) {
+        setBookingId(bookingIdParam);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!sessionIdParam && !paymentIntentParam) {
+        toast.error("No booking found");
+        navigate("/");
+        return;
+      }
+
+      try {
+        let query = supabase.from('bookings').select('id');
+        
+        if (sessionIdParam) {
+          query = query.eq('checkout_session_id', sessionIdParam);
+        } else if (paymentIntentParam) {
+          query = query.eq('payment_intent_id', paymentIntentParam);
+        }
+        
+        const { data, error } = await query.single();
+        
+        if (error || !data) {
+          console.error("Booking lookup failed:", error);
+          toast.error("Booking not found. Please contact support.");
+          navigate("/");
+          return;
+        }
+        
+        setBookingId(data.id);
+      } catch (err) {
+        console.error("Error looking up booking:", err);
+        toast.error("Error finding your booking");
+        navigate("/");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    lookupBooking();
+  }, [bookingIdParam, sessionIdParam, paymentIntentParam, navigate]);
+
+  // Redirect if no booking ID after lookup
+  useEffect(() => {
+    if (!isLoading && !bookingId) {
       toast.error("No booking ID found");
       navigate("/");
     }
-  }, [bookingId, navigate]);
+  }, [bookingId, isLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,9 +157,24 @@ export default function PropertyDetails() {
     }
   };
 
+  // Loading state while looking up booking
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
+        <Card className="max-w-md w-full shadow-card">
+          <CardContent className="pt-8 pb-8 text-center space-y-4">
+            <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
+            <h2 className="text-xl font-bold">Loading Booking...</h2>
+            <p className="text-muted-foreground text-sm">Please wait while we load your booking details</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
-      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in">
+      <Card className="max-w-lg w-full shadow-card animate-fade-in border border-border">
         <CardHeader className="text-center space-y-4 pb-6">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10 text-primary" />
