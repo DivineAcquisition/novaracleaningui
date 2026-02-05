@@ -176,3 +176,18 @@ verify_jwt = false
 
 [functions.mark-cart-converted]
 verify_jwt = false
+
+[functions.cancel-subscription]
+verify_jwt = true
+
+[functions.modify-subscription]
+verify_jwt = true
+
+[functions.send-twilio-sms]
+verify_jwt = false
+
+[functions.twilio-sms-webhook]
+verify_jwt = false
+
+[functions.send-service-reminders]
+verify_jwt = false
