@@ -20,6 +20,7 @@ import {
 } from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import SEO from "@/components/SEO";
 
 // Service types with their features
 const SERVICE_TYPES = {
@@ -268,6 +269,10 @@ export default function BookingOffer() {
 
   return (
     <PageTransition direction="forward">
+      <SEO 
+        title="Choose Your Service | One-Time or Membership | Novara Cleaning"
+        description="Choose between one-time deep cleaning or save up to 40% with our membership plans. Flexible scheduling available."
+      />
       <div className="min-h-screen bg-background pb-32 md:pb-8">
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
 

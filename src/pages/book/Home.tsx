@@ -11,6 +11,7 @@ import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
+import SEO from "@/components/SEO";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location", path: "/book/zip" },
@@ -53,6 +54,10 @@ export default function BookingHome() {
 
   return (
     <PageTransition direction="forward">
+      <SEO 
+        title="Select Home Size | Get Instant Quote | Novara Cleaning"
+        description="Tell us about your home size and get an instant, transparent quote for professional cleaning services."
+      />
       <div className="min-h-screen bg-muted/30 pb-32 md:pb-8" {...swipeHandlers}>
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Home Size" />
         <PromoBanner />

@@ -11,6 +11,7 @@ import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { getZoneForZipCode, PRICING_ZONES } from "@/lib/pricing-system";
+import SEO from "@/components/SEO";
 
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
@@ -175,6 +176,10 @@ export default function BookingZip() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      <SEO 
+        title="Book Your Cleaning | Check Service Area | Novara Cleaning"
+        description="Enter your ZIP code to check if we service your area and get instant pricing for professional home cleaning."
+      />
       {/* Sticky Booking Header */}
       <BookingHeader currentStep={1} totalSteps={6} stepLabel="Location" />
 

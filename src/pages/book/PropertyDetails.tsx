@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
 import { US_STATES } from "@/lib/us-states";
+import SEO from "@/components/SEO";
 
 const DWELLING_TYPES = [
   { value: 'house', label: 'House' },
@@ -174,6 +175,10 @@ export default function PropertyDetails() {
 
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
+      <SEO 
+        title="Property Details | Complete Your Booking | Novara Cleaning"
+        description="Enter your property details to complete your cleaning booking."
+      />
       <Card className="max-w-lg w-full shadow-card animate-fade-in border border-border">
         <CardHeader className="text-center space-y-4 pb-6">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">

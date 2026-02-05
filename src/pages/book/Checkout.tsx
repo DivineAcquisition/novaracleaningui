@@ -26,6 +26,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
+import SEO from "@/components/SEO";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -429,6 +430,10 @@ export default function BookingCheckout() {
   const totalSavings = (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0) + (depositPricing.membershipDiscount || 0) + (effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
   return <PageTransition direction="forward">
+      <SEO 
+        title="Secure Checkout | Complete Your Booking | Novara Cleaning"
+        description="Complete your booking securely. Your cleaning is just moments away from being confirmed."
+      />
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         

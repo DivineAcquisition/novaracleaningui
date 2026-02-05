@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import SEO from "@/components/SEO";
 import { 
   ArrowRight, 
   CheckCircle2, 
@@ -19,96 +20,117 @@ import {
   Zap,
   MapPin,
   Phone,
-  ThumbsUp,
   Award,
+  Play,
+  ChevronRight,
   Percent,
-  RefreshCw
+  RefreshCw,
+  Heart,
+  Target,
+  TrendingUp
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
+// Booking flow steps visualization
+const BOOKING_STEPS = [
+  {
+    step: 1,
+    title: "Enter ZIP",
+    subtitle: "Check coverage",
+    icon: MapPin,
+    color: "from-violet-500 to-purple-600",
+  },
+  {
+    step: 2,
+    title: "Home Size",
+    subtitle: "Instant price",
+    icon: Home,
+    color: "from-blue-500 to-indigo-600",
+  },
+  {
+    step: 3,
+    title: "Pick Service",
+    subtitle: "One-time or plan",
+    icon: Sparkles,
+    color: "from-emerald-500 to-teal-600",
+  },
+  {
+    step: 4,
+    title: "Schedule",
+    subtitle: "Book instantly",
+    icon: Calendar,
+    color: "from-amber-500 to-orange-600",
+  },
+];
+
 const FEATURES = [
   {
     icon: Clock,
-    title: "On-Time, Every Time",
-    description: "We show up when promised. No excuses, no waiting around."
+    title: "On-Time Guarantee",
+    description: "We show up when we say we will. If we're late, your cleaning is discounted.",
+    highlight: "98% on-time rate",
   },
   {
     icon: Shield,
-    title: "Vetted & Trained",
-    description: "Background-checked, trained professionals you can trust in your home."
+    title: "Vetted Professionals",
+    description: "Background-checked, trained, and insured cleaning professionals you can trust.",
+    highlight: "100% vetted",
   },
   {
     icon: CreditCard,
     title: "Transparent Pricing",
-    description: "Know exactly what you'll pay. No surprises, no hidden fees."
+    description: "See your exact price before booking. No hidden fees, no surprises.",
+    highlight: "Upfront quotes",
   },
   {
     icon: RefreshCw,
-    title: "Satisfaction Guarantee",
-    description: "Not happy? We'll re-clean for free within 48 hours."
-  }
-];
-
-const PROCESS_STEPS = [
-  {
-    step: 1,
-    title: "Enter Your ZIP",
-    description: "Check if we service your area",
-    icon: MapPin
+    title: "Satisfaction Guaranteed",
+    description: "Not happy? We'll re-clean for free within 48 hours. No questions asked.",
+    highlight: "48hr re-clean",
   },
-  {
-    step: 2,
-    title: "Select Home Size",
-    description: "Get instant pricing",
-    icon: Home
-  },
-  {
-    step: 3,
-    title: "Choose Service",
-    description: "One-time or membership",
-    icon: Sparkles
-  },
-  {
-    step: 4,
-    title: "Pick Your Date",
-    description: "Flexible scheduling",
-    icon: Calendar
-  }
 ];
 
 const TESTIMONIALS = [
   {
     name: "Sarah M.",
     location: "Bethesda, MD",
-    text: "After years of no-shows and mediocre cleaning, Novara is a breath of fresh air. They actually show up on time and do an incredible job.",
-    rating: 5
+    text: "After years of no-shows and mediocre cleaning, Novara is a breath of fresh air. They actually show up on time and do an incredible job. My home has never looked better!",
+    rating: 5,
+    image: "SM",
   },
   {
-    name: "Mike R.",
+    name: "Michael R.",
     location: "Rockville, MD",
-    text: "The online booking was so easy. I had my first clean scheduled in under 2 minutes. The team was professional and thorough.",
-    rating: 5
+    text: "The online booking was so easy - scheduled my first clean in under 2 minutes. The team was professional, thorough, and left my apartment sparkling.",
+    rating: 5,
+    image: "MR",
   },
   {
     name: "Jennifer L.",
     location: "Silver Spring, MD",
-    text: "We switched from another service and the difference is night and day. Worth every penny for the peace of mind.",
-    rating: 5
-  }
-];
-
-const PRICING_PREVIEW = [
-  { size: "Studio/1BR", sqft: "Under 1,000 sq ft", price: 150 },
-  { size: "2-3 BR", sqft: "1,500-2,000 sq ft", price: 239 },
-  { size: "4 BR", sqft: "2,500-3,000 sq ft", price: 339 },
+    text: "We switched from another service and the difference is night and day. Consistent quality every single time. Worth every penny for the peace of mind.",
+    rating: 5,
+    image: "JL",
+  },
 ];
 
 const STATS = [
-  { value: "2,500+", label: "Happy Customers" },
-  { value: "4.9", label: "Average Rating" },
-  { value: "98%", label: "On-Time Rate" },
-  { value: "48hr", label: "Re-Clean Guarantee" },
+  { value: "2,500+", label: "Happy Customers", icon: Heart },
+  { value: "4.9", label: "Average Rating", icon: Star },
+  { value: "98%", label: "On-Time Rate", icon: Target },
+  { value: "15K+", label: "Cleans Completed", icon: TrendingUp },
+];
+
+const PRICING_PREVIEW = [
+  { size: "Studio/1BR", sqft: "Under 1,000 sq ft", price: 150, popular: false },
+  { size: "2-3 BR", sqft: "1,500-2,000 sq ft", price: 239, popular: true },
+  { size: "4+ BR", sqft: "2,500-3,000 sq ft", price: 339, popular: false },
+];
+
+const SERVICE_AREAS = [
+  'Bethesda', 'Potomac', 'Chevy Chase', 'Rockville', 'Silver Spring', 
+  'Columbia', 'Ellicott City', 'Annapolis', 'Frederick', 'Baltimore'
 ];
 
 const Index = () => {
@@ -117,6 +139,15 @@ const Index = () => {
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState("");
+  const [activeStep, setActiveStep] = useState(1);
+
+  // Animate through booking steps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveStep((prev) => (prev % 4) + 1);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleZipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,13 +160,6 @@ const Index = () => {
     setError("");
 
     try {
-      const { data: coverage } = await supabase
-        .from('service_coverage_zones')
-        .select('city, state')
-        .eq('zip_code', zipCode)
-        .eq('is_active', true)
-        .single();
-
       updateBookingData({ zipCode });
       navigate("/book/sqft");
     } catch (err) {
@@ -147,72 +171,100 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-background/95 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
+    <div className="min-h-screen bg-background overflow-hidden">
+      <SEO />
+      
+      {/* Navigation */}
+      <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-bold text-xl tracking-tight">Novara</span>
             </div>
-            <span className="font-bold text-lg">Novara</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <a href="tel:3018005252" className="hidden md:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-              <Phone className="w-4 h-4" />
-              (301) 800-5252
-            </a>
-            <Badge variant="secondary" className="text-xs border border-green-500/20 bg-green-500/10 text-green-600">
-              <Zap className="w-3 h-3 mr-1" />
-              Book in 2 min
-            </Badge>
+            
+            <div className="hidden md:flex items-center gap-6">
+              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
+              <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
+              <a href="#reviews" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Reviews</a>
+              <a href="tel:3018005252" className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5" />
+                (301) 800-5252
+              </a>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/auth')} className="hidden sm:flex">
+                Sign In
+              </Button>
+              <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 shadow-md">
+                <Zap className="w-3 h-3 mr-1" />
+                Book in 2 min
+              </Badge>
+            </div>
           </div>
         </div>
-      </header>
+      </nav>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-purple-500/5" />
-        <div className="relative max-w-6xl mx-auto px-4 py-12 md:py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left: Hero Text + ZIP Entry */}
-            <div className="space-y-6">
-              <Badge className="bg-primary/10 text-primary border border-primary/20">
-                Maryland's Most Reliable Cleaning Service
-              </Badge>
-              
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
-                Finally, a Cleaning Service That{" "}
-                <span className="text-primary">Actually Shows Up</span>
-              </h1>
-              
-              <p className="text-lg text-muted-foreground">
-                Tired of cleaners who cancel, show up late, or do a mediocre job? 
-                We get it. That's why we built Novara differently—professional teams that 
-                arrive on time, every time, with a satisfaction guarantee you can count on.
-              </p>
-
-              {/* Stats Row */}
-              <div className="flex flex-wrap gap-4 py-2">
-                {STATS.map((stat, i) => (
-                  <div key={i} className="text-center">
-                    <p className="text-2xl font-bold text-primary">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground">{stat.label}</p>
-                  </div>
-                ))}
+      <section className="relative pt-12 pb-20 md:pt-20 md:pb-32 overflow-hidden">
+        {/* Background Elements */}
+        <div className="absolute inset-0 bg-gradient-to-br from-violet-50 via-background to-purple-50/50 dark:from-violet-950/20 dark:to-purple-950/20" />
+        <div className="absolute top-20 left-10 w-72 h-72 bg-violet-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl" />
+        
+        <div className="relative max-w-7xl mx-auto px-4">
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+            {/* Left: Hero Content */}
+            <div className="space-y-8">
+              <div className="space-y-4">
+                <Badge variant="outline" className="border-violet-300 text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/50 px-4 py-1.5">
+                  <Award className="w-3.5 h-3.5 mr-1.5" />
+                  Maryland's #1 Rated Cleaning Service
+                </Badge>
+                
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight">
+                  A Cleaning Service That{" "}
+                  <span className="bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+                    Actually Shows Up
+                  </span>
+                </h1>
+                
+                <p className="text-lg md:text-xl text-muted-foreground max-w-lg">
+                  Tired of unreliable cleaners? Book vetted professionals in minutes. 
+                  Transparent pricing. On-time guarantee. Satisfaction guaranteed.
+                </p>
               </div>
 
-              {/* ZIP Entry Card */}
-              <Card className="border border-border shadow-lg">
-                <CardContent className="p-5">
+              {/* Stats Row */}
+              <div className="grid grid-cols-4 gap-4">
+                {STATS.map((stat, i) => {
+                  const Icon = stat.icon;
+                  return (
+                    <div key={i} className="text-center">
+                      <div className="flex items-center justify-center mb-1">
+                        <Icon className="w-4 h-4 text-violet-500 mr-1" />
+                        <span className="text-xl md:text-2xl font-bold">{stat.value}</span>
+                      </div>
+                      <p className="text-[10px] md:text-xs text-muted-foreground">{stat.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ZIP Entry Form */}
+              <Card className="border-2 border-violet-200 dark:border-violet-800 shadow-xl bg-white/80 dark:bg-background/80 backdrop-blur">
+                <CardContent className="p-6">
                   <form onSubmit={handleZipSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">
-                        Get your instant quote in seconds
+                    <div>
+                      <label className="text-sm font-semibold mb-2 block">
+                        Get your instant quote
                       </label>
-                      <div className="flex gap-2">
+                      <div className="flex gap-3">
                         <div className="relative flex-1">
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <Input
                             type="text"
                             inputMode="numeric"
@@ -225,8 +277,8 @@ const Index = () => {
                               setError("");
                             }}
                             className={cn(
-                              "h-12 pl-10 text-lg border",
-                              error ? "border-destructive" : "border-border"
+                              "h-14 pl-12 text-lg font-medium border-2 rounded-xl transition-all",
+                              error ? "border-destructive" : "border-border focus:border-violet-500"
                             )}
                             autoFocus
                           />
@@ -234,82 +286,102 @@ const Index = () => {
                         <Button 
                           type="submit"
                           disabled={zipCode.length !== 5 || isValidating}
-                          className="h-12 px-6 bg-gradient-to-r from-primary to-purple-600 border-0"
+                          size="lg"
+                          className="h-14 px-8 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/25"
                         >
                           {isValidating ? "..." : "Get Quote"}
-                          <ArrowRight className="w-4 h-4 ml-2" />
+                          <ArrowRight className="w-5 h-5 ml-2" />
                         </Button>
                       </div>
-                      {error && (
-                        <p className="text-xs text-destructive">{error}</p>
-                      )}
+                      {error && <p className="text-sm text-destructive mt-2">{error}</p>}
                     </div>
                   </form>
 
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-border">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                      No credit card needed
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                      Instant pricing
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                      Cancel anytime
-                    </div>
+                  <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t">
+                    {[
+                      { icon: CheckCircle2, text: "No credit card needed" },
+                      { icon: Clock, text: "Instant pricing" },
+                      { icon: Shield, text: "Cancel anytime" },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <item.icon className="w-3.5 h-3.5 text-emerald-500" />
+                        {item.text}
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Right: Process Visual */}
+            {/* Right: Booking Flow Visualization */}
             <div className="hidden lg:block">
-              <Card className="border border-border shadow-xl bg-gradient-to-br from-muted/50 to-background">
-                <CardContent className="p-6">
-                  <div className="text-center mb-6">
-                    <Badge variant="secondary" className="mb-2 border border-border">
-                      Simple 4-Step Booking
+              <Card className="border-2 border-border shadow-2xl bg-gradient-to-br from-white to-violet-50/50 dark:from-background dark:to-violet-950/20 overflow-hidden">
+                <CardContent className="p-8">
+                  <div className="text-center mb-8">
+                    <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300 border-0 mb-3">
+                      <Play className="w-3 h-3 mr-1" />
+                      See How It Works
                     </Badge>
-                    <h3 className="text-lg font-semibold">Get Your Home Cleaned Today</h3>
+                    <h3 className="text-xl font-bold">Book in 4 Simple Steps</h3>
                   </div>
                   
                   <div className="space-y-4">
-                    {PROCESS_STEPS.map((step, index) => {
+                    {BOOKING_STEPS.map((step, index) => {
                       const Icon = step.icon;
+                      const isActive = activeStep === step.step;
+                      const isPast = activeStep > step.step;
+                      
                       return (
-                        <div key={step.step} className="flex items-start gap-4">
+                        <div 
+                          key={step.step}
+                          className={cn(
+                            "flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-500",
+                            isActive 
+                              ? "border-violet-400 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/50 dark:to-purple-950/50 scale-[1.02] shadow-lg" 
+                              : isPast
+                              ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20"
+                              : "border-border bg-background/50"
+                          )}
+                        >
                           <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border",
-                            index === 0 
-                              ? "bg-primary text-white border-primary" 
-                              : "bg-muted text-muted-foreground border-border"
+                            "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500",
+                            isActive 
+                              ? `bg-gradient-to-br ${step.color} shadow-lg`
+                              : isPast
+                              ? "bg-emerald-500"
+                              : "bg-muted"
                           )}>
-                            <Icon className="w-5 h-5" />
+                            {isPast ? (
+                              <CheckCircle2 className="w-6 h-6 text-white" />
+                            ) : (
+                              <Icon className={cn("w-6 h-6", isActive ? "text-white" : "text-muted-foreground")} />
+                            )}
                           </div>
-                          <div>
-                            <p className="font-medium text-sm">{step.title}</p>
-                            <p className="text-xs text-muted-foreground">{step.description}</p>
+                          <div className="flex-1">
+                            <p className={cn(
+                              "font-semibold transition-colors",
+                              isActive ? "text-violet-700 dark:text-violet-300" : ""
+                            )}>
+                              {step.title}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{step.subtitle}</p>
                           </div>
-                          {index === 0 && (
-                            <Badge className="ml-auto bg-green-500/10 text-green-600 border border-green-500/20 text-[10px]">
-                              Start here
-                            </Badge>
+                          {isActive && (
+                            <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
                           )}
                         </div>
                       );
                     })}
                   </div>
 
-                  <div className="mt-6 pt-6 border-t border-border">
+                  <div className="mt-8 pt-6 border-t text-center">
                     <div className="flex items-center justify-center gap-1 mb-2">
                       {[...Array(5)].map((_, i) => (
                         <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
                       ))}
                     </div>
-                    <p className="text-xs text-center text-muted-foreground">
-                      "Best cleaning service in Maryland" — 500+ 5-star reviews
+                    <p className="text-sm text-muted-foreground">
+                      Join 2,500+ happy customers in Maryland
                     </p>
                   </div>
                 </CardContent>
@@ -319,96 +391,131 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Problem/Solution Section */}
-      <section className="py-12 md:py-16 border-t border-border bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div>
-              <Badge variant="outline" className="mb-4 border-red-500/30 text-red-600 bg-red-500/10">
-                Sound Familiar?
-              </Badge>
-              <h2 className="text-2xl md:text-3xl font-bold mb-4">
-                Tired of Unreliable Cleaners?
-              </h2>
-              <ul className="space-y-3 text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-1">✗</span>
-                  Cleaners who cancel at the last minute
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-1">✗</span>
-                  Showing up late (or not at all)
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-1">✗</span>
-                  Inconsistent quality from visit to visit
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-1">✗</span>
-                  Hidden fees and surprise charges
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-1">✗</span>
-                  Having to follow up multiple times
-                </li>
-              </ul>
-            </div>
-            <div>
-              <Badge variant="outline" className="mb-4 border-green-500/30 text-green-600 bg-green-500/10">
-                The Novara Difference
-              </Badge>
-              <h2 className="text-2xl md:text-3xl font-bold mb-4">
-                Professional Service You Can Count On
-              </h2>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span><strong>On-time guarantee</strong> — We show up when promised</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span><strong>Same team every time</strong> — Consistency you can trust</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span><strong>Transparent pricing</strong> — Know what you pay upfront</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span><strong>48-hour re-clean guarantee</strong> — Not happy? We fix it free</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span><strong>Real communication</strong> — We respond in minutes, not days</span>
-                </li>
-              </ul>
-            </div>
+      {/* How It Works Section */}
+      <section id="how-it-works" className="py-20 bg-muted/30 border-y border-border">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-3">Simple Process</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold mb-3">How Novara Works</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Book your professional cleaning in under 2 minutes. No phone calls, no waiting.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-6">
+            {BOOKING_STEPS.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.step} className="relative">
+                  {index < 3 && (
+                    <div className="hidden md:block absolute top-12 left-[60%] w-[80%] border-t-2 border-dashed border-violet-200 dark:border-violet-800" />
+                  )}
+                  <Card className="relative bg-background border-2 hover:border-violet-300 transition-all hover:shadow-lg group">
+                    <CardContent className="pt-8 pb-6 text-center">
+                      <div className={cn(
+                        "w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br shadow-lg transition-transform group-hover:scale-110",
+                        step.color
+                      )}>
+                        <Icon className="w-8 h-8 text-white" />
+                      </div>
+                      <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center text-sm font-bold text-violet-700 dark:text-violet-300">
+                        {step.step}
+                      </div>
+                      <h3 className="font-bold text-lg mb-1">{step.title}</h3>
+                      <p className="text-sm text-muted-foreground">{step.subtitle}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="text-center mt-10">
+            <Button 
+              size="lg" 
+              onClick={() => document.querySelector('input')?.focus()}
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg h-14 px-8 rounded-xl"
+            >
+              Start Booking Now
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-3">Why Choose Us</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold mb-3">The Novara Difference</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Professional cleaning service backed by guarantees you can count on.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {FEATURES.map((feature, index) => {
+              const Icon = feature.icon;
+              return (
+                <Card key={index} className="border-2 hover:border-violet-300 transition-all hover:shadow-lg group">
+                  <CardContent className="pt-6">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900 dark:to-purple-900 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Icon className="w-7 h-7 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <Badge variant="outline" className="mb-3 text-[10px] border-emerald-300 text-emerald-700 dark:text-emerald-400">
+                      {feature.highlight}
+                    </Badge>
+                    <h3 className="font-bold text-lg mb-2">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Pricing Preview */}
-      <section className="py-12 md:py-16 border-t border-border">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <Badge variant="secondary" className="mb-2 border border-border">
+      <section id="pricing" className="py-20 bg-gradient-to-b from-background to-violet-50/50 dark:to-violet-950/20">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-3">
               <Percent className="w-3 h-3 mr-1" />
               Transparent Pricing
             </Badge>
-            <h2 className="text-2xl md:text-3xl font-bold mb-2">Simple, Honest Pricing</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-3">Simple, Honest Pricing</h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              No hidden fees. No surprise charges. Just straightforward pricing based on your home size.
+              No hidden fees. Know exactly what you'll pay before booking.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto mb-8">
-            {PRICING_PREVIEW.map((item, index) => (
-              <Card key={index} className="border border-border shadow-sm text-center">
-                <CardContent className="p-5">
-                  <p className="font-semibold mb-1">{item.size}</p>
-                  <p className="text-xs text-muted-foreground mb-3">{item.sqft}</p>
-                  <p className="text-3xl font-bold text-primary">${item.price}</p>
-                  <p className="text-xs text-muted-foreground">one-time clean</p>
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {PRICING_PREVIEW.map((tier, index) => (
+              <Card 
+                key={index} 
+                className={cn(
+                  "relative border-2 transition-all hover:shadow-xl",
+                  tier.popular 
+                    ? "border-violet-400 shadow-lg scale-105 bg-gradient-to-b from-violet-50 to-white dark:from-violet-950/50 dark:to-background" 
+                    : "border-border hover:border-violet-300"
+                )}
+              >
+                {tier.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="bg-gradient-to-r from-violet-600 to-purple-600 text-white border-0 shadow-md">
+                      Most Popular
+                    </Badge>
+                  </div>
+                )}
+                <CardContent className="pt-8 pb-6 text-center">
+                  <p className="font-bold text-lg mb-1">{tier.size}</p>
+                  <p className="text-xs text-muted-foreground mb-4">{tier.sqft}</p>
+                  <div className="mb-4">
+                    <span className="text-4xl font-bold">${tier.price}</span>
+                    <span className="text-muted-foreground text-sm">/clean</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">One-time pricing</p>
                 </CardContent>
               </Card>
             ))}
@@ -420,8 +527,8 @@ const Index = () => {
             </p>
             <Button 
               size="lg"
-              onClick={() => document.getElementById('hero-zip')?.focus()}
-              className="bg-gradient-to-r from-primary to-purple-600"
+              onClick={() => document.querySelector('input')?.focus()}
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 rounded-xl h-12"
             >
               Get Your Exact Price
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -430,62 +537,35 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-12 md:py-16 border-t border-border bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl md:text-3xl font-bold mb-2">Why Novara?</h2>
-            <p className="text-muted-foreground">Professional cleaning you can actually count on</p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {FEATURES.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <Card key={index} className="border border-border shadow-sm">
-                  <CardContent className="p-4 md:p-5 text-center">
-                    <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3 border border-primary/20">
-                      <Icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
-                    <p className="text-xs text-muted-foreground">{feature.description}</p>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof Section */}
-      <section className="py-12 md:py-16 border-t border-border">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <div className="flex items-center justify-center gap-1 mb-2">
+      {/* Testimonials */}
+      <section id="reviews" className="py-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <div className="flex items-center justify-center gap-1 mb-3">
               {[...Array(5)].map((_, i) => (
                 <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
               ))}
             </div>
-            <h2 className="text-2xl md:text-3xl font-bold mb-2">Loved by Maryland Homeowners</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-3">Loved by Maryland Homeowners</h2>
             <p className="text-muted-foreground">Join thousands of happy customers across the DMV</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-3 gap-6">
             {TESTIMONIALS.map((testimonial, index) => (
-              <Card key={index} className="border border-border shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-1 mb-3">
+              <Card key={index} className="border-2 hover:border-violet-300 transition-all hover:shadow-lg">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-1 mb-4">
                     {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
                     ))}
                   </div>
-                  <p className="text-sm mb-4 italic">"{testimonial.text}"</p>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Users className="w-4 h-4 text-primary" />
+                  <p className="text-sm mb-6 leading-relaxed">"{testimonial.text}"</p>
+                  <div className="flex items-center gap-3 pt-4 border-t">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
+                      {testimonial.image}
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{testimonial.name}</p>
+                      <p className="font-semibold text-sm">{testimonial.name}</p>
                       <p className="text-xs text-muted-foreground">{testimonial.location}</p>
                     </div>
                   </div>
@@ -496,50 +576,51 @@ const Index = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-12 md:py-16 border-t border-border bg-gradient-to-br from-primary/5 to-purple-500/5">
-        <div className="max-w-2xl mx-auto px-4 text-center">
-          <Award className="w-12 h-12 text-primary mx-auto mb-4" />
-          <h2 className="text-2xl md:text-3xl font-bold mb-4">
-            Ready for a Home That Sparkles?
+      {/* Final CTA */}
+      <section className="py-20 bg-gradient-to-br from-violet-600 to-purple-700 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 w-40 h-40 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-10 right-10 w-60 h-60 bg-white rounded-full blur-3xl" />
+        </div>
+        
+        <div className="relative max-w-3xl mx-auto px-4 text-center">
+          <Sparkles className="w-12 h-12 text-white/80 mx-auto mb-6" />
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            Ready for a Spotless Home?
           </h2>
-          <p className="text-muted-foreground mb-6">
-            Get your instant quote in seconds. No commitment required. 
-            Join thousands of Maryland homeowners who trust Novara for their cleaning needs.
+          <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+            Get your instant quote in seconds. No commitment required.
           </p>
 
-          <Card className="border border-border shadow-lg max-w-md mx-auto">
-            <CardContent className="p-5">
-              <form onSubmit={handleZipSubmit} className="space-y-3">
-                <div className="flex gap-2">
+          <Card className="max-w-md mx-auto border-0 shadow-2xl">
+            <CardContent className="p-6">
+              <form onSubmit={handleZipSubmit} className="space-y-4">
+                <div className="flex gap-3">
                   <div className="relative flex-1">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
-                      id="hero-zip"
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
                       maxLength={5}
-                      placeholder="Enter ZIP code"
+                      placeholder="ZIP code"
                       value={zipCode}
-                      onChange={(e) => {
-                        setZipCode(e.target.value.replace(/\D/g, ''));
-                        setError("");
-                      }}
-                      className="h-12 pl-10 text-lg border border-border"
+                      onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ''))}
+                      className="h-14 pl-12 text-lg rounded-xl border-2"
                     />
                   </div>
                   <Button 
                     type="submit"
                     disabled={zipCode.length !== 5 || isValidating}
-                    className="h-12 px-6 bg-gradient-to-r from-primary to-purple-600 border-0"
+                    size="lg"
+                    className="h-14 px-8 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600"
                   >
-                    {isValidating ? "..." : "Get Quote"}
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    Book Now
+                    <ChevronRight className="w-5 h-5 ml-1" />
                   </Button>
                 </div>
               </form>
-              <p className="text-xs text-muted-foreground mt-3 text-center">
+              <p className="text-xs text-muted-foreground mt-4 text-center">
                 No credit card required • Instant pricing • Cancel anytime
               </p>
             </CardContent>
@@ -548,37 +629,42 @@ const Index = () => {
       </section>
 
       {/* Service Areas */}
-      <section className="py-8 border-t border-border bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="text-sm text-muted-foreground mb-3">Proudly serving Maryland communities</p>
-          <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-            {['Bethesda', 'Potomac', 'Chevy Chase', 'Rockville', 'Silver Spring', 'Columbia', 'Ellicott City', 'Annapolis', 'Frederick', 'Baltimore'].map((area) => (
-              <span key={area} className="px-2 py-1 bg-background rounded border border-border">{area}</span>
+      <section className="py-10 bg-muted/30 border-t">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-sm text-muted-foreground mb-4">Proudly serving Maryland communities</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {SERVICE_AREAS.map((area) => (
+              <Badge key={area} variant="secondary" className="px-3 py-1">
+                {area}
+              </Badge>
             ))}
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-8 border-t border-border">
-        <div className="max-w-6xl mx-auto px-4">
+      <footer className="py-8 border-t">
+        <div className="max-w-7xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-                <Sparkles className="w-3 h-3 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <span className="font-semibold text-sm">Novara Cleaning</span>
+              <span className="font-bold">Novara Cleaning</span>
             </div>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <a href="tel:3018005252" className="flex items-center gap-1 hover:text-foreground">
-                <Phone className="w-3.5 h-3.5" />
+            
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <a href="tel:3018005252" className="flex items-center gap-1 hover:text-foreground transition-colors">
+                <Phone className="w-4 h-4" />
                 (301) 800-5252
               </a>
+              <span>support@novaracleaning.com</span>
             </div>
+            
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
               <span>© 2024 Novara Cleaning</span>
-              <a href="#" className="hover:text-foreground">Privacy</a>
-              <a href="#" className="hover:text-foreground">Terms</a>
+              <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
+              <a href="#" className="hover:text-foreground transition-colors">Terms</a>
             </div>
           </div>
         </div>

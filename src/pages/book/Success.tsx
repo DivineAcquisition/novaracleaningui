@@ -12,6 +12,7 @@ import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/l
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
+import SEO from "@/components/SEO";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -499,6 +500,10 @@ export default function BookingSuccess() {
 
   return (
     <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 pb-24 md:pb-12">
+      <SEO 
+        title="Booking Confirmed! | Novara Cleaning"
+        description="Your cleaning has been confirmed. Add it to your calendar and share your referral code to earn credits."
+      />
       <div className="container max-w-3xl mx-auto">
         {/* Show verification error if payment failed */}
         {verificationError && (
