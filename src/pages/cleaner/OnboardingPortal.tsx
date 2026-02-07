@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -58,93 +58,62 @@ interface CleanerProfile {
   ob_training_accessed_at: string | null;
 }
 
-// ─── Agreement Content ──────────────────────────────────
-const AGREEMENT_SECTIONS = [
-  {
-    title: "1. Independent Contractor Status",
-    content:
-      'You are engaged as an independent contractor and not an employee of Novara Cleaning LLC. You are responsible for your own taxes, insurance, and business obligations.',
-  },
-  {
-    title: "2. Service Standards",
-    content:
-      "You agree to uphold Novara Cleaning's quality standards at all times. This includes following the 40-point cleaning checklist, arriving on time, wearing professional attire, and treating all client property with care and respect.",
-  },
-  {
-    title: "3. Confidentiality & Privacy",
-    content:
-      "You agree to keep all client information, addresses, access codes, and personal details strictly confidential. Sharing client information with unauthorized third parties is grounds for immediate termination.",
-  },
-  {
-    title: "4. Payment Terms",
-    content:
-      "Payment is processed through Stripe Connect. You will receive payouts within 2-3 business days of job completion. Your current pay rate is $18/hour. Rates may be adjusted based on performance and market conditions with advance notice.",
-  },
-  {
-    title: "5. Cancellation & No-Show Policy",
-    content:
-      "You must provide at least 24 hours notice for cancellations. Repeated no-shows or last-minute cancellations may result in account suspension or termination. Emergency exceptions will be reviewed on a case-by-case basis.",
-  },
-  {
-    title: "6. Equipment & Supplies",
-    content:
-      "Novara Cleaning will provide a starter supplies kit. You are responsible for maintaining your equipment in working order. Lost or damaged equipment beyond normal wear must be replaced at your expense.",
-  },
-  {
-    title: "7. Background Check & Insurance",
-    content:
-      "You consent to a background check as a condition of engagement. You are covered under Novara Cleaning's general liability insurance while performing services. You are responsible for your own health insurance and personal liability.",
-  },
-  {
-    title: "8. Termination",
-    content:
-      "Either party may terminate this agreement at any time with 7 days written notice. Novara Cleaning reserves the right to terminate immediately for violations of this agreement, client complaints, or policy violations.",
-  },
-];
+// ─── Agreement Link ─────────────────────────────────────
+const AGREEMENT_URL =
+  "https://link.novaracleaning.com/documents/doc-form/68fe8f402c7279d7984c4e99?locale=en_US";
 
-// ─── Supplies Checklist ─────────────────────────────────
-const SUPPLIES_CHECKLIST = [
+// ─── Supplies Checklist (from official NovaraCleaning Supply Checklist) ───
+const SUPPLIES_ESSENTIAL = [
   {
     category: "Cleaning Solutions",
     items: [
-      "All-purpose cleaner (provided)",
-      "Glass cleaner (provided)",
-      "Bathroom disinfectant (provided)",
-      "Stainless steel cleaner",
-      "Wood floor cleaner",
+      "All-purpose cleaner",
+      "Glass & mirror cleaner",
+      "Disinfectant spray",
+      "Bathroom cleaner (soap scum remover)",
+      "Toilet bowl cleaner",
+      "Kitchen degreaser",
     ],
   },
   {
-    category: "Tools & Equipment",
+    category: "Tools",
     items: [
-      "Microfiber cloths (10+ recommended)",
-      "Scrub sponges (non-scratch)",
+      "Vacuum with attachments",
+      "Mop & bucket (or spray mop)",
+      "Microfiber cloths (10-15)",
+      "Scrub brush (tile/grout)",
       "Toilet brush",
-      "Duster with extension pole",
+      "Cleaning toothbrush",
+      "White scrub pads (non-scratch)",
+      "Duster (microfiber or feather)",
       "Spray bottles",
-      "Vacuum cleaner (HEPA preferred)",
-      "Mop and bucket",
+      "Cleaning tote or caddy",
     ],
   },
   {
-    category: "Protective Gear",
+    category: "Safety & Personal",
     items: [
-      "Rubber gloves (multiple pairs)",
-      "Knee pads (optional but recommended)",
+      "Rubber gloves",
       "Non-slip shoes",
-    ],
-  },
-  {
-    category: "Professional Appearance",
-    items: [
-      "Novara-branded shirt (provided after first 5 jobs)",
-      "Clean, professional attire",
-      "ID badge (provided)",
+      "Cleaning apron with pockets",
     ],
   },
 ];
 
-// Google Chat link - replace with actual link
+const SUPPLIES_OPTIONAL = [
+  "Stainless steel cleaner & polish",
+  "Wood furniture polish",
+  "Stone cleaner (pH neutral)",
+  "Oven cleaner (for add-on service)",
+  "Squeegee",
+  "Whisk broom",
+  "Step stool (2-step max)",
+  "Mask/respirator (ovens, showers)",
+  "Separate toilet toothbrush (different color)",
+  "Leather cleaner (rare)",
+];
+
+// Google Chat link - update with your actual Google Chat room invite URL
 const GOOGLE_CHAT_LINK = "https://chat.google.com/room/AAAA_placeholder";
 
 // ─── Blocked Status Screen ──────────────────────────────
@@ -190,11 +159,9 @@ export default function OnboardingPortal() {
   const [blockedStatus, setBlockedStatus] = useState("");
 
   // Agreement state
-  const [agreementScrolled, setAgreementScrolled] = useState(false);
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [signatureName, setSignatureName] = useState("");
   const [signingAgreement, setSigningAgreement] = useState(false);
-  const agreementRef = useRef<HTMLDivElement>(null);
 
   // Other step states
   const [savingStep, setSavingStep] = useState(false);
@@ -327,14 +294,6 @@ export default function OnboardingPortal() {
   };
 
   // ─── Agreement Handlers ───────────────────────────────
-  const handleAgreementScroll = () => {
-    if (!agreementRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = agreementRef.current;
-    if (scrollTop + clientHeight >= scrollHeight - 20) {
-      setAgreementScrolled(true);
-    }
-  };
-
   const handleSignAgreement = async () => {
     if (!agreementChecked || !signatureName.trim() || !profile) return;
 
@@ -640,7 +599,7 @@ export default function OnboardingPortal() {
                 {isActive && !step.completed && (
                   <Card className="mt-2 border-primary/20 shadow-lg animate-in slide-in-from-top-2 duration-200">
                     <CardContent className="p-5">
-                      {/* Step 0: Sign Agreement */}
+                      {/* Step 0: Sign Agreement (external document) */}
                       {step.id === 0 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
@@ -650,46 +609,46 @@ export default function OnboardingPortal() {
                             </h3>
                           </div>
 
-                          <div
-                            ref={agreementRef}
-                            onScroll={handleAgreementScroll}
-                            className="h-64 overflow-y-auto rounded-lg border bg-muted/30 p-4 space-y-4 text-sm"
-                          >
-                            <div className="text-center pb-2 border-b">
-                              <p className="font-bold text-base">
-                                NOVARA CLEANING LLC
-                              </p>
-                              <p className="text-muted-foreground text-xs">
-                                Independent Contractor Agreement
-                              </p>
-                            </div>
-                            {AGREEMENT_SECTIONS.map((section, idx) => (
-                              <div key={idx} className="space-y-1.5">
-                                <h4 className="font-semibold text-xs">
-                                  {section.title}
-                                </h4>
-                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                  {section.content}
-                                </p>
-                              </div>
-                            ))}
-                            <div className="pt-4 border-t text-center">
-                              <p className="text-xs text-muted-foreground">
-                                By signing below, you acknowledge that you have
-                                read, understood, and agree to all terms above.
-                              </p>
-                            </div>
+                          <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                              You must review and sign the official Novara Cleaning
+                              Independent Contractor Agreement before proceeding.
+                              The document will open in a new tab.
+                            </p>
+                            <ul className="space-y-2">
+                              {[
+                                "Review all terms and conditions carefully",
+                                "Fill in your information on the form",
+                                "Sign the document electronically",
+                                "Come back here and confirm you've signed",
+                              ].map((item, idx) => (
+                                <li
+                                  key={idx}
+                                  className="flex items-center gap-2 text-sm"
+                                >
+                                  <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-primary">
+                                    {idx + 1}
+                                  </span>
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
 
-                          {!agreementScrolled && (
-                            <p className="text-xs text-amber-600 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Please scroll to the bottom to read the full
-                              agreement
-                            </p>
-                          )}
+                          <Button
+                            variant="outline"
+                            className="w-full h-11"
+                            onClick={() =>
+                              window.open(AGREEMENT_URL, "_blank")
+                            }
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Open Agreement Document
+                          </Button>
 
-                          <div className="space-y-3 pt-2">
+                          <Separator />
+
+                          <div className="space-y-3">
                             <div className="flex items-start gap-3">
                               <Checkbox
                                 id="agree"
@@ -697,22 +656,21 @@ export default function OnboardingPortal() {
                                 onCheckedChange={(v) =>
                                   setAgreementChecked(v === true)
                                 }
-                                disabled={!agreementScrolled}
                               />
                               <label
                                 htmlFor="agree"
                                 className="text-xs leading-relaxed cursor-pointer"
                               >
-                                I have read and agree to the Independent
-                                Contractor Agreement. I understand that I am
-                                joining as an independent contractor, not an
-                                employee.
+                                I have read, completed, and signed the
+                                Independent Contractor Agreement. I understand
+                                that I am joining as an independent contractor,
+                                not an employee of Novara Cleaning LLC.
                               </label>
                             </div>
 
                             <div className="space-y-1.5">
                               <label className="text-xs font-semibold">
-                                Type your full legal name to sign
+                                Type your full legal name to confirm
                               </label>
                               <Input
                                 value={signatureName}
@@ -737,12 +695,12 @@ export default function OnboardingPortal() {
                               {signingAgreement ? (
                                 <>
                                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Signing...
+                                  Confirming...
                                 </>
                               ) : (
                                 <>
                                   <FileSignature className="w-4 h-4 mr-2" />
-                                  Sign Agreement
+                                  Confirm Agreement Signed
                                 </>
                               )}
                             </Button>
@@ -821,47 +779,104 @@ export default function OnboardingPortal() {
                           <div className="flex items-center gap-2 mb-2">
                             <ClipboardList className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">
-                              Supplies Checklist
+                              Supply Checklist
                             </h3>
                           </div>
 
                           <p className="text-sm text-muted-foreground">
-                            Make sure you have these supplies ready before your
-                            first job. Items marked "(provided)" will be
-                            included in your starter kit.
+                            As an independent contractor, you provide your own supplies.
+                            Get the essentials before your first job. Optional items
+                            can be added later for premium services.
                           </p>
 
+                          {/* Essential Supplies */}
                           <div className="space-y-4">
-                            {SUPPLIES_CHECKLIST.map((category, catIdx) => (
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-primary/10 text-primary border-0 text-[10px] uppercase tracking-wider font-bold">
+                                Essential
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Get these before your first job
+                              </span>
+                            </div>
+
+                            {SUPPLIES_ESSENTIAL.map((category, catIdx) => (
                               <div key={catIdx}>
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-primary mb-2">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground mb-2">
                                   {category.category}
                                 </h4>
-                                <div className="space-y-1.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                   {category.items.map((item, itemIdx) => (
                                     <div
                                       key={itemIdx}
-                                      className="flex items-center gap-2 text-sm"
+                                      className="flex items-center gap-2"
                                     >
-                                      <div className="w-4 h-4 rounded border border-border flex items-center justify-center flex-shrink-0">
-                                        {item.includes("(provided)") && (
-                                          <CheckCircle2 className="w-3 h-3 text-green-500" />
-                                        )}
-                                      </div>
-                                      <span
-                                        className={cn(
-                                          "text-xs",
-                                          item.includes("(provided)") &&
-                                            "text-green-700"
-                                        )}
-                                      >
-                                        {item}
-                                      </span>
+                                      <div className="w-4 h-4 rounded border-2 border-primary/30 flex-shrink-0" />
+                                      <span className="text-xs">{item}</span>
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             ))}
+                          </div>
+
+                          <Separator />
+
+                          {/* Optional Supplies */}
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-bold">
+                                Optional
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Add later for deep cleans & specialty surfaces
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {SUPPLIES_OPTIONAL.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2"
+                                >
+                                  <div className="w-4 h-4 rounded border border-border/60 flex-shrink-0" />
+                                  <span className="text-xs text-muted-foreground">
+                                    {item}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          {/* Warning about natural stone */}
+                          <div className="bg-destructive/5 rounded-lg p-3 border border-destructive/20">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-xs font-bold text-destructive">
+                                  NEVER USE ON NATURAL STONE
+                                </p>
+                                <p className="text-[11px] text-destructive/80 mt-1">
+                                  Granite, marble, quartz, and travertine are
+                                  damaged by acidic products. Do NOT use vinegar,
+                                  toilet bowl cleaner, CLR, Lime-A-Way, or
+                                  citrus-based cleaners. Use pH-neutral stone
+                                  cleaner only. When in doubt, ASK before cleaning.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Pro Tip */}
+                          <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+                            <p className="text-xs text-primary/90">
+                              <span className="font-bold">PRO TIP:</span> Keep
+                              your supplies organized in two totes — one for
+                              bathrooms ("dirty") and one for the rest of the
+                              house ("clean"). This prevents cross-contamination
+                              and keeps you efficient.
+                            </p>
                           </div>
 
                           <Button
