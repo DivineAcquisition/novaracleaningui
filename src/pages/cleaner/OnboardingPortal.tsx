@@ -317,30 +317,19 @@ export default function OnboardingPortal() {
     setStripeLoading(true);
 
     try {
-      if (profile.stripe_account_id && profile.payouts_enabled) {
-        // Already set up - mark complete and open dashboard
+      // Always route to Stripe Connect onboarding flow
+      // This handles both new accounts and incomplete onboarding
+      const { data, error } = await supabase.functions.invoke(
+        "initiate-cleaner-stripe-connect"
+      );
+
+      if (error) throw error;
+      if (data?.url) {
+        // Mark step complete before redirecting
         await updateStep("ob_payouts_setup", "ob_payouts_setup_at");
-
-        const { data, error } = await supabase.functions.invoke(
-          "create-stripe-login-link",
-          { body: { stripe_account_id: profile.stripe_account_id } }
-        );
-
-        if (!error && data?.url) {
-          window.open(data.url, "_blank");
-        }
+        window.location.href = data.url;
       } else {
-        // Need to set up Stripe Connect
-        const { data, error } = await supabase.functions.invoke(
-          "initiate-cleaner-stripe-connect"
-        );
-
-        if (error) throw error;
-        if (data?.url) {
-          // Mark step as in-progress (we'll check on return)
-          await updateStep("ob_payouts_setup", "ob_payouts_setup_at");
-          window.location.href = data.url;
-        }
+        toast.error("Could not start Stripe onboarding. Please try again.");
       }
     } catch (error) {
       console.error("Stripe setup error:", error);
@@ -1039,23 +1028,33 @@ export default function OnboardingPortal() {
                             <h3 className="font-semibold">Setup Payouts</h3>
                           </div>
 
+                          {/* 1099 notice */}
+                          <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+                            <p className="text-xs text-primary/90">
+                              <span className="font-bold">This is a 1099 independent contractor role.</span>{" "}
+                              You are responsible for reporting your own income and paying your own taxes. Novara Cleaning does not withhold taxes from your payouts.
+                            </p>
+                          </div>
+
                           <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                             <p className="text-sm text-muted-foreground">
-                              We use Stripe to process your payouts securely.
-                              You'll need to:
+                              We use Stripe Connect to process your payouts securely.
+                              You'll be redirected to Stripe to complete onboarding:
                             </p>
                             <ul className="space-y-2">
                               {[
-                                "Verify your identity",
+                                "Verify your identity (SSN & date of birth)",
                                 "Connect your bank account or debit card",
-                                "Provide tax information (W-9)",
+                                "Provide your legal name and address for tax reporting",
                               ].map((item, idx) => (
                                 <li
                                   key={idx}
                                   className="flex items-center gap-2 text-sm"
                                 >
-                                  <ArrowRight className="w-3 h-3 text-primary flex-shrink-0" />
-                                  {item}
+                                  <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-primary">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="text-xs">{item}</span>
                                 </li>
                               ))}
                             </ul>
@@ -1064,34 +1063,33 @@ export default function OnboardingPortal() {
                           <div className="bg-green-500/5 rounded-lg p-3 border border-green-500/20">
                             <p className="text-xs text-green-700">
                               Payouts are processed within 2-3 business days
-                              after each completed job. Your rate: $18/hour.
+                              after each completed job. Your rate: <span className="font-bold">$18/hour</span>.
                             </p>
                           </div>
 
                           <Button
-                            className="w-full h-11"
+                            className="w-full h-12 text-sm font-semibold"
                             onClick={handleSetupPayouts}
                             disabled={stripeLoading}
                           >
                             {stripeLoading ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Setting up...
-                              </>
-                            ) : profile.stripe_account_id ? (
-                              <>
-                                <CreditCard className="w-4 h-4 mr-2" />
-                                Complete Stripe Setup
-                                <ExternalLink className="w-4 h-4 ml-2" />
+                                Redirecting to Stripe...
                               </>
                             ) : (
                               <>
                                 <CreditCard className="w-4 h-4 mr-2" />
-                                Connect with Stripe
-                                <ExternalLink className="w-4 h-4 ml-2" />
+                                Start Stripe Connect Onboarding
+                                <ArrowRight className="w-4 h-4 ml-2" />
                               </>
                             )}
                           </Button>
+
+                          <p className="text-[11px] text-center text-muted-foreground">
+                            You'll be redirected to Stripe's secure onboarding page.
+                            Complete all steps there, then return here.
+                          </p>
                         </div>
                       )}
 
