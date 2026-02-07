@@ -113,8 +113,8 @@ const SUPPLIES_OPTIONAL = [
   "Leather cleaner (rare)",
 ];
 
-// Google Chat link - update with your actual Google Chat room invite URL
-const GOOGLE_CHAT_LINK = "https://chat.google.com/room/AAAA_placeholder";
+// Discord server invite link
+const DISCORD_INVITE_LINK = "https://discord.gg/YJ4CfWeFpe";
 
 // ─── Blocked Status Screen ──────────────────────────────
 function BlockedScreen({ status }: { status: string }) {
@@ -394,8 +394,8 @@ export default function OnboardingPortal() {
     },
     {
       id: 1,
-      title: "Join Team Google Chat",
-      description: "Join our team communication channel",
+      title: "Join Team Discord",
+      description: "Download Discord and join our team server",
       icon: MessageCircle,
       completed: profile.ob_google_chat_joined,
       completedAt: profile.ob_google_chat_joined_at,
@@ -635,15 +635,22 @@ export default function OnboardingPortal() {
                             </ul>
                           </div>
 
+                          <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
+                            <p className="text-xs text-amber-700 font-medium flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                              You MUST complete and sign the agreement before continuing. Do not just open it — fill in all fields and submit your signature.
+                            </p>
+                          </div>
+
                           <Button
                             variant="outline"
-                            className="w-full h-11"
+                            className="w-full h-12 text-sm font-semibold border-primary/30"
                             onClick={() =>
                               window.open(AGREEMENT_URL, "_blank")
                             }
                           >
                             <ExternalLink className="w-4 h-4 mr-2" />
-                            Open Agreement Document
+                            Open & Sign Agreement Document
                           </Button>
 
                           <Separator />
@@ -708,19 +715,19 @@ export default function OnboardingPortal() {
                         </div>
                       )}
 
-                      {/* Step 1: Google Chat */}
+                      {/* Step 1: Discord */}
                       {step.id === 1 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
                             <MessageCircle className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">
-                              Join Team Google Chat
+                              Join Team Discord
                             </h3>
                           </div>
 
                           <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                             <p className="text-sm text-muted-foreground">
-                              Our team communicates through Google Chat. This is
+                              Our team communicates through Discord. This is
                               where you'll receive:
                             </p>
                             <ul className="space-y-2">
@@ -741,16 +748,48 @@ export default function OnboardingPortal() {
                             </ul>
                           </div>
 
+                          {/* Discord setup instructions */}
+                          <div className="bg-[#5865F2]/10 rounded-lg p-4 border border-[#5865F2]/20 space-y-3">
+                            <p className="text-xs font-bold text-[#5865F2] uppercase tracking-wider">
+                              Required Steps
+                            </p>
+                            <ol className="space-y-2">
+                              {[
+                                "Download the Discord app on your phone (App Store / Google Play)",
+                                "Create a free Discord account if you don't have one",
+                                "Click the invite link below to join our server",
+                                "Introduce yourself in the #introductions channel",
+                              ].map((item, idx) => (
+                                <li
+                                  key={idx}
+                                  className="flex items-start gap-2 text-sm"
+                                >
+                                  <span className="w-5 h-5 rounded-full bg-[#5865F2]/20 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#5865F2]">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="text-xs">{item}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+
+                          <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
+                            <p className="text-xs text-amber-700 font-medium flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                              You must download the Discord app and create an account. This is how all team communication happens — do not skip this step.
+                            </p>
+                          </div>
+
                           <div className="space-y-2">
                             <Button
                               variant="outline"
-                              className="w-full h-11"
+                              className="w-full h-12 text-sm font-semibold border-[#5865F2]/30 text-[#5865F2] hover:bg-[#5865F2]/5"
                               onClick={() =>
-                                window.open(GOOGLE_CHAT_LINK, "_blank")
+                                window.open(DISCORD_INVITE_LINK, "_blank")
                               }
                             >
                               <ExternalLink className="w-4 h-4 mr-2" />
-                              Open Google Chat Invite
+                              Join Novara Discord Server
                             </Button>
                             <Button
                               className="w-full h-11"
@@ -767,7 +806,7 @@ export default function OnboardingPortal() {
                               ) : (
                                 <CheckCircle2 className="w-4 h-4 mr-2" />
                               )}
-                              I've Joined the Chat
+                              I've Downloaded Discord & Joined the Server
                             </Button>
                           </div>
                         </div>
@@ -785,9 +824,102 @@ export default function OnboardingPortal() {
 
                           <p className="text-sm text-muted-foreground">
                             As an independent contractor, you provide your own supplies.
-                            Get the essentials before your first job. Optional items
-                            can be added later for premium services.
+                            <span className="font-semibold text-foreground"> Not all supplies need to be purchased right away</span> — start with the essentials and add optional items as you take on more specialized jobs.
                           </p>
+
+                          {/* No reimbursement notice */}
+                          <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
+                            <p className="text-xs text-amber-700 font-medium flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                              There are no reimbursements for supplies. All supply costs are your responsibility as an independent contractor.
+                            </p>
+                          </div>
+
+                          {/* Screenshot / Download option */}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-9 text-xs"
+                              onClick={() => {
+                                // Create a printable text version for download
+                                const text = [
+                                  "NOVARA CLEANING — SUPPLY CHECKLIST",
+                                  "===================================",
+                                  "",
+                                  "ESSENTIAL — Get These Before Your First Job",
+                                  "",
+                                  "Cleaning Solutions:",
+                                  "  [ ] All-purpose cleaner",
+                                  "  [ ] Glass & mirror cleaner",
+                                  "  [ ] Disinfectant spray",
+                                  "  [ ] Bathroom cleaner (soap scum remover)",
+                                  "  [ ] Toilet bowl cleaner",
+                                  "  [ ] Kitchen degreaser",
+                                  "",
+                                  "Tools:",
+                                  "  [ ] Vacuum with attachments",
+                                  "  [ ] Mop & bucket (or spray mop)",
+                                  "  [ ] Microfiber cloths (10-15)",
+                                  "  [ ] Scrub brush (tile/grout)",
+                                  "  [ ] Toilet brush",
+                                  "  [ ] Cleaning toothbrush",
+                                  "  [ ] White scrub pads (non-scratch)",
+                                  "  [ ] Duster (microfiber or feather)",
+                                  "  [ ] Spray bottles",
+                                  "  [ ] Cleaning tote or caddy",
+                                  "",
+                                  "Safety & Personal:",
+                                  "  [ ] Rubber gloves",
+                                  "  [ ] Non-slip shoes",
+                                  "  [ ] Cleaning apron with pockets",
+                                  "",
+                                  "OPTIONAL — Add Later for Premium Jobs",
+                                  "",
+                                  "  [ ] Stainless steel cleaner & polish",
+                                  "  [ ] Wood furniture polish",
+                                  "  [ ] Stone cleaner (pH neutral)",
+                                  "  [ ] Oven cleaner (for add-on service)",
+                                  "  [ ] Squeegee",
+                                  "  [ ] Whisk broom",
+                                  "  [ ] Step stool (2-step max)",
+                                  "  [ ] Mask/respirator (ovens, showers)",
+                                  "  [ ] Separate toilet toothbrush (different color)",
+                                  "  [ ] Leather cleaner (rare)",
+                                  "",
+                                  "WARNING: NEVER use vinegar, toilet bowl cleaner, CLR,",
+                                  "Lime-A-Way, or citrus-based cleaners on natural stone",
+                                  "(granite, marble, quartz, travertine).",
+                                  "",
+                                  "No reimbursements. All supply costs are your responsibility.",
+                                  "",
+                                  "CONFIDENTIAL — Property of NovaraCleaning.",
+                                ].join("\n");
+                                const blob = new Blob([text], { type: "text/plain" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = "NovaraCleaning_Supply_Checklist.txt";
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                toast.success("Checklist downloaded!");
+                              }}
+                            >
+                              <ClipboardList className="w-3 h-3 mr-1" />
+                              Download Checklist
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-9 text-xs"
+                              onClick={() => {
+                                toast.info("Take a screenshot of this page for your records!");
+                              }}
+                            >
+                              <ExternalLink className="w-3 h-3 mr-1" />
+                              Screenshot This Page
+                            </Button>
+                          </div>
 
                           {/* Essential Supplies */}
                           <div className="space-y-4">
