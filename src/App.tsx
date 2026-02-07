@@ -32,6 +32,7 @@ import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
+import CleanerOnboardingPortal from "./pages/cleaner/OnboardingPortal";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
 import AdminAuth from "./pages/admin/Auth";
@@ -133,6 +134,9 @@ const App = () => (
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+              <Route path="/cleaner/ob-portal" element={<CleanerOnboardingPortal />} />
+              {/* Alias for contractor.novaracleaning.com/ob-portal */}
+              <Route path="/ob-portal" element={<CleanerOnboardingPortal />} />
               {/* Legacy routes redirect to dashboard */}
               <Route path="/cleaner/profile" element={<Navigate to="/cleaner/dashboard" replace />} />
               <Route path="/cleaner/onboarding-landing" element={<Navigate to="/cleaner/onboarding" replace />} />
