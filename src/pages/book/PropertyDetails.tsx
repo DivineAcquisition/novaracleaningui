@@ -58,10 +58,16 @@ export default function PropertyDetails() {
 
   useEffect(() => {
     if (!bookingId) {
-      toast.error("No booking ID found");
-      navigate("/");
+      // Check if bookingId is in the booking context
+      if (bookingData.bookingId) {
+        // Redirect to same page with proper booking_id param
+        navigate(`/book/details?booking_id=${bookingData.bookingId}`, { replace: true });
+        return;
+      }
+      toast.error("No booking ID found. Please complete checkout first.");
+      navigate("/book/checkout");
     }
-  }, [bookingId, navigate]);
+  }, [bookingId, bookingData.bookingId, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
