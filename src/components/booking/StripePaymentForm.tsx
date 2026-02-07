@@ -15,9 +15,10 @@ interface StripePaymentFormProps {
   onSuccess: () => void;
   onRetry?: () => void;
   customerEmail?: string;
+  bookingId?: string | null;
 }
 
-export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }: StripePaymentFormProps) {
+export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, bookingId }: StripePaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
@@ -117,17 +118,23 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
     setErrorType(null);
 
     try {
+      // Build the return URL with booking_id for redirect-based payment methods (e.g. 3DS)
+      const returnUrl = new URL(`${window.location.origin}/book/confirmation`);
+      if (bookingId) {
+        returnUrl.searchParams.set('booking_id', bookingId);
+      }
+
       // If using saved payment method
       if (selectedPaymentMethod !== "new" && savedPaymentMethods.length > 0) {
         const paymentMethod = savedPaymentMethods.find(pm => pm.id === selectedPaymentMethod);
         if (paymentMethod) {
-          // Use the saved payment method
-          const { error } = await stripe.confirmPayment({
+          const { error, paymentIntent } = await stripe.confirmPayment({
             elements,
             confirmParams: {
-              return_url: `${window.location.origin}/book/success`,
+              return_url: returnUrl.toString(),
               payment_method: selectedPaymentMethod,
             },
+            redirect: 'if_required',
           });
 
           if (error) {
@@ -140,18 +147,23 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
               description: errorDetails.message,
               variant: "destructive",
             });
+          } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+            // Payment succeeded inline (no redirect needed)
+            onSuccess();
           }
           return;
         }
       }
 
       // New payment method - confirm and optionally save
-      const { error } = await stripe.confirmPayment({
+      // Use redirect: 'if_required' so cards without 3DS don't redirect
+      const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/book/success`,
+          return_url: returnUrl.toString(),
           save_payment_method: saveForFuture,
         },
+        redirect: 'if_required',
       });
 
       if (error) {
@@ -164,6 +176,9 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail }:
           description: errorDetails.message,
           variant: "destructive",
         });
+      } else if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture')) {
+        // Payment succeeded inline (no redirect needed)
+        onSuccess();
       }
     } catch (error: any) {
       const errorDetails = getErrorMessage(error);

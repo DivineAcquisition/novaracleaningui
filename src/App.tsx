@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
@@ -32,6 +32,7 @@ import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
+import CleanerOnboardingPortal from "./pages/cleaner/OnboardingPortal";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
 import AdminAuth from "./pages/admin/Auth";
@@ -41,6 +42,14 @@ import { DomainRouter } from "./components/auth/DomainRouter";
 
 // Allowed domains for the public booking flow
 const BOOKING_ALLOWED_DOMAINS = ['try.novaracleaning.com'];
+
+// Redirect component that preserves search params
+function RedirectWithParams({ to }: { to: string }) {
+  const [searchParams] = useSearchParams();
+  const search = searchParams.toString();
+  const destination = search ? `${to}?${search}` : to;
+  return <Navigate to={destination} replace />;
+}
 
 const queryClient = new QueryClient();
 
@@ -99,13 +108,13 @@ const App = () => (
                 </DomainRestricted>
               } />
               
-              {/* Legacy redirects for backwards compatibility */}
-              <Route path="/book/home" element={<Navigate to="/book/sqft" replace />} />
-              <Route path="/book/service" element={<Navigate to="/book/offer" replace />} />
-              <Route path="/book/schedule" element={<Navigate to="/book/checkout" replace />} />
-              <Route path="/book/summary" element={<Navigate to="/book/checkout" replace />} />
-              <Route path="/book/success" element={<Navigate to="/book/confirmation" replace />} />
-              <Route path="/book/additional-details" element={<Navigate to="/book/details" replace />} />
+              {/* Legacy redirects for backwards compatibility - preserve search params */}
+              <Route path="/book/home" element={<RedirectWithParams to="/book/sqft" />} />
+              <Route path="/book/service" element={<RedirectWithParams to="/book/offer" />} />
+              <Route path="/book/schedule" element={<RedirectWithParams to="/book/checkout" />} />
+              <Route path="/book/summary" element={<RedirectWithParams to="/book/checkout" />} />
+              <Route path="/book/success" element={<RedirectWithParams to="/book/confirmation" />} />
+              <Route path="/book/additional-details" element={<RedirectWithParams to="/book/details" />} />
               
               <Route path="/book/custom-quote" element={
                 <DomainRestricted allowedDomains={BOOKING_ALLOWED_DOMAINS}>
@@ -125,6 +134,9 @@ const App = () => (
               <Route path="/cleaner/reset-password" element={<CleanerResetPassword />} />
               <Route path="/cleaner/onboarding" element={<CleanerOnboarding />} />
               <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+              <Route path="/cleaner/ob-portal" element={<CleanerOnboardingPortal />} />
+              {/* Alias for contractor.novaracleaning.com/ob-portal */}
+              <Route path="/ob-portal" element={<CleanerOnboardingPortal />} />
               {/* Legacy routes redirect to dashboard */}
               <Route path="/cleaner/profile" element={<Navigate to="/cleaner/dashboard" replace />} />
               <Route path="/cleaner/onboarding-landing" element={<Navigate to="/cleaner/onboarding" replace />} />

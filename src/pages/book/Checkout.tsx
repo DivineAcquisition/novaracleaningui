@@ -728,7 +728,7 @@ export default function BookingCheckout() {
                   {stripePromise && clientSecret && paymentAmount > 0 && !initError && !isProcessing && <Elements stripe={stripePromise} options={{
                   clientSecret
                 }}>
-                      <StripePaymentForm amount={paymentAmount} onSuccess={handlePaymentSuccess} onRetry={handleRetryPayment} customerEmail={bookingData.email} />
+                      <StripePaymentForm amount={paymentAmount} onSuccess={handlePaymentSuccess} onRetry={handleRetryPayment} customerEmail={bookingData.email} bookingId={bookingId} />
                     </Elements>}
                 </>}
 
