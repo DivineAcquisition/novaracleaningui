@@ -1,3 +1,9 @@
+// ─── NovaraCleaning Pricing System v2.0 — Maryland ──────
+// Zone B = Base | Zone A = ×1.15 | Zone C = ×0.90
+// Deep = Standard × 1.5 | Move-In/Out = Standard × 2.0
+// First Clean: +$75 deep clean for all new members
+// 5% Platform Fee deducted from contractor pay
+
 export interface HomeSizeRange {
   id: string;
   label: string;
@@ -5,7 +11,8 @@ export interface HomeSizeRange {
   maxSqft: number;
   bedroomRange: string;
   baseHours: number;
-  standardPrice: number;
+  standardPrice: number; // Zone B base standard clean price
+  cleaners: string;      // Number of cleaners for standard
 }
 
 export const HOURLY_RATE = 75;
@@ -13,158 +20,140 @@ export const DEPOSIT_AMOUNT = 39;
 export const OVERTIME_RATE = 75;
 export const OVERTIME_INCREMENT = 0.5;
 export const NEW_CUSTOMER_DISCOUNT = 60;
+export const FIRST_CLEAN_SURCHARGE = 75; // Required deep clean for new members
 
+// ─── Service Zones ──────────────────────────────────────
+export const SERVICE_ZONES = {
+  A: { id: 'A', label: 'Zone A (Premium)', modifier: 1.15, areas: 'Bethesda, Potomac, Chevy Chase, Rockville, Silver Spring' },
+  B: { id: 'B', label: 'Zone B (Standard)', modifier: 1.00, areas: 'Rest of MoCo, PG County, Columbia, Ellicott City' },
+  C: { id: 'C', label: 'Zone C (Outer)', modifier: 0.90, areas: 'Frederick, Hagerstown, Annapolis, Baltimore suburbs' },
+};
+
+export type ZoneId = 'A' | 'B' | 'C';
+
+// ─── Home Size Ranges (Zone B base prices) ──────────────
 export const HOME_SIZE_RANGES: HomeSizeRange[] = [
-  {
-    id: '0_999',
-    label: '0 – 999 sq ft',
-    minSqft: 0,
-    maxSqft: 999,
-    bedroomRange: 'Studio – 1 BR',
-    baseHours: 2.0,
-    standardPrice: 150,
-  },
-  {
-    id: '1000_1500',
-    label: '1,000 – 1,500 sq ft',
-    minSqft: 1000,
-    maxSqft: 1500,
-    bedroomRange: '1–2 BR condos/homes',
-    baseHours: 2.5,
-    standardPrice: 187.5,
-  },
-  {
-    id: '1501_2000',
-    label: '1,501 – 2,000 sq ft',
-    minSqft: 1501,
-    maxSqft: 2000,
-    bedroomRange: '2–3 BR apartments/townhomes',
-    baseHours: 3.0,
-    standardPrice: 225,
-  },
-  {
-    id: '2001_2500',
-    label: '2,001 – 2,500 sq ft',
-    minSqft: 2001,
-    maxSqft: 2500,
-    bedroomRange: '3–4 BR homes',
-    baseHours: 3.5,
-    standardPrice: 262.5,
-  },
-  {
-    id: '2501_3000',
-    label: '2,501 – 3,000 sq ft',
-    minSqft: 2501,
-    maxSqft: 3000,
-    bedroomRange: '4 BR homes',
-    baseHours: 4.0,
-    standardPrice: 300,
-  },
-  {
-    id: '3001_3500',
-    label: '3,001 – 3,500 sq ft',
-    minSqft: 3001,
-    maxSqft: 3500,
-    bedroomRange: '4–5 BR homes',
-    baseHours: 4.5,
-    standardPrice: 337.5,
-  },
-  {
-    id: '3501_4000',
-    label: '3,501 – 4,000 sq ft',
-    minSqft: 3501,
-    maxSqft: 4000,
-    bedroomRange: '5 BR homes',
-    baseHours: 5.0,
-    standardPrice: 375,
-  },
-  {
-    id: '4001_4500',
-    label: '4,001 – 4,500 sq ft',
-    minSqft: 4001,
-    maxSqft: 4500,
-    bedroomRange: '5+ BR homes',
-    baseHours: 5.5,
-    standardPrice: 412.5,
-  },
-  {
-    id: '4501_5000',
-    label: '4,501 – 5,000 sq ft',
-    minSqft: 4501,
-    maxSqft: 5000,
-    bedroomRange: '5+ BR large homes',
-    baseHours: 6.0,
-    standardPrice: 450,
-  },
-  {
-    id: '5000_plus',
-    label: '5,000+ sq ft',
-    minSqft: 5000,
-    maxSqft: 999999,
-    bedroomRange: '6+ BR estates',
-    baseHours: 0,
-    standardPrice: 0,
-  },
+  { id: '0_999',      label: '0 – 999 sq ft',       minSqft: 0,    maxSqft: 999,   bedroomRange: 'Studio – 1 BR',         baseHours: 2.0, standardPrice: 150,   cleaners: '1' },
+  { id: '1000_1500',  label: '1,000 – 1,500 sq ft',  minSqft: 1000, maxSqft: 1500,  bedroomRange: '1–2 BR condos/homes',   baseHours: 2.5, standardPrice: 189,   cleaners: '1' },
+  { id: '1501_2000',  label: '1,501 – 2,000 sq ft',  minSqft: 1501, maxSqft: 2000,  bedroomRange: '2–3 BR apartments',     baseHours: 3.0, standardPrice: 239,   cleaners: '1' },
+  { id: '2001_2500',  label: '2,001 – 2,500 sq ft',  minSqft: 2001, maxSqft: 2500,  bedroomRange: '3–4 BR homes',          baseHours: 3.5, standardPrice: 279,   cleaners: '1' },
+  { id: '2501_3000',  label: '2,501 – 3,000 sq ft',  minSqft: 2501, maxSqft: 3000,  bedroomRange: '4 BR homes',            baseHours: 4.0, standardPrice: 339,   cleaners: '1-2' },
+  { id: '3001_3500',  label: '3,001 – 3,500 sq ft',  minSqft: 3001, maxSqft: 3500,  bedroomRange: '4–5 BR homes',          baseHours: 4.5, standardPrice: 379,   cleaners: '1-2' },
+  { id: '3501_4000',  label: '3,501 – 4,000 sq ft',  minSqft: 3501, maxSqft: 4000,  bedroomRange: '5 BR homes',            baseHours: 5.0, standardPrice: 439,   cleaners: '2' },
+  { id: '4001_4500',  label: '4,001 – 4,500 sq ft',  minSqft: 4001, maxSqft: 4500,  bedroomRange: '5+ BR homes',           baseHours: 5.5, standardPrice: 489,   cleaners: '2' },
+  { id: '4501_5000',  label: '4,501 – 5,000 sq ft',  minSqft: 4501, maxSqft: 5000,  bedroomRange: '5+ BR large homes',     baseHours: 6.0, standardPrice: 539,   cleaners: '2' },
+  { id: '5000_plus',  label: '5,000+ sq ft',          minSqft: 5000, maxSqft: 999999, bedroomRange: '6+ BR estates',         baseHours: 0,   standardPrice: 0,     cleaners: 'Custom' },
 ];
 
+// ─── Service Tier Multipliers ───────────────────────────
 export const SERVICE_TIER_PRICING = {
-  standard: { label: 'Standard', addition: 0 },
-  deep: { label: 'Deep Clean', addition: 50 },
-  moveInOut: { label: 'Move-In/Out Cleaning', addition: 120 },
+  standard: { label: 'Standard Clean', multiplier: 1.0, addition: 0 },
+  deep:     { label: 'Deep Clean',     multiplier: 1.5, addition: 0 }, // +50% of standard
+  moveInOut: { label: 'Move-In/Out',   multiplier: 2.0, addition: 0 }, // +100% of standard, includes fridge & oven
 };
 
+// ─── Add-Ons ────────────────────────────────────────────
 export const ADD_ONS = {
-  fridge: { label: 'Inside Fridge', price: 30 },
-  oven: { label: 'Inside Oven', price: 30 },
-  windows: { label: 'Interior Windows', price: 40 },
+  fridge:  { label: 'Inside Fridge', price: 30, note: 'Free w/ Move-In/Out' },
+  oven:    { label: 'Inside Oven',   price: 30, note: 'Free w/ Move-In/Out' },
+  windows: { label: 'Interior Windows', price: 40, note: 'Per visit' },
 };
 
+// ─── Membership Plans (Zone B base monthly prices) ──────
+// Monthly prices vary by home size. These are the base tier structures.
 export const MEMBERSHIP_PLANS = {
   none: {
     id: 'none',
     label: 'Pay Per Clean',
-    monthlyPrice: 0,
+    frequency: 'one-time',
     cleansPerMonth: 0,
+    monthlyPrice: 0,
     includedHours: 0,
     overtimeDiscount: 0,
     discount: 0,
     description: 'No commitment, pay as you go',
-    features: ['Flexible scheduling', 'No monthly fees', 'Cancel anytime']
+    features: ['Flexible scheduling', 'No monthly fees', 'Book anytime'],
   },
-  essential: {
-    id: 'essential',
-    label: 'Glow Essential',
-    monthlyPrice: 189,
+  monthly: {
+    id: 'monthly',
+    label: 'Glow Monthly',
+    frequency: 'monthly',
     cleansPerMonth: 1,
-    includedHours: 2,
+    monthlyPrice: 0, // Varies by home size
+    includedHours: 0,
     overtimeDiscount: 0.15,
-    discount: 0.10,
-    description: '1 clean/month • 2 hrs included • 15% off overtime',
-    features: ['1 clean per month', '2 hours included', '15% off overtime', 'Priority scheduling']
+    discount: 0.15,
+    description: '1 clean/month • Up to 18% off',
+    features: ['1 clean per month', 'Up to 18% off one-time price', 'Priority scheduling', 'Cancel anytime'],
   },
-  standard: {
-    id: 'standard',
-    label: 'Glow Standard',
-    monthlyPrice: 289,
+  biweekly: {
+    id: 'biweekly',
+    label: 'Glow Bi-Weekly',
+    frequency: 'biweekly',
     cleansPerMonth: 2,
-    includedHours: 3,
+    monthlyPrice: 0, // Varies by home size
+    includedHours: 0,
     overtimeDiscount: 0.25,
-    discount: 0.20,
-    description: '2 cleans/month • 3 hrs included • 25% off overtime',
-    features: ['2 cleans per month', '3 hours included', '25% off overtime', 'Priority scheduling', 'Free add-ons']
+    discount: 0.34,
+    description: '2 cleans/month • Up to 34% off • BEST VALUE',
+    features: ['2 cleans per month', 'Up to 34% off per clean', 'Priority scheduling', 'Free add-ons', 'Same trusted team'],
   },
-  premium: {
-    id: 'premium',
-    label: 'Glow Premium',
-    monthlyPrice: 389,
+  weekly: {
+    id: 'weekly',
+    label: 'Glow Weekly',
+    frequency: 'weekly',
     cleansPerMonth: 4,
-    includedHours: 3,
+    monthlyPrice: 0, // Varies by home size
+    includedHours: 0,
     overtimeDiscount: 0.35,
-    discount: 0.30,
-    description: '4 cleans/month • 3 hrs included • 35% off overtime',
-    features: ['4 cleans per month', '3 hours included per clean', '35% off overtime', 'VIP scheduling', 'Free add-ons', 'Dedicated team']
-  }
+    discount: 0.42,
+    description: '4 cleans/month • Up to 42% off • Premium',
+    features: ['4 cleans per month', 'Up to 42% off per clean', 'VIP scheduling', 'Free add-ons', 'Dedicated team', 'Best for families & pets'],
+  },
 };
+
+// ─── Membership pricing lookup (Zone B base) ────────────
+// Index by home size ID → { monthly, biweekly, weekly }
+export const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
+  '0_999':     { monthly: 129, biweekly: 199, weekly: 349 },
+  '1000_1500': { monthly: 159, biweekly: 249, weekly: 449 },
+  '1501_2000': { monthly: 199, biweekly: 319, weekly: 569 },
+  '2001_2500': { monthly: 229, biweekly: 369, weekly: 659 },
+  '2501_3000': { monthly: 279, biweekly: 449, weekly: 799 },
+  '3001_3500': { monthly: 319, biweekly: 499, weekly: 899 },
+  '3501_4000': { monthly: 369, biweekly: 579, weekly: 1039 },
+  '4001_4500': { monthly: 409, biweekly: 649, weekly: 1159 },
+  '4501_5000': { monthly: 459, biweekly: 719, weekly: 1279 },
+};
+
+// ─── Helpers ────────────────────────────────────────────
+
+/** Get zone-adjusted price */
+export function getZonePrice(basePrice: number, zone: ZoneId = 'B'): number {
+  return Math.round(basePrice * SERVICE_ZONES[zone].modifier);
+}
+
+/** Get service tier price for a home size and zone */
+export function getServicePrice(homeSizeId: string, serviceType: string, zone: ZoneId = 'B'): number {
+  const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
+  if (!homeSize || homeSize.standardPrice === 0) return 0;
+  
+  const tier = SERVICE_TIER_PRICING[serviceType as keyof typeof SERVICE_TIER_PRICING];
+  const basePrice = homeSize.standardPrice * (tier?.multiplier || 1);
+  return getZonePrice(Math.round(basePrice), zone);
+}
+
+/** Get membership monthly price for a home size, plan, and zone */
+export function getMembershipPrice(homeSizeId: string, planId: string, zone: ZoneId = 'B'): number {
+  const prices = MEMBERSHIP_PRICES[homeSizeId];
+  if (!prices) return 0;
+  
+  const planKey = planId as keyof typeof prices;
+  const basePrice = prices[planKey] || 0;
+  return getZonePrice(basePrice, zone);
+}
+
+// ─── Types ──────────────────────────────────────────────
 
 export interface PricingCalculation {
   basePrice: number;
@@ -220,23 +209,14 @@ export function calculateFullPaymentWithDiscount(
   isNewCustomer: boolean = false,
   promoDiscount: number = 0
 ): FullPaymentCalculation {
-  // Get base pricing WITH new customer discount AND promo discount already applied
   const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer, promoDiscount);
-  
-  // Calculate 10% full payment discount on the total AFTER all other discounts
   const fullPaymentDiscount = Math.round(pricing.total * 0.10 * 100) / 100;
-  
-  // Final amount after all discounts including full payment discount
   const finalAmount = pricing.total - fullPaymentDiscount;
-  
-  // originalTotal should be the subtotal (before any discounts) for display purposes
   const originalTotal = pricing.subtotal;
-  
-  // Total savings = new customer + membership + full payment + promo discounts
   const totalSavings = pricing.newCustomerDiscount + pricing.membershipDiscount + fullPaymentDiscount + promoDiscount;
   
   return {
-    originalTotal: originalTotal,
+    originalTotal,
     discount: fullPaymentDiscount,
     newCustomerDiscount: pricing.newCustomerDiscount,
     promoDiscount,
@@ -257,43 +237,34 @@ export function calculatePrice(
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
   if (!homeSize) {
     return {
-      basePrice: 0,
-      serviceAddition: 0,
-      addOnsTotal: 0,
-      subtotal: 0,
-      membershipDiscount: 0,
-      newCustomerDiscount: 0,
-      total: 0,
-      deposit: DEPOSIT_AMOUNT,
-      balanceDue: 0,
-      hours: 0,
+      basePrice: 0, serviceAddition: 0, addOnsTotal: 0, subtotal: 0,
+      membershipDiscount: 0, newCustomerDiscount: 0, total: 0,
+      deposit: DEPOSIT_AMOUNT, balanceDue: 0, hours: 0,
     };
   }
 
-  // Base price from home size
+  // Base price = standard clean for the home size (Zone B)
   const basePrice = homeSize.standardPrice;
   
-  // Service tier addition
-  const serviceAddition = SERVICE_TIER_PRICING[serviceType as keyof typeof SERVICE_TIER_PRICING]?.addition || 0;
+  // Service tier: deep = 50% more, moveInOut = 100% more
+  const tier = SERVICE_TIER_PRICING[serviceType as keyof typeof SERVICE_TIER_PRICING];
+  const serviceAddition = tier ? Math.round(basePrice * (tier.multiplier - 1)) : 0;
   
-  // Add-ons (smart filtering for Move-In/Out which includes fridge & oven)
+  // Add-ons (Move-In/Out includes fridge & oven)
   let addOnsTotal = 0;
   if (serviceType === 'moveInOut') {
-    // Move-In/Out includes fridge & oven, only count windows
     addOnsTotal = addOns
       .filter(addon => addon === 'windows')
       .reduce((total, addon) => total + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0), 0);
   } else {
-    // Standard & Deep count all add-ons
     addOnsTotal = addOns.reduce((total, addon) => {
       return total + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0);
     }, 0);
   }
   
-  // Subtotal before membership discount
   const subtotal = basePrice + serviceAddition + addOnsTotal;
   
-  // Membership discount applies only to extras (service addition + add-ons)
+  // Membership discount on extras
   const membership = MEMBERSHIP_PLANS[membershipPlan as keyof typeof MEMBERSHIP_PLANS];
   const extrasAmount = serviceAddition + addOnsTotal;
   const membershipDiscount = membership && !useCredit ? extrasAmount * membership.discount : 0;
@@ -301,110 +272,53 @@ export function calculatePrice(
   // New customer discount (only for non-members)
   const newCustomerDiscount = isNewCustomer && membershipPlan === 'none' ? NEW_CUSTOMER_DISCOUNT : 0;
   
-  // If using credit, base price is covered (up to 2 hours worth = $150)
+  // Credit coverage
   const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;
   
-  // Deposit: $0 for members using credit, $39 otherwise
   const deposit = useCredit ? 0 : DEPOSIT_AMOUNT;
-  
-  // Total calculation with promo discount
   const total = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - promoDiscount;
   const balanceDue = Math.max(0, total - deposit);
   
   return {
-    basePrice,
-    serviceAddition,
-    addOnsTotal,
-    subtotal,
-    membershipDiscount,
-    newCustomerDiscount,
-    total: Math.max(0, total),
-    deposit: useCredit ? 0 : DEPOSIT_AMOUNT,
-    balanceDue,
-    hours: homeSize.baseHours,
+    basePrice, serviceAddition, addOnsTotal, subtotal,
+    membershipDiscount, newCustomerDiscount,
+    total: Math.max(0, total), deposit: useCredit ? 0 : DEPOSIT_AMOUNT,
+    balanceDue, hours: homeSize.baseHours,
   };
 }
 
-/**
- * Apply and validate promo code
- */
 export async function applyPromoCode(
-  code: string,
-  subtotal: number,
-  homeSizeId: string,
-  isNewCustomer: boolean,
-  customerEmail: string,
-  supabase: any
+  code: string, subtotal: number, homeSizeId: string,
+  isNewCustomer: boolean, customerEmail: string, supabase: any
 ): Promise<PromoValidation> {
-  if (!code.trim()) {
-    return { valid: false, discount: 0, message: 'Please enter a promo code' };
-  }
+  if (!code.trim()) return { valid: false, discount: 0, message: 'Please enter a promo code' };
 
-  // Fetch promo code from database
   const { data: promoCode, error } = await supabase
-    .from('promo_codes')
-    .select('*')
-    .eq('code', code.toUpperCase())
-    .eq('active', true)
-    .single();
+    .from('promo_codes').select('*').eq('code', code.toUpperCase()).eq('active', true).single();
 
-  if (error || !promoCode) {
-    return { valid: false, discount: 0, message: 'Invalid promo code' };
-  }
-
-  // Check expiration
-  if (promoCode.expires_at && new Date(promoCode.expires_at) < new Date()) {
+  if (error || !promoCode) return { valid: false, discount: 0, message: 'Invalid promo code' };
+  if (promoCode.expires_at && new Date(promoCode.expires_at) < new Date())
     return { valid: false, discount: 0, message: 'This promo code has expired' };
-  }
-
-  // Check customer eligibility
-  if (promoCode.applies_to === 'new_customers' && !isNewCustomer) {
+  if (promoCode.applies_to === 'new_customers' && !isNewCustomer)
     return { valid: false, discount: 0, message: 'This code is only for new customers' };
-  }
-  if (promoCode.applies_to === 'returning_customers' && isNewCustomer) {
+  if (promoCode.applies_to === 'returning_customers' && isNewCustomer)
     return { valid: false, discount: 0, message: 'This code is only for returning customers' };
-  }
-
-  // Check total usage limit
-  if (promoCode.max_total_uses && promoCode.total_uses >= promoCode.max_total_uses) {
+  if (promoCode.max_total_uses && promoCode.total_uses >= promoCode.max_total_uses)
     return { valid: false, discount: 0, message: 'This promo code has reached its usage limit' };
-  }
 
-  // Check per-customer usage limit
   if (promoCode.max_uses_per_customer) {
     const { data: customerUsage } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('email', customerEmail)
-      .ilike('team_notes', `%${code.toUpperCase()}%`); // Promo codes stored in team_notes
-
-    if (customerUsage && customerUsage.length >= promoCode.max_uses_per_customer) {
-      return { 
-        valid: false, 
-        discount: 0, 
-        message: `You've already used this code ${promoCode.max_uses_per_customer} time(s)` 
-      };
-    }
+      .from('bookings').select('id').eq('email', customerEmail)
+      .ilike('team_notes', `%${code.toUpperCase()}%`);
+    if (customerUsage && customerUsage.length >= promoCode.max_uses_per_customer)
+      return { valid: false, discount: 0, message: `You've already used this code ${promoCode.max_uses_per_customer} time(s)` };
   }
 
-  // Calculate discount
-  let discount = 0;
-  if (promoCode.type === 'percent') {
-    discount = Math.round((subtotal * promoCode.value) / 100 * 100) / 100;
-  } else {
-    discount = promoCode.value;
-  }
+  let discount = promoCode.type === 'percent'
+    ? Math.round((subtotal * promoCode.value) / 100 * 100) / 100
+    : promoCode.value;
 
-  // Validate profit margin (import validateDiscount if needed)
-  const finalPrice = subtotal - discount;
-  if (finalPrice < 0) {
-    return { valid: false, discount: 0, message: 'Invalid discount amount' };
-  }
+  if (subtotal - discount < 0) return { valid: false, discount: 0, message: 'Invalid discount amount' };
 
-  return {
-    valid: true,
-    discount,
-    message: `🎉 ${promoCode.value}% off applied!`,
-    promoCode: promoCode as PromoCode,
-  };
+  return { valid: true, discount, message: `🎉 ${promoCode.value}% off applied!`, promoCode: promoCode as PromoCode };
 }
