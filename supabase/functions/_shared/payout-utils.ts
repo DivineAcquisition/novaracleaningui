@@ -2,18 +2,18 @@
  * Shared utilities for calculating cleaner payouts and mapping home sizes
  */
 
-// Map home size IDs to estimated hours
+// Map home size IDs to estimated hours (from v2 pricing PDF)
 export const HOME_SIZE_HOURS: Record<string, number> = {
   "0_999": 2,
-  "1000_1500": 3,
-  "1501_2000": 4,
-  "2001_2500": 5,
-  "2501_3000": 6,
-  "3001_3500": 7,
-  "3501_4000": 8,
-  "4001_4500": 9,
-  "4501_5000": 10,
-  "5000_plus": 12,
+  "1000_1500": 2.5,
+  "1501_2000": 3,
+  "2001_2500": 3.5,
+  "2501_3000": 4,
+  "3001_3500": 4.5,
+  "3501_4000": 5,
+  "4001_4500": 5.5,
+  "4501_5000": 6,
+  "5000_plus": 8,
 };
 
 // Home sizes that require 3 cleaners (above 2500 sq ft)

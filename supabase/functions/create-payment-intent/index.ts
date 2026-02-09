@@ -18,30 +18,31 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PAYMENT-INTENT] ${step}${detailsStr}`);
 };
 
-// Service pricing configuration (cents)
-const SERVICE_TIER_PRICING = {
-  standard: 0,
-  deep: 5000, // $50
-  moveInOut: 12000, // $120
+// ─── v2.0 Pricing (cents) ────────────────────────────────
+// Deep = Standard × 1.5 | Move-In/Out = Standard × 2.0
+const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
+  standard: 1.0,
+  deep: 1.5,
+  moveInOut: 2.0,
 };
 
-const ADD_ON_PRICING = {
+const ADD_ON_PRICING: Record<string, number> = {
   fridge: 3000, // $30
   oven: 3000, // $30
   windows: 4000, // $40
 };
 
-// Match frontend HOME_SIZE_RANGES IDs and prices (standardPrice * 100)
+// Zone B base standard clean prices in cents
 const HOME_SIZE_PRICING: Record<string, number> = {
   "0_999": 15000,
-  "1000_1500": 18750,
-  "1501_2000": 22500,
-  "2001_2500": 26250,
-  "2501_3000": 30000,
-  "3001_3500": 33750,
-  "3501_4000": 37500,
-  "4001_4500": 41250,
-  "4501_5000": 45000,
+  "1000_1500": 18900,
+  "1501_2000": 23900,
+  "2001_2500": 27900,
+  "2501_3000": 33900,
+  "3001_3500": 37900,
+  "3501_4000": 43900,
+  "4001_4500": 48900,
+  "4501_5000": 53900,
   "5000_plus": 0,
 };
 
@@ -50,9 +51,9 @@ const NEW_CUSTOMER_DISCOUNT = 6000; // $60
 
 // Membership discount on extras only
 const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
-  monthly: 0.20,
+  monthly: 0.15,
   biweekly: 0.25,
-  weekly: 0.30,
+  weekly: 0.35,
 };
 
 serve(async (req) => {
@@ -115,8 +116,9 @@ serve(async (req) => {
     );
 
     // Calculate pricing to match frontend logic (values in cents)
-    const basePrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string];
-    if (basePrice === undefined) {
+    // v2.0: Deep = Standard × 1.5, Move-In/Out = Standard × 2.0
+    const baseStandardPrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string];
+    if (baseStandardPrice === undefined) {
       logStep("Invalid home size ID", { homeSizeId: bookingData.homeSizeId, validIds: Object.keys(HOME_SIZE_PRICING) });
       return new Response(
         JSON.stringify({ 
@@ -127,7 +129,11 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const serviceTierPrice = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING] ?? 0;
+    
+    // Apply service tier multiplier
+    const tierMultiplier = SERVICE_TIER_MULTIPLIERS[bookingData.serviceType as string] ?? 1.0;
+    const basePrice = Math.round(baseStandardPrice * tierMultiplier);
+    const serviceTierPrice = basePrice - baseStandardPrice; // The addition from the tier
 
     // Prepare add-ons (Move-In/Out includes fridge & oven already)
     const incomingAddOns: string[] = Array.isArray(bookingData.addOns) ? bookingData.addOns : [];
@@ -135,9 +141,9 @@ serve(async (req) => {
       ? incomingAddOns.filter((a) => a !== 'fridge' && a !== 'oven')
       : incomingAddOns;
 
-    const addOnsTotal = relevantAddOns.reduce((sum, a) => sum + (ADD_ON_PRICING[a as keyof typeof ADD_ON_PRICING] ?? 0), 0);
+    const addOnsTotal = relevantAddOns.reduce((sum, a) => sum + (ADD_ON_PRICING[a] ?? 0), 0);
 
-    const subtotal = basePrice + serviceTierPrice + addOnsTotal;
+    const subtotal = basePrice + addOnsTotal;
 
     // Membership discount applies only to extras (service addition + add-ons) and only if not using credit
     const membershipPlan: string = bookingData.membershipPlan || 'none';

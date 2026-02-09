@@ -4,15 +4,21 @@ import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Gift, Check, ArrowLeft, Phone, ChevronRight } from "lucide-react";
+import { Check, ArrowLeft, Phone, ChevronRight, Star, Crown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PromoBanner } from "@/components/booking/PromoBanner";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import {
+  HOME_SIZE_RANGES,
+  DEPOSIT_AMOUNT,
+  MEMBERSHIP_PRICES,
+  getServicePrice,
+} from "@/lib/pricing-system";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -25,22 +31,16 @@ const BOOKING_STEPS = [
   { number: 6, label: "Confirm", path: "/book/confirmation" },
 ];
 
-// New Year's Special - Ends Jan 7, 2025
-const OFFER_END_DATE = new Date('2025-01-07T23:59:59');
-const DEEP_CLEAN_DISCOUNT = 50;
-const RECURRING_DISCOUNT_PERCENT = 15;
-
 // Deep clean features
 const DEEP_CLEAN_FEATURES = [
   "40-point Deep Clean checklist",
-  "2-person professional team",
+  "Professional team",
   "All supplies & equipment included",
   "48-hour re-clean guarantee",
 ];
 
-// Recurring features
-const RECURRING_FEATURES = [
-  "Bi-weekly or monthly scheduling",
+// Membership features
+const MEMBERSHIP_FEATURES = [
   "Same trusted cleaning team",
   "Priority scheduling & member perks",
   "Cancel or pause anytime",
@@ -51,9 +51,8 @@ export default function BookingOffer() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showDeepCleanModal, setShowDeepCleanModal] = useState(false);
-  const [showRecurringModal, setShowRecurringModal] = useState(false);
-  const [daysRemaining, setDaysRemaining] = useState(0);
-  const [selectedService, setSelectedService] = useState<'deep' | 'recurring' | null>(null);
+  const [showMembershipModal, setShowMembershipModal] = useState(false);
+  const [selectedService, setSelectedService] = useState<'deep' | 'membership' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -63,40 +62,35 @@ export default function BookingOffer() {
     return HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   }, [bookingData.homeSizeId]);
 
-  // Calculate prices
+  // Calculate v2 prices using the pricing system
   const prices = useMemo(() => {
-    const basePrice = selectedHomeSize?.standardPrice || 150;
-    const deepCleanPrice = basePrice + SERVICE_TIER_PRICING.deep.addition;
-    const discountedDeepCleanPrice = deepCleanPrice - DEEP_CLEAN_DISCOUNT;
-    const depositAmount = Math.round(discountedDeepCleanPrice * 0.25);
+    const homeSizeId = bookingData.homeSizeId || '0_999';
 
-    const recurringPrice = basePrice; // Standard clean for recurring
-    const discountedRecurringPrice = Math.round(recurringPrice * (1 - RECURRING_DISCOUNT_PERCENT / 100));
-    const recurringDeposit = Math.round(discountedRecurringPrice * 0.25);
-    const recurringSavings = recurringPrice - discountedRecurringPrice;
+    // One-time prices (Zone B base — backend applies zone modifier)
+    const standardPrice = getServicePrice(homeSizeId, 'standard', 'B');
+    const deepCleanPrice = getServicePrice(homeSizeId, 'deep', 'B');
+
+    // Membership prices (Zone B base)
+    const memberPrices = MEMBERSHIP_PRICES[homeSizeId] || { monthly: 129, biweekly: 199, weekly: 349 };
+
+    // Per-clean cost for bi-weekly
+    const biweeklyPerClean = Math.round((memberPrices.biweekly / 2) * 100) / 100;
+    const biweeklySavingsPercent = standardPrice > 0
+      ? Math.round((1 - biweeklyPerClean / standardPrice) * 100)
+      : 34;
 
     return {
-      deepClean: {
-        original: deepCleanPrice,
-        discounted: discountedDeepCleanPrice,
-        deposit: depositAmount,
-      },
-      recurring: {
-        original: recurringPrice,
-        discounted: discountedRecurringPrice,
-        deposit: recurringDeposit,
-        savings: recurringSavings,
+      standard: standardPrice,
+      deepClean: deepCleanPrice,
+      membership: {
+        monthly: memberPrices.monthly,
+        biweekly: memberPrices.biweekly,
+        weekly: memberPrices.weekly,
+        biweeklyPerClean,
+        biweeklySavingsPercent,
       },
     };
-  }, [selectedHomeSize]);
-
-  // Calculate days remaining
-  useEffect(() => {
-    const now = new Date();
-    const diff = OFFER_END_DATE.getTime() - now.getTime();
-    const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-    setDaysRemaining(days);
-  }, []);
+  }, [bookingData.homeSizeId]);
 
   // Check for custom quote requirement (5000+ sq ft)
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
@@ -106,22 +100,18 @@ export default function BookingOffer() {
     updateBookingData({
       serviceType: 'deep',
       membershipPlan: 'none',
-      promoCode: 'NEWYEAR50',
     });
-    // Scroll to scheduler
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
 
-  const handleSelectRecurring = () => {
-    setSelectedService('recurring');
+  const handleSelectMembership = () => {
+    setSelectedService('membership');
     updateBookingData({
       serviceType: 'standard',
       membershipPlan: 'biweekly',
-      promoCode: 'NEWYEAR15',
     });
-    // Scroll to scheduler
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -155,17 +145,6 @@ export default function BookingOffer() {
                 <p className="text-muted-foreground">
                   Your home requires a customized quote to ensure accurate pricing.
                 </p>
-                
-                <div className="grid grid-cols-2 gap-4 text-left">
-                  <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="font-semibold">Deep Clean</p>
-                    <p className="text-sm text-muted-foreground">Starting at $500</p>
-                  </div>
-                  <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="font-semibold">Recurring Service</p>
-                    <p className="text-sm text-muted-foreground">Starting at $400/visit</p>
-                  </div>
-                </div>
                 
                 <div className="flex items-center justify-center gap-2 text-lg font-semibold text-primary">
                   <Phone className="w-5 h-5" />
@@ -206,10 +185,9 @@ export default function BookingOffer() {
             </h1>
             
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Choose your service and lock in your New Year savings.
+              One-time deep clean or recurring membership — you decide.
             </p>
             
-            {/* Trust Badge */}
             <GoogleGuaranteedBadge variant="compact" />
           </div>
 
@@ -217,26 +195,18 @@ export default function BookingOffer() {
           <div id="offers-section" className="grid md:grid-cols-2 gap-4 md:gap-6">
             {/* Card A: Deep Clean (One-Time) */}
             <Card className="relative overflow-hidden border-2 border-primary/30 hover:border-primary/60 transition-all duration-300 hover:shadow-xl">
-              <div className="absolute top-3 left-3">
-                <Badge className="bg-amber-500 text-black font-bold">
-                  <Gift className="w-3 h-3 mr-1" />
-                  $50 Off — New Year Special
-                </Badge>
-              </div>
-              
-              <CardContent className="pt-14 pb-6 px-5 space-y-5">
+              <CardContent className="pt-8 pb-6 px-5 space-y-5">
                 <div>
                   <h3 className="text-2xl font-bold font-jakarta">Deep Clean</h3>
-                  <p className="text-muted-foreground">One-time reset for your home</p>
+                  <p className="text-muted-foreground">One-time top-to-bottom reset</p>
                 </div>
                 
                 <div className="space-y-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-lg text-muted-foreground line-through">${prices.deepClean.original}</span>
-                    <span className="text-3xl font-black text-primary">${prices.deepClean.discounted}</span>
+                    <span className="text-3xl font-black text-primary">${prices.deepClean}</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Pay only ${prices.deepClean.deposit} today (25% deposit)
+                    Pay only ${DEPOSIT_AMOUNT} deposit today
                   </p>
                 </div>
                 
@@ -257,7 +227,7 @@ export default function BookingOffer() {
                     className="w-full bg-gradient-primary font-semibold"
                     onClick={handleSelectDeepClean}
                   >
-                    Get Started — ${prices.deepClean.deposit} Today
+                    Get Started — ${DEPOSIT_AMOUNT} Today
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                   <Button 
@@ -272,38 +242,48 @@ export default function BookingOffer() {
               </CardContent>
             </Card>
 
-            {/* Card B: Recurring Maintenance (Most Popular) */}
+            {/* Card B: Novara Glow Membership (Most Popular) */}
             <div className="relative">
-              {/* Most Popular Pill - positioned outside the card */}
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                 <Badge className="bg-success text-white font-bold shadow-lg px-4 py-1.5">
-                  Most Popular
+                  Most Popular — Save {prices.membership.biweeklySavingsPercent}%
                 </Badge>
               </div>
               
               <Card className="overflow-hidden border-2 border-success/30 hover:border-success/60 transition-all duration-300 hover:shadow-xl">
-              
               <CardContent className="pt-14 pb-6 px-5 space-y-5">
                 <div>
                   <h3 className="text-2xl font-bold font-jakarta">Novara Glow Membership</h3>
-                  <p className="text-muted-foreground">Keep your home guest-ready, always</p>
+                  <p className="text-muted-foreground">Recurring cleaning — choose your frequency</p>
                 </div>
                 
-                <div className="space-y-1">
+                <div className="space-y-2">
+                  {/* Bi-Weekly highlight */}
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-success">$189</span>
+                    <span className="text-3xl font-black text-success">${prices.membership.biweekly}</span>
                     <span className="text-muted-foreground">/month</span>
                   </div>
                   <p className="text-sm text-success font-medium">
-                    Includes 1 cleaning per month + member perks
+                    Bi-Weekly: 2 cleans/month at ${prices.membership.biweeklyPerClean}/clean
                   </p>
+
+                  {/* Other frequency options */}
+                  <div className="flex gap-2 pt-1">
+                    <Badge variant="secondary" className="text-[10px]">
+                      Monthly: ${prices.membership.monthly}/mo
+                    </Badge>
+                    <Badge variant="secondary" className="text-[10px]">
+                      Weekly: ${prices.membership.weekly}/mo
+                    </Badge>
+                  </div>
+
                   <p className="text-sm text-muted-foreground">
-                    Pay only ${prices.recurring.deposit} today (25% deposit)
+                    Pay only ${DEPOSIT_AMOUNT} deposit today
                   </p>
                 </div>
                 
                 <ul className="space-y-2.5">
-                  {RECURRING_FEATURES.map((feature, idx) => (
+                  {MEMBERSHIP_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-sm">
                       <div className="w-5 h-5 rounded-full bg-success/15 flex items-center justify-center flex-shrink-0">
                         <Check className="w-3 h-3 text-success" />
@@ -317,16 +297,16 @@ export default function BookingOffer() {
                   <Button 
                     size="lg" 
                     className="w-full bg-success hover:bg-success/90 font-semibold"
-                    onClick={handleSelectRecurring}
+                    onClick={handleSelectMembership}
                   >
-                    Get Started — ${prices.recurring.deposit} Today
+                    Get Started — ${DEPOSIT_AMOUNT} Today
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                   <Button 
                     variant="ghost" 
                     size="sm" 
                     className="w-full"
-                    onClick={() => setShowRecurringModal(true)}
+                    onClick={() => setShowMembershipModal(true)}
                   >
                     What's Included?
                   </Button>
@@ -399,13 +379,16 @@ export default function BookingOffer() {
                   "Bathroom grout scrubbed",
                   "Kitchen appliances detailed",
                   "All supplies & equipment included",
-                  "2-person professional team",
+                  "Professional team",
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     <span className="text-sm">{item}</span>
                   </div>
                 ))}
+              </div>
+              <div className="pt-2 text-center">
+                <p className="text-lg font-bold text-primary">${prices.deepClean} — Pay ${DEPOSIT_AMOUNT} today</p>
               </div>
               <Button className="w-full" onClick={() => { setShowDeepCleanModal(false); handleSelectDeepClean(); }}>
                 Select Deep Clean
@@ -414,28 +397,58 @@ export default function BookingOffer() {
           </DialogContent>
         </Dialog>
 
-        {/* Recurring Modal */}
-        <Dialog open={showRecurringModal} onOpenChange={setShowRecurringModal}>
+        {/* Membership Modal */}
+        <Dialog open={showMembershipModal} onOpenChange={setShowMembershipModal}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-xl font-jakarta">Novara Glow Membership — What's Included</DialogTitle>
+              <DialogTitle className="text-xl font-jakarta">Novara Glow Membership</DialogTitle>
               <DialogDescription>
-                Keep your home consistently clean with regular scheduled service.
+                Recurring cleaning at a fraction of the one-time price.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Frequency options */}
+              <div className="grid gap-3">
+                <div className="p-3 rounded-lg border bg-success/5 border-success/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Star className="w-4 h-4 text-success" />
+                      <span className="font-semibold text-sm">Bi-Weekly (2x/month)</span>
+                      <Badge className="bg-success/10 text-success border-0 text-[10px]">Best Value</Badge>
+                    </div>
+                    <span className="font-bold text-success">${prices.membership.biweekly}/mo</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span className="font-semibold text-sm">Monthly (1x/month)</span>
+                    </div>
+                    <span className="font-bold">${prices.membership.monthly}/mo</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Crown className="w-4 h-4 text-primary" />
+                      <span className="font-semibold text-sm">Weekly (4x/month)</span>
+                    </div>
+                    <span className="font-bold">${prices.membership.weekly}/mo</span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
               <div className="grid gap-3">
                 {[
-                  "Standard cleaning every visit",
-                  "Dusting all surfaces",
-                  "Vacuuming & mopping floors",
-                  "Kitchen & bathroom cleaning",
-                  "Trash removal",
-                  "Bed making (linens provided)",
-                  "Same trusted cleaning team",
-                  "Flexible bi-weekly or monthly schedule",
-                  "Priority booking slots",
-                  "Easy pause or cancel anytime",
+                  "Same trusted cleaning team every visit",
+                  "Priority scheduling",
+                  "Free add-ons included",
+                  "Cancel or pause anytime",
+                  "48-hour re-clean guarantee",
+                  "No long-term contracts",
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-success flex-shrink-0" />
@@ -443,8 +456,8 @@ export default function BookingOffer() {
                   </div>
                 ))}
               </div>
-              <Button className="w-full bg-success hover:bg-success/90" onClick={() => { setShowRecurringModal(false); handleSelectRecurring(); }}>
-                Select Recurring Service
+              <Button className="w-full bg-success hover:bg-success/90" onClick={() => { setShowMembershipModal(false); handleSelectMembership(); }}>
+                Get Started with Glow Membership
               </Button>
             </div>
           </DialogContent>
