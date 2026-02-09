@@ -304,22 +304,22 @@ export default function PricingSheet() {
           ))}
         </div>
 
-        {/* ─── Novara Glow Membership ────────────────────── */}
-        <div className="mb-6 text-center">
+        {/* ─── Novara Glow Membership (Recurring Services) ── */}
+        <div className="mb-8 text-center">
           <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-[#5C0FFE]/20 hover:bg-[#5C0FFE]/10 px-4 py-1.5 mb-4">
             <Crown className="w-3.5 h-3.5 mr-1.5" />Save Up to 42%
           </Badge>
           <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Novara Glow Membership</h2>
-          <p className="text-muted-foreground mt-2 max-w-xl mx-auto">
-            Recurring cleaning at a fraction of the one-time price. Cancel or pause anytime.
+          <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+            Recurring cleaning services at a fraction of the one-time price. Choose your frequency — <span className="font-semibold text-foreground">Monthly</span>, <span className="font-semibold text-foreground">Bi-Weekly</span>, or <span className="font-semibold text-foreground">Weekly</span> — and enjoy consistent, reliable cleaning with the same trusted team. Cancel or pause anytime.
           </p>
-          <p className="text-xs text-amber-600 font-medium mt-2">
+          <p className="text-xs text-amber-600 font-medium mt-3">
             * First month: +${FIRST_CLEAN_SURCHARGE} required deep clean for all new members
           </p>
         </div>
 
-        {/* Membership Comparison Cards */}
-        <div className="grid md:grid-cols-3 gap-5 mb-8">
+        {/* Frequency Cards */}
+        <div className="grid md:grid-cols-3 gap-5 mb-10">
           {/* Monthly */}
           <Card className="border border-border/50 hover:shadow-lg transition-all">
             <CardContent className="p-6 space-y-4">
@@ -328,8 +328,8 @@ export default function PricingSheet() {
                   <Sparkles className="w-5 h-5 text-[#5C0FFE]" />
                 </div>
                 <div>
-                  <h3 className="font-bold font-jakarta">Glow Monthly</h3>
-                  <p className="text-xs text-muted-foreground">1 clean/month</p>
+                  <h3 className="font-bold font-jakarta">Monthly</h3>
+                  <p className="text-xs text-muted-foreground">1 clean per month</p>
                 </div>
               </div>
               <div className="text-center py-2">
@@ -337,7 +337,7 @@ export default function PricingSheet() {
                 <p className="text-3xl font-extrabold text-[#5C0FFE]">
                   ${zone === 'A' ? 148 : zone === 'C' ? 116 : 129}<span className="text-base font-normal text-muted-foreground">/mo</span>
                 </p>
-                <Badge variant="secondary" className="mt-1 text-[10px]">Up to 18% off</Badge>
+                <Badge variant="secondary" className="mt-1 text-[10px]">Up to 18% off one-time price</Badge>
               </div>
               <Separator />
               <ul className="space-y-2">
@@ -362,8 +362,8 @@ export default function PricingSheet() {
                   <Star className="w-5 h-5 text-[#5C0FFE]" />
                 </div>
                 <div>
-                  <h3 className="font-bold font-jakarta">Glow Bi-Weekly</h3>
-                  <p className="text-xs text-muted-foreground">2 cleans/month</p>
+                  <h3 className="font-bold font-jakarta">Bi-Weekly</h3>
+                  <p className="text-xs text-muted-foreground">2 cleans per month</p>
                 </div>
               </div>
               <div className="text-center py-2">
@@ -393,8 +393,8 @@ export default function PricingSheet() {
                   <Crown className="w-5 h-5 text-[#5C0FFE]" />
                 </div>
                 <div>
-                  <h3 className="font-bold font-jakarta">Glow Weekly</h3>
-                  <p className="text-xs text-muted-foreground">4 cleans/month</p>
+                  <h3 className="font-bold font-jakarta">Weekly</h3>
+                  <p className="text-xs text-muted-foreground">4 cleans per month</p>
                 </div>
               </div>
               <div className="text-center py-2">
@@ -417,9 +417,10 @@ export default function PricingSheet() {
           </Card>
         </div>
 
-        {/* Membership Full Table */}
+        {/* Full Membership Pricing Table */}
         <div className="mb-6 text-center">
-          <h3 className="text-lg font-bold font-jakarta">Full Membership Pricing — {SERVICE_ZONES[zone].label}</h3>
+          <h3 className="text-lg font-bold font-jakarta">Novara Glow Membership — Full Pricing — {SERVICE_ZONES[zone].label}</h3>
+          <p className="text-xs text-muted-foreground mt-1">Compare one-time vs. recurring per-clean savings by home size</p>
         </div>
         <Card className="border border-border/60 shadow-lg overflow-hidden mb-16">
           <div className="overflow-x-auto">
