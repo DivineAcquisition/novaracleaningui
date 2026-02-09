@@ -285,7 +285,7 @@ export default function BookingOffer() {
               
               <CardContent className="pt-14 pb-6 px-5 space-y-5">
                 <div>
-                  <h3 className="text-2xl font-bold font-jakarta">Novara Membership</h3>
+                  <h3 className="text-2xl font-bold font-jakarta">Novara Glow Membership</h3>
                   <p className="text-muted-foreground">Keep your home guest-ready, always</p>
                 </div>
                 
@@ -418,7 +418,7 @@ export default function BookingOffer() {
         <Dialog open={showRecurringModal} onOpenChange={setShowRecurringModal}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-xl font-jakarta">Novara Membership — What's Included</DialogTitle>
+              <DialogTitle className="text-xl font-jakarta">Novara Glow Membership — What's Included</DialogTitle>
               <DialogDescription>
                 Keep your home consistently clean with regular scheduled service.
               </DialogDescription>

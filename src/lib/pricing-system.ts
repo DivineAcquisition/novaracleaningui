@@ -133,7 +133,7 @@ export const MEMBERSHIP_PLANS = {
   },
   essential: {
     id: 'essential',
-    label: 'Essential',
+    label: 'Glow Essential',
     monthlyPrice: 189,
     cleansPerMonth: 1,
     includedHours: 2,
@@ -144,7 +144,7 @@ export const MEMBERSHIP_PLANS = {
   },
   standard: {
     id: 'standard',
-    label: 'Standard',
+    label: 'Glow Standard',
     monthlyPrice: 289,
     cleansPerMonth: 2,
     includedHours: 3,
@@ -155,7 +155,7 @@ export const MEMBERSHIP_PLANS = {
   },
   premium: {
     id: 'premium',
-    label: 'Premium',
+    label: 'Glow Premium',
     monthlyPrice: 389,
     cleansPerMonth: 4,
     includedHours: 3,

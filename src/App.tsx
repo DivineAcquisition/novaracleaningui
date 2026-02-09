@@ -33,6 +33,7 @@ import CleanerResetPassword from "./pages/cleaner/ResetPassword";
 import CleanerOnboarding from "./pages/cleaner/Onboarding";
 import CleanerDashboard from "./pages/cleaner/Dashboard";
 import CleanerOnboardingPortal from "./pages/cleaner/OnboardingPortal";
+import PricingSheet from "./pages/PricingSheet";
 import SmsConsent from "./pages/SmsConsent";
 import MemberBooking from "./pages/portal/MemberBooking";
 import AdminAuth from "./pages/admin/Auth";
@@ -141,6 +142,8 @@ const App = () => (
               <Route path="/cleaner/profile" element={<Navigate to="/cleaner/dashboard" replace />} />
               <Route path="/cleaner/onboarding-landing" element={<Navigate to="/cleaner/onboarding" replace />} />
               <Route path="/cleaner/onboard" element={<Navigate to="/cleaner/onboarding" replace />} />
+              <Route path="/pricing-sheet" element={<PricingSheet />} />
+              <Route path="/pricing" element={<PricingSheet />} />
               <Route path="/sms-consent" element={<SmsConsent />} />
               
               {/* Customer Portal - Member Booking */}
