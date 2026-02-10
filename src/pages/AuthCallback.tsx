@@ -42,7 +42,7 @@ export default function AuthCallback() {
           const { data: cleanerData } = await supabase
             .from('cleaners')
             .select('id, onboarding_complete')
-            .eq('email', session.user.email)
+            .eq('user_id', session.user.id)
             .maybeSingle();
 
           if (cleanerData) {

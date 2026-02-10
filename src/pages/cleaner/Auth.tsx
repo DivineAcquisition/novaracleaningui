@@ -121,7 +121,7 @@ export default function CleanerAuth() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/cleaner/onboarding`,
+          emailRedirectTo: `${window.location.origin}/cleaner/auth/callback`,
           data: { is_cleaner: true },
         },
       });
