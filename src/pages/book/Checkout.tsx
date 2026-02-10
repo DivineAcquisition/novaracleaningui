@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -58,7 +60,7 @@ const TIME_SLOT_LABELS: Record<string, string> = {
   "16-20": "4:00 PM - 8:00 PM"
 };
 export default function BookingCheckout() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const {
     bookingData,
     currentStep,
@@ -200,7 +202,7 @@ export default function BookingCheckout() {
 
   // Swipe handlers
   const swipeHandlers = useBookingSwipe({
-    onSwipeRight: () => navigate("/book/offer"),
+    onSwipeRight: () => router.push("/book/offer"),
     step: 4
   });
 
@@ -300,7 +302,7 @@ export default function BookingCheckout() {
     });
     setClientSecret(null);
   };
-  const handleBack = () => navigate("/book/offer");
+  const handleBack = () => router.push("/book/offer");
   const handleMembershipCheckout = async () => {
     setIsProcessing(true);
     setInitError(null);
@@ -431,7 +433,7 @@ export default function BookingCheckout() {
         bookingId
       });
     }
-    navigate("/book/details?booking_id=" + bookingId);
+    router.push("/book/details?booking_id=" + bookingId);
   };
 
   // Initialize payment when all required fields are present
@@ -550,7 +552,7 @@ export default function BookingCheckout() {
                     </div>
                   </> : <div className="text-center py-4 space-y-3">
                     <p className="text-muted-foreground">No schedule selected</p>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/book/offer')}>
+                    <Button variant="outline" size="sm" onClick={() => router.push('/book/offer')}>
                       <ArrowLeft className="w-4 h-4 mr-2" />
                       Go Back to Select Date & Time
                     </Button>
@@ -569,7 +571,7 @@ export default function BookingCheckout() {
                     Please select a date and time for your cleaning before proceeding to payment.
                   </p>
                 </div>
-                <Button onClick={() => navigate('/book/offer')} className="bg-gradient-primary">
+                <Button onClick={() => router.push('/book/offer')} className="bg-gradient-primary">
                   <Calendar className="w-4 h-4 mr-2" />
                   Select Your Appointment
                 </Button>
@@ -733,7 +735,7 @@ export default function BookingCheckout() {
                     <p className="text-3xl font-bold text-green-700">$0.00</p>
                     <p className="text-green-600 mt-1">Covered by your membership credit!</p>
                   </div>
-                  <Button onClick={() => navigate("/book/success")} size="lg" className="w-full bg-gradient-primary hover:opacity-90">
+                  <Button onClick={() => router.push("/book/success")} size="lg" className="w-full bg-gradient-primary hover:opacity-90">
                     Confirm Booking
                   </Button>
                 </div>}

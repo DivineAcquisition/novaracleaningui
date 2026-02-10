@@ -1,5 +1,7 @@
+"use client";
+
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,7 +11,7 @@ import { toast } from "sonner";
  * After Google sign-in, this checks for cleaner profile and routes appropriately.
  */
 export default function CleanerAuthCallback() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [status, setStatus] = useState("Verifying authentication...");
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function CleanerAuthCallback() {
       if (sessionError) {
         console.error("Session error:", sessionError);
         toast.error("Authentication failed. Please try again.");
-        navigate("/cleaner/auth", { replace: true });
+        router.replace("/cleaner/auth");
         return;
       }
 
@@ -39,7 +41,7 @@ export default function CleanerAuthCallback() {
         
         if (!retrySession?.user) {
           toast.error("Authentication failed. Please try again.");
-          navigate("/cleaner/auth", { replace: true });
+          router.replace("/cleaner/auth");
           return;
         }
         
@@ -50,7 +52,7 @@ export default function CleanerAuthCallback() {
     } catch (error) {
       console.error("Callback error:", error);
       toast.error("Something went wrong. Please try again.");
-      navigate("/cleaner/auth", { replace: true });
+      router.replace("/cleaner/auth");
     }
   };
 
@@ -74,20 +76,20 @@ export default function CleanerAuthCallback() {
         // Has cleaner profile
         if (cleaner.onboarding_complete) {
           toast.success(`Welcome back${cleaner.first_name ? `, ${cleaner.first_name}` : ''}!`);
-          navigate("/cleaner/dashboard", { replace: true });
+          router.replace("/cleaner/dashboard");
         } else {
           toast.info("Please complete your profile to continue.");
-          navigate("/cleaner/onboarding", { replace: true });
+          router.replace("/cleaner/onboarding");
         }
       } else {
         // No cleaner profile - redirect to onboarding to create one
         toast.success("Account connected! Complete your profile to get started.");
-        navigate("/cleaner/onboarding", { replace: true });
+        router.replace("/cleaner/onboarding");
       }
     } catch (error) {
       console.error("Process user error:", error);
       // Default to onboarding if anything fails
-      navigate("/cleaner/onboarding", { replace: true });
+      router.replace("/cleaner/onboarding");
     }
   };
 

@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,7 +80,7 @@ const MEMBERSHIP_TIERS = {
 };
 
 export default function Membership() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { user, subscription, checkSubscription } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [pauseResumeDialogOpen, setPauseResumeDialogOpen] = useState(false);
@@ -86,7 +88,7 @@ export default function Membership() {
   const handleSubscribe = async (priceId: string, planId: string) => {
     if (!user) {
       toast.error('Please sign in to subscribe');
-      navigate('/auth');
+      router.push('/auth');
       return;
     }
 
@@ -350,7 +352,7 @@ export default function Membership() {
         <div className="text-center mt-12 space-y-4">
           <p className="text-muted-foreground">
             Not ready for a membership?{' '}
-            <Button variant="link" onClick={() => navigate('/book/home')} className="p-0 h-auto">
+            <Button variant="link" onClick={() => router.push('/book/home')} className="p-0 h-auto">
               Book a one-time cleaning
             </Button>
           </p>

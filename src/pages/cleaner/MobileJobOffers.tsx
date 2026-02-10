@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,7 +34,7 @@ interface JobOffer {
 }
 
 export default function MobileJobOffers() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function MobileJobOffers() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        navigate("/cleaner/auth");
+        router.push("/cleaner/auth");
         return;
       }
 

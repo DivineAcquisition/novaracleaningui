@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +13,7 @@ import { toast } from "sonner";
 import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
 
 export default function CustomQuote() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [formData, setFormData] = useState({
@@ -73,7 +75,7 @@ export default function CustomQuote() {
   };
 
   const handleBack = () => {
-    navigate("/book/home");
+    router.push("/book/home");
   };
 
   if (isSuccess) {
@@ -100,7 +102,7 @@ export default function CustomQuote() {
             <Button
               size="lg"
               className="w-full h-14 text-base font-semibold bg-gradient-primary shadow-neon"
-              onClick={() => navigate("/")}
+              onClick={() => router.push("/")}
             >
               Return to Home
             </Button>

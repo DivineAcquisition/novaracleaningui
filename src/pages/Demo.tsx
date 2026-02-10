@@ -1,8 +1,10 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ArrowRight, Tag, Crown } from "lucide-react";
-import selestialLogo from "@/assets/selestial-logo.png";
+const selestialLogo = "/selestial-logo.png";
 
 export default function Demo() {
   return (

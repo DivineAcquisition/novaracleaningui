@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,7 +16,7 @@ const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 export default function AdminAuth() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { user, signIn, signInWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -42,7 +44,7 @@ export default function AdminAuth() {
       }
 
       if (data === true) {
-        navigate("/admin/dispatch");
+        router.push("/admin/dispatch");
       } else {
         toast.error("Access Denied", {
           description: "You don't have admin permissions."

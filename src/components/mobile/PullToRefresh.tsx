@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef, ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";

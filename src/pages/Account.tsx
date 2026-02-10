@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +52,7 @@ interface MembershipCredit {
 }
 
 export default function Account() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { user, subscription, signOut, checkSubscription, openCustomerPortal, resetPassword } = useAuth();
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -65,7 +67,7 @@ export default function Account() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      router.push("/auth");
     } else {
       checkSubscription();
       fetchBookings();
@@ -114,7 +116,7 @@ export default function Account() {
   const handleSignOut = async () => {
     await signOut();
     toast.success("Signed out successfully");
-    navigate("/");
+    router.push("/");
   };
 
   const handleManageSubscription = async () => {
@@ -244,7 +246,7 @@ export default function Account() {
             <h1 className="text-2xl md:text-3xl font-bold font-jakarta mb-2">My Account</h1>
             <p className="text-muted-foreground">Manage your profile, bookings, and subscriptions</p>
           </div>
-          <Button variant="outline" onClick={() => navigate("/")}>
+          <Button variant="outline" onClick={() => router.push("/")}>
             <Home className="w-4 h-4 mr-2" />
             Home
           </Button>
@@ -354,7 +356,7 @@ export default function Account() {
                     </p>
                     <Button
                       className="bg-gradient-primary hover:opacity-90 shadow-lavender"
-                      onClick={() => navigate("/book/zip")}
+                      onClick={() => router.push("/book/zip")}
                     >
                       Book Your First Cleaning
                     </Button>
@@ -421,7 +423,7 @@ export default function Account() {
               {membershipCredits.credits_remaining > 0 && (
                 <Button 
                   className="w-full bg-gradient-primary hover:opacity-90 shadow-lavender h-12 text-lg"
-                  onClick={() => navigate("/portal/book")}
+                  onClick={() => router.push("/portal/book")}
                 >
                   <Calendar className="w-5 h-5 mr-2" />
                   Use Credit to Book a Cleaning
@@ -474,7 +476,7 @@ export default function Account() {
                           <Button
                             size="sm"
                             className="bg-warning hover:bg-warning/90 text-warning-foreground"
-                            onClick={() => navigate(`/book/checkout?booking_id=${booking.id}`)}
+                            onClick={() => router.push(`/book/checkout?booking_id=${booking.id}`)}
                           >
                             Complete Payment
                           </Button>
@@ -506,7 +508,7 @@ export default function Account() {
               <div className="text-center py-8">
                 <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                 <p className="text-muted-foreground mb-4">No upcoming cleanings scheduled</p>
-                <Button onClick={() => navigate("/book/zip")} className="bg-gradient-primary">
+                <Button onClick={() => router.push("/book/zip")} className="bg-gradient-primary">
                   Book a Cleaning
                 </Button>
               </div>
@@ -664,7 +666,7 @@ export default function Account() {
               <Button
                 variant="outline"
                 className="h-auto py-4 justify-start"
-                onClick={() => navigate("/book/zip")}
+                onClick={() => router.push("/book/zip")}
               >
                 <div className="flex items-start gap-3">
                   <Calendar className="w-5 h-5 text-primary mt-0.5" />
@@ -694,7 +696,7 @@ export default function Account() {
               <Button
                 variant="outline"
                 className="h-auto py-4 justify-start"
-                onClick={() => navigate("/membership")}
+                onClick={() => router.push("/membership")}
               >
                 <div className="flex items-start gap-3">
                   <Package className="w-5 h-5 text-primary mt-0.5" />

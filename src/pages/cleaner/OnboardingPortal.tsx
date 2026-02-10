@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +36,7 @@ import {
   Circle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/logo.png";
+const logo = "/logo.png";
 
 // ─── Types ──────────────────────────────────────────────
 interface CleanerProfile {
@@ -151,7 +153,7 @@ function BlockedScreen({ status }: { status: string }) {
 
 // ─── Main Component ─────────────────────────────────────
 export default function OnboardingPortal() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [activeStep, setActiveStep] = useState<number | null>(null);
@@ -187,7 +189,7 @@ export default function OnboardingPortal() {
 
       if (!session) {
         toast.error("Please sign in to access the onboarding portal");
-        navigate("/cleaner/auth");
+        router.push("/cleaner/auth");
         return;
       }
 
@@ -202,7 +204,7 @@ export default function OnboardingPortal() {
 
       if (!cleaner) {
         toast.info("Please complete your profile first");
-        navigate("/cleaner/onboarding");
+        router.push("/cleaner/onboarding");
         return;
       }
 
@@ -226,7 +228,7 @@ export default function OnboardingPortal() {
     } catch (error) {
       console.error("Auth/load error:", error);
       toast.error("Failed to load your profile");
-      navigate("/cleaner/auth");
+      router.push("/cleaner/auth");
     } finally {
       setLoading(false);
     }
@@ -347,7 +349,7 @@ export default function OnboardingPortal() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    navigate("/cleaner/auth");
+    router.push("/cleaner/auth");
   };
 
   // ─── Loading State ────────────────────────────────────
@@ -1164,7 +1166,7 @@ export default function OnboardingPortal() {
               </div>
               <Button
                 className="w-full h-12"
-                onClick={() => navigate("/cleaner/dashboard")}
+                onClick={() => router.push("/cleaner/dashboard")}
               >
                 Go to Dashboard
                 <ArrowRight className="w-4 h-4 ml-2" />

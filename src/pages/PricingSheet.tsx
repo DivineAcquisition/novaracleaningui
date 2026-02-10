@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +12,7 @@ import {
   Clock, Phone, Zap, Home, Award, MapPin, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/logo.png";
+const logo = "/logo.png";
 import {
   HOME_SIZE_RANGES, SERVICE_ZONES, ADD_ONS, MEMBERSHIP_PRICES,
   DEPOSIT_AMOUNT, NEW_CUSTOMER_DISCOUNT, FIRST_CLEAN_SURCHARGE,
@@ -93,9 +95,9 @@ const MEMBERSHIP_ZONE_PRICES = {
 const sizes = HOME_SIZE_RANGES.filter(s => s.id !== '5000_plus');
 
 export default function PricingSheet() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [zone, setZone] = useState<ZoneId>('B');
-  const handleBookNow = () => navigate("/book/zip");
+  const handleBookNow = () => router.push("/book/zip");
 
   const Z = (prices: Record<ZoneId, number>) => prices[zone];
 

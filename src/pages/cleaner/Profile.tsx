@@ -1,5 +1,8 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -31,7 +34,7 @@ interface CleanerProfile {
 }
 
 export default function CleanerProfile() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,7 +45,7 @@ export default function CleanerProfile() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/cleaner/auth");
+      router.push("/cleaner/auth");
       return;
     }
     fetchProfile();
@@ -238,7 +241,7 @@ export default function CleanerProfile() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/cleaner/dashboard")}
+          onClick={() => router.push("/cleaner/dashboard")}
           className="mb-3"
         >
           <ArrowLeft className="mr-1 h-4 w-4" />
@@ -460,7 +463,7 @@ export default function CleanerProfile() {
                   <Badge variant="outline" className="text-xs">Off</Badge>
                 )}
               </div>
-              <Link to="/sms-consent">
+              <Link href="/sms-consent">
                 <Button variant="ghost" size="sm" className="w-full h-8 text-xs">
                   <Bell className="mr-1 h-3 w-3" />
                   Manage SMS Preferences

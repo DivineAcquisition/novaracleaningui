@@ -1,3 +1,5 @@
+"use client";
+
 export function BookingFooter() {
   return (
     <footer className="mt-auto py-6 px-4 border-t border-border/40 bg-background/60">

@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Mail, Sparkles, CheckCircle2, KeyRound } from "lucide-react";
 
 export default function OnboardingLanding() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'email' | 'code'>('email');
@@ -111,7 +113,7 @@ export default function OnboardingLanding() {
       // Small delay to ensure session is fully established
       setTimeout(() => {
         console.log("[LANDING] Navigating to /cleaner/onboarding");
-        navigate("/cleaner/onboarding");
+        router.push("/cleaner/onboarding");
       }, 500);
       
     } catch (error) {
@@ -265,7 +267,7 @@ export default function OnboardingLanding() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/cleaner/auth")}
+                onClick={() => router.push("/cleaner/auth")}
                 className="w-full"
                 size="sm"
                 disabled={isLoading}

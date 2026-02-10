@@ -1,10 +1,12 @@
+"use client";
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 import {
@@ -23,7 +25,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
-import logo from "@/assets/logo.png";
+const logo = "/logo.png";
 
 const TRUST_STATS = [
   { label: "Homes Cleaned", value: "1,200+", icon: CheckCircle },
@@ -75,7 +77,7 @@ const TESTIMONIALS = [
 ];
 
 const Index = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { signOut } = useAuth();
   const { updateBookingData } = useBooking();
   const [zipCode, setZipCode] = useState("");
@@ -139,7 +141,7 @@ const Index = () => {
         },
       })
       .catch((err) => console.error("Lead webhook error:", err));
-    navigate("/book/sqft");
+    router.push("/book/sqft");
   };
 
   const handleChangeZip = () => {
@@ -183,7 +185,7 @@ const Index = () => {
               variant="outline"
               size="sm"
               className="h-9"
-              onClick={() => navigate("/auth")}
+              onClick={() => router.push("/auth")}
             >
               Sign In
             </Button>

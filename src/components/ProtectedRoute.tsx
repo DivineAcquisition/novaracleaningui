@@ -1,5 +1,7 @@
+"use client";
+
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -12,6 +14,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRouteProps) => {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const checkAuthorization = async () => {
@@ -53,6 +56,12 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
     checkAuthorization();
   }, [requiredRole]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthorized === false) {
+      router.replace("/");
+    }
+  }, [isLoading, isAuthorized, router]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
@@ -65,7 +74,7 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
   }
 
   if (!isAuthorized) {
-    return <Navigate to="/" replace />;
+    return null;
   }
 
   return <>{children}</>;

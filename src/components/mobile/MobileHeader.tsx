@@ -1,3 +1,5 @@
+"use client";
+
 import { Bell, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";

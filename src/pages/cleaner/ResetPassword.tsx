@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,7 +71,7 @@ export default function CleanerResetPassword() {
                   Reset link sent to <strong>{email}</strong>
                 </p>
               </div>
-              <Link to="/cleaner/auth">
+              <Link href="/cleaner/auth">
                 <Button variant="outline" className="w-full" size="sm">
                   <ArrowLeft className="mr-1 w-4 h-4" />
                   Back to Sign In
@@ -111,7 +113,7 @@ export default function CleanerResetPassword() {
                 )}
               </Button>
 
-              <Link to="/cleaner/auth">
+              <Link href="/cleaner/auth">
                 <Button variant="ghost" className="w-full" size="sm">
                   <ArrowLeft className="mr-1 w-4 h-4" />
                   Back to Sign In

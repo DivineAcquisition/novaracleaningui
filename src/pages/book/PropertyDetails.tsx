@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -40,8 +42,8 @@ const FLOORING_TYPES = [
 ];
 
 export default function PropertyDetails() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
   const { bookingData } = useBooking();
   
@@ -61,11 +63,11 @@ export default function PropertyDetails() {
       // Check if bookingId is in the booking context
       if (bookingData.bookingId) {
         // Redirect to same page with proper booking_id param
-        navigate(`/book/details?booking_id=${bookingData.bookingId}`, { replace: true });
+        router.replace(`/book/details?booking_id=${bookingData.bookingId}`);
         return;
       }
       toast.error("No booking ID found. Please complete checkout first.");
-      navigate("/book/checkout");
+      router.push("/book/checkout");
     }
   }, [bookingId, bookingData.bookingId, navigate]);
 
@@ -103,7 +105,7 @@ export default function PropertyDetails() {
       if (error) throw error;
 
       toast.success("Details saved successfully!");
-      navigate("/book/confirmation?booking_id=" + bookingId);
+      router.push("/book/confirmation?booking_id=" + bookingId);
     } catch (error) {
       console.error("Error saving details:", error);
       toast.error("Failed to save details. Please try again.");

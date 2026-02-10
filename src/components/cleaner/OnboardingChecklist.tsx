@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { CheckCircle2, XCircle, ExternalLink, Phone, CreditCard, Calendar } from "lucide-react";
 import { Card } from "@/components/ui/card";

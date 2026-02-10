@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +23,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function CleanerAvailability() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -38,7 +40,7 @@ export default function CleanerAvailability() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        navigate("/cleaner/auth");
+        router.push("/cleaner/auth");
         return;
       }
 
@@ -54,7 +56,7 @@ export default function CleanerAvailability() {
           description: "Failed to load cleaner profile",
           variant: "destructive",
         });
-        navigate("/cleaner/dashboard");
+        router.push("/cleaner/dashboard");
         return;
       }
 
@@ -97,7 +99,7 @@ export default function CleanerAvailability() {
         description: "Your availability has been updated successfully",
       });
 
-      navigate("/cleaner/dashboard");
+      router.push("/cleaner/dashboard");
     } catch (error: any) {
       console.error("Error saving availability:", error);
       toast({
@@ -126,7 +128,7 @@ export default function CleanerAvailability() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/cleaner/dashboard")}
+            onClick={() => router.push("/cleaner/dashboard")}
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
@@ -239,7 +241,7 @@ export default function CleanerAvailability() {
         <div className="flex gap-3">
           <Button
             variant="outline"
-            onClick={() => navigate("/cleaner/dashboard")}
+            onClick={() => router.push("/cleaner/dashboard")}
             className="flex-1"
           >
             Cancel

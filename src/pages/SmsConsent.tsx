@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +13,7 @@ import { formatPhoneNumber } from "@/lib/input-formatters";
 import { MessageSquare, Shield, Bell, Clock } from "lucide-react";
 
 const SmsConsent = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -51,7 +53,7 @@ const SmsConsent = () => {
       if (error) throw error;
 
       toast.success("SMS consent recorded successfully!");
-      setTimeout(() => navigate("/cleaner/profile"), 2000);
+      setTimeout(() => router.push("/cleaner/profile"), 2000);
     } catch (error: any) {
       console.error("Error submitting consent:", error);
       toast.error(error.message || "Failed to submit consent");

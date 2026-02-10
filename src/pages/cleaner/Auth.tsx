@@ -1,5 +1,8 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +11,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Mail, Lock, Sparkles, Briefcase } from "lucide-react";
-import logo from "@/assets/logo.png";
+const logo = "/logo.png";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 export default function CleanerAuth() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
@@ -53,12 +56,12 @@ export default function CleanerAuth() {
 
       if (cleaner) {
         if (cleaner.onboarding_complete) {
-          navigate("/cleaner/dashboard", { replace: true });
+          router.replace("/cleaner/dashboard");
         } else {
-          navigate("/cleaner/onboarding", { replace: true });
+          router.replace("/cleaner/onboarding");
         }
       } else {
-        navigate("/cleaner/onboarding", { replace: true });
+        router.replace("/cleaner/onboarding");
       }
     } catch (error) {
       console.error("Post-auth error:", error);
@@ -141,7 +144,7 @@ export default function CleanerAuth() {
         toast.success("Account created! Please check your email to verify your account.");
       } else if (data?.session) {
         toast.success("Account created! Complete your profile to get started.");
-        navigate("/cleaner/onboarding", { replace: true });
+        router.replace("/cleaner/onboarding");
       }
     } catch (error: any) {
       toast.error(error.message || "An error occurred");
@@ -265,7 +268,7 @@ export default function CleanerAuth() {
                         Password
                       </Label>
                       <Link 
-                        to="/cleaner/reset-password" 
+                        href="/cleaner/reset-password" 
                         className="text-xs text-primary hover:text-primary/80 font-medium"
                       >
                         Forgot password?
@@ -377,7 +380,7 @@ export default function CleanerAuth() {
         <div className="mt-6 text-center space-y-2">
           <p className="text-xs text-muted-foreground">
             Looking to book a cleaning?{" "}
-            <Link to="/auth" className="text-primary hover:underline font-medium">
+            <Link href="/auth" className="text-primary hover:underline font-medium">
               Customer Portal →
             </Link>
           </p>

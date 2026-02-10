@@ -1,3 +1,5 @@
+"use client";
+
 import { Card } from "@/components/ui/card";
 import { MapPin, Calendar, DollarSign, Star } from "lucide-react";
 import { format } from "date-fns";
