@@ -1,57 +1,63 @@
 
 
-# Add Real Stripe Invoice & Payment Links to Webhook Payload
+# Update Migma Email Template Replacement Logic
 
 ## Problem
-- The current "Invoice URL" in the webhook is a fabricated URL (`https://invoice.stripe.com/i/...`) that doesn't work for customers.
-- The actual `hosted_invoice_url` from Stripe (the real payment link for remaining balance) is never saved -- it's only logged.
-- For customers who paid in full, there's no receipt link included in the payload.
+The Migma booking confirmation template (v7) now uses **GoHighLevel (GHL) dynamic variables** like `{{contact.first_name}}`, `{{contact.deposit_amount_}}`, `{{appointment.start_date}}`, etc. However, the current `populateMigmaTemplate` function in `send-booking-email/index.ts` still uses **hardcoded regex replacements** targeting old test values (e.g., replacing "Test", "NOV-00001", "$189.00"). These regexes are fragile and will break whenever the template is updated in Migma.
+
+## Solution
+Rewrite `populateMigmaTemplate` to replace the GHL-style `{{variable}}` placeholders with actual booking data. This is far more reliable -- the placeholders are consistent and won't change with template design updates.
 
 ## Changes
 
-### 1. Add `hosted_invoice_url` Column to Bookings Table
-New migration to add a column storing the real Stripe invoice payment link.
+### File: `supabase/functions/send-booking-email/index.ts`
 
-```sql
-ALTER TABLE bookings ADD COLUMN hosted_invoice_url text;
+**Replace the entire `populateMigmaTemplate` function** with a GHL-variable-based replacement approach:
+
+| GHL Placeholder | Booking Data Source |
+|---|---|
+| `{{contact.first_name}}` | `data.firstName` |
+| `{{opportunity.name}}` | `data.bookingNumber` |
+| `{{appointment.start_date}}` | `formatServiceDate(data.serviceDate)` |
+| `{{contact.service_start_time}}` | `data.arrivalWindow` or `data.timeSlot` |
+| `{{contact.address1}}` | Full address string |
+| `{{contact.novara_glow_plan}}` | Membership plan or "N/A" |
+| `{{contact.cleaning_type}}` | Service type label |
+| `{{contact.service_frequency}}` | `data.frequency` |
+| `{{contact.bedrooms}}` | `data.bedrooms` |
+| `{{contact.bathrooms}}` | `data.bathrooms` |
+| `{{contact.estimated_sqft}}` | `data.sqft` |
+| `{{contact.add_ons}}` | Joined add-ons list |
+| `{{contact.final_cost_}}` | `formatCurrency(data.totalAmount)` |
+| `{{contact.deposit_amount_}}` | `formatCurrency(data.depositAmount)` |
+| `{{contact.remaining_balance}}` | `formatCurrency(data.balanceAmount)` |
+| `{{contact.last_invoice_url}}` | `data.hostedInvoiceUrl` |
+| `{{contact.referral_link}}` | `data.referralLink` |
+| `{{appointment.reschedule_link}}` | Reschedule URL or "#" |
+| `{{appointment.cancellation_link}}` | Cancellation URL or "#" |
+| `{{unsubscribe_link}}` | Unsubscribe URL or "#" |
+
+**Additional data fields** to add to the `BookingEmailRequest` interface:
+- `membershipPlan?: string` -- for the "Active Plan" row
+- `rescheduleLink?: string` -- for the reschedule CTA
+- `cancellationLink?: string` -- for the cancel CTA
+
+The replacement will use a simple map-based approach: iterate over a key-value map of `{ "{{placeholder}}": value }` and do a global string replace for each. This is cleaner than fragile regex patterns.
+
+### Technical Details
+
+```text
+populateMigmaTemplate(html, data):
+  1. Build a replacements map: { "{{contact.first_name}}": data.firstName, ... }
+  2. For each entry, do html.replaceAll(key, value)
+  3. Handle URL-encoded variants (Migma may encode {{ }} in href attributes as %7B%7B...%7D%7D)
+  4. Return the fully populated HTML
 ```
 
-### 2. Update `stripe-webhook` Edge Function
-After finalizing the invoice, save the `hosted_invoice_url` alongside the `stripe_invoice_id`:
+The function will also handle the URL-encoded versions of placeholders (e.g., `%7B%7Bcontact.referral_link%7D%7D`) since Migma wraps link hrefs with encoded curly braces as seen in the template source.
 
-```typescript
-await supabase
-  .from('bookings')
-  .update({ 
-    stripe_invoice_id: invoice.id,
-    hosted_invoice_url: finalizedInvoice.hosted_invoice_url 
-  })
-  .eq('id', booking.id);
-```
+### Deployment
+- Update and deploy the `send-booking-email` edge function
+- No database changes needed
+- No frontend changes needed
 
-### 3. Update `send-zapier-webhook` Edge Function
-Replace the fake invoice URL with the real one, and add a receipt link for paid-in-full customers:
-
-- **"Invoice URL"**: Use `booking.hosted_invoice_url` (the real Stripe-hosted payment page for remaining balance)
-- **"Payment Receipt URL"**: For paid-in-full bookings, use the Stripe receipt URL constructed from the `payment_intent_id` by fetching the charge's `receipt_url` via Stripe API
-
-Specifically:
-- If `payment_option === 'deposit'` and `hosted_invoice_url` exists: include it as the "Invoice URL" (this is the link for paying the remaining balance)
-- If `payment_option === 'full'` and `payment_intent_id` exists: fetch the PaymentIntent from Stripe to get the charge's `receipt_url` and include it as "Payment Receipt URL"
-
-### 4. Updated Webhook Payload Fields
-
-| Field | When | Value |
-|-------|------|-------|
-| Invoice URL | Deposit customers with remaining balance | Real Stripe hosted invoice link (clickable payment page) |
-| Payment Receipt URL | Paid-in-full customers | Stripe receipt URL from the charge |
-| Invoice Status | Always | Based on Stripe invoice status or "Paid in Full" |
-
-## Files Modified
-- **New migration** -- Add `hosted_invoice_url` column to `bookings`
-- **`supabase/functions/stripe-webhook/index.ts`** -- Save `hosted_invoice_url` on invoice creation
-- **`supabase/functions/send-zapier-webhook/index.ts`** -- Use real URLs, add Stripe API call for receipt URL
-
-## Notes
-- The Stripe API call in the webhook function uses the existing `STRIPE_SECRET_KEY` secret (already configured)
-- For existing bookings that already have a `stripe_invoice_id` but no `hosted_invoice_url`, the field will be empty until the next invoice is created
