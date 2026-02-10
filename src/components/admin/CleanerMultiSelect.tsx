@@ -50,7 +50,7 @@ export function CleanerMultiSelect({
         id: cleaner.id,
         name: `${cleaner.first_name} ${cleaner.last_name}`,
         role: selectedCleaners.length === 0 ? 'Lead' : 'Support',
-        hourlyRate: cleaner.pay_rate_hr || 20,
+        hourlyRate: cleaner.pay_rate_hr || 18,
         distance: cleaner.distance || 0,
       };
       
@@ -197,7 +197,7 @@ export function CleanerMultiSelect({
                         {cleaner.distance} mi away
                       </span>
                     )}
-                    <span>${cleaner.pay_rate_hr || 20}/hr</span>
+                    <span>${cleaner.pay_rate_hr || 18}/hr</span>
                   </div>
                 </div>
               </div>
