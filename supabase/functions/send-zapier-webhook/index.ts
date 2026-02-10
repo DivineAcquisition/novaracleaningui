@@ -360,7 +360,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       // Customer Referral Information
       "Customer Referral Code": customerData?.referral_code || "",
       "Referral Link": customerData?.referral_code 
-        ? `${origin}/book?ref=${customerData.referral_code}` 
+        ? `${origin}/book/zip?ref=${customerData.referral_code}` 
         : "",
       
       // Location Details
