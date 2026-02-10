@@ -78,10 +78,40 @@ export default function BookingCheckout() {
   const MAX_RETRIES = 3;
 
   // Referral Code state
-  const [referralInput, setReferralInput] = useState('');
+  const [referralInput, setReferralInput] = useState(bookingData.referralCode || '');
   const [isValidatingReferral, setIsValidatingReferral] = useState(false);
   const [appliedReferralCode, setAppliedReferralCode] = useState<string | null>(null);
   const [referralDiscount, setReferralDiscount] = useState(0);
+
+  // Auto-apply referral code from BookingContext (set on Zip page)
+  useEffect(() => {
+    if (bookingData.referralCode && !appliedReferralCode) {
+      setReferralInput(bookingData.referralCode);
+      // Auto-validate
+      const autoApply = async () => {
+        setIsValidatingReferral(true);
+        try {
+          const { data: referral } = await supabase
+            .from('referrals')
+            .select('*')
+            .eq('code', bookingData.referralCode!.toUpperCase())
+            .eq('status', 'pending')
+            .single();
+          if (referral) {
+            const discount = (referral.credit_cents || 2000) / 100;
+            setReferralDiscount(discount);
+            setAppliedReferralCode(bookingData.referralCode!.toUpperCase());
+            toast.success(`Referral code applied! $${discount.toFixed(2)} off`);
+          }
+        } catch (err) {
+          console.error('Auto-apply referral error:', err);
+        } finally {
+          setIsValidatingReferral(false);
+        }
+      };
+      autoApply();
+    }
+  }, [bookingData.referralCode]);
 
   // Promo Code state
   const [promoInput, setPromoInput] = useState('');

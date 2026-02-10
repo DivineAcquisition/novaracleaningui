@@ -95,7 +95,7 @@ serve(async (req) => {
     logStep("Referral created successfully", { code, referralId: referral.id });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const referralLink = `${supabaseUrl.replace("sxdraeptzuamsgjcvfeg.supabase.co", "book.novaracleaning.com")}/book/zip?ref=${code}`;
+    const referralLink = `https://try.novaracleaning.com/book/zip?ref=${code}`;
 
     return new Response(
       JSON.stringify({ 
