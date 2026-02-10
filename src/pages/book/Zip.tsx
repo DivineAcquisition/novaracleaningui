@@ -93,20 +93,26 @@ export default function BookingZip() {
       }
     }).catch(err => console.error('Track cart error:', err));
     
-    // Send lead capture webhook (fire and forget - don't block navigation)
-    supabase.functions.invoke('send-lead-capture-webhook', {
-      body: {
-        firstName,
-        lastName,
-        email,
-        phone: formattedPhone,
-        zipCode,
-        city: cityState.split(', ')[0] || '',
-        state: cityState.split(', ')[1] || '',
-        source: 'Website',
-        landingPage: '/book/zip',
-      }
-    }).catch(err => console.error('Lead webhook error:', err));
+    // Send lead capture webhook with client-side duplicate guard
+    const capturedEmails: string[] = JSON.parse(localStorage.getItem('lead_captured_emails') || '[]');
+    if (!capturedEmails.includes(email.toLowerCase())) {
+      supabase.functions.invoke('send-lead-capture-webhook', {
+        body: {
+          firstName,
+          lastName,
+          email,
+          phone: formattedPhone,
+          zipCode,
+          city: cityState.split(', ')[0] || '',
+          state: cityState.split(', ')[1] || '',
+          source: 'Website',
+          landingPage: '/book/zip',
+        }
+      }).then(() => {
+        const updated = [...capturedEmails, email.toLowerCase()];
+        localStorage.setItem('lead_captured_emails', JSON.stringify(updated));
+      }).catch(err => console.error('Lead webhook error:', err));
+    }
     
     navigate("/book/sqft");
   };
