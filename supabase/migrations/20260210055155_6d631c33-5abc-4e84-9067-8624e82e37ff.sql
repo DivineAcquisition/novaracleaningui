@@ -1,0 +1,1 @@
+ALTER TABLE public.bookings ADD COLUMN hosted_invoice_url text;

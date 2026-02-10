@@ -163,10 +163,13 @@ serve(async (req) => {
 
               await stripe.invoices.sendInvoice(invoice.id);
 
-              // Update booking with invoice ID
+              // Update booking with invoice ID and hosted invoice URL
               await supabase
                 .from('bookings')
-                .update({ stripe_invoice_id: invoice.id })
+                .update({ 
+                  stripe_invoice_id: invoice.id,
+                  hosted_invoice_url: finalizedInvoice.hosted_invoice_url || null
+                })
                 .eq('id', booking.id);
 
               logStep("Invoice created and sent", { 
