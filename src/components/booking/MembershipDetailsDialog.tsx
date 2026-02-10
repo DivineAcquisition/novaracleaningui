@@ -87,7 +87,7 @@ export function MembershipDetailsDialog({
               .filter(key => key !== 'none')
               .map((planId) => {
                 const plan = MEMBERSHIP_PLANS[planId];
-                const isRecommended = planId === 'standard';
+                const isRecommended = (planId as string) === 'standard';
                 const isSelected = selectedMembership === planId;
                 
                 return (
@@ -151,7 +151,7 @@ export function MembershipDetailsDialog({
 
                       <div className="pt-2 border-t">
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          Perfect for {planId === 'essential' ? 'monthly' : planId === 'standard' ? 'bi-weekly' : 'weekly'} cleaning schedules
+                          Perfect for {(planId as string) === 'essential' ? 'monthly' : (planId as string) === 'standard' ? 'bi-weekly' : 'weekly'} cleaning schedules
                         </p>
                       </div>
                     </div>
