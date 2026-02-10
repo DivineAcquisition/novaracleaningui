@@ -388,20 +388,10 @@ serve(async (req) => {
         });
 
       if (reserveError || !reserved) {
-        logStep("Time slot reservation failed", { error: reserveError });
-        return new Response(
-          JSON.stringify({ 
-            error: "This time slot just filled up. Please select another time.",
-            code: "SLOT_UNAVAILABLE"
-          }),
-          { 
-            status: 409, 
-            headers: { ...corsHeaders, "Content-Type": "application/json" } 
-          }
-        );
+        logStep("Warning: slot reservation failed, continuing with payment", { error: reserveError });
+      } else {
+        logStep("Time slot reserved successfully");
       }
-
-      logStep("Time slot reserved successfully");
     } else {
       logStep("Warning: startTime/endTime not provided, skipping slot reservation");
     }

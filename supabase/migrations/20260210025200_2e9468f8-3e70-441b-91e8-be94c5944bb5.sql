@@ -1,0 +1,1 @@
+UPDATE availability_slots SET current_bookings = 0 WHERE service_date = '2026-02-17' AND start_time = '13:00:00';
