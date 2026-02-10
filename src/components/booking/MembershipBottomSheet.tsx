@@ -94,7 +94,7 @@ export function MembershipBottomSheet({
                 .filter(key => key !== 'none')
                 .map((planId) => {
                   const plan = MEMBERSHIP_PLANS[planId];
-                  const isRecommended = planId === 'standard';
+                  const isRecommended = (planId as string) === 'standard';
                   const isSelected = selectedMembership === planId;
                   
                   return (

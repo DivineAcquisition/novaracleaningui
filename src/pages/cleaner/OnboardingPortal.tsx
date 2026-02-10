@@ -214,11 +214,11 @@ export default function OnboardingPortal() {
         return;
       }
 
-      setProfile(cleaner as CleanerProfile);
+      setProfile(cleaner as unknown as CleanerProfile);
 
       // Determine first incomplete step
       const firstIncomplete = getFirstIncompleteStep(
-        cleaner as CleanerProfile
+        cleaner as unknown as CleanerProfile
       );
       if (firstIncomplete !== null) {
         setActiveStep(firstIncomplete);

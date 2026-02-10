@@ -196,6 +196,21 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_pages: {
+        Row: {
+          created_at: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           access_notes: string | null
@@ -249,7 +264,10 @@ export type Database = {
           pets: string | null
           phone: string
           platform_fee_cents: number | null
+          rated_at: string | null
+          rating: number | null
           rating_submitted: boolean | null
+          review_text: string | null
           service_date: string
           service_type: string
           sqft: number | null
@@ -317,7 +335,10 @@ export type Database = {
           pets?: string | null
           phone: string
           platform_fee_cents?: number | null
+          rated_at?: string | null
+          rating?: number | null
           rating_submitted?: boolean | null
+          review_text?: string | null
           service_date: string
           service_type: string
           sqft?: number | null
@@ -385,7 +406,10 @@ export type Database = {
           pets?: string | null
           phone?: string
           platform_fee_cents?: number | null
+          rated_at?: string | null
+          rating?: number | null
           rating_submitted?: boolean | null
+          review_text?: string | null
           service_date?: string
           service_type?: string
           sqft?: number | null
@@ -538,6 +562,16 @@ export type Database = {
           last_name: string
           max_travel_miles: number | null
           max_weekly_bookings: number | null
+          ob_agreement_signed: boolean | null
+          ob_agreement_signed_at: string | null
+          ob_google_chat_joined: boolean | null
+          ob_google_chat_joined_at: string | null
+          ob_payouts_setup: boolean | null
+          ob_payouts_setup_at: string | null
+          ob_supplies_checklist_viewed: boolean | null
+          ob_supplies_checklist_viewed_at: string | null
+          ob_training_accessed: boolean | null
+          ob_training_accessed_at: string | null
           on_time_rate: number | null
           onboarding_complete: boolean | null
           pay_rate_hr: number
@@ -587,6 +621,16 @@ export type Database = {
           last_name: string
           max_travel_miles?: number | null
           max_weekly_bookings?: number | null
+          ob_agreement_signed?: boolean | null
+          ob_agreement_signed_at?: string | null
+          ob_google_chat_joined?: boolean | null
+          ob_google_chat_joined_at?: string | null
+          ob_payouts_setup?: boolean | null
+          ob_payouts_setup_at?: string | null
+          ob_supplies_checklist_viewed?: boolean | null
+          ob_supplies_checklist_viewed_at?: string | null
+          ob_training_accessed?: boolean | null
+          ob_training_accessed_at?: string | null
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
           pay_rate_hr?: number
@@ -636,6 +680,16 @@ export type Database = {
           last_name?: string
           max_travel_miles?: number | null
           max_weekly_bookings?: number | null
+          ob_agreement_signed?: boolean | null
+          ob_agreement_signed_at?: string | null
+          ob_google_chat_joined?: boolean | null
+          ob_google_chat_joined_at?: string | null
+          ob_payouts_setup?: boolean | null
+          ob_payouts_setup_at?: string | null
+          ob_supplies_checklist_viewed?: boolean | null
+          ob_supplies_checklist_viewed_at?: string | null
+          ob_training_accessed?: boolean | null
+          ob_training_accessed_at?: string | null
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
           pay_rate_hr?: number
@@ -664,6 +718,42 @@ export type Database = {
           user_id?: string | null
           weighted_score?: number | null
           workload_score?: number | null
+        }
+        Relationships: []
+      }
+      contacts: {
+        Row: {
+          address: string | null
+          booking_count: number | null
+          created_at: string
+          id: string
+          last_contacted: string | null
+          last_contacted_at: string | null
+          last_response: string | null
+          lifetime_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          booking_count?: number | null
+          created_at?: string
+          id?: string
+          last_contacted?: string | null
+          last_contacted_at?: string | null
+          last_response?: string | null
+          lifetime_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          booking_count?: number | null
+          created_at?: string
+          id?: string
+          last_contacted?: string | null
+          last_contacted_at?: string | null
+          last_response?: string | null
+          lifetime_value?: number | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1057,6 +1147,94 @@ export type Database = {
           id?: string
           membership_plan?: string
           subscription_id?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string | null
+          type: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          type?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_members: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          role: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          role?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          role?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1552,6 +1730,21 @@ export type Database = {
           },
         ]
       }
+      workflow_enrollments: {
+        Row: {
+          created_at: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1564,18 +1757,22 @@ export type Database = {
         }
         Returns: boolean
       }
-      release_time_slot: {
-        Args: { _date: string; _start_time: string }
-        Returns: undefined
-      }
+      release_time_slot:
+        | { Args: { _date: string; _start_time: string }; Returns: undefined }
+        | { Args: { _date: string; _start_time: string }; Returns: undefined }
       reserve_availability: {
         Args: { _date: string; _time_window: string }
         Returns: boolean
       }
-      reserve_time_slot: {
-        Args: { _date: string; _end_time: string; _start_time: string }
-        Returns: boolean
-      }
+      reserve_time_slot:
+        | {
+            Args: { _date: string; _end_time: string; _start_time: string }
+            Returns: boolean
+          }
+        | {
+            Args: { _date: string; _end_time: string; _start_time: string }
+            Returns: boolean
+          }
     }
     Enums: {
       app_role: "admin" | "customer"
