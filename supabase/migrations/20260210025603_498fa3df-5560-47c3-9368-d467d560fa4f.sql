@@ -1,0 +1,1 @@
+ALTER TABLE bookings ALTER COLUMN estimated_duration_hours TYPE numeric(4,1);
