@@ -1,58 +1,41 @@
 
 
-# Fix Referral Links + Clean Up Bookings
+# Send Lead Data to New GHL Webhook (No Duplicates)
 
-## 1. Delete All Bookings
+## What This Does
+When a customer enters their ZIP code and contact details on the landing page (`/`) or booking page (`/book/zip`), their info gets sent to your new GoHighLevel webhook. If they've already submitted their data in the same session or their email already exists in your customers table, the webhook will NOT fire again.
 
-Remove all existing booking records from the database. These include test bookings and bookings without valid Stripe purchases.
+## Changes
 
-## 2. Fix Referral Link URLs
+### 1. Update the GHL Lead Capture Webhook URL
+Update the `GHL_LEAD_CAPTURE_WEBHOOK_URL` Supabase secret to point to the new endpoint:
+`https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/b5ad9435-58aa-4e0a-b0af-06c2126eca89`
 
-The referral link currently generates as `/book?ref=CODE` which doesn't match any route. It needs to be `/book/zip?ref=CODE`.
+### 2. Add Duplicate Detection to the Edge Function
+Modify `supabase/functions/send-lead-capture-webhook/index.ts` to:
+- Check the `customers` table for an existing record with the same email
+- If a customer already exists, skip the webhook send and return early with a "duplicate" response
+- This prevents repeat submissions from the same person across sessions/devices
 
-**Files to fix:**
-- `src/components/ReferralSection.tsx` (line 47) -- change `/book?ref=` to `/book/zip?ref=`
-- `supabase/functions/generate-booking-referral-code/index.ts` (line 83) -- fix the hardcoded URL to use `/book/zip?ref=`
+### 3. Add Client-Side Duplicate Guard
+Modify both `src/pages/book/Zip.tsx` and `src/pages/Index.tsx` to:
+- After a successful lead capture submission, store the email in `localStorage` (key: `lead_captured_emails`)
+- Before calling the webhook, check if the email is already in that list
+- If already captured, skip the edge function call entirely (saves a network request)
+- This handles the common case of someone going back and re-entering their info in the same browser
 
-## 3. Capture the `?ref=` Parameter on the Zip Page
+## Technical Details
 
-The Zip page (`src/pages/book/Zip.tsx`) currently has **no code** to read the `ref` query parameter from the URL. When a referred customer lands on `/book/zip?ref=ZUP4HKWX`, the referral code is silently ignored.
+**Edge Function Changes** (`send-lead-capture-webhook/index.ts`):
+- Add Supabase client initialization using service role key
+- Query `customers` table: `SELECT id FROM customers WHERE email = $email LIMIT 1`
+- If found, return `{ success: true, skipped: true, reason: "duplicate" }` without calling any webhooks
+- If not found, proceed with webhook sends as normal
 
-**Fix:** Add `useSearchParams` to the Zip page to:
-- Read the `ref` parameter on load
-- Store it in the BookingContext via `updateBookingData({ referralCode })`
-- Auto-apply it later at checkout
+**Client-Side Changes** (both `Zip.tsx` and `Index.tsx`):
+- Before calling `send-lead-capture-webhook`, check `localStorage` for previously captured emails
+- If email already captured, skip the edge function invoke
+- After successful invoke, add email to the localStorage set
 
-## 4. Show a Visual Referral Banner
+**No database schema changes needed** -- the existing `customers` table already stores emails from completed bookings, providing natural duplicate detection for returning customers.
 
-When a customer arrives via a referral link, show a friendly banner on the Zip page so they know they're getting a discount. Something like:
-
-```
-----------------------------------------------
-| Gift icon  You were referred! $50 off your |
-|            first cleaning is waiting.       |
-----------------------------------------------
-```
-
-This banner appears only when a valid `?ref=` parameter is present.
-
-## 5. Auto-Apply Referral at Checkout
-
-In `src/pages/book/Checkout.tsx`, check if `bookingData.referralCode` is already set (from the Zip page capture) and auto-apply it instead of requiring the customer to manually type it.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| Database (data operation) | Delete all rows from `bookings` table |
-| `src/components/ReferralSection.tsx` | Fix URL from `/book?ref=` to `/book/zip?ref=` |
-| `supabase/functions/generate-booking-referral-code/index.ts` | Fix hardcoded referral URL path |
-| `src/pages/book/Zip.tsx` | Read `?ref=` param, store in BookingContext, show referral banner |
-| `src/pages/book/Checkout.tsx` | Auto-apply referral code from BookingContext on load |
-
-## Expected Result
-
-- All old bookings are removed
-- Referral links point to the correct `/book/zip?ref=CODE` URL
-- Customers landing via referral link see a friendly "$50 off" banner
-- The referral code auto-applies at checkout without manual entry
