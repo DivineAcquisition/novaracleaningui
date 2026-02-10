@@ -339,8 +339,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const fullPaymentDiscount = booking.full_payment_discount || 0;
     const totalDiscountCents = newCustomerDiscount + creditDiscount + fullPaymentDiscount;
 
-    // Get origin URL for referral link
-    const origin = Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '') || 'https://yourdomain.com';
+    // Referral link uses the production booking domain
+    const origin = 'https://try.novaracleaning.com';
 
     // Build Zapier payload
     const payload = {
