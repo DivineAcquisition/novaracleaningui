@@ -1,63 +1,67 @@
 
-# Meta Pixel Funnel Tracking Events
+# Fix: Stripe Payment Form Not Loading
 
-Add Meta Pixel conversion events at key points in the booking flow to track the full funnel for Meta Ads optimization.
+## Root Cause
 
-## What This Does
+The Stripe payment form fails to load because the `create-payment-intent` edge function returns a **409 error** instead of the `clientSecret` needed to render the form.
 
-Tracks three key user actions so Meta can optimize your ad delivery:
-
-1. **ViewContent** -- When a user selects a service type and sees pricing (Offer page)
-2. **InitiateCheckout** -- When a user reaches the checkout/payment page
-3. **Purchase** -- When a booking is confirmed (Success page)
-
-## Where Events Fire
+Here is what happens step-by-step:
 
 ```text
-Zip Code --> Home Size --> Offer Page -----------> Checkout -----------> Success
-                          (ViewContent)     (InitiateCheckout)       (Purchase)
+1. Client calls create-payment-intent
+2. Edge function calculates pricing (OK)
+3. Edge function creates Stripe PaymentIntent (OK)
+4. Edge function calls reserve_time_slot() RPC --> FAILS with PGRST203
+5. Function returns 409 "This time slot just filled up" --> Client never gets clientSecret
+6. Stripe form never renders
 ```
 
-## Implementation Steps
+The database error (`PGRST203`) occurs because there are **two versions** of the `reserve_time_slot` function with different parameter types:
 
-### 1. Add TypeScript declaration for `fbq`
+- `reserve_time_slot(_date date, _start_time text, _end_time text)`
+- `reserve_time_slot(_date date, _start_time time without time zone, _end_time time without time zone)`
 
-Create a small type declaration file so TypeScript recognizes the global `fbq` function without errors.
+When the edge function calls the RPC with string values like `"09:00"`, PostgreSQL cannot decide which function to use and throws:
 
-### 2. Create a reusable Meta Pixel helper
+> "Could not choose the best candidate function between: public.reserve_time_slot(...text...) and public.reserve_time_slot(...time without time zone...)"
 
-Create `src/lib/meta-pixel.ts` with wrapper functions:
-- `trackViewContent(value, contentName)` -- fires ViewContent
-- `trackInitiateCheckout(value)` -- fires InitiateCheckout
-- `trackPurchase(value, serviceType, frequency, zoneId)` -- fires Purchase
+The same duplication exists for `release_time_slot`.
 
-Each function safely checks if `fbq` exists before calling it.
+## Fix
 
-### 3. Fire ViewContent on the Offer page
+### Step 1: Drop the duplicate database functions
 
-In `src/pages/book/Offer.tsx`, call `trackViewContent` when the user selects a service type and the estimated price is calculated.
+Run a migration to drop the `time without time zone` versions, keeping only the `text` versions which the edge functions already use:
 
-### 4. Fire InitiateCheckout on the Checkout page
+```sql
+DROP FUNCTION IF EXISTS public.reserve_time_slot(date, time without time zone, time without time zone);
+DROP FUNCTION IF EXISTS public.release_time_slot(date, time without time zone);
+```
 
-In `src/pages/book/Checkout.tsx`, call `trackInitiateCheckout` when the page loads and payment is initialized (client secret is ready).
+### Step 2: Align Stripe API version in create-payment-intent
 
-### 5. Fire Purchase on the Success page
+The `create-payment-intent` function uses Stripe API version `2023-10-16` while `verify-payment` and `create-checkout` use `2025-08-27.basil`. Update `create-payment-intent` to use the same version for consistency:
 
-In `src/pages/book/Success.tsx`, call `trackPurchase` when payment is verified and the booking is confirmed.
-
-## Technical Details
-
-- The base pixel code (ID: `1641726577181415`) is already in `index.html` and fires `PageView` on every page load
-- All new events will include `value` and `currency: 'USD'` for Meta's value optimization
-- Price values will be passed in dollars (not cents)
-- The helper functions will gracefully no-op if `fbq` is not loaded (e.g., ad blockers)
+In `supabase/functions/create-payment-intent/index.ts`, change:
+```
+apiVersion: "2023-10-16"
+```
+to:
+```
+apiVersion: "2025-08-27.basil"
+```
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/types/meta-pixel.d.ts` | New -- TypeScript declaration for `fbq` global |
-| `src/lib/meta-pixel.ts` | New -- Helper functions for pixel events |
-| `src/pages/book/Offer.tsx` | Add ViewContent event when service is selected |
-| `src/pages/book/Checkout.tsx` | Add InitiateCheckout event on page load |
-| `src/pages/book/Success.tsx` | Add Purchase event on booking confirmation |
+| Database migration | Drop duplicate `reserve_time_slot` and `release_time_slot` functions with `time` type params |
+| `supabase/functions/create-payment-intent/index.ts` | Update Stripe API version to `2025-08-27.basil` |
+
+## Expected Result
+
+After these changes:
+1. The `reserve_time_slot` RPC call will resolve to the single remaining `text`-parameter function
+2. The time slot reservation will succeed
+3. The edge function will return the `clientSecret`
+4. The Stripe payment form will render in the checkout page
