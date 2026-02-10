@@ -12,12 +12,11 @@ interface UseBookingSwipeOptions {
 
 const STEP_ROUTES = [
   '/book/zip',
-  '/book/home',
-  '/book/service',
-  '/book/schedule',
-  '/book/details',
-  '/book/summary',
+  '/book/sqft',
+  '/book/offer',
   '/book/checkout',
+  '/book/details',
+  '/book/confirmation',
 ];
 
 export function useBookingSwipe({

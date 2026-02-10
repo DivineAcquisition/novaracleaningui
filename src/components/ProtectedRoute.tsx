@@ -65,7 +65,7 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
   }
 
   if (!isAuthorized) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/admin/auth" replace />;
   }
 
   return <>{children}</>;
