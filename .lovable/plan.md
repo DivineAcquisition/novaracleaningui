@@ -1,59 +1,58 @@
 
 
-# Fix: Stripe Payment Form Blocked by Slot Reservation
+# Fix Referral Links + Clean Up Bookings
 
-## Problem
+## 1. Delete All Bookings
 
-The `create-payment-intent` edge function creates the Stripe PaymentIntent successfully but then checks slot availability. If the slot is full or the reservation fails for any reason, it returns a 409 error and **throws away the clientSecret** -- so the payment form never loads.
+Remove all existing booking records from the database. These include test bookings and bookings without valid Stripe purchases.
 
-The slot for `2026-02-17 13:00` is currently at 5/5 capacity (inflated by all the retry attempts), which is why every attempt fails.
+## 2. Fix Referral Link URLs
 
-## Root Cause
+The referral link currently generates as `/book?ref=CODE` which doesn't match any route. It needs to be `/book/zip?ref=CODE`.
 
-Lines 390-401 of `create-payment-intent/index.ts` treat a failed slot reservation as a hard blocker, returning 409 and discarding the already-created PaymentIntent.
+**Files to fix:**
+- `src/components/ReferralSection.tsx` (line 47) -- change `/book?ref=` to `/book/zip?ref=`
+- `supabase/functions/generate-booking-referral-code/index.ts` (line 83) -- fix the hardcoded URL to use `/book/zip?ref=`
 
-## Fix (Two Parts)
+## 3. Capture the `?ref=` Parameter on the Zip Page
 
-### Part 1: Make slot reservation non-blocking
+The Zip page (`src/pages/book/Zip.tsx`) currently has **no code** to read the `ref` query parameter from the URL. When a referred customer lands on `/book/zip?ref=ZUP4HKWX`, the referral code is silently ignored.
 
-Change the reservation logic so that if it fails, the function **logs a warning but still returns the clientSecret**. The slot reservation becomes a best-effort optimization, not a gate.
+**Fix:** Add `useSearchParams` to the Zip page to:
+- Read the `ref` parameter on load
+- Store it in the BookingContext via `updateBookingData({ referralCode })`
+- Auto-apply it later at checkout
 
-In `supabase/functions/create-payment-intent/index.ts`, replace the 409 error return with a warning log:
+## 4. Show a Visual Referral Banner
 
-```text
-Before:
-  if (reserveError || !reserved) {
-    return 409 error  <-- BLOCKS payment form
-  }
+When a customer arrives via a referral link, show a friendly banner on the Zip page so they know they're getting a discount. Something like:
 
-After:
-  if (reserveError || !reserved) {
-    logStep("Warning: slot reservation failed, continuing with payment")
-    // Continue -- payment form still loads
-  }
+```
+----------------------------------------------
+| Gift icon  You were referred! $50 off your |
+|            first cleaning is waiting.       |
+----------------------------------------------
 ```
 
-### Part 2: Reset the inflated slot counter
+This banner appears only when a valid `?ref=` parameter is present.
 
-The `2026-02-17 13:00` slot has `current_bookings: 5` from all the failed retries. Reset it so real customers can book that time:
+## 5. Auto-Apply Referral at Checkout
 
-```sql
-UPDATE availability_slots
-SET current_bookings = 0
-WHERE service_date = '2026-02-17'
-  AND start_time = '13:00:00';
-```
+In `src/pages/book/Checkout.tsx`, check if `bookingData.referralCode` is already set (from the Zip page capture) and auto-apply it instead of requiring the customer to manually type it.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/create-payment-intent/index.ts` | Make slot reservation non-blocking (warning instead of 409) |
-| Database (data fix) | Reset `current_bookings` on the inflated slot |
+| Database (data operation) | Delete all rows from `bookings` table |
+| `src/components/ReferralSection.tsx` | Fix URL from `/book?ref=` to `/book/zip?ref=` |
+| `supabase/functions/generate-booking-referral-code/index.ts` | Fix hardcoded referral URL path |
+| `src/pages/book/Zip.tsx` | Read `?ref=` param, store in BookingContext, show referral banner |
+| `src/pages/book/Checkout.tsx` | Auto-apply referral code from BookingContext on load |
 
 ## Expected Result
 
-- The payment form will always load as long as the Stripe PaymentIntent is created successfully
-- Slot availability is still tracked but does not block checkout
-- The corrupted slot counter is fixed
-
+- All old bookings are removed
+- Referral links point to the correct `/book/zip?ref=CODE` URL
+- Customers landing via referral link see a friendly "$50 off" banner
+- The referral code auto-applies at checkout without manual entry
