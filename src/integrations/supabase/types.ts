@@ -251,6 +251,7 @@ export type Database = {
           full_payment_discount: number | null
           google_calendar_event_id: string | null
           home_size_id: string
+          hosted_invoice_url: string | null
           id: string
           issues_flag: boolean | null
           issues_notes: string | null
@@ -322,6 +323,7 @@ export type Database = {
           full_payment_discount?: number | null
           google_calendar_event_id?: string | null
           home_size_id: string
+          hosted_invoice_url?: string | null
           id?: string
           issues_flag?: boolean | null
           issues_notes?: string | null
@@ -393,6 +395,7 @@ export type Database = {
           full_payment_discount?: number | null
           google_calendar_event_id?: string | null
           home_size_id?: string
+          hosted_invoice_url?: string | null
           id?: string
           issues_flag?: boolean | null
           issues_notes?: string | null

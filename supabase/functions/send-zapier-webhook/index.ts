@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { 
   getEstimatedHours, 
   calculateCleanerPayout,
@@ -339,6 +340,27 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const fullPaymentDiscount = booking.full_payment_discount || 0;
     const totalDiscountCents = newCustomerDiscount + creditDiscount + fullPaymentDiscount;
 
+    // Fetch Stripe receipt URL for paid-in-full customers
+    let paymentReceiptUrl = "";
+    if (booking.payment_option === 'full' && booking.payment_intent_id) {
+      try {
+        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        if (stripeKey) {
+          const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+          const paymentIntent = await stripe.paymentIntents.retrieve(booking.payment_intent_id, {
+            expand: ['latest_charge'],
+          });
+          const charge = paymentIntent.latest_charge as Stripe.Charge;
+          if (charge?.receipt_url) {
+            paymentReceiptUrl = charge.receipt_url;
+            logStep("Fetched Stripe receipt URL", { receiptUrl: paymentReceiptUrl.substring(0, 60) });
+          }
+        }
+      } catch (stripeErr) {
+        logStep("Error fetching Stripe receipt (non-critical)", { error: stripeErr instanceof Error ? stripeErr.message : String(stripeErr) });
+      }
+    }
+
     // Referral link uses the production booking domain
     const origin = 'https://try.novaracleaning.com';
 
@@ -428,10 +450,9 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Remaining Balance": booking.payment_option === 'deposit' 
         ? formatCurrency(booking.total_estimate_cents - booking.deposit_cents)
         : "$0.00",
-      "Invoice URL": booking.stripe_invoice_id 
-        ? `https://invoice.stripe.com/i/${booking.stripe_invoice_id}` 
-        : "",
-      "Invoice Status": booking.stripe_invoice_id ? "Sent" : "N/A",
+      "Invoice URL": booking.hosted_invoice_url || "",
+      "Invoice Status": booking.hosted_invoice_url ? "Sent" : (booking.payment_option === 'full' ? "Paid in Full" : "N/A"),
+      "Payment Receipt URL": paymentReceiptUrl,
       "Payment Status": getPaymentStatus(booking.status, booking.payment_option),
       "Deposit Type": mapDepositType(booking.payment_option, booking.deposit_cents, booking.total_estimate_cents),
       "Paid in Full": booking.payment_option === 'full',
