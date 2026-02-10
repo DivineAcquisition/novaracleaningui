@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
-import { ArrowRight, Crown, CheckCircle, Clock, MapPin } from "lucide-react";
+import { ArrowRight, Crown, CheckCircle, Clock, MapPin, Gift } from "lucide-react";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +14,16 @@ type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
 export default function BookingZip() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { updateBookingData } = useBooking();
+  const referralCode = searchParams.get('ref');
+
+  // Capture referral code from URL on mount
+  useEffect(() => {
+    if (referralCode) {
+      updateBookingData({ referralCode: referralCode.toUpperCase() });
+    }
+  }, [referralCode]);
   
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);
@@ -158,6 +167,20 @@ export default function BookingZip() {
       {/* Hero + Booking Section */}
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-2xl mx-auto text-center space-y-8">
+          
+          {/* Referral Banner */}
+          {referralCode && (
+            <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/30 rounded-xl animate-fade-in">
+              <div className="flex-shrink-0 w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                <Gift className="w-5 h-5 text-primary" />
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-foreground text-sm">You were referred! 🎉</p>
+                <p className="text-xs text-muted-foreground">$50 off your first cleaning is waiting for you.</p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
               {formMode === 'waitlist-success' 

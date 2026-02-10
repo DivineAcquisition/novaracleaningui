@@ -44,7 +44,7 @@ export function ReferralSection({ email }: ReferralSectionProps) {
     return null;
   }
 
-  const referralLink = `${window.location.origin}/book?ref=${referralCode}`;
+  const referralLink = `${window.location.origin}/book/zip?ref=${referralCode}`;
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
