@@ -12,6 +12,7 @@ import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/l
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
+import { trackPurchase } from "@/lib/meta-pixel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -190,6 +191,12 @@ export default function BookingSuccess() {
           if (data.success) {
             setPaymentVerified(true);
             toast.success("Payment confirmed!");
+            trackPurchase(
+              pricing.total / 100,
+              bookingData.serviceType,
+              bookingData.membershipPlan || 'none',
+              bookingData.zipCode
+            );
             
             // Additional details check is now handled by the validation effect
           } else {

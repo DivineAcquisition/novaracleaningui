@@ -26,6 +26,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
+import { trackInitiateCheckout } from "@/lib/meta-pixel";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -362,6 +363,7 @@ export default function BookingCheckout() {
       setClientSecret(data.clientSecret);
       setPaymentAmount(data.amount);
       setBookingId(data.bookingId);
+      trackInitiateCheckout(data.amount / 100);
       setRetryCount(0); // Reset retry count on success
       setIsProcessing(false);
     } catch (error: any) {

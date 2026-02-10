@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { trackViewContent } from "@/lib/meta-pixel";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ export default function BookingOffer() {
       serviceType: 'deep',
       membershipPlan: 'none',
     });
+    trackViewContent(prices.deepClean, 'Deep Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -112,6 +114,7 @@ export default function BookingOffer() {
       serviceType: 'standard',
       membershipPlan: 'biweekly',
     });
+    trackViewContent(prices.membership.biweekly, 'Novara Glow Membership — Bi-Weekly');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
