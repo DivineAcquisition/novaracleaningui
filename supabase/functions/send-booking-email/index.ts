@@ -60,6 +60,9 @@ interface BookingEmailRequest {
     referralLink?: string;
     hostedInvoiceUrl?: string;
     paymentReceiptUrl?: string;
+    membershipPlan?: string;
+    rescheduleLink?: string;
+    cancellationLink?: string;
   };
   bookingData?: any;
 }
@@ -117,79 +120,46 @@ function populateMigmaTemplate(html: string, data: BookingEmailRequest['data']):
     moveInOut: 'Move In/Out Cleaning',
   };
 
-  const formattedDate = data.serviceDate ? formatServiceDate(data.serviceDate) : '';
-  const serviceType = serviceTypeLabels[data.serviceType || 'standard'] || data.serviceType || 'Cleaning';
   const fullAddress = `${data.address || ''}, ${data.city || ''}, ${data.state || ''} ${data.zipCode || ''}`.trim();
-  const addOnsText = data.addOns?.length ? data.addOns.join(', ') : 'None';
-  const totalAmount = data.totalAmount ? formatCurrency(data.totalAmount) : '$0.00';
-  const depositAmount = data.depositAmount ? formatCurrency(data.depositAmount) : '$0.00';
-  const balanceAmount = data.balanceAmount ? formatCurrency(data.balanceAmount) : '$0.00';
-  const bookingNumber = data.bookingNumber || data.bookingId?.substring(0, 8) || '';
-  const arrivalWindow = data.arrivalWindow || data.timeSlot || '';
-  const frequency = data.frequency || 'One-Time';
-  const bedrooms = data.bedrooms ?? 0;
-  const bathrooms = data.bathrooms ?? 0;
-  const sqft = data.sqft || data.homeSizeId || '';
-  const paymentMethod = data.paymentMethod || 'Card';
-  const referralLink = data.referralLink || '';
+  const serviceType = serviceTypeLabels[data.serviceType || 'standard'] || data.serviceType || 'Cleaning';
 
-  // Replace hardcoded test values with actual booking data
-  // Using specific text replacements based on the Migma template structure
+  // Build a map of GHL placeholders to actual values
+  const replacements: Record<string, string> = {
+    '{{contact.first_name}}': data.firstName || 'there',
+    '{{opportunity.name}}': data.bookingNumber || data.bookingId?.substring(0, 8) || '',
+    '{{appointment.start_date}}': data.serviceDate ? formatServiceDate(data.serviceDate) : '',
+    '{{contact.service_start_time}}': data.arrivalWindow || data.timeSlot || '',
+    '{{contact.address1}}': fullAddress,
+    '{{contact.novara_glow_plan}}': data.membershipPlan || 'N/A',
+    '{{contact.cleaning_type}}': serviceType,
+    '{{contact.service_frequency}}': data.frequency || 'One-Time',
+    '{{contact.bedrooms}}': String(data.bedrooms ?? 0),
+    '{{contact.bathrooms}}': String(data.bathrooms ?? 0),
+    '{{contact.estimated_sqft}}': data.sqft || data.homeSizeId || '',
+    '{{contact.add_ons}}': data.addOns?.length ? data.addOns.join(', ') : 'None',
+    '{{contact.final_cost_}}': data.totalAmount ? formatCurrency(data.totalAmount) : '$0.00',
+    '{{contact.deposit_amount_}}': data.depositAmount ? formatCurrency(data.depositAmount) : '$0.00',
+    '{{contact.remaining_balance}}': data.balanceAmount ? formatCurrency(data.balanceAmount) : '$0.00',
+    '{{contact.last_invoice_url}}': data.hostedInvoiceUrl || '#',
+    '{{contact.referral_link}}': data.referralLink || '#',
+    '{{appointment.reschedule_link}}': data.rescheduleLink || '#',
+    '{{appointment.cancellation_link}}': data.cancellationLink || '#',
+    '{{unsubscribe_link}}': '#',
+  };
+
   let result = html;
 
-  // Customer name
-  result = result.replace(/See you soon,\s*<[^>]*>\s*Test\s*<\/[^>]*>/g, 
-    `See you soon, <span>${data.firstName || 'there'}</span>`);
-  result = result.replace(/>Test!</g, `>${data.firstName || 'there'}!`);
-  // Simpler replacements for name in preview text
-  result = result.replace(/Great news, Test!/g, `Great news, ${data.firstName || 'there'}!`);
-  result = result.replace(/See you soon,(\s*)Test/g, `See you soon,$1${data.firstName || 'there'}`);
-
-  // Booking number
-  result = result.replace(/NOV-00001/g, bookingNumber);
-
-  // Date
-  result = result.replace(/02-15-2026/g, formattedDate);
-
-  // Arrival window  
-  result = result.replace(/8–10a/g, arrivalWindow);
-
-  // Address
-  result = result.replace(/123 Webhook Test Lane, Bethesda,\s*MD 20814/g, fullAddress);
-  result = result.replace(/123 Webhook Test Lane, Bethesda, MD 20814/g, fullAddress);
-
-  // Service type
-  result = result.replace(/>Standard Cleaning</g, `>${serviceType}<`);
-
-  // Frequency
-  result = result.replace(/>One-Time</g, `>${frequency}<`);
-
-  // Home size (bedrooms/bathrooms)
-  result = result.replace(/>2\s*<[^>]*>\s*Bed/g, `>${bedrooms} Bed`);
-  result = result.replace(/>1\s*<[^>]*>\s*Bath/g, `>${bathrooms} Bath`);
-
-  // Square feet
-  result = result.replace(/>1000-1500</g, `>${sqft}<`);
-
-  // Add-ons
-  result = result.replace(/>Inside Fridge, Inside Oven</g, `>${addOnsText}<`);
-
-  // Payment amounts
-  result = result.replace(/>\$189\.00</g, `>${totalAmount}<`);
-  result = result.replace(/>\$39\.00</g, `>${depositAmount}<`);
-  result = result.replace(/>\$150\.00</g, `>${balanceAmount}<`);
-
-  // Payment method
-  result = result.replace(/Deposit Paid \(Card\)/g, `Deposit Paid (${paymentMethod})`);
-
-  // Referral link - update the CTA link
-  if (referralLink) {
-    result = result.replace(/Copy your referral link/g, `Share your referral link`);
+  // Replace both raw and URL-encoded variants of each placeholder
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    result = result.replaceAll(placeholder, value);
+    // Handle URL-encoded version (e.g. %7B%7Bcontact.first_name%7D%7D)
+    const encoded = encodeURIComponent(placeholder);
+    result = result.replaceAll(encoded, value);
   }
 
-  // Year in footer
+  // Replace year in footer
   const currentYear = new Date().getFullYear();
-  result = result.replace(/© 2026/g, `© ${currentYear}`);
+  result = result.replaceAll('© 2026', `© ${currentYear}`);
 
   return result;
 }
