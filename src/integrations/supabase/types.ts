@@ -1757,22 +1757,18 @@ export type Database = {
         }
         Returns: boolean
       }
-      release_time_slot:
-        | { Args: { _date: string; _start_time: string }; Returns: undefined }
-        | { Args: { _date: string; _start_time: string }; Returns: undefined }
+      release_time_slot: {
+        Args: { _date: string; _start_time: string }
+        Returns: undefined
+      }
       reserve_availability: {
         Args: { _date: string; _time_window: string }
         Returns: boolean
       }
-      reserve_time_slot:
-        | {
-            Args: { _date: string; _end_time: string; _start_time: string }
-            Returns: boolean
-          }
-        | {
-            Args: { _date: string; _end_time: string; _start_time: string }
-            Returns: boolean
-          }
+      reserve_time_slot: {
+        Args: { _date: string; _end_time: string; _start_time: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "customer"
