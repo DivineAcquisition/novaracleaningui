@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,6 +41,25 @@ serve(async (req) => {
       zipCode: leadData.zipCode 
     });
 
+    // --- Duplicate detection: check customers table ---
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: existingCustomer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("email", leadData.email.toLowerCase())
+      .maybeSingle();
+
+    if (existingCustomer) {
+      logStep("Duplicate detected - customer already exists", { email: leadData.email });
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: "duplicate" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     // Build standardized payload for external webhooks
     const payload = {
       // Contact Information
@@ -71,7 +91,7 @@ serve(async (req) => {
     const webhookUrls = [
       { url: GHL_LEAD_CAPTURE_WEBHOOK_URL, name: 'GoHighLevel Lead Capture' },
       { url: ZAPIER_LEAD_CAPTURE_WEBHOOK_URL, name: 'Zapier Lead Capture' }
-    ].filter(w => w.url); // Only include configured webhooks
+    ].filter(w => w.url);
 
     logStep("Sending to webhooks", { 
       count: webhookUrls.length, 
@@ -81,11 +101,7 @@ serve(async (req) => {
     if (webhookUrls.length === 0) {
       logStep("No webhooks configured, skipping external sends");
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: "No webhooks configured",
-          payload 
-        }),
+        JSON.stringify({ success: true, message: "No webhooks configured", payload }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
