@@ -1,0 +1,1 @@
+UPDATE bookings SET customer_id = 'cus_TxDrN2Zz6k82h8' WHERE id = '80a27196-5896-474c-8065-9042907b4108';
