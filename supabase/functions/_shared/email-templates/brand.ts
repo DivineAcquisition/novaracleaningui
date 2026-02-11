@@ -36,7 +36,7 @@ export const BRAND = {
   },
   contact: {
     email: 'support@novaracleaning.com',
-    phone: '(555) 123-4567',
+    phone: '+1 (844) 735-2070',
   },
   urls: {
     website: 'https://novaracleaning.com',
