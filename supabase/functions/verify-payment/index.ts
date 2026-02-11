@@ -95,41 +95,7 @@ serve(async (req) => {
       case "succeeded":
         newStatus = "confirmed";
         message = "Payment confirmed successfully";
-        
-        // Deduct membership credit if booking uses credit (with idempotency check)
-        if (booking.uses_credit && booking.customer_id && booking.status !== 'confirmed') {
-          logStep("Deducting membership credit", { customerId: booking.customer_id });
-          
-          const { data: creditRecord, error: creditFetchError } = await supabase
-            .from("membership_credits")
-            .select("*")
-            .eq("customer_id", booking.customer_id)
-            .maybeSingle();
-
-          if (creditFetchError) {
-            logStep("Error fetching credit record", creditFetchError);
-          } else if (creditRecord && creditRecord.credits_remaining > 0) {
-            // Use atomic update to prevent race conditions
-            const { error: creditUpdateError } = await supabase
-              .from("membership_credits")
-              .update({
-                credits_used: creditRecord.credits_used + 1,
-                credits_remaining: Math.max(0, creditRecord.credits_remaining - 1),
-              })
-              .eq("customer_id", booking.customer_id)
-              .eq("credits_remaining", creditRecord.credits_remaining); // Optimistic locking
-
-            if (creditUpdateError) {
-              logStep("Error updating credits", creditUpdateError);
-            } else {
-              logStep("Credit deducted successfully", { 
-                remainingCredits: creditRecord.credits_remaining - 1 
-              });
-            }
-          } else {
-            logStep("No credit available or record not found");
-          }
-        }
+        // Credit deduction is handled by stripe-webhook to avoid race conditions
         break;
 
       case "processing":
@@ -214,73 +180,7 @@ serve(async (req) => {
       logStep("Booking status unchanged", { bookingId: booking.id, status: booking.status });
     }
 
-    // Send confirmation email if payment succeeded and not already sent
-    if (paymentIntent.status === "succeeded" && booking.status !== 'confirmed') {
-      logStep("Sending confirmation emails", { email: booking.email });
-      
-      try {
-        // Send booking confirmation
-        await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-          },
-          body: JSON.stringify({
-            type: 'confirmation',
-            email: booking.email,
-            data: {
-              firstName: booking.first_name,
-              lastName: booking.last_name,
-              bookingId: booking.id,
-              serviceDate: booking.service_date,
-              timeSlot: booking.time_slot,
-              serviceType: booking.service_type,
-              homeSize: booking.home_size_id,
-              address: booking.address,
-              city: booking.city,
-              state: booking.state,
-              zipCode: booking.zip_code,
-              totalAmount: booking.total_estimate_cents,
-              depositAmount: booking.deposit_cents,
-              balanceAmount: booking.total_estimate_cents - (booking.payment_option === 'full' ? booking.total_estimate_cents - (booking.full_payment_discount || 0) : booking.deposit_cents),
-              paymentOption: booking.payment_option,
-              useCredit: booking.uses_credit,
-              addOns: booking.add_ons,
-            },
-          }),
-        });
-
-        // Send payment receipt
-        await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-          },
-          body: JSON.stringify({
-            type: 'payment_receipt',
-            email: booking.email,
-            data: {
-              firstName: booking.first_name,
-              lastName: booking.last_name,
-              bookingId: booking.id,
-              serviceDate: booking.service_date,
-              timeSlot: booking.time_slot,
-              serviceType: booking.service_type,
-              totalAmount: booking.payment_option === 'full' ? booking.total_estimate_cents - (booking.full_payment_discount || 0) : booking.deposit_cents,
-              balanceAmount: booking.payment_option === 'deposit' ? booking.total_estimate_cents - booking.deposit_cents : 0,
-              paymentOption: booking.payment_option,
-            },
-          }),
-        });
-
-        logStep("Confirmation emails sent successfully");
-      } catch (emailError) {
-        logStep("Error sending emails (non-blocking)", { error: emailError });
-        // Don't fail the whole request if emails fail
-      }
-    }
+    // Email sending removed — stripe-webhook is the single source of truth for all downstream actions
 
     return new Response(
       JSON.stringify({

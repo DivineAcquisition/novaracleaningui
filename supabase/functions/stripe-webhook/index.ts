@@ -87,50 +87,66 @@ serve(async (req) => {
           break;
         }
 
-        // Idempotency check - if already confirmed, skip processing
-        if (booking.status === 'confirmed') {
-          logStep("Booking already confirmed - skipping webhook processing", { bookingId: booking.id });
-          break;
+        // Idempotency: skip status update if already confirmed, but ALWAYS run downstream actions
+        const alreadyConfirmed = booking.status === 'confirmed';
+        
+        if (alreadyConfirmed) {
+          logStep("Booking already confirmed - skipping status update but running downstream actions", { bookingId: booking.id });
+        } else {
+          logStep("Processing booking confirmation", { bookingId: booking.id, currentStatus: booking.status });
+
+          // Update booking status to confirmed with optimistic locking
+          const { error: updateError } = await supabase
+            .from('bookings')
+            .update({ status: 'confirmed' })
+            .eq('id', booking.id)
+            .eq('status', booking.status); // Only update if status hasn't changed
+
+          if (updateError) {
+            logStep("Error updating booking status", updateError);
+            break;
+          }
+          logStep("Booking confirmed via webhook", { bookingId: booking.id });
         }
-
-        logStep("Processing booking confirmation", { bookingId: booking.id, currentStatus: booking.status });
-
-        // Update booking status to confirmed with optimistic locking
-        const { error: updateError } = await supabase
+        
+        // Re-fetch booking to get latest state (may have been updated by verify-payment)
+        const { data: freshBooking, error: refetchError } = await supabase
           .from('bookings')
-          .update({ status: 'confirmed' })
+          .select('*')
           .eq('id', booking.id)
-          .eq('status', booking.status); // Only update if status hasn't changed
-
-        if (updateError) {
-          logStep("Error updating booking status", updateError);
+          .single();
+        
+        if (refetchError || !freshBooking) {
+          logStep("Error re-fetching booking", { error: refetchError });
           break;
         }
-        logStep("Booking confirmed via webhook", { bookingId: booking.id });
+        
+        // Use freshBooking for all downstream actions (has latest idempotency flags)
+        const confirmedBooking = freshBooking;
 
-        // Create invoice for remaining balance if deposit was paid
-        if (booking.payment_option === 'deposit') {
-          const remainingBalanceCents = booking.total_estimate_cents - booking.deposit_cents;
+        // Create invoice for remaining balance if deposit was paid (skip if already has invoice)
+        if (confirmedBooking.payment_option === 'deposit' && !confirmedBooking.stripe_invoice_id) {
+          const remainingBalanceCents = confirmedBooking.total_estimate_cents - confirmedBooking.deposit_cents;
           
           if (remainingBalanceCents > 0) {
             logStep("Creating invoice for remaining balance", { 
               remainingBalance: remainingBalanceCents,
-              serviceDate: booking.service_date
+              serviceDate: confirmedBooking.service_date
             });
 
             try {
               // Get or create Stripe customer
               const customers = await stripe.customers.list({ 
-                email: booking.email, 
+                email: confirmedBooking.email, 
                 limit: 1 
               });
               
               let customerId = customers.data[0]?.id;
               if (!customerId) {
                 const customer = await stripe.customers.create({
-                  email: booking.email,
-                  name: `${booking.first_name} ${booking.last_name}`,
-                  phone: booking.phone,
+                  email: confirmedBooking.email,
+                  name: `${confirmedBooking.first_name} ${confirmedBooking.last_name}`,
+                  phone: confirmedBooking.phone,
                 });
                 customerId = customer.id;
               }
@@ -139,11 +155,11 @@ serve(async (req) => {
               const invoice = await stripe.invoices.create({
                 customer: customerId,
                 collection_method: 'send_invoice',
-                days_until_due: Math.max(0, Math.ceil((new Date(booking.service_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
-                description: `Remaining balance for ${booking.service_type} cleaning on ${booking.service_date}`,
+                days_until_due: Math.max(0, Math.ceil((new Date(confirmedBooking.service_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
+                description: `Remaining balance for ${confirmedBooking.service_type} cleaning on ${confirmedBooking.service_date}`,
                 metadata: {
-                  booking_id: booking.id,
-                  booking_number: booking.booking_number?.toString() || '',
+                  booking_id: confirmedBooking.id,
+                  booking_number: confirmedBooking.booking_number?.toString() || '',
                 },
               });
 
@@ -153,7 +169,7 @@ serve(async (req) => {
                 invoice: invoice.id,
                 amount: remainingBalanceCents,
                 currency: 'usd',
-                description: `Remaining Balance - ${booking.service_type} Cleaning Service`,
+                description: `Remaining Balance - ${confirmedBooking.service_type} Cleaning Service`,
               });
 
               // Finalize and send invoice
@@ -170,7 +186,7 @@ serve(async (req) => {
                   stripe_invoice_id: invoice.id,
                   hosted_invoice_url: finalizedInvoice.hosted_invoice_url || null
                 })
-                .eq('id', booking.id);
+                .eq('id', confirmedBooking.id);
 
               logStep("Invoice created and sent", { 
                 invoiceId: invoice.id,
@@ -188,7 +204,7 @@ serve(async (req) => {
         logStep("Triggering auto-dispatch for booking");
         try {
           await supabase.functions.invoke('auto-dispatch-booking', {
-            body: { bookingId: booking.id }
+            body: { bookingId: confirmedBooking.id }
           });
           logStep("Auto-dispatch triggered successfully");
         } catch (dispatchError) {
@@ -200,7 +216,7 @@ serve(async (req) => {
         logStep("Creating Google Calendar event for booking");
         try {
           await supabase.functions.invoke('create-google-calendar-event', {
-            body: { bookingId: booking.id }
+            body: { bookingId: confirmedBooking.id }
           });
           logStep("Google Calendar event created successfully");
         } catch (calendarError) {
@@ -209,13 +225,13 @@ serve(async (req) => {
         }
 
         // Deduct membership credit if booking uses credit (with idempotency and race condition checks)
-        if (booking.uses_credit && booking.customer_id) {
-          logStep("Attempting to deduct membership credit", { customerId: booking.customer_id });
+        if (confirmedBooking.uses_credit && confirmedBooking.customer_id) {
+          logStep("Attempting to deduct membership credit", { customerId: confirmedBooking.customer_id });
           
           const { data: creditRecord, error: creditFetchError } = await supabase
             .from('membership_credits')
             .select('*')
-            .eq('customer_id', booking.customer_id)
+            .eq('customer_id', confirmedBooking.customer_id)
             .maybeSingle();
 
           if (creditFetchError) {
@@ -228,7 +244,7 @@ serve(async (req) => {
                 credits_used: creditRecord.credits_used + 1,
                 credits_remaining: Math.max(0, creditRecord.credits_remaining - 1),
               })
-              .eq('customer_id', booking.customer_id)
+              .eq('customer_id', confirmedBooking.customer_id)
               .eq('credits_remaining', creditRecord.credits_remaining); // Optimistic locking
 
             if (creditUpdateError) {
@@ -243,41 +259,42 @@ serve(async (req) => {
           }
         }
 
-          // Send confirmation emails
-          logStep("Sending confirmation emails", { email: booking.email });
+          // Send confirmation emails (skip if already sent)
+          if (!confirmedBooking.confirmation_email_sent) {
+            logStep("Sending confirmation emails", { email: confirmedBooking.email });
           
-          try {
-            // Send booking confirmation
-            await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-              },
-              body: JSON.stringify({
-                type: 'confirmation',
-                email: booking.email,
-                data: {
-                  firstName: booking.first_name,
-                  lastName: booking.last_name,
-                  bookingId: booking.id,
-                  serviceDate: booking.service_date,
-                  timeSlot: booking.time_slot,
-                  serviceType: booking.service_type,
-                  homeSize: booking.home_size_id,
-                  address: booking.address,
-                  city: booking.city,
-                  state: booking.state,
-                  zipCode: booking.zip_code,
-                  totalAmount: booking.total_estimate_cents,
-                  depositAmount: booking.deposit_cents,
-                  balanceAmount: booking.total_estimate_cents - (booking.payment_option === 'full' ? booking.total_estimate_cents - (booking.full_payment_discount || 0) : booking.deposit_cents),
-                  paymentOption: booking.payment_option,
-                  useCredit: booking.uses_credit,
-                  addOns: booking.add_ons,
+            try {
+              // Send booking confirmation
+              await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
                 },
-              }),
-            });
+                body: JSON.stringify({
+                  type: 'confirmation',
+                  email: confirmedBooking.email,
+                  data: {
+                    firstName: confirmedBooking.first_name,
+                    lastName: confirmedBooking.last_name,
+                    bookingId: confirmedBooking.id,
+                    serviceDate: confirmedBooking.service_date,
+                    timeSlot: confirmedBooking.time_slot,
+                    serviceType: confirmedBooking.service_type,
+                    homeSize: confirmedBooking.home_size_id,
+                    address: confirmedBooking.address,
+                    city: confirmedBooking.city,
+                    state: confirmedBooking.state,
+                    zipCode: confirmedBooking.zip_code,
+                    totalAmount: confirmedBooking.total_estimate_cents,
+                    depositAmount: confirmedBooking.deposit_cents,
+                    balanceAmount: confirmedBooking.total_estimate_cents - (confirmedBooking.payment_option === 'full' ? confirmedBooking.total_estimate_cents - (confirmedBooking.full_payment_discount || 0) : confirmedBooking.deposit_cents),
+                    paymentOption: confirmedBooking.payment_option,
+                    useCredit: confirmedBooking.uses_credit,
+                    addOns: confirmedBooking.add_ons,
+                  },
+                }),
+              });
 
             // Send payment receipt
             await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
@@ -288,17 +305,17 @@ serve(async (req) => {
               },
               body: JSON.stringify({
                 type: 'payment_receipt',
-                email: booking.email,
+                email: confirmedBooking.email,
                 data: {
-                  firstName: booking.first_name,
-                  lastName: booking.last_name,
-                  bookingId: booking.id,
-                  serviceDate: booking.service_date,
-                  timeSlot: booking.time_slot,
-                  serviceType: booking.service_type,
-                  totalAmount: booking.payment_option === 'full' ? booking.total_estimate_cents - (booking.full_payment_discount || 0) : booking.deposit_cents,
-                  balanceAmount: booking.payment_option === 'deposit' ? booking.total_estimate_cents - booking.deposit_cents : 0,
-                  paymentOption: booking.payment_option,
+                  firstName: confirmedBooking.first_name,
+                  lastName: confirmedBooking.last_name,
+                  bookingId: confirmedBooking.id,
+                  serviceDate: confirmedBooking.service_date,
+                  timeSlot: confirmedBooking.time_slot,
+                  serviceType: confirmedBooking.service_type,
+                  totalAmount: confirmedBooking.payment_option === 'full' ? confirmedBooking.total_estimate_cents - (confirmedBooking.full_payment_discount || 0) : confirmedBooking.deposit_cents,
+                  balanceAmount: confirmedBooking.payment_option === 'deposit' ? confirmedBooking.total_estimate_cents - confirmedBooking.deposit_cents : 0,
+                  paymentOption: confirmedBooking.payment_option,
                 },
               }),
             });
@@ -307,24 +324,27 @@ serve(async (req) => {
           } catch (emailError) {
             logStep("Error sending emails (non-blocking)", { error: emailError });
           }
+          } else {
+            logStep("Confirmation email already sent - skipping", { bookingId: confirmedBooking.id });
+          }
 
           // Legacy assign-cleaner removed — auto-dispatch-booking (line ~190) handles this via dispatch-job
 
           // Generate referral code for customer if they don't have one
           try {
-            logStep("Checking/generating customer referral code", { email: booking.email });
+            logStep("Checking/generating customer referral code", { email: confirmedBooking.email });
             
             // Find or create customer record
             const { data: existingCustomer } = await supabase
               .from('customers')
               .select('id, referral_code')
-              .eq('email', booking.email)
+              .eq('email', confirmedBooking.email)
               .maybeSingle();
             
             if (existingCustomer && !existingCustomer.referral_code) {
               // Generate referral code for existing customer without one
               const referralResponse = await supabase.functions.invoke('generate-referral-code', {
-                body: { customerId: existingCustomer.id, email: booking.email },
+                body: { customerId: existingCustomer.id, email: confirmedBooking.email },
               });
               
               if (referralResponse.error) {
@@ -337,14 +357,14 @@ serve(async (req) => {
               const { data: newCustomer, error: insertError } = await supabase
                 .from('customers')
                 .insert({
-                  email: booking.email,
-                  first_name: booking.first_name,
-                  last_name: booking.last_name,
-                  phone: booking.phone,
-                  address: booking.address,
-                  city: booking.city,
-                  state: booking.state,
-                  zip: booking.zip_code,
+                  email: confirmedBooking.email,
+                  first_name: confirmedBooking.first_name,
+                  last_name: confirmedBooking.last_name,
+                  phone: confirmedBooking.phone,
+                  address: confirmedBooking.address,
+                  city: confirmedBooking.city,
+                  state: confirmedBooking.state,
+                  zip: confirmedBooking.zip_code,
                 })
                 .select('id')
                 .single();
@@ -353,7 +373,7 @@ serve(async (req) => {
                 logStep("Customer creation failed (non-blocking)", { error: insertError.message });
               } else if (newCustomer) {
                 const referralResponse = await supabase.functions.invoke('generate-referral-code', {
-                  body: { customerId: newCustomer.id, email: booking.email },
+                  body: { customerId: newCustomer.id, email: confirmedBooking.email },
                 });
                 
                 if (referralResponse.error) {
@@ -373,7 +393,7 @@ serve(async (req) => {
           try {
             logStep("Triggering Zapier webhook");
             const zapierResponse = await supabase.functions.invoke('send-zapier-webhook', {
-              body: { bookingId: booking.id },
+              body: { bookingId: confirmedBooking.id },
             });
             
             if (zapierResponse.error) {
@@ -389,7 +409,7 @@ serve(async (req) => {
           try {
             logStep("Syncing to Anything App Platform");
             const anythingResponse = await supabase.functions.invoke('sync-to-anything', {
-              body: { bookingId: booking.id },
+              body: { bookingId: confirmedBooking.id },
             });
             
             if (anythingResponse.error) {
@@ -402,9 +422,9 @@ serve(async (req) => {
           }
 
           // Track referral if referral code was used
-          if (booking.metadata && (booking.metadata as any).referral_code) {
+          if (confirmedBooking.metadata && (confirmedBooking.metadata as any).referral_code) {
             try {
-              const referralCode = (booking.metadata as any).referral_code;
+              const referralCode = (confirmedBooking.metadata as any).referral_code;
               logStep("Processing referral", { code: referralCode });
 
               // Find the referrer
