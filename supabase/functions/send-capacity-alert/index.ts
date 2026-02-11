@@ -108,7 +108,7 @@ serve(async (req) => {
     `;
 
     const { data, error } = await resend.emails.send({
-      from: "NovaRaCleaning Alerts <hello@notify.novaracleaning.com>",
+      from: "NovaRaCleaning Alerts <hello@novaracleaning.com>",
       to: ["admin@novaracleaning.com"], // Update with actual admin email(s)
       subject: `${urgencyLevel === 'FULL' ? '🚨 FULL' : '⚡ FILLING UP'} - ${formattedDate} at ${time_slot}`,
       html: emailHtml,

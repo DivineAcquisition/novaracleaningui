@@ -95,10 +95,35 @@ serve(async (req) => {
     const startTime = parseTimeSlot(booking.time_slot);
     const startDatetime = `${booking.service_date}T${startTime}`;
 
+    // Resolve customer UUID - booking.customer_id may be a Stripe ID (cus_...) not a UUID
+    let customerUuid: string | null = null;
+    if (booking.customer_id) {
+      // Check if it's already a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(booking.customer_id)) {
+        customerUuid = booking.customer_id;
+      } else {
+        // It's likely a Stripe customer ID - look up the actual customer by email
+        logStep("customer_id is not UUID, looking up by email", { customer_id: booking.customer_id, email: booking.email });
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("email", booking.email)
+          .maybeSingle();
+        
+        if (customer) {
+          customerUuid = customer.id;
+          logStep("Resolved customer UUID", { customerUuid });
+        } else {
+          logStep("No customer found by email, setting customer_id to null");
+        }
+      }
+    }
+
     const { data: job, error: jobError } = await supabase
       .from("jobs")
       .insert({
-        customer_id: booking.customer_id,
+        customer_id: customerUuid,
         address: booking.address,
         city: booking.city,
         state: booking.state,
