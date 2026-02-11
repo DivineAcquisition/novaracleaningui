@@ -1,99 +1,47 @@
 
-# Fix: Race Condition Causing Missing Emails and Webhooks After Booking
 
-## Problem Identified
+# Abandoned Cart Email via Migma (with Direct Placeholders)
 
-Malik Sannie's booking (`d7bfdbc2`) on Feb 11 was confirmed but received **no confirmation email, no job dispatch, and no Zapier webhook**. The `confirmation_email_sent` flag is `false` and `job_id` is `null`.
+## Overview
+Update `send-abandoned-cart-email` to fetch the HTML template from Migma, populate placeholders using direct cart data values (no GHL-style naming), and fall back to React Email if Migma fails.
 
-### Root Cause: Race Condition Between `verify-payment` and `stripe-webhook`
+## Migma Conversation ID
+`698acaea41154eb80fab602e`
 
-There are three independent systems that can confirm a booking:
+## Placeholder Strategy
+Instead of GHL-style `{{contact.first_name}}`, use straightforward placeholders mapped directly from abandoned cart fields:
 
-```text
-Customer pays -> Success page loads
-                    |
-                    +--> verify-payment (edge function)
-                    |       Confirms booking status
-                    |       Sends email
-                    |       Does NOT dispatch job or send webhooks
-                    |
-                    +--> stripe-webhook (from Stripe servers)
-                            Checks status -> already "confirmed"
-                            SKIPS EVERYTHING (idempotency guard)
-                            No email, no dispatch, no Zapier, no calendar
-```
+| Placeholder | Source |
+|---|---|
+| `{{first_name}}` | `cart.first_name` |
+| `{{service_type}}` | `cart.service_type` |
+| `{{home_size}}` | `cart.home_size` |
+| `{{resume_url}}` | Generated resume booking link |
+| `{{zip_code}}` | `cart.zip_code` |
 
-When `verify-payment` wins the race (which happened here), the `stripe-webhook` sees the booking is already confirmed and skips all downstream actions. But `verify-payment` doesn't trigger dispatch, Zapier, Google Calendar, or referral generation -- those only exist in `stripe-webhook`.
+## Changes
 
-## Solution
+### 1. `supabase/functions/send-abandoned-cart-email/index.ts`
+- Add `fetchMigmaTemplate()` (reuse same pattern from `send-booking-email`)
+- Add `populateAbandonedCartTemplate()` with direct placeholder names
+- Try Migma first; on failure, fall back to existing React Email `AbandonedCartReminder`
+- Keep `testMode` support intact
+- No changes to subject line logic or Resend sending
 
-### Strategy: Make `stripe-webhook` the single source of truth for post-payment actions
-
-Instead of having the idempotency check skip everything, split it into two concerns:
-1. **Status update** -- skip if already confirmed (keep idempotency)
-2. **Downstream actions** -- always run if payment succeeded, using their own idempotency flags
-
-### Changes
-
-#### 1. Update `supabase/functions/stripe-webhook/index.ts`
-
-Restructure the `payment_intent.succeeded` handler so downstream actions run even if the booking was already confirmed by `verify-payment`:
-
-- Keep the status update idempotent (don't re-confirm)
-- Move email sending, auto-dispatch, Zapier webhook, Google Calendar, and referral generation **outside** the idempotency guard
-- Each action already has its own idempotency check:
-  - Email: checks `confirmation_email_sent` flag
-  - Dispatch: checks `job_id` existence
-  - Zapier: fire-and-forget (safe to re-send)
-  - Calendar: checks `google_calendar_event_id`
-
-The key change is replacing the early `break` at line 93 with a flag that skips only the status update but continues processing downstream actions.
-
-#### 2. Update `supabase/functions/verify-payment/index.ts`
-
-Simplify this function to **only** verify payment status and update booking status. Remove the email sending logic (lines 218-283) since `stripe-webhook` will reliably handle all downstream actions. This eliminates the competing email sender.
-
-Also remove the credit deduction logic (lines 99-132) since `stripe-webhook` already handles this with the same optimistic locking pattern.
-
-#### 3. Update `src/pages/book/Success.tsx`
-
-Remove the client-side `sendConfirmationEmail` effect (lines 224-362). This is a third competing email sender that adds complexity. The `stripe-webhook` will handle all email sending server-side, which is more reliable than client-side triggers that depend on the user staying on the page.
-
-Keep the `verify-payment` call for UI feedback (showing the user their payment status), but it no longer triggers side effects.
-
-#### 4. Immediate Fix for Malik's Booking
-
-Run the downstream actions manually for the missed booking by invoking the edge functions directly:
-- Call `send-booking-email` with the booking data
-- Call `auto-dispatch-booking` with the booking ID
-- Call `send-zapier-webhook` with the booking ID
-
-## File Changes Summary
-
-| File | Action | What Changes |
-|---|---|---|
-| `supabase/functions/stripe-webhook/index.ts` | Edit | Remove early `break` on confirmed status; run downstream actions with individual idempotency checks |
-| `supabase/functions/verify-payment/index.ts` | Edit | Remove email sending and credit deduction; keep only status verification |
-| `src/pages/book/Success.tsx` | Edit | Remove client-side email sending effect |
-
-## After the Fix
+### 2. Flow
 
 ```text
-Customer pays -> Success page loads
-                    |
-                    +--> verify-payment
-                    |       Updates status to "confirmed" (if not already)
-                    |       Returns status to UI for display
-                    |       NO side effects
-                    |
-                    +--> stripe-webhook
-                            Updates status to "confirmed" (skipped if already done)
-                            ALWAYS runs downstream actions:
-                              - Send confirmation email (if not already sent)
-                              - Auto-dispatch job (if no job_id yet)
-                              - Send Zapier webhook
-                              - Create Google Calendar event
-                              - Generate referral code
+Request --> Fetch Migma HTML (conversation 698acaea...)
+              |
+              +-- Success --> Replace {{first_name}}, {{resume_url}}, etc. --> Send via Resend
+              |
+              +-- Failure --> Render AbandonedCartReminder (React Email) --> Send via Resend
 ```
 
-This ensures that even if `verify-payment` confirms the booking first, the webhook still fires all the important downstream actions.
+### What stays the same
+- `check-abandoned-carts` cron job (no changes)
+- `testMode` behavior
+- Subject lines (1st vs 2nd reminder)
+- Resend delivery from `hello@novaracleaning.com`
+- `MIGMA_API_KEY` secret (already configured)
+
