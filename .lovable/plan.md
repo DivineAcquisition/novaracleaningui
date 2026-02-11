@@ -1,63 +1,118 @@
 
+# Autonomous Cleaner Enrollment and Job Assignment System
 
-# Update Migma Email Template Replacement Logic
+## What This Solves
+Right now, adding cleaners and assigning them to jobs requires manual admin intervention. As your cleaner pool grows, this won't scale. This plan creates two things:
 
-## Problem
-The Migma booking confirmation template (v7) now uses **GoHighLevel (GHL) dynamic variables** like `{{contact.first_name}}`, `{{contact.deposit_amount_}}`, `{{appointment.start_date}}`, etc. However, the current `populateMigmaTemplate` function in `send-booking-email/index.ts` still uses **hardcoded regex replacements** targeting old test values (e.g., replacing "Test", "NOV-00001", "$189.00"). These regexes are fragile and will break whenever the template is updated in Migma.
+1. **A public webhook** that external systems (Zapier, GHL, Google Forms, etc.) can call to auto-enroll cleaners
+2. **A self-enrollment page** where cleaners can sign up on their own without admin involvement
+3. **Tightening the auto-dispatch pipeline** so jobs flow to cleaners without manual steps
 
-## Solution
-Rewrite `populateMigmaTemplate` to replace the GHL-style `{{variable}}` placeholders with actual booking data. This is far more reliable -- the placeholders are consistent and won't change with template design updates.
+## Current State (What Already Works)
+- `dispatch-job` -- sophisticated scoring algorithm (location, rating, workload, performance) that assigns cleaners to jobs
+- `auto-dispatch-booking` -- creates a job from a booking and calls `dispatch-job`
+- `stripe-webhook` -- triggers `auto-dispatch-booking` after payment succeeds
+- `assign-cleaner` -- simpler ZIP-based round-robin assignment (legacy, also triggered by stripe-webhook)
+- Cleaner onboarding wizard at `/cleaner/onboarding` (requires auth)
 
-## Changes
+## Current Gaps
+1. **No inbound webhook exists** for programmatic cleaner creation from external systems
+2. **Duplicate dispatch calls** -- stripe-webhook calls BOTH `auto-dispatch-booking` AND `assign-cleaner`, causing double assignment attempts
+3. **Self-enrollment requires admin approval** -- the onboarding form sets `approved: true` but geocoding (home_lat/lng) isn't done, so `dispatch-job` skips these cleaners (it filters on `not home_lat is null`)
+4. **No geocoding on cleaner signup** -- cleaners enter a ZIP code but lat/lng is never calculated, making them invisible to the distance-based dispatch algorithm
 
-### File: `supabase/functions/send-booking-email/index.ts`
+## Plan
 
-**Replace the entire `populateMigmaTemplate` function** with a GHL-variable-based replacement approach:
+### 1. Create Inbound Webhook: `enroll-cleaner`
+A new edge function at `supabase/functions/enroll-cleaner/index.ts` that external systems can POST to.
 
-| GHL Placeholder | Booking Data Source |
-|---|---|
-| `{{contact.first_name}}` | `data.firstName` |
-| `{{opportunity.name}}` | `data.bookingNumber` |
-| `{{appointment.start_date}}` | `formatServiceDate(data.serviceDate)` |
-| `{{contact.service_start_time}}` | `data.arrivalWindow` or `data.timeSlot` |
-| `{{contact.address1}}` | Full address string |
-| `{{contact.novara_glow_plan}}` | Membership plan or "N/A" |
-| `{{contact.cleaning_type}}` | Service type label |
-| `{{contact.service_frequency}}` | `data.frequency` |
-| `{{contact.bedrooms}}` | `data.bedrooms` |
-| `{{contact.bathrooms}}` | `data.bathrooms` |
-| `{{contact.estimated_sqft}}` | `data.sqft` |
-| `{{contact.add_ons}}` | Joined add-ons list |
-| `{{contact.final_cost_}}` | `formatCurrency(data.totalAmount)` |
-| `{{contact.deposit_amount_}}` | `formatCurrency(data.depositAmount)` |
-| `{{contact.remaining_balance}}` | `formatCurrency(data.balanceAmount)` |
-| `{{contact.last_invoice_url}}` | `data.hostedInvoiceUrl` |
-| `{{contact.referral_link}}` | `data.referralLink` |
-| `{{appointment.reschedule_link}}` | Reschedule URL or "#" |
-| `{{appointment.cancellation_link}}` | Cancellation URL or "#" |
-| `{{unsubscribe_link}}` | Unsubscribe URL or "#" |
+**Authentication**: Secret key in header (`x-webhook-secret`) matched against a new `CLEANER_ENROLLMENT_WEBHOOK_SECRET` Supabase secret.
 
-**Additional data fields** to add to the `BookingEmailRequest` interface:
-- `membershipPlan?: string` -- for the "Active Plan" row
-- `rescheduleLink?: string` -- for the reschedule CTA
-- `cancellationLink?: string` -- for the cancel CTA
-
-The replacement will use a simple map-based approach: iterate over a key-value map of `{ "{{placeholder}}": value }` and do a global string replace for each. This is cleaner than fragile regex patterns.
-
-### Technical Details
-
+**Accepts**:
 ```text
-populateMigmaTemplate(html, data):
-  1. Build a replacements map: { "{{contact.first_name}}": data.firstName, ... }
-  2. For each entry, do html.replaceAll(key, value)
-  3. Handle URL-encoded variants (Migma may encode {{ }} in href attributes as %7B%7B...%7D%7D)
-  4. Return the fully populated HTML
+{
+  "email": "jane@example.com",       (required)
+  "first_name": "Jane",              (required)
+  "last_name": "Doe",                (required)
+  "phone": "5551234567",             (required)
+  "state": "MD",                     (optional)
+  "home_zip": "21201",               (optional)
+  "service_zip_codes": ["21201"],    (optional)
+  "max_travel_miles": 20,            (optional, default 20)
+  "preferred_work_days": ["Mon","Tue"], (optional)
+  "skillset": ["Standard Cleaning"], (optional)
+  "pay_rate_hr": 18                  (optional, default 18)
+}
 ```
 
-The function will also handle the URL-encoded versions of placeholders (e.g., `%7B%7Bcontact.referral_link%7D%7D`) since Migma wraps link hrefs with encoded curly braces as seen in the template source.
+**Logic**:
+- Validate required fields (email, name, phone)
+- Check for duplicate by email -- skip if already exists (return existing cleaner ID)
+- Create Supabase auth user with auto-generated password (same pattern: `{firstInitial}{lastName}nv2025!`)
+- Create cleaner record with `approved: true`, `status: "active"`, `onboarding_complete: true`
+- Geocode home_zip to populate `home_lat`/`home_lng` (calls existing `geocode-address` function)
+- Return cleaner ID and generated credentials
+- Log enrollment to a simple audit trail
 
-### Deployment
-- Update and deploy the `send-booking-email` edge function
-- No database changes needed
-- No frontend changes needed
+**Config**: `verify_jwt = false` (uses secret key auth instead)
 
+### 2. Auto-Geocode Cleaners on Self-Enrollment
+Update `src/pages/cleaner/Onboarding.tsx` to geocode the cleaner's home ZIP after profile creation.
+
+After the cleaner record is inserted, call the `geocode-address` edge function with the ZIP code, then update the cleaner record with `home_lat` and `home_lng`. This ensures self-enrolled cleaners are immediately visible to the dispatch algorithm.
+
+### 3. Fix Duplicate Dispatch in Stripe Webhook
+Update `supabase/functions/stripe-webhook/index.ts` to remove the redundant `assign-cleaner` call.
+
+Currently at line ~312, after `auto-dispatch-booking` already runs (line ~190), the webhook ALSO calls `assign-cleaner` (line ~315). This creates competing assignment logic. Remove the `assign-cleaner` block since `auto-dispatch-booking` -> `dispatch-job` is the more sophisticated pipeline.
+
+### 4. Add Secret for Webhook Authentication
+Add a new Supabase secret: `CLEANER_ENROLLMENT_WEBHOOK_SECRET` -- a random string that external systems must include in their requests.
+
+### 5. Update `supabase/config.toml`
+Add the new function entry:
+```toml
+[functions.enroll-cleaner]
+verify_jwt = false
+```
+
+## File Changes Summary
+
+| File | Action | Purpose |
+|---|---|---|
+| `supabase/functions/enroll-cleaner/index.ts` | Create | New inbound webhook for auto-enrolling cleaners |
+| `supabase/config.toml` | Edit | Add `enroll-cleaner` function config |
+| `src/pages/cleaner/Onboarding.tsx` | Edit | Add geocoding after profile creation |
+| `supabase/functions/stripe-webhook/index.ts` | Edit | Remove duplicate `assign-cleaner` call |
+
+## How It All Works End-to-End
+
+```text
+CLEANER ENROLLMENT (two paths):
+
+Path A: External System (Zapier/GHL/Form)
+  POST /enroll-cleaner + x-webhook-secret header
+    -> Validates fields
+    -> Creates auth user + cleaner record
+    -> Geocodes ZIP -> lat/lng
+    -> Cleaner immediately available for dispatch
+
+Path B: Self-Enrollment (contractor.novaracleaning.com)
+  Cleaner visits /cleaner/onboarding-landing
+    -> Email verification
+    -> 4-step wizard
+    -> Profile saved + geocoded
+    -> Stripe Connect setup
+    -> Cleaner immediately available for dispatch
+
+JOB ASSIGNMENT (fully autonomous):
+
+Customer pays for booking
+  -> Stripe webhook fires
+  -> auto-dispatch-booking creates job record
+  -> dispatch-job scores all eligible cleaners
+     (location, rating, workload, performance)
+  -> Creates job_assignments for top candidates
+  -> Sends SMS offers to cleaners
+  -> Cleaners accept/decline via SMS link
+```
