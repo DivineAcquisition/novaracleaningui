@@ -26,7 +26,9 @@ export function DomainRestricted({
   // Allow localhost for development
   const isDevelopment = currentHostname === 'localhost' || 
                         currentHostname === '127.0.0.1' ||
-                        currentHostname.includes('localhost');
+                        currentHostname.includes('localhost') ||
+                        currentHostname.includes('lovableproject.com') ||
+                        currentHostname.includes('lovable.app');
   
   // Check if current domain is allowed
   const isAllowed = isDevelopment || 

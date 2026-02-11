@@ -110,7 +110,7 @@ serve(async (req) => {
     }
 
     const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <hello@notify.novaracleaning.com>",
+      from: "Novara Cleaning <hello@novaracleaning.com>",
       to: [email],
       subject,
       html,
