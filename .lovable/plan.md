@@ -1,118 +1,99 @@
 
-# Autonomous Cleaner Enrollment and Job Assignment System
+# Fix: Race Condition Causing Missing Emails and Webhooks After Booking
 
-## What This Solves
-Right now, adding cleaners and assigning them to jobs requires manual admin intervention. As your cleaner pool grows, this won't scale. This plan creates two things:
+## Problem Identified
 
-1. **A public webhook** that external systems (Zapier, GHL, Google Forms, etc.) can call to auto-enroll cleaners
-2. **A self-enrollment page** where cleaners can sign up on their own without admin involvement
-3. **Tightening the auto-dispatch pipeline** so jobs flow to cleaners without manual steps
+Malik Sannie's booking (`d7bfdbc2`) on Feb 11 was confirmed but received **no confirmation email, no job dispatch, and no Zapier webhook**. The `confirmation_email_sent` flag is `false` and `job_id` is `null`.
 
-## Current State (What Already Works)
-- `dispatch-job` -- sophisticated scoring algorithm (location, rating, workload, performance) that assigns cleaners to jobs
-- `auto-dispatch-booking` -- creates a job from a booking and calls `dispatch-job`
-- `stripe-webhook` -- triggers `auto-dispatch-booking` after payment succeeds
-- `assign-cleaner` -- simpler ZIP-based round-robin assignment (legacy, also triggered by stripe-webhook)
-- Cleaner onboarding wizard at `/cleaner/onboarding` (requires auth)
+### Root Cause: Race Condition Between `verify-payment` and `stripe-webhook`
 
-## Current Gaps
-1. **No inbound webhook exists** for programmatic cleaner creation from external systems
-2. **Duplicate dispatch calls** -- stripe-webhook calls BOTH `auto-dispatch-booking` AND `assign-cleaner`, causing double assignment attempts
-3. **Self-enrollment requires admin approval** -- the onboarding form sets `approved: true` but geocoding (home_lat/lng) isn't done, so `dispatch-job` skips these cleaners (it filters on `not home_lat is null`)
-4. **No geocoding on cleaner signup** -- cleaners enter a ZIP code but lat/lng is never calculated, making them invisible to the distance-based dispatch algorithm
+There are three independent systems that can confirm a booking:
 
-## Plan
-
-### 1. Create Inbound Webhook: `enroll-cleaner`
-A new edge function at `supabase/functions/enroll-cleaner/index.ts` that external systems can POST to.
-
-**Authentication**: Secret key in header (`x-webhook-secret`) matched against a new `CLEANER_ENROLLMENT_WEBHOOK_SECRET` Supabase secret.
-
-**Accepts**:
 ```text
-{
-  "email": "jane@example.com",       (required)
-  "first_name": "Jane",              (required)
-  "last_name": "Doe",                (required)
-  "phone": "5551234567",             (required)
-  "state": "MD",                     (optional)
-  "home_zip": "21201",               (optional)
-  "service_zip_codes": ["21201"],    (optional)
-  "max_travel_miles": 20,            (optional, default 20)
-  "preferred_work_days": ["Mon","Tue"], (optional)
-  "skillset": ["Standard Cleaning"], (optional)
-  "pay_rate_hr": 18                  (optional, default 18)
-}
+Customer pays -> Success page loads
+                    |
+                    +--> verify-payment (edge function)
+                    |       Confirms booking status
+                    |       Sends email
+                    |       Does NOT dispatch job or send webhooks
+                    |
+                    +--> stripe-webhook (from Stripe servers)
+                            Checks status -> already "confirmed"
+                            SKIPS EVERYTHING (idempotency guard)
+                            No email, no dispatch, no Zapier, no calendar
 ```
 
-**Logic**:
-- Validate required fields (email, name, phone)
-- Check for duplicate by email -- skip if already exists (return existing cleaner ID)
-- Create Supabase auth user with auto-generated password (same pattern: `{firstInitial}{lastName}nv2025!`)
-- Create cleaner record with `approved: true`, `status: "active"`, `onboarding_complete: true`
-- Geocode home_zip to populate `home_lat`/`home_lng` (calls existing `geocode-address` function)
-- Return cleaner ID and generated credentials
-- Log enrollment to a simple audit trail
+When `verify-payment` wins the race (which happened here), the `stripe-webhook` sees the booking is already confirmed and skips all downstream actions. But `verify-payment` doesn't trigger dispatch, Zapier, Google Calendar, or referral generation -- those only exist in `stripe-webhook`.
 
-**Config**: `verify_jwt = false` (uses secret key auth instead)
+## Solution
 
-### 2. Auto-Geocode Cleaners on Self-Enrollment
-Update `src/pages/cleaner/Onboarding.tsx` to geocode the cleaner's home ZIP after profile creation.
+### Strategy: Make `stripe-webhook` the single source of truth for post-payment actions
 
-After the cleaner record is inserted, call the `geocode-address` edge function with the ZIP code, then update the cleaner record with `home_lat` and `home_lng`. This ensures self-enrolled cleaners are immediately visible to the dispatch algorithm.
+Instead of having the idempotency check skip everything, split it into two concerns:
+1. **Status update** -- skip if already confirmed (keep idempotency)
+2. **Downstream actions** -- always run if payment succeeded, using their own idempotency flags
 
-### 3. Fix Duplicate Dispatch in Stripe Webhook
-Update `supabase/functions/stripe-webhook/index.ts` to remove the redundant `assign-cleaner` call.
+### Changes
 
-Currently at line ~312, after `auto-dispatch-booking` already runs (line ~190), the webhook ALSO calls `assign-cleaner` (line ~315). This creates competing assignment logic. Remove the `assign-cleaner` block since `auto-dispatch-booking` -> `dispatch-job` is the more sophisticated pipeline.
+#### 1. Update `supabase/functions/stripe-webhook/index.ts`
 
-### 4. Add Secret for Webhook Authentication
-Add a new Supabase secret: `CLEANER_ENROLLMENT_WEBHOOK_SECRET` -- a random string that external systems must include in their requests.
+Restructure the `payment_intent.succeeded` handler so downstream actions run even if the booking was already confirmed by `verify-payment`:
 
-### 5. Update `supabase/config.toml`
-Add the new function entry:
-```toml
-[functions.enroll-cleaner]
-verify_jwt = false
-```
+- Keep the status update idempotent (don't re-confirm)
+- Move email sending, auto-dispatch, Zapier webhook, Google Calendar, and referral generation **outside** the idempotency guard
+- Each action already has its own idempotency check:
+  - Email: checks `confirmation_email_sent` flag
+  - Dispatch: checks `job_id` existence
+  - Zapier: fire-and-forget (safe to re-send)
+  - Calendar: checks `google_calendar_event_id`
+
+The key change is replacing the early `break` at line 93 with a flag that skips only the status update but continues processing downstream actions.
+
+#### 2. Update `supabase/functions/verify-payment/index.ts`
+
+Simplify this function to **only** verify payment status and update booking status. Remove the email sending logic (lines 218-283) since `stripe-webhook` will reliably handle all downstream actions. This eliminates the competing email sender.
+
+Also remove the credit deduction logic (lines 99-132) since `stripe-webhook` already handles this with the same optimistic locking pattern.
+
+#### 3. Update `src/pages/book/Success.tsx`
+
+Remove the client-side `sendConfirmationEmail` effect (lines 224-362). This is a third competing email sender that adds complexity. The `stripe-webhook` will handle all email sending server-side, which is more reliable than client-side triggers that depend on the user staying on the page.
+
+Keep the `verify-payment` call for UI feedback (showing the user their payment status), but it no longer triggers side effects.
+
+#### 4. Immediate Fix for Malik's Booking
+
+Run the downstream actions manually for the missed booking by invoking the edge functions directly:
+- Call `send-booking-email` with the booking data
+- Call `auto-dispatch-booking` with the booking ID
+- Call `send-zapier-webhook` with the booking ID
 
 ## File Changes Summary
 
-| File | Action | Purpose |
+| File | Action | What Changes |
 |---|---|---|
-| `supabase/functions/enroll-cleaner/index.ts` | Create | New inbound webhook for auto-enrolling cleaners |
-| `supabase/config.toml` | Edit | Add `enroll-cleaner` function config |
-| `src/pages/cleaner/Onboarding.tsx` | Edit | Add geocoding after profile creation |
-| `supabase/functions/stripe-webhook/index.ts` | Edit | Remove duplicate `assign-cleaner` call |
+| `supabase/functions/stripe-webhook/index.ts` | Edit | Remove early `break` on confirmed status; run downstream actions with individual idempotency checks |
+| `supabase/functions/verify-payment/index.ts` | Edit | Remove email sending and credit deduction; keep only status verification |
+| `src/pages/book/Success.tsx` | Edit | Remove client-side email sending effect |
 
-## How It All Works End-to-End
+## After the Fix
 
 ```text
-CLEANER ENROLLMENT (two paths):
-
-Path A: External System (Zapier/GHL/Form)
-  POST /enroll-cleaner + x-webhook-secret header
-    -> Validates fields
-    -> Creates auth user + cleaner record
-    -> Geocodes ZIP -> lat/lng
-    -> Cleaner immediately available for dispatch
-
-Path B: Self-Enrollment (contractor.novaracleaning.com)
-  Cleaner visits /cleaner/onboarding-landing
-    -> Email verification
-    -> 4-step wizard
-    -> Profile saved + geocoded
-    -> Stripe Connect setup
-    -> Cleaner immediately available for dispatch
-
-JOB ASSIGNMENT (fully autonomous):
-
-Customer pays for booking
-  -> Stripe webhook fires
-  -> auto-dispatch-booking creates job record
-  -> dispatch-job scores all eligible cleaners
-     (location, rating, workload, performance)
-  -> Creates job_assignments for top candidates
-  -> Sends SMS offers to cleaners
-  -> Cleaners accept/decline via SMS link
+Customer pays -> Success page loads
+                    |
+                    +--> verify-payment
+                    |       Updates status to "confirmed" (if not already)
+                    |       Returns status to UI for display
+                    |       NO side effects
+                    |
+                    +--> stripe-webhook
+                            Updates status to "confirmed" (skipped if already done)
+                            ALWAYS runs downstream actions:
+                              - Send confirmation email (if not already sent)
+                              - Auto-dispatch job (if no job_id yet)
+                              - Send Zapier webhook
+                              - Create Google Calendar event
+                              - Generate referral code
 ```
+
+This ensures that even if `verify-payment` confirms the booking first, the webhook still fires all the important downstream actions.
