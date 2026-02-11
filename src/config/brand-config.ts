@@ -12,7 +12,7 @@
 export const COMPANY = {
   name: "NovaraCleaning",
   tagline: "Professional House Cleaning Services",
-  phone: "(555) 123-4567",
+  phone: "+1 (844) 735-2070",
   email: "hello@novaracleaning.com",
   website: "https://novaracleaning.com",
   logoUrl: "/novara-logo.png",
