@@ -181,11 +181,11 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="tel:9725590223"
+              href="tel:+18447352070"
               className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <Phone className="w-4 h-4" />
-              (972) 559-0223
+              (844) 735-2070
             </a>
             <Button
               variant="outline"
@@ -675,10 +675,10 @@ const Index = () => {
                   Terms of Service
                 </a>
                 <a
-                  href="tel:9725590223"
+                  href="tel:+18447352070"
                   className="hover:text-foreground transition-colors"
                 >
-                  (972) 559-0223
+                  (844) 735-2070
                 </a>
                 <a
                   href="mailto:support@novaracleaning.com"
