@@ -151,12 +151,12 @@ export default function BookingOffer() {
                 
                 <div className="flex items-center justify-center gap-2 text-lg font-semibold text-primary">
                   <Phone className="w-5 h-5" />
-                  <a href="tel:9725590223">(972) 559-0223</a>
+                  <a href="tel:+18447352070">(844) 735-2070</a>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button asChild size="lg" className="bg-gradient-primary">
-                    <a href="tel:9725590223">
+                    <a href="tel:+18447352070">
                       <Phone className="w-4 h-4 mr-2" />
                       Call Now
                     </a>

@@ -42,7 +42,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
               className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
               asChild
             >
-              <a href="tel:+19725590223">
+              <a href="tel:+18447352070">
                 <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="hidden xs:inline">Call</span>
               </a>
