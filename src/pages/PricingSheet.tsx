@@ -111,8 +111,8 @@ export default function PricingSheet() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <a href="tel:9725590223" className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Phone className="w-4 h-4" />(972) 559-0223
+            <a href="tel:+18447352070" className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <Phone className="w-4 h-4" />(844) 735-2070
             </a>
             <Button onClick={handleBookNow} className="h-10 px-6 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white">
               Book Now <ArrowRight className="w-4 h-4 ml-2" />
@@ -496,9 +496,9 @@ export default function PricingSheet() {
             <Button onClick={handleBookNow} size="lg" className="h-14 px-10 text-base font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">
               Book Your Clean Now <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
-            <a href="tel:9725590223">
+            <a href="tel:+18447352070">
               <Button variant="outline" size="lg" className="h-14 px-10 text-base font-semibold border-[#5C0FFE]/30 text-[#5C0FFE]">
-                <Phone className="w-4 h-4 mr-2" />Call (972) 559-0223
+                <Phone className="w-4 h-4 mr-2" />Call (844) 735-2070
               </Button>
             </a>
           </div>
