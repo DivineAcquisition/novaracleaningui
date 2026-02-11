@@ -10,6 +10,53 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const MIGMA_CONVERSATION_ID = "698acaea41154eb80fab602e";
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[SEND-ABANDONED-CART-EMAIL] ${step}${detailsStr}`);
+};
+
+async function fetchMigmaTemplate(conversationId: string): Promise<string | null> {
+  const apiKey = Deno.env.get("MIGMA_API_KEY");
+  if (!apiKey) {
+    logStep("MIGMA_API_KEY not configured, falling back to React Email");
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://api.migma.ai/v1/export/html/${conversationId}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+
+    if (!response.ok) {
+      logStep("Migma API error", { status: response.status, statusText: response.statusText });
+      return null;
+    }
+
+    const result = await response.json();
+    const html = typeof result === 'string' ? result : (result.html || result.data?.html || null);
+
+    if (html) {
+      logStep("Migma template fetched successfully", { length: html.length });
+    }
+    return html;
+  } catch (err: any) {
+    logStep("Error fetching Migma template", { error: err.message });
+    return null;
+  }
+}
+
+function populateAbandonedCartTemplate(html: string, data: Record<string, string>): string {
+  let result = html;
+  for (const [placeholder, value] of Object.entries(data)) {
+    result = result.replaceAll(`{{${placeholder}}}`, value);
+    const encoded = encodeURIComponent(`{{${placeholder}}}`);
+    result = result.replaceAll(encoded, value);
+  }
+  return result;
+}
+
 interface AbandonedCartEmailRequest {
   cartId: string;
   isSecondReminder?: boolean;
@@ -38,8 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
     let cart: any;
 
     if (testMode && testEmail) {
-      // Direct test mode — no DB lookup needed
-      console.log(`Test mode: sending abandoned cart email to ${testEmail}`);
+      logStep(`Test mode: sending abandoned cart email to ${testEmail}`);
       cart = {
         id: 'test',
         email: testEmail,
@@ -47,9 +93,9 @@ const handler = async (req: Request): Promise<Response> => {
         home_size: testHomeSize || null,
         service_type: testServiceType || null,
         reminder_count: isSecondReminder ? 1 : 0,
+        zip_code: null,
       };
     } else {
-      // Normal mode — fetch from DB
       const { data: cartData, error: cartError } = await supabase
         .from("abandoned_carts")
         .select("*")
@@ -64,9 +110,8 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      // Don't send if already converted
       if (cartData.converted_at) {
-        console.log("Cart already converted, skipping email");
+        logStep("Cart already converted, skipping email");
         return new Response(
           JSON.stringify({ success: true, message: "Cart already converted" }),
           { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -76,24 +121,44 @@ const handler = async (req: Request): Promise<Response> => {
       cart = cartData;
     }
 
-    // Build resume URL
     const baseUrl = "https://try.novaracleaning.com";
     const resumeUrl = `${baseUrl}/book/sqft?resume=${cartId}`;
 
-    console.log(`Sending ${isSecondReminder ? 'second' : 'first'} reminder to ${cart.email}`);
+    logStep(`Sending ${isSecondReminder ? 'second' : 'first'} reminder to ${cart.email}`);
 
-    // Render email
-    const html = await renderAsync(
-      React.createElement(AbandonedCartReminder, {
-        firstName: cart.first_name || undefined,
-        homeSize: cart.home_size || undefined,
-        serviceType: cart.service_type || undefined,
-        resumeUrl,
-        isSecondReminder,
-      })
-    );
+    // Try Migma template first, fall back to React Email
+    let html: string;
 
-    // Send email
+    const migmaHtml = await fetchMigmaTemplate(MIGMA_CONVERSATION_ID);
+
+    if (migmaHtml) {
+      const serviceTypeLabels: Record<string, string> = {
+        standard: 'Standard Cleaning',
+        deep: 'Deep Cleaning',
+        moveInOut: 'Move In/Out Cleaning',
+      };
+
+      html = populateAbandonedCartTemplate(migmaHtml, {
+        first_name: cart.first_name || 'there',
+        service_type: serviceTypeLabels[cart.service_type] || cart.service_type || 'Cleaning',
+        home_size: cart.home_size || '',
+        resume_url: resumeUrl,
+        zip_code: cart.zip_code || '',
+      });
+      logStep("Using Migma template for abandoned cart email");
+    } else {
+      html = await renderAsync(
+        React.createElement(AbandonedCartReminder, {
+          firstName: cart.first_name || undefined,
+          homeSize: cart.home_size || undefined,
+          serviceType: cart.service_type || undefined,
+          resumeUrl,
+          isSecondReminder,
+        })
+      );
+      logStep("Using React Email fallback for abandoned cart email");
+    }
+
     const subject = isSecondReminder
       ? "Last chance! Complete your Novara Cleaning booking"
       : "You're almost there! Complete your booking";
@@ -105,9 +170,8 @@ const handler = async (req: Request): Promise<Response> => {
       html,
     });
 
-    console.log("Abandoned cart email sent:", emailResult);
+    logStep("Abandoned cart email sent:", emailResult);
 
-    // Update cart record (skip in test mode)
     if (!testMode) {
       await supabase
         .from("abandoned_carts")
