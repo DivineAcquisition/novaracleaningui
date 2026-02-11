@@ -27,6 +27,9 @@ import WebhookTester from "./pages/admin/WebhookTester";
 import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminBookings from "./pages/admin/Bookings";
+import AdminCustomers from "./pages/admin/Customers";
 import CleanerAuth from "./pages/cleaner/Auth";
 import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
 import CleanerResetPassword from "./pages/cleaner/ResetPassword";
@@ -140,6 +143,21 @@ const App = () => (
               <Route path="/admin/auth" element={
                 <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
                   <AdminAuth />
+                </DomainRestricted>
+              } />
+              <Route path="/admin/dashboard" element={
+                <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
+                  <ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/bookings" element={
+                <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
+                  <ProtectedRoute requiredRole="admin"><AdminBookings /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/customers" element={
+                <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
+                  <ProtectedRoute requiredRole="admin"><AdminCustomers /></ProtectedRoute>
                 </DomainRestricted>
               } />
               <Route path="/admin/cleaners" element={
