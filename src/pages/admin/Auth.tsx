@@ -42,7 +42,7 @@ export default function AdminAuth() {
       }
 
       if (data === true) {
-        navigate("/admin/dispatch");
+        navigate("/admin/dashboard");
       } else {
         toast.error("Access Denied", {
           description: "You don't have admin permissions."
