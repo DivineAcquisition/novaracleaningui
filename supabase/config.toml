@@ -176,3 +176,6 @@ verify_jwt = false
 
 [functions.mark-cart-converted]
 verify_jwt = false
+
+[functions.enroll-cleaner]
+verify_jwt = false

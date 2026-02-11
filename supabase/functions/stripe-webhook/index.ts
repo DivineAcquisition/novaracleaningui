@@ -308,23 +308,7 @@ serve(async (req) => {
             logStep("Error sending emails (non-blocking)", { error: emailError });
           }
 
-          // Auto-assign cleaner if not already assigned
-          if (!booking.cleaner_id) {
-            try {
-              logStep("Triggering auto-assignment");
-              const assignResponse = await supabase.functions.invoke('assign-cleaner', {
-                body: { bookingId: booking.id },
-              });
-              
-              if (assignResponse.error) {
-                logStep("Auto-assignment failed (non-blocking)", { error: assignResponse.error });
-              } else {
-                logStep("Cleaner assigned successfully", assignResponse.data);
-              }
-            } catch (assignError) {
-              logStep("Error auto-assigning cleaner (non-blocking)", { error: assignError });
-            }
-          }
+          // Legacy assign-cleaner removed — auto-dispatch-booking (line ~190) handles this via dispatch-job
 
           // Generate referral code for customer if they don't have one
           try {
