@@ -32,31 +32,48 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = new Resend(resendApiKey);
 
-    const body: AbandonedCartEmailRequest = await req.json();
-    const { cartId, isSecondReminder = false } = body;
+    const body = await req.json();
+    const { cartId, isSecondReminder = false, testMode, testEmail, testFirstName, testHomeSize, testServiceType } = body;
 
-    // Fetch cart details
-    const { data: cart, error: cartError } = await supabase
-      .from("abandoned_carts")
-      .select("*")
-      .eq("id", cartId)
-      .single();
+    let cart: any;
 
-    if (cartError || !cart) {
-      console.error("Cart not found:", cartError);
-      return new Response(
-        JSON.stringify({ error: "Cart not found" }),
-        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+    if (testMode && testEmail) {
+      // Direct test mode — no DB lookup needed
+      console.log(`Test mode: sending abandoned cart email to ${testEmail}`);
+      cart = {
+        id: 'test',
+        email: testEmail,
+        first_name: testFirstName || 'there',
+        home_size: testHomeSize || null,
+        service_type: testServiceType || null,
+        reminder_count: isSecondReminder ? 1 : 0,
+      };
+    } else {
+      // Normal mode — fetch from DB
+      const { data: cartData, error: cartError } = await supabase
+        .from("abandoned_carts")
+        .select("*")
+        .eq("id", cartId)
+        .single();
 
-    // Don't send if already converted
-    if (cart.converted_at) {
-      console.log("Cart already converted, skipping email");
-      return new Response(
-        JSON.stringify({ success: true, message: "Cart already converted" }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      if (cartError || !cartData) {
+        console.error("Cart not found:", cartError);
+        return new Response(
+          JSON.stringify({ error: "Cart not found" }),
+          { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      // Don't send if already converted
+      if (cartData.converted_at) {
+        console.log("Cart already converted, skipping email");
+        return new Response(
+          JSON.stringify({ success: true, message: "Cart already converted" }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      cart = cartData;
     }
 
     // Build resume URL
@@ -90,15 +107,17 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Abandoned cart email sent:", emailResult);
 
-    // Update cart record
-    await supabase
-      .from("abandoned_carts")
-      .update({
-        reminder_sent_at: new Date().toISOString(),
-        reminder_count: cart.reminder_count + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", cartId);
+    // Update cart record (skip in test mode)
+    if (!testMode) {
+      await supabase
+        .from("abandoned_carts")
+        .update({
+          reminder_sent_at: new Date().toISOString(),
+          reminder_count: cart.reminder_count + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", cartId);
+    }
 
     return new Response(
       JSON.stringify({ success: true, emailId: emailResult.data?.id }),
