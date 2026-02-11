@@ -263,6 +263,23 @@ export default function CleanerOnboarding() {
         throw insertError;
       }
 
+      // Geocode home ZIP to populate home_lat/home_lng for dispatch eligibility
+      if (formData.homeZip) {
+        try {
+          const { data: geoData } = await supabase.functions.invoke('geocode-address', {
+            body: { zip: formData.homeZip }
+          });
+          if (geoData?.lat && geoData?.lng) {
+            await supabase
+              .from("cleaners")
+              .update({ home_lat: geoData.lat, home_lng: geoData.lng })
+              .eq("user_id", userId);
+          }
+        } catch (geoErr) {
+          console.warn("Geocoding failed (non-critical):", geoErr);
+        }
+      }
+
       // Initiate Stripe Connect
       toast.success("Profile created! Setting up payments...");
       
