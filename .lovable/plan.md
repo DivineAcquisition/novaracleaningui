@@ -1,47 +1,94 @@
 
 
-# Abandoned Cart Email via Migma (with Direct Placeholders)
+# Complete Admin Portal Build-Out
 
-## Overview
-Update `send-abandoned-cart-email` to fetch the HTML template from Migma, populate placeholders using direct cart data values (no GHL-style naming), and fall back to React Email if Migma fails.
+## What's Missing Today
 
-## Migma Conversation ID
-`698acaea41154eb80fab602e`
+The admin portal currently has isolated pages (Cleaners, Directory, Dispatch, Intake, Webhooks) but lacks:
+- A unified layout with sidebar navigation
+- A Bookings Management page (view/search/edit/cancel all booked jobs)
+- A Customers Management page (view all customer accounts, booking history, membership status)
+- An Admin Dashboard home page with key metrics at a glance
 
-## Placeholder Strategy
-Instead of GHL-style `{{contact.first_name}}`, use straightforward placeholders mapped directly from abandoned cart fields:
+## Plan
 
-| Placeholder | Source |
+### 1. Admin Layout with Sidebar Navigation
+Create a shared `AdminLayout` component that wraps all admin pages with:
+- Collapsible sidebar with navigation links (Dashboard, Bookings, Customers, Cleaners, Directory, Dispatch, Intake, Webhooks)
+- Current page indicator
+- Admin user info + sign-out button in the sidebar footer
+- Mobile-responsive (drawer on small screens)
+
+### 2. Admin Dashboard Page (`/admin` or `/admin/dashboard`)
+A summary page showing:
+- Today's bookings count, upcoming bookings, revenue this month
+- Quick stats: total customers, active cleaners, pending jobs
+- Recent bookings list (last 10)
+- Alerts: unassigned jobs, failed webhooks, pending cleaner approvals
+
+### 3. Bookings Management Page (`/admin/bookings`)
+Full CRUD for all bookings:
+- Searchable/filterable table (by status, date range, customer email, cleaner)
+- Status filters: All, Pending Payment, Confirmed, Assigned, Completed, Cancelled
+- Each row shows: date, customer name, address, service type, status, assigned cleaner(s), amount
+- Click a row to open a detail/edit panel:
+  - View full booking details
+  - Change status
+  - Reassign cleaner
+  - Add/edit team notes, dispatch notes
+  - Cancel booking (with reason)
+  - View payment info (Stripe link)
+
+### 4. Customers Management Page (`/admin/customers`)
+Full view of all customer accounts:
+- Searchable table (by name, email, phone, ZIP)
+- Each row: name, email, phone, ZIP, booking count, membership status, referral code
+- Click to expand: booking history, membership credit details, referral activity
+- Quick actions: view bookings for this customer
+
+### 5. Route Updates
+Add new routes in `App.tsx`:
+- `/admin/dashboard` -- Admin Dashboard (default after login)
+- `/admin/bookings` -- Bookings Management
+- `/admin/customers` -- Customers Management
+- Update AdminAuth to redirect to `/admin/dashboard` instead of `/admin/dispatch`
+
+## Technical Details
+
+### New Files
+| File | Purpose |
 |---|---|
-| `{{first_name}}` | `cart.first_name` |
-| `{{service_type}}` | `cart.service_type` |
-| `{{home_size}}` | `cart.home_size` |
-| `{{resume_url}}` | Generated resume booking link |
-| `{{zip_code}}` | `cart.zip_code` |
+| `src/components/admin/AdminLayout.tsx` | Shared sidebar layout wrapping all admin pages |
+| `src/pages/admin/Dashboard.tsx` | Admin home with KPI cards and alerts |
+| `src/pages/admin/Bookings.tsx` | Bookings table with search, filter, detail panel |
+| `src/pages/admin/Customers.tsx` | Customers table with search, expansion rows |
 
-## Changes
+### Modified Files
+| File | Change |
+|---|---|
+| `src/App.tsx` | Add 3 new admin routes, wrap existing admin routes in AdminLayout |
+| `src/pages/admin/Auth.tsx` | Redirect to `/admin/dashboard` on success |
+| All existing admin pages | Wrap in AdminLayout for consistent navigation |
 
-### 1. `supabase/functions/send-abandoned-cart-email/index.ts`
-- Add `fetchMigmaTemplate()` (reuse same pattern from `send-booking-email`)
-- Add `populateAbandonedCartTemplate()` with direct placeholder names
-- Try Migma first; on failure, fall back to existing React Email `AbandonedCartReminder`
-- Keep `testMode` support intact
-- No changes to subject line logic or Resend sending
+### Data Sources (no schema changes needed)
+- **Bookings**: `bookings` table -- already has public read/update RLS
+- **Customers**: `customers` table -- already has public read RLS
+- **Cleaners**: `cleaners` table -- admin RLS via `has_role`
+- **Jobs/Assignments**: `jobs`, `job_assignments` tables -- admin RLS
+- **Membership**: `membership_credits` table -- public read RLS
+- **Payouts**: `payouts` table -- admin RLS
 
-### 2. Flow
+### No database migrations required
+All tables already exist with appropriate columns and RLS policies for admin access.
 
-```text
-Request --> Fetch Migma HTML (conversation 698acaea...)
-              |
-              +-- Success --> Replace {{first_name}}, {{resume_url}}, etc. --> Send via Resend
-              |
-              +-- Failure --> Render AbandonedCartReminder (React Email) --> Send via Resend
-```
-
-### What stays the same
-- `check-abandoned-carts` cron job (no changes)
-- `testMode` behavior
-- Subject lines (1st vs 2nd reminder)
-- Resend delivery from `hello@novaracleaning.com`
-- `MIGMA_API_KEY` secret (already configured)
+### Bookings Detail Panel Fields
+- Customer info (name, email, phone)
+- Service details (type, home size, add-ons, frequency)
+- Address, date, time slot, arrival window
+- Status with dropdown to change
+- Assigned cleaners with reassignment option
+- Payment: method, option (deposit/full), amounts, Stripe invoice link
+- Notes: access, team, dispatch (editable)
+- Cancel button with reason dialog
+- Check-in/out times, before/after photos (read-only)
 
