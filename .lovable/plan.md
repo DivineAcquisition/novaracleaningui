@@ -1,61 +1,127 @@
 
 
-# Deduplicate Customer Search Results
+# Multi-Part Update: Sales Submit, Name Dedup, Customer Portal Overhaul, Reschedule Webhook
 
-## Problem
+This plan covers 4 distinct areas of work.
 
-The customer search in `useCustomerSearch` (`src/hooks/use-sales-data.ts`) deduplicates only by email. This means:
-- A person who appears in both `bookings` and `customers` with different email casing could show twice (already handled via `.toLowerCase()`)
-- A person with the **same phone number** but different emails shows as separate entries
-- A person with the **same name** but different emails shows as separate entries
-- Multiple booking rows for the same person are aggregated, but customer/cart duplicates of the same person (matching by phone) slip through
+---
 
-The cleaner search (`CleanerMultiSelect`) is already fine -- it works from a single `cleaners` table with unique `id` keys, so no duplicates are possible.
+## 1. Sales Tool: "Create Booking" Already Exists
 
-## Fix
+The "Create Booking" submit button is **already implemented** in `SalesTool.tsx` (line 540-543). It:
+- Validates all required fields (customer info, address, service, schedule)
+- Inserts into `bookings` table with full pricing
+- Creates `jobs` + `job_assignments` if cleaners are selected
+- Calls `send-zapier-webhook` for CRM sync
+- Calls `send-booking-email` for confirmation email
+- Navigates to dispatch queue on success
 
-Update the deduplication logic in `useCustomerSearch` to key by **email OR phone**, whichever matches first. This catches cases where the same person has different emails across tables but the same phone number.
+**No changes needed here** -- this is already working.
 
-## Technical Details
+---
 
-### File: `src/hooks/use-sales-data.ts`
+## 2. Customer Search: Deduplicate by Name, Show All Contact Info
 
-**Change the dedup key logic** in the `useCustomerSearch` queryFn:
+### Problem
+The current dedup keys on email and phone, but the same person with the same name but different emails/phones still shows multiple rows.
 
-- Instead of keying only by `email.toLowerCase()`, generate a composite dedup approach:
-  1. Maintain two lookup maps: one by email, one by phone (digits only)
-  2. When processing each result, check if **either** the email or phone already exists in the seen maps
-  3. If a match is found on either, skip the entry (or merge booking count if from bookings)
-  4. If no match, add the entry and register both its email and phone in the lookup maps
+### Solution
+Update `useCustomerSearch` in `src/hooks/use-sales-data.ts` to:
 
-**Before (current):**
-```typescript
-const seen = new Map<string, CustomerSearchResult>();
-// ...
-const key = b.email.toLowerCase();
-if (!seen.has(key)) { seen.set(key, ...); }
+1. Add a **third dedup key by normalized name** (`firstName lastName` lowercased, trimmed)
+2. When a name match is found, **merge** the contact info rather than skip -- collect all emails and phones into arrays
+3. Update the `CustomerSearchResult` interface to support multiple contacts: add `allEmails: string[]` and `allPhones: string[]`
+4. The primary `email` and `phone` fields will be the **most recent / most-used** one (from bookings first, then customers, then carts)
+
+### Display Changes in `SalesTool.tsx`
+Update the search results dropdown (line 583-594) to show all associated emails and phones beneath the name, with the primary one highlighted.
+
+### Files Changed
+- `src/hooks/use-sales-data.ts` -- Add name-based dedup, `allEmails`/`allPhones` fields, prioritize by recency
+- `src/pages/admin/SalesTool.tsx` -- Update search result display to show all contact methods
+
+---
+
+## 3. Customer Portal (Account Page) -- Complete Overhaul
+
+### Current Issues
+- Functional but basic card-based layout
+- Reschedule dialog uses a horizontal scroll date picker that's hard to use
+- No webhook to GHL on reschedule from the customer portal side
+
+### Redesign: `src/pages/Account.tsx`
+
+**New Layout** -- Clean, modern dashboard with clear sections:
+
+```
++--------------------------------------------------+
+|  Header: Welcome Back, [Name]    [Book] [Sign Out]|
++--------------------------------------------------+
+|  [Next Cleaning Card - hero style]               |
+|   Date, time, address, countdown                  |
+|   [Reschedule] [Modify] [Cancel]                  |
++--------------------------------------------------+
+|  [Membership Card]  |  [Quick Actions]            |
+|   Credits, plan      |   Book, Billing, Refer     |
++--------------------------------------------------+
+|  Upcoming Bookings (list)                         |
++--------------------------------------------------+
+|  Past Bookings (collapsible table)                |
++--------------------------------------------------+
 ```
 
-**After:**
-```typescript
-const byEmail = new Map<string, CustomerSearchResult>();
-const byPhone = new Map<string, CustomerSearchResult>();
+Key improvements:
+- Hero card for the next upcoming booking with prominent action buttons
+- Better visual hierarchy with status colors
+- Countdown to next cleaning ("in 3 days")
+- Collapsible past bookings section
+- Mobile-responsive card layout instead of dense tables
 
-function findExisting(email: string, phone: string) {
-  return byEmail.get(email.toLowerCase()) 
-    || (phone ? byPhone.get(phone.replace(/\D/g, '')) : undefined);
-}
+### Reschedule Dialog UI Overhaul: `src/components/booking/RescheduleDialog.tsx`
 
-function register(result: CustomerSearchResult) {
-  if (result.email) byEmail.set(result.email.toLowerCase(), result);
-  const digits = result.phone?.replace(/\D/g, '');
-  if (digits && digits.length >= 10) byPhone.set(digits, result);
-}
+Replace the horizontal scroll date picker with:
+- A **calendar grid** (using the existing `Calendar` component from shadcn) for date selection
+- A cleaner **vertical list** of time slots with radio-style selection
+- Current booking info displayed as a highlighted summary card at the top
+- Better loading/success states with animations
+
+---
+
+## 4. Reschedule Webhook to GHL
+
+### New webhook call in `supabase/functions/reschedule-booking/index.ts`
+
+After the booking is updated and email is sent, add a direct POST to the GHL reschedule webhook:
+
+```
+URL: https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/f8326cbb-8ef8-4220-bd54-746e909bcb2f
 ```
 
-This ensures that if "John Doe" appears in `customers` with email A and phone 555-1234, and again in `bookings` with email B but the same phone 555-1234, only one entry shows up.
+The payload will include:
+- `booking_id`, `email`, `first_name`, `last_name`, `phone`
+- `old_date`, `old_time_slot`
+- `new_date`, `new_time_slot`
+- `service_type`, `address`, `city`, `state`, `zip_code`
+- `total_estimate_cents`
+- `event_type: "booking_rescheduled"`
 
-### No other files change
+This will be a direct `fetch()` call in the edge function (no new secret needed since the URL is hardcoded like other GHL endpoints).
 
-The `CleanerMultiSelect` component queries a single table with unique IDs -- no dedup needed there.
+### Send a Test
+
+After deploying the updated edge function, I will call it with a test booking ID to verify the webhook fires correctly.
+
+---
+
+## Technical Summary
+
+| File | Change |
+|------|--------|
+| `src/hooks/use-sales-data.ts` | Add name-based dedup key, `allEmails`/`allPhones` arrays, prioritize most-used contact |
+| `src/pages/admin/SalesTool.tsx` | Update search dropdown to display all emails/phones per person |
+| `src/pages/Account.tsx` | Complete UI overhaul with hero next-booking card, better layout, mobile-friendly |
+| `src/components/booking/RescheduleDialog.tsx` | Replace horizontal date scroll with calendar grid, cleaner time slot list |
+| `supabase/functions/reschedule-booking/index.ts` | Add GHL webhook POST after successful reschedule |
+
+No database migrations needed.
 
