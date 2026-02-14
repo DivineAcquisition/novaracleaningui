@@ -1,11 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { LeadIntakeSection, LeadIntakeData } from "@/components/sales/LeadIntakeSection";
-import { useServiceCoverage } from "@/hooks/use-sales-data";
-import { QualificationSection, QualificationData } from "@/components/sales/QualificationSection";
 import { LiveQuotePanel } from "@/components/sales/LiveQuotePanel";
 import { SalesAssistPanel } from "@/components/sales/SalesAssistPanel";
-import { BookingConfirmationSection } from "@/components/sales/BookingConfirmationSection";
 import { FollowUpScheduler } from "@/components/sales/FollowUpScheduler";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,13 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { toast as toastHook } from "@/hooks/use-toast";
 import {
-  Headset, Save, CheckCircle, BarChart3, RotateCcw, Pencil, Lock,
-  Clock, DollarSign, RefreshCw, Trash2, ArrowLeft, Users,
+  Save, CheckCircle, BarChart3, RotateCcw, Pencil, Lock,
+  Clock, DollarSign, RefreshCw, Users,
 } from "lucide-react";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, calculatePrice, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
@@ -31,27 +26,17 @@ import { calculateDistance } from "@/lib/distance-calculator";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { useCustomerSearch, CustomerSearchResult } from "@/hooks/use-sales-data";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, UserCheck, ShoppingCart, User } from "lucide-react";
+import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const ACCESS_PIN = "1234";
 const AUTOSAVE_KEY = "sales_tool_autosave";
 const AUTOSAVE_INTERVAL = 30000;
 
-// Novara brand green
 const BRAND_GREEN = "hsl(142, 76%, 36%)";
 
-const initialLead: LeadIntakeData = {
-  firstName: "", lastName: "", phone: "", email: "",
-  source: "Website", channel: "Phone Call", activeChannel: "Phone Call",
-  notes: "", isExistingCustomer: false,
-};
-
-const initialQualification: QualificationData = {
-  serviceType: "standard", propertyType: "", bedrooms: 0, bathrooms: 0,
-  sqft: "", homeSizeId: "", zipCode: "", frequency: "One-Time",
-  preferredDate: "", preferredTime: "", specialRequests: "", urgency: "", addOns: [],
-};
+const LEAD_SOURCES = ["Google Ads", "Facebook", "Instagram DM", "Referral", "Website", "Cold Outreach", "Other"];
+const CONTACT_CHANNELS = ["Phone Call", "Text/SMS", "Instagram DM", "Facebook DM", "Email"];
 
 interface Cleaner {
   id: string;
@@ -102,73 +87,117 @@ export default function SalesTool() {
     }
   };
 
-  // ─── Active tab ───
-  const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(tabParam === "intake" ? "intake" : "sales");
-
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    setSearchParams(tab === "sales" ? {} : { tab });
-  };
-
-  // ─── Customer Search (shared) ───
+  // ─── Customer Search ───
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const { data: searchResults, isLoading: searchLoading } = useCustomerSearch(searchQuery);
 
   const handleSelectSearchResult = (result: CustomerSearchResult) => {
-    setLead(prev => ({
-      ...prev,
-      firstName: result.firstName,
-      lastName: result.lastName,
-      email: result.email,
-      phone: result.phone || "",
-      isExistingCustomer: true,
-    }));
-    setIntakeFirstName(result.firstName);
-    setIntakeLastName(result.lastName);
-    setIntakeEmail(result.email);
-    setIntakePhone(result.phone || "");
+    setFirstName(result.firstName);
+    setLastName(result.lastName);
+    setEmail(result.email);
+    setPhone(result.phone || "");
     setSearchOpen(false);
     setSearchQuery("");
     toast.success(`Loaded: ${result.firstName} ${result.lastName}`);
   };
 
-  // ─── Sales Tab State ───
-  const [lead, setLead] = useState<LeadIntakeData>(initialLead);
-  const [qual, setQual] = useState<QualificationData>(initialQualification);
+  // ─── Unified Form State ───
   const [saving, setSaving] = useState(false);
   const [savedLeadId, setSavedLeadId] = useState<string | null>(null);
-  const [booked, setBooked] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
+  const [loading, setLoading] = useState(false);
 
+  // Customer Info
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [customerSource, setCustomerSource] = useState("New Lead");
+  const [sdrRepName, setSdrRepName] = useState("");
+  const [leadSource, setLeadSource] = useState("Website");
+  const [channel, setChannel] = useState("Phone Call");
+  const [activeChannel, setActiveChannel] = useState("Phone Call");
+  const [notes, setNotes] = useState("");
+
+  // Service Address
+  const [street, setStreet] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("MD");
+  const [zipCode, setZipCode] = useState("");
+  const [bedrooms, setBedrooms] = useState("");
+  const [bathrooms, setBathrooms] = useState("");
+  const [dwellingType, setDwellingType] = useState("");
+  const [pets, setPets] = useState("None");
+
+  // Service Details
+  const [homeSizeId, setHomeSizeId] = useState("");
+  const [serviceType, setServiceType] = useState("standard");
+  const [addOns, setAddOns] = useState<string[]>([]);
+  const [frequency, setFrequency] = useState("One-Time");
+
+  // Scheduling
+  const [serviceDate, setServiceDate] = useState("");
+  const [timeSlot, setTimeSlot] = useState("");
+  const [estimatedDuration, setEstimatedDuration] = useState("");
+  const [arrivalWindow, setArrivalWindow] = useState("");
+
+  // Booking Config
+  const [bookingChannel, setBookingChannel] = useState("Phone");
+  const [paymentStatus, setPaymentStatus] = useState("Deposit Paid");
+  const [paymentMethod, setPaymentMethod] = useState("Card");
+  const [membershipPlan, setMembershipPlan] = useState("none");
+  const [applyNewCustomerDiscount, setApplyNewCustomerDiscount] = useState(true);
+
+  // Notes
+  const [accessNotes, setAccessNotes] = useState("");
+  const [teamNotes, setTeamNotes] = useState("");
+  const [dispatchNotes, setDispatchNotes] = useState("");
+
+  // Cleaner Assignment
+  const [numCleaners, setNumCleaners] = useState(2);
+  const [cleaners, setCleaners] = useState<Cleaner[]>([]);
+  const [selectedCleaners, setSelectedCleaners] = useState<SelectedCleaner[]>([]);
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [customerStatus, setCustomerStatus] = useState<CustomerStatus | null>(null);
+  const [checkingCustomer, setCheckingCustomer] = useState(false);
+
+  // Auto-calculate number of cleaners from home size
+  useEffect(() => {
+    if (homeSizeId) {
+      const hs = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
+      if (hs) {
+        const autoNum = (hs.maxSqft || hs.minSqft) > 2500 ? 3 : 2;
+        setNumCleaners(autoNum);
+      }
+    }
+  }, [homeSizeId]);
+
+  // Load lead from URL param
   const leadIdParam = searchParams.get("leadId");
-
   useEffect(() => {
     if (!leadIdParam) return;
     const loadLead = async () => {
       const { data, error } = await supabase.from("leads").select("*").eq("id", leadIdParam).single();
       if (error || !data) { toast.error("Lead not found"); return; }
       const l = data as any;
-      setLead({
-        firstName: l.first_name || "", lastName: l.last_name || "",
-        phone: l.phone || "", email: l.email || "",
-        source: l.source || "Website", channel: l.channel || "Phone Call",
-        activeChannel: l.active_channel || "Phone Call",
-        notes: l.notes || "", isExistingCustomer: l.is_existing_customer || false,
-      });
-      setQual({
-        serviceType: l.service_type || "standard", propertyType: l.property_type || "",
-        bedrooms: l.bedrooms || 0, bathrooms: l.bathrooms || 0,
-        sqft: l.sqft ? String(l.sqft) : "", homeSizeId: "",
-        zipCode: l.zip_code || "", frequency: l.frequency || "One-Time",
-        preferredDate: l.preferred_date || "", preferredTime: l.preferred_time || "",
-        specialRequests: l.special_requests || "", urgency: l.urgency || "", addOns: [],
-      });
+      setFirstName(l.first_name || "");
+      setLastName(l.last_name || "");
+      setPhone(l.phone || "");
+      setEmail(l.email || "");
+      setLeadSource(l.source || "Website");
+      setChannel(l.channel || "Phone Call");
+      setActiveChannel(l.active_channel || "Phone Call");
+      setNotes(l.notes || "");
+      setServiceType(l.service_type || "standard");
+      setBedrooms(l.bedrooms ? String(l.bedrooms) : "");
+      setBathrooms(l.bathrooms ? String(l.bathrooms) : "");
+      setZipCode(l.zip_code || "");
+      setFrequency(l.frequency || "One-Time");
+      setServiceDate(l.preferred_date || "");
       setSavedLeadId(l.id);
       setIsEditing(true);
-      setBooked(l.status === "booked");
     };
     loadLead();
   }, [leadIdParam]);
@@ -190,20 +219,45 @@ export default function SalesTool() {
     if (!isAuthenticated) return;
     if (savedLeadId && !isEditing) return;
     const interval = setInterval(() => {
-      if (lead.firstName || lead.email || qual.zipCode) {
-        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ lead, qual, timestamp: Date.now() }));
+      if (firstName || email || zipCode) {
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
+          firstName, lastName, email, phone, leadSource, channel, activeChannel, notes,
+          street, city, state, zipCode, bedrooms, bathrooms, homeSizeId, serviceType,
+          addOns, frequency, serviceDate, sdrRepName,
+          timestamp: Date.now(),
+        }));
       }
     }, AUTOSAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [lead, qual, savedLeadId, isEditing, isAuthenticated]);
+  }, [firstName, lastName, email, phone, leadSource, channel, activeChannel, notes,
+    street, city, state, zipCode, bedrooms, bathrooms, homeSizeId, serviceType,
+    addOns, frequency, serviceDate, sdrRepName, savedLeadId, isEditing, isAuthenticated]);
 
   const handleRestore = () => {
     const saved = localStorage.getItem(AUTOSAVE_KEY);
     if (saved) {
       try {
-        const { lead: s, qual: q } = JSON.parse(saved);
-        if (s) setLead(s);
-        if (q) setQual(q);
+        const d = JSON.parse(saved);
+        if (d.firstName) setFirstName(d.firstName);
+        if (d.lastName) setLastName(d.lastName);
+        if (d.email) setEmail(d.email);
+        if (d.phone) setPhone(d.phone);
+        if (d.leadSource) setLeadSource(d.leadSource);
+        if (d.channel) setChannel(d.channel);
+        if (d.activeChannel) setActiveChannel(d.activeChannel);
+        if (d.notes) setNotes(d.notes);
+        if (d.street) setStreet(d.street);
+        if (d.city) setCity(d.city);
+        if (d.state) setState(d.state);
+        if (d.zipCode) setZipCode(d.zipCode);
+        if (d.bedrooms) setBedrooms(d.bedrooms);
+        if (d.bathrooms) setBathrooms(d.bathrooms);
+        if (d.homeSizeId) setHomeSizeId(d.homeSizeId);
+        if (d.serviceType) setServiceType(d.serviceType);
+        if (d.addOns) setAddOns(d.addOns);
+        if (d.frequency) setFrequency(d.frequency);
+        if (d.serviceDate) setServiceDate(d.serviceDate);
+        if (d.sdrRepName) setSdrRepName(d.sdrRepName);
         toast.success("Form data restored");
       } catch { toast.error("Failed to restore data"); }
     }
@@ -215,33 +269,124 @@ export default function SalesTool() {
     setShowRestorePrompt(false);
   };
 
+  const resetForm = () => {
+    setFirstName(""); setLastName(""); setEmail(""); setPhone("");
+    setCustomerSource("New Lead"); setSdrRepName(""); setLeadSource("Website");
+    setChannel("Phone Call"); setActiveChannel("Phone Call"); setNotes("");
+    setStreet(""); setCity(""); setState("MD"); setZipCode("");
+    setBedrooms(""); setBathrooms(""); setDwellingType(""); setPets("None");
+    setHomeSizeId(""); setServiceType("standard"); setAddOns([]); setFrequency("One-Time");
+    setServiceDate(""); setTimeSlot(""); setEstimatedDuration(""); setArrivalWindow("");
+    setBookingChannel("Phone"); setPaymentStatus("Deposit Paid"); setPaymentMethod("Card");
+    setMembershipPlan("none"); setApplyNewCustomerDiscount(true);
+    setAccessNotes(""); setTeamNotes(""); setDispatchNotes("");
+    setSelectedCleaners([]); setCustomerStatus(null); setCustomerLocation(null);
+    setNumCleaners(2); setSavedLeadId(null); setIsEditing(false);
+    setSearchParams({});
+    localStorage.removeItem(AUTOSAVE_KEY);
+    localStorage.removeItem("admin_intake_autosave");
+  };
+
+  // Fetch cleaners
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const fetchCleaners = async () => {
+      const { data } = await supabase
+        .from("cleaners")
+        .select("id, first_name, last_name, status, home_lat, home_lng, pay_rate_hr, max_travel_miles")
+        .eq("approved", true)
+        .order("first_name");
+      setCleaners(data || []);
+    };
+    fetchCleaners();
+  }, [isAuthenticated]);
+
+  // Auto-calc duration
+  useEffect(() => {
+    if (homeSizeId && serviceType) {
+      const hs = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
+      if (hs) setEstimatedDuration(calculateServiceDuration(homeSizeId, serviceType, hs.baseHours).toString());
+    }
+  }, [homeSizeId, serviceType]);
+
+  // Customer recognition
+  useEffect(() => {
+    if (!email || !email.includes("@")) return;
+    const t = setTimeout(async () => {
+      setCheckingCustomer(true);
+      try {
+        const { data: customer } = await supabase.from("customers").select("*").eq("email", email).maybeSingle();
+        const { data: membership } = await supabase.from("membership_credits").select("*").eq("email", email)
+          .gt("current_period_end", new Date().toISOString()).order("current_period_end", { ascending: false }).maybeSingle();
+        if (!customer) {
+          setCustomerStatus({ isNew: true, hasMembership: false });
+          setApplyNewCustomerDiscount(true);
+        } else if (membership) {
+          setCustomerStatus({
+            isNew: false, hasMembership: true, membershipPlan: membership.membership_plan,
+            creditsRemaining: membership.credits_remaining, creditsPerMonth: membership.credits_per_month,
+            currentPeriodEnd: membership.current_period_end,
+          });
+          setMembershipPlan(membership.membership_plan);
+          setApplyNewCustomerDiscount(false);
+        } else {
+          setCustomerStatus({ isNew: false, hasMembership: false });
+          setApplyNewCustomerDiscount(false);
+        }
+      } catch {} finally { setCheckingCustomer(false); }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [email]);
+
+  // Cleaner distances
+  useEffect(() => {
+    if (!customerLocation || cleaners.length === 0) return;
+    const updated = cleaners.map(c => {
+      if (c.home_lat && c.home_lng) {
+        const d = calculateDistance(customerLocation.lat, customerLocation.lng, c.home_lat, c.home_lng);
+        if (c.max_travel_miles && d > c.max_travel_miles) return null;
+        return { ...c, distance: d };
+      }
+      return c;
+    }).filter(Boolean) as Cleaner[];
+    updated.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
+    setCleaners(updated);
+  }, [customerLocation]);
+
+  const handleAddressSelect = (addr: { street: string; city: string; state: string; zipCode: string; lat: number; lng: number }) => {
+    setStreet(addr.street); setCity(addr.city); setState(addr.state); setZipCode(addr.zipCode);
+    setCustomerLocation({ lat: addr.lat, lng: addr.lng });
+    toast.success("Address selected — calculating distances...");
+  };
+
+  // Determine sales step for SalesAssistPanel
   const currentStep = useMemo(() => {
-    if (!qual.serviceType) return "service_type";
-    if (!qual.homeSizeId) return "home_size";
-    if (!qual.zipCode || qual.zipCode.length < 5) return "zip_validation";
-    if (!qual.frequency || qual.frequency === "One-Time") return "frequency";
+    if (!serviceType) return "service_type";
+    if (!homeSizeId) return "home_size";
+    if (!zipCode || zipCode.length < 5) return "zip_validation";
+    if (!frequency || frequency === "One-Time") return "frequency";
     return "price_presentation";
-  }, [qual]);
+  }, [serviceType, homeSizeId, zipCode, frequency]);
 
-  const isNewCustomer = !lead.isExistingCustomer;
-  const { data: coverageData } = useServiceCoverage(qual.zipCode);
+  const isNewCustomer = customerStatus?.isNew !== false;
 
+  // ─── Save Lead ───
   const handleSaveLead = async () => {
-    if (!lead.firstName || !lead.lastName) { toast.error("Lead name is required"); return; }
+    if (!firstName || !lastName) { toast.error("Lead name is required"); return; }
     setSaving(true);
     try {
       const payload = {
-        first_name: lead.firstName, last_name: lead.lastName,
-        phone: lead.phone || null, email: lead.email || null,
-        source: lead.source, channel: lead.channel,
-        active_channel: lead.activeChannel, notes: lead.notes || null,
-        is_existing_customer: lead.isExistingCustomer,
-        service_type: qual.serviceType || null, property_type: qual.propertyType || null,
-        bedrooms: qual.bedrooms || null, bathrooms: qual.bathrooms || null,
-        sqft: qual.sqft ? parseInt(qual.sqft) : null, zip_code: qual.zipCode || null,
-        frequency: qual.frequency || null, preferred_date: qual.preferredDate || null,
-        preferred_time: qual.preferredTime || null, special_requests: qual.specialRequests || null,
-        urgency: qual.urgency || null,
+        first_name: firstName, last_name: lastName,
+        phone: phone || null, email: email || null,
+        source: leadSource, channel,
+        active_channel: activeChannel, notes: notes || null,
+        is_existing_customer: !isNewCustomer,
+        service_type: serviceType || null, property_type: dwellingType || null,
+        bedrooms: bedrooms ? parseInt(bedrooms) : null,
+        bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+        zip_code: zipCode || null,
+        frequency: frequency || null, preferred_date: serviceDate || null,
+        special_requests: accessNotes || null,
       };
       if (isEditing && savedLeadId) {
         const { error } = await supabase.from("leads").update(payload as any).eq("id", savedLeadId);
@@ -253,7 +398,7 @@ export default function SalesTool() {
         if (error) throw error;
         if (data) {
           setSavedLeadId((data as any).id);
-          await supabase.from("lead_activity_log").insert({ lead_id: (data as any).id, action: "created", notes: `Lead created from ${lead.source} via ${lead.channel}` } as any);
+          await supabase.from("lead_activity_log").insert({ lead_id: (data as any).id, action: "created", notes: `Lead created from ${leadSource} via ${channel}` } as any);
         }
         toast.success("Lead saved!");
       }
@@ -262,223 +407,68 @@ export default function SalesTool() {
     finally { setSaving(false); }
   };
 
-  const handleReset = () => {
-    setLead(initialLead);
-    setQual(initialQualification);
-    setSavedLeadId(null);
-    setBooked(false);
-    setIsEditing(false);
-    setSearchParams({});
-    localStorage.removeItem(AUTOSAVE_KEY);
-    resetIntakeForm();
-  };
+  // ─── Create Booking ───
+  const handleCreateBooking = async () => {
+    if (!firstName || !lastName || !email || !phone) { toastHook({ title: "Missing customer info", variant: "destructive" }); return; }
+    if (!street || !city || !state || !zipCode) { toastHook({ title: "Missing address", variant: "destructive" }); return; }
+    if (!homeSizeId || !serviceType) { toastHook({ title: "Missing service details", variant: "destructive" }); return; }
+    if (!serviceDate || !timeSlot) { toastHook({ title: "Missing schedule", variant: "destructive" }); return; }
 
-  // ─── Intake Tab State ───
-  const [intakeLoading, setIntakeLoading] = useState(false);
-  const [intakeCleaners, setIntakeCleaners] = useState<Cleaner[]>([]);
-  const [intakeCustomerStatus, setIntakeCustomerStatus] = useState<CustomerStatus | null>(null);
-  const [checkingIntakeCustomer, setCheckingIntakeCustomer] = useState(false);
-  const [intakeSelectedCleaners, setIntakeSelectedCleaners] = useState<SelectedCleaner[]>([]);
-  const [intakeCustomerLocation, setIntakeCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [intakeLastSaved, setIntakeLastSaved] = useState<Date | null>(null);
-
-  const [intakeFirstName, setIntakeFirstName] = useState("");
-  const [intakeLastName, setIntakeLastName] = useState("");
-  const [intakeEmail, setIntakeEmail] = useState("");
-  const [intakePhone, setIntakePhone] = useState("");
-  const [intakeCustomerSource, setIntakeCustomerSource] = useState("New Lead");
-  const [intakeStreet, setIntakeStreet] = useState("");
-  const [intakeCity, setIntakeCity] = useState("");
-  const [intakeState, setIntakeState] = useState("MD");
-  const [intakeZipCode, setIntakeZipCode] = useState("");
-  const [intakeBedrooms, setIntakeBedrooms] = useState("");
-  const [intakeBathrooms, setIntakeBathrooms] = useState("");
-  const [intakeDwellingType, setIntakeDwellingType] = useState("");
-  const [intakePets, setIntakePets] = useState("None");
-  const [intakeHomeSizeId, setIntakeHomeSizeId] = useState("");
-  const [intakeServiceType, setIntakeServiceType] = useState("standard");
-  const [intakeAddOns, setIntakeAddOns] = useState<string[]>([]);
-  const [intakeFrequency, setIntakeFrequency] = useState("One-Time");
-  const [intakeServiceDate, setIntakeServiceDate] = useState("");
-  const [intakeTimeSlot, setIntakeTimeSlot] = useState("");
-  const [intakeEstimatedDuration, setIntakeEstimatedDuration] = useState("");
-  const [intakeArrivalWindow, setIntakeArrivalWindow] = useState("");
-  const [intakeBookingChannel, setIntakeBookingChannel] = useState("Phone");
-  const [intakePaymentStatus, setIntakePaymentStatus] = useState("Deposit Paid");
-  const [intakePaymentMethod, setIntakePaymentMethod] = useState("Card");
-  const [intakeMembershipPlan, setIntakeMembershipPlan] = useState("none");
-  const [intakeApplyNewCustomerDiscount, setIntakeApplyNewCustomerDiscount] = useState(true);
-  const [intakeAccessNotes, setIntakeAccessNotes] = useState("");
-  const [intakeTeamNotes, setIntakeTeamNotes] = useState("");
-  const [intakeDispatchNotes, setIntakeDispatchNotes] = useState("");
-  const [intakeSdrRepName, setIntakeSdrRepName] = useState("");
-  const [intakeNumCleaners, setIntakeNumCleaners] = useState(2);
-
-  // Auto-calculate number of cleaners from home size
-  useEffect(() => {
-    if (intakeHomeSizeId) {
-      const hs = HOME_SIZE_RANGES.find(h => h.id === intakeHomeSizeId);
-      if (hs) {
-        const autoNum = (hs.maxSqft || hs.minSqft) > 2500 ? 3 : 2;
-        setIntakeNumCleaners(autoNum);
-      }
-    }
-  }, [intakeHomeSizeId]);
-
-  const resetIntakeForm = () => {
-    setIntakeFirstName(""); setIntakeLastName(""); setIntakeEmail(""); setIntakePhone("");
-    setIntakeCustomerSource("New Lead"); setIntakeStreet(""); setIntakeCity(""); setIntakeState("MD");
-    setIntakeZipCode(""); setIntakeBedrooms(""); setIntakeBathrooms(""); setIntakeDwellingType("");
-    setIntakePets("None"); setIntakeHomeSizeId(""); setIntakeServiceType("standard");
-    setIntakeAddOns([]); setIntakeFrequency("One-Time"); setIntakeServiceDate("");
-    setIntakeTimeSlot(""); setIntakeEstimatedDuration(""); setIntakeArrivalWindow("");
-    setIntakeBookingChannel("Phone"); setIntakePaymentStatus("Deposit Paid");
-    setIntakePaymentMethod("Card"); setIntakeMembershipPlan("none");
-    setIntakeApplyNewCustomerDiscount(true); setIntakeAccessNotes("");
-    setIntakeTeamNotes(""); setIntakeDispatchNotes(""); setIntakeSelectedCleaners([]);
-    setIntakeCustomerStatus(null); setIntakeCustomerLocation(null);
-    setIntakeSdrRepName(""); setIntakeNumCleaners(2);
-    localStorage.removeItem("admin_intake_autosave");
-  };
-
-  // Fetch cleaners for intake tab
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const fetchCleaners = async () => {
-      const { data } = await supabase
-        .from("cleaners")
-        .select("id, first_name, last_name, status, home_lat, home_lng, pay_rate_hr, max_travel_miles")
-        .eq("approved", true)
-        .order("first_name");
-      setIntakeCleaners(data || []);
-    };
-    fetchCleaners();
-  }, [isAuthenticated]);
-
-  // Auto-calc duration
-  useEffect(() => {
-    if (intakeHomeSizeId && intakeServiceType) {
-      const hs = HOME_SIZE_RANGES.find(h => h.id === intakeHomeSizeId);
-      if (hs) setIntakeEstimatedDuration(calculateServiceDuration(intakeHomeSizeId, intakeServiceType, hs.baseHours).toString());
-    }
-  }, [intakeHomeSizeId, intakeServiceType]);
-
-  // Customer recognition
-  useEffect(() => {
-    if (!intakeEmail || !intakeEmail.includes("@")) return;
-    const t = setTimeout(async () => {
-      setCheckingIntakeCustomer(true);
-      try {
-        const { data: customer } = await supabase.from("customers").select("*").eq("email", intakeEmail).maybeSingle();
-        const { data: membership } = await supabase.from("membership_credits").select("*").eq("email", intakeEmail)
-          .gt("current_period_end", new Date().toISOString()).order("current_period_end", { ascending: false }).maybeSingle();
-        if (!customer) {
-          setIntakeCustomerStatus({ isNew: true, hasMembership: false });
-          setIntakeApplyNewCustomerDiscount(true);
-        } else if (membership) {
-          setIntakeCustomerStatus({
-            isNew: false, hasMembership: true, membershipPlan: membership.membership_plan,
-            creditsRemaining: membership.credits_remaining, creditsPerMonth: membership.credits_per_month,
-            currentPeriodEnd: membership.current_period_end,
-          });
-          setIntakeMembershipPlan(membership.membership_plan);
-          setIntakeApplyNewCustomerDiscount(false);
-        } else {
-          setIntakeCustomerStatus({ isNew: false, hasMembership: false });
-          setIntakeApplyNewCustomerDiscount(false);
-        }
-      } catch {} finally { setCheckingIntakeCustomer(false); }
-    }, 500);
-    return () => clearTimeout(t);
-  }, [intakeEmail]);
-
-  // Cleaner distances
-  useEffect(() => {
-    if (!intakeCustomerLocation || intakeCleaners.length === 0) return;
-    const updated = intakeCleaners.map(c => {
-      if (c.home_lat && c.home_lng) {
-        const d = calculateDistance(intakeCustomerLocation.lat, intakeCustomerLocation.lng, c.home_lat, c.home_lng);
-        if (c.max_travel_miles && d > c.max_travel_miles) return null;
-        return { ...c, distance: d };
-      }
-      return c;
-    }).filter(Boolean) as Cleaner[];
-    updated.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
-    setIntakeCleaners(updated);
-  }, [intakeCustomerLocation]);
-
-  const handleIntakeAddressSelect = (addr: { street: string; city: string; state: string; zipCode: string; lat: number; lng: number }) => {
-    setIntakeStreet(addr.street); setIntakeCity(addr.city); setIntakeState(addr.state); setIntakeZipCode(addr.zipCode);
-    setIntakeCustomerLocation({ lat: addr.lat, lng: addr.lng });
-    toast.success("Address selected — calculating distances...");
-  };
-
-  const handleIntakeSubmit = async () => {
-    if (!intakeFirstName || !intakeLastName || !intakeEmail || !intakePhone) { toastHook({ title: "Missing customer info", variant: "destructive" }); return; }
-    if (!intakeStreet || !intakeCity || !intakeState || !intakeZipCode) { toastHook({ title: "Missing address", variant: "destructive" }); return; }
-    if (!intakeHomeSizeId || !intakeServiceType) { toastHook({ title: "Missing service details", variant: "destructive" }); return; }
-    if (!intakeServiceDate || !intakeTimeSlot) { toastHook({ title: "Missing schedule", variant: "destructive" }); return; }
-
-    setIntakeLoading(true);
+    setLoading(true);
     try {
-      const pricing = calculatePrice(intakeHomeSizeId, intakeServiceType, intakeAddOns, intakeMembershipPlan, false, intakeApplyNewCustomerDiscount);
+      const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, false, applyNewCustomerDiscount);
       let bookingStatus = "pending_payment";
-      if (intakePaymentStatus === "Deposit Paid" || intakePaymentStatus === "Paid in Full") bookingStatus = "confirmed";
-      const homeSize = HOME_SIZE_RANGES.find(h => h.id === intakeHomeSizeId);
+      if (paymentStatus === "Deposit Paid" || paymentStatus === "Paid in Full") bookingStatus = "confirmed";
+      const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
       const estimatedHours = homeSize?.baseHours || 0;
 
       const { data: booking, error: bookingError } = await supabase.from("bookings").insert({
-        first_name: intakeFirstName, last_name: intakeLastName, email: intakeEmail, phone: intakePhone,
-        address: intakeStreet, city: intakeCity, state: intakeState, zip_code: intakeZipCode,
-        bedrooms: intakeBedrooms ? parseInt(intakeBedrooms) : null, bathrooms: intakeBathrooms ? parseFloat(intakeBathrooms) : null,
-        dwelling_type: intakeDwellingType || null, pets: intakePets,
-        home_size_id: intakeHomeSizeId, service_type: intakeServiceType, add_ons: intakeAddOns, frequency: intakeFrequency,
-        service_date: intakeServiceDate, time_slot: intakeTimeSlot,
-        estimated_duration_hours: parseInt(intakeEstimatedDuration || "0"), arrival_window: intakeArrivalWindow || null,
+        first_name: firstName, last_name: lastName, email, phone,
+        address: street, city, state, zip_code: zipCode,
+        bedrooms: bedrooms ? parseInt(bedrooms) : null, bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+        dwelling_type: dwellingType || null, pets,
+        home_size_id: homeSizeId, service_type: serviceType, add_ons: addOns, frequency,
+        service_date: serviceDate, time_slot: timeSlot,
+        estimated_duration_hours: parseInt(estimatedDuration || "0"), arrival_window: arrivalWindow || null,
         base_price_cents: pricing.basePrice, deposit_cents: DEPOSIT_AMOUNT, total_estimate_cents: pricing.total,
-        booking_channel: intakeBookingChannel, booker_source: intakeCustomerSource,
-        payment_method: intakePaymentMethod, payment_option: intakePaymentStatus === "Paid in Full" ? "full" : "deposit",
-        membership_plan: intakeMembershipPlan, status: bookingStatus,
-        access_notes: intakeAccessNotes || null, team_notes: intakeTeamNotes || null, dispatch_notes: intakeDispatchNotes || null,
-        sdr_rep_name: intakeSdrRepName || null,
-        num_cleaners_assigned: intakeNumCleaners,
+        booking_channel: bookingChannel, booker_source: customerSource,
+        payment_method: paymentMethod, payment_option: paymentStatus === "Paid in Full" ? "full" : "deposit",
+        membership_plan: membershipPlan, status: bookingStatus,
+        access_notes: accessNotes || null, team_notes: teamNotes || null, dispatch_notes: dispatchNotes || null,
+        sdr_rep_name: sdrRepName || null,
+        num_cleaners_assigned: numCleaners,
       } as any).select().single();
 
       if (bookingError) throw bookingError;
 
-      if (intakeSelectedCleaners.length > 0 && intakeCustomerLocation) {
+      if (selectedCleaners.length > 0 && customerLocation) {
         const { data: job, error: jobError } = await supabase.from("jobs").insert({
-          address: intakeStreet, city: intakeCity, state: intakeState, zip: intakeZipCode,
-          lat: intakeCustomerLocation.lat, lng: intakeCustomerLocation.lng,
-          service_type: intakeServiceType, start_datetime: `${intakeServiceDate} ${intakeTimeSlot.split(" - ")[0]}`,
-          duration_est_hours: estimatedHours, min_cleaners_required: intakeSelectedCleaners.length,
+          address: street, city, state, zip: zipCode,
+          lat: customerLocation.lat, lng: customerLocation.lng,
+          service_type: serviceType, start_datetime: `${serviceDate} ${timeSlot.split(" - ")[0]}`,
+          duration_est_hours: estimatedHours, min_cleaners_required: selectedCleaners.length,
           status: "Assigned", sq_ft: homeSize?.minSqft || null,
-          bedrooms: intakeBedrooms ? parseInt(intakeBedrooms) : null, bathrooms: intakeBathrooms ? parseFloat(intakeBathrooms) : null,
+          bedrooms: bedrooms ? parseInt(bedrooms) : null, bathrooms: bathrooms ? parseFloat(bathrooms) : null,
         }).select().single();
         if (jobError) throw jobError;
         await supabase.from("bookings").update({ job_id: job.id }).eq("id", booking.id);
         await supabase.from("job_assignments").insert(
-          intakeSelectedCleaners.map(c => ({
+          selectedCleaners.map(c => ({
             job_id: job.id, cleaner_id: c.id, role: c.role, distance_miles: c.distance,
             pay_rate_hr: c.hourlyRate, estimated_pay_cents: c.hourlyRate * estimatedHours * 100, status: "Assigned",
           }))
         );
       }
 
-      // Trigger webhook and confirmation email
-      try {
-        await supabase.functions.invoke("send-zapier-webhook", { body: { bookingId: booking.id } });
-      } catch (e) { console.error("Webhook error (non-critical):", e); }
-      try {
-        await supabase.functions.invoke("send-booking-email", { body: { bookingId: booking.id, type: "confirmation" } });
-      } catch (e) { console.error("Email error (non-critical):", e); }
+      try { await supabase.functions.invoke("send-zapier-webhook", { body: { bookingId: booking.id } }); } catch (e) { console.error("Webhook error:", e); }
+      try { await supabase.functions.invoke("send-booking-email", { body: { bookingId: booking.id, type: "confirmation" } }); } catch (e) { console.error("Email error:", e); }
 
       localStorage.removeItem("admin_intake_autosave");
       toast.success(`Booking created: ${booking.id}`);
       navigate("/admin/dispatch");
     } catch (err: any) {
       toastHook({ title: "Error creating booking", description: err.message, variant: "destructive" });
-    } finally { setIntakeLoading(false); }
+    } finally { setLoading(false); }
   };
 
   // ─── PIN Gate ───
@@ -521,7 +511,7 @@ export default function SalesTool() {
   // ─── Main Layout ───
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Standalone Header */}
+      {/* Header */}
       <div className="border-b border-gray-200 bg-white/90 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -529,7 +519,7 @@ export default function SalesTool() {
             <div>
               <h1 className="text-lg font-bold text-gray-900">Novara Sales & Intake</h1>
               <p className="text-xs text-gray-500">
-                {isEditing ? `Editing: ${lead.firstName} ${lead.lastName}` : "Sales closer & booking intake"}
+                {isEditing ? `Editing: ${firstName} ${lastName}` : "Unified sales & booking tool"}
               </p>
             </div>
           </div>
@@ -537,24 +527,20 @@ export default function SalesTool() {
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/pipeline")} className="border-gray-300 text-gray-600">
               <BarChart3 className="w-4 h-4 mr-1" /> Pipeline
             </Button>
-            <Button variant="outline" size="sm" onClick={handleReset} className="border-gray-300 text-gray-600">
+            <Button variant="outline" size="sm" onClick={resetForm} className="border-gray-300 text-gray-600">
               New
             </Button>
-            {activeTab === "sales" && (
-              <Button size="sm" onClick={handleSaveLead} disabled={saving || !lead.firstName}
-                className="text-white font-semibold" style={{ backgroundColor: BRAND_GREEN }}>
-                {saving ? <><Save className="w-4 h-4 mr-1 animate-spin" /> Saving...</>
-                  : isEditing ? <><Pencil className="w-4 h-4 mr-1" /> Update</>
-                  : savedLeadId ? <><CheckCircle className="w-4 h-4 mr-1" /> Saved</>
-                  : <><Save className="w-4 h-4 mr-1" /> Save Lead</>}
-              </Button>
-            )}
-            {activeTab === "intake" && (
-              <Button size="sm" onClick={handleIntakeSubmit} disabled={intakeLoading}
-                className="text-white font-semibold" style={{ backgroundColor: BRAND_GREEN }}>
-                <Save className="w-4 h-4 mr-1" /> {intakeLoading ? "Creating..." : "Create Booking"}
-              </Button>
-            )}
+            <Button size="sm" onClick={handleSaveLead} disabled={saving || !firstName}
+              className="text-white font-semibold" style={{ backgroundColor: BRAND_GREEN }}>
+              {saving ? <><Save className="w-4 h-4 mr-1 animate-spin" /> Saving...</>
+                : isEditing ? <><Pencil className="w-4 h-4 mr-1" /> Update</>
+                : savedLeadId ? <><CheckCircle className="w-4 h-4 mr-1" /> Saved</>
+                : <><Save className="w-4 h-4 mr-1" /> Save Lead</>}
+            </Button>
+            <Button size="sm" onClick={handleCreateBooking} disabled={loading}
+              className="text-white font-semibold" style={{ backgroundColor: BRAND_GREEN }}>
+              <Save className="w-4 h-4 mr-1" /> {loading ? "Creating..." : "Create Booking"}
+            </Button>
           </div>
         </div>
       </div>
@@ -574,7 +560,7 @@ export default function SalesTool() {
           </div>
         )}
 
-        {/* Shared Customer Search */}
+        {/* Customer Search */}
         <div className="mb-4">
           <Popover open={searchOpen && searchQuery.length >= 2} onOpenChange={setSearchOpen}>
             <PopoverTrigger asChild>
@@ -615,348 +601,358 @@ export default function SalesTool() {
           </Popover>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="bg-gray-100 border border-gray-200 mb-6">
-            <TabsTrigger value="sales" className="data-[state=active]:text-gray-900" style={{ ["--tw-ring-color" as any]: BRAND_GREEN }}
-              data-active-style={{ backgroundColor: `${BRAND_GREEN}20`, color: BRAND_GREEN }}>
-              <Headset className="w-4 h-4 mr-2" /> Sales Closer
-            </TabsTrigger>
-            <TabsTrigger value="intake" className="data-[state=active]:text-gray-900"
-              style={{ ["--tw-ring-color" as any]: BRAND_GREEN }}>
-              <DollarSign className="w-4 h-4 mr-2" /> Booking Intake
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ═══ SALES TAB ═══ */}
-          <TabsContent value="sales">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-              <div className="space-y-6">
-                <Card className="bg-white border-gray-200 p-6">
-                  <LeadIntakeSection data={lead} onChange={setLead} />
-                </Card>
-                <Card className="bg-white border-gray-200 p-6">
-                  <QualificationSection data={qual} onChange={setQual} />
-                </Card>
-                {savedLeadId && !booked && (
-                  <Card className="bg-white border-gray-200 p-6">
-                    <BookingConfirmationSection leadId={savedLeadId} lead={lead} qualification={qual}
-                      isNewCustomer={isNewCustomer} onBooked={() => setBooked(true)}
-                      coverageCity={coverageData?.city} coverageState={coverageData?.state} />
-                  </Card>
+        {/* ─── Unified Form + Sidebar ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+          {/* Left: Form */}
+          <div className="space-y-6">
+            {/* Customer Information */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader><CardTitle className="text-gray-900">Customer Information</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">First Name *</Label>
+                    <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Last Name *</Label>
+                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Email *</Label>
+                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Phone *</Label>
+                    <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 123-4567" className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                </div>
+                {checkingCustomer && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Checking customer status...
+                  </div>
                 )}
-              </div>
-              <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-                <Card className="bg-white border-gray-200 p-4">
-                  <LiveQuotePanel homeSizeId={qual.homeSizeId} serviceType={qual.serviceType}
-                    frequency={qual.frequency} addOns={qual.addOns} isNewCustomer={isNewCustomer}
-                    bedrooms={qual.bedrooms} bathrooms={qual.bathrooms} leadEmail={lead.email}
-                    leadId={savedLeadId} leadFirstName={lead.firstName}
-                    onStatusAdvance={(s) => toast.info(`Lead status → "${s}"`)} />
-                </Card>
-                {savedLeadId && (
-                  <Card className="bg-white border-gray-200 p-4">
-                    <FollowUpScheduler leadId={savedLeadId} leadName={lead.firstName || "there"} activeChannel={lead.activeChannel} />
-                  </Card>
-                )}
-                <Card className="bg-white border-gray-200 p-4">
-                  <SalesAssistPanel activeChannel={lead.activeChannel} currentStep={currentStep} />
-                </Card>
-              </div>
-            </div>
-          </TabsContent>
+                <CustomerRecognitionCard status={customerStatus} />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Customer Source</Label>
+                    <Select value={customerSource} onValueChange={setCustomerSource}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="New Lead">New Lead</SelectItem>
+                        <SelectItem value="Member">Member</SelectItem>
+                        <SelectItem value="Returning Client">Returning Client</SelectItem>
+                        <SelectItem value="Internal">Internal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Lead Source</Label>
+                    <Select value={leadSource} onValueChange={setLeadSource}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {LEAD_SOURCES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Contact Channel</Label>
+                    <Select value={channel} onValueChange={(v) => { setChannel(v); setActiveChannel(v); }}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CONTACT_CHANNELS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">SDR Rep Name</Label>
+                    <Input value={sdrRepName} onChange={(e) => setSdrRepName(e.target.value)}
+                      placeholder="e.g., Maria G." className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* ═══ INTAKE TAB ═══ */}
-          <TabsContent value="intake">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-6">
-                {/* Customer Info */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader><CardTitle className="text-gray-900">Customer Information</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">First Name *</Label>
-                        <Input value={intakeFirstName} onChange={(e) => setIntakeFirstName(e.target.value)} placeholder="John" className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">Last Name *</Label>
-                        <Input value={intakeLastName} onChange={(e) => setIntakeLastName(e.target.value)} placeholder="Smith" className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">Email *</Label>
-                        <Input type="email" value={intakeEmail} onChange={(e) => setIntakeEmail(e.target.value)} placeholder="john@example.com" className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">Phone *</Label>
-                        <Input type="tel" value={intakePhone} onChange={(e) => setIntakePhone(e.target.value)} placeholder="(555) 123-4567" className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                    </div>
-                    {checkingIntakeCustomer && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <RefreshCw className="w-4 h-4 animate-spin" /> Checking customer status...
-                      </div>
-                    )}
-                    <CustomerRecognitionCard status={intakeCustomerStatus} />
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">Customer Source</Label>
-                        <Select value={intakeCustomerSource} onValueChange={setIntakeCustomerSource}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="New Lead">New Lead</SelectItem>
-                            <SelectItem value="Member">Member</SelectItem>
-                            <SelectItem value="Returning Client">Returning Client</SelectItem>
-                            <SelectItem value="Internal">Internal</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">SDR Rep Name</Label>
-                        <Input value={intakeSdrRepName} onChange={(e) => setIntakeSdrRepName(e.target.value)}
-                          placeholder="e.g., Maria G." className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Service Address */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader><CardTitle className="text-gray-900">Service Address</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <AddressAutocomplete onAddressSelect={handleAddressSelect} initialValue={street} />
+                <div className="text-xs text-gray-500">Auto-filled from address above</div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">City *</Label><Input value={city} readOnly className="bg-gray-50 border-gray-300 text-gray-900" /></div>
+                  <div className="space-y-2"><Label className="text-gray-600">State *</Label><Input value={state} readOnly className="bg-gray-50 border-gray-300 text-gray-900" /></div>
+                  <div className="space-y-2"><Label className="text-gray-600">ZIP *</Label><Input value={zipCode} readOnly className="bg-gray-50 border-gray-300 text-gray-900" maxLength={5} /></div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Bedrooms</Label>
+                    <Select value={bedrooms} onValueChange={setBedrooms}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{[1,2,3,4,5,6,7].map(n => <SelectItem key={n} value={n.toString()}>{n}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Bathrooms</Label>
+                    <Select value={bathrooms} onValueChange={setBathrooms}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["1","1.5","2","2.5","3","3.5","4"].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Pets</Label>
+                    <Select value={pets} onValueChange={setPets}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="None">None</SelectItem><SelectItem value="Dog(s)">Dog(s)</SelectItem>
+                        <SelectItem value="Cat(s)">Cat(s)</SelectItem><SelectItem value="Multiple">Multiple</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Dwelling Type</Label>
+                    <Select value={dwellingType} onValueChange={setDwellingType}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="house">House</SelectItem><SelectItem value="apartment">Apartment</SelectItem>
+                        <SelectItem value="condo">Condo</SelectItem><SelectItem value="office_space">Office Space</SelectItem>
+                        <SelectItem value="townhouse">Townhouse</SelectItem><SelectItem value="mansion">Mansion</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Service Address */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader><CardTitle className="text-gray-900">Service Address</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <AddressAutocomplete onAddressSelect={handleIntakeAddressSelect} initialValue={intakeStreet} />
-                    <div className="text-xs text-gray-500">Auto-filled from address above</div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2"><Label className="text-gray-600">City *</Label><Input value={intakeCity} readOnly className="bg-gray-50 border-gray-300 text-gray-900" /></div>
-                      <div className="space-y-2"><Label className="text-gray-600">State *</Label><Input value={intakeState} readOnly className="bg-gray-50 border-gray-300 text-gray-900" /></div>
-                      <div className="space-y-2"><Label className="text-gray-600">ZIP *</Label><Input value={intakeZipCode} readOnly className="bg-gray-50 border-gray-300 text-gray-900" maxLength={5} /></div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2"><Label className="text-gray-600">Bedrooms</Label>
-                        <Select value={intakeBedrooms} onValueChange={setIntakeBedrooms}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>{[1,2,3,4,5,6,7].map(n => <SelectItem key={n} value={n.toString()}>{n}</SelectItem>)}</SelectContent>
-                        </Select>
+            {/* Service Details */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader><CardTitle className="text-gray-900">Service Details</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Home Size *</Label>
+                    <Select value={homeSizeId} onValueChange={setHomeSizeId}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select home size" /></SelectTrigger>
+                      <SelectContent>{HOME_SIZE_RANGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label} ({s.baseHours}h)</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Service Type *</Label>
+                    <Select value={serviceType} onValueChange={setServiceType}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard Cleaning</SelectItem>
+                        <SelectItem value="deep">Deep Clean (+${SERVICE_TIER_PRICING.deep.addition})</SelectItem>
+                        <SelectItem value="moveInOut">Move-In/Out (+${SERVICE_TIER_PRICING.moveInOut.addition})</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Frequency</Label>
+                    <Select value={frequency} onValueChange={setFrequency}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="One-Time">One-Time</SelectItem><SelectItem value="Weekly">Weekly</SelectItem>
+                        <SelectItem value="Biweekly">Biweekly</SelectItem><SelectItem value="Monthly">Monthly</SelectItem>
+                        <SelectItem value="Quarterly">Quarterly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-3"><Label className="text-gray-600">Add-ons</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(ADD_ONS).map(([key, addon]) => (
+                      <div key={key} className="flex items-center space-x-2">
+                        <Checkbox id={`addon-${key}`} checked={addOns.includes(key)}
+                          onCheckedChange={() => setAddOns(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])} />
+                        <label htmlFor={`addon-${key}`} className="text-sm cursor-pointer text-gray-600">{addon.label} (+${addon.price})</label>
                       </div>
-                      <div className="space-y-2"><Label className="text-gray-600">Bathrooms</Label>
-                        <Select value={intakeBathrooms} onValueChange={setIntakeBathrooms}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>{["1","1.5","2","2.5","3","3.5","4"].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2"><Label className="text-gray-600">Pets</Label>
-                        <Select value={intakePets} onValueChange={setIntakePets}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="None">None</SelectItem><SelectItem value="Dog(s)">Dog(s)</SelectItem>
-                            <SelectItem value="Cat(s)">Cat(s)</SelectItem><SelectItem value="Multiple">Multiple</SelectItem>
-                            <SelectItem value="Other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Dwelling Type</Label>
-                      <Select value={intakeDwellingType} onValueChange={setIntakeDwellingType}>
-                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select dwelling type" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="house">House</SelectItem><SelectItem value="apartment">Apartment</SelectItem>
-                          <SelectItem value="condo">Condo</SelectItem><SelectItem value="office_space">Office Space</SelectItem>
-                          <SelectItem value="townhouse">Townhouse</SelectItem><SelectItem value="mansion">Mansion</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Service Details */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader><CardTitle className="text-gray-900">Service Details</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2"><Label className="text-gray-600">Home Size *</Label>
-                      <Select value={intakeHomeSizeId} onValueChange={setIntakeHomeSizeId}>
-                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select home size" /></SelectTrigger>
-                        <SelectContent>{HOME_SIZE_RANGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label} ({s.baseHours}h)</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Service Type *</Label>
-                      <Select value={intakeServiceType} onValueChange={setIntakeServiceType}>
-                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="standard">Standard Cleaning</SelectItem>
-                          <SelectItem value="deep">Deep Clean (+${SERVICE_TIER_PRICING.deep.addition})</SelectItem>
-                          <SelectItem value="moveInOut">Move-In/Out (+${SERVICE_TIER_PRICING.moveInOut.addition})</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-3"><Label className="text-gray-600">Add-ons</Label>
-                      {Object.entries(ADD_ONS).map(([key, addon]) => (
-                        <div key={key} className="flex items-center space-x-2">
-                          <Checkbox id={`intake-${key}`} checked={intakeAddOns.includes(key)}
-                            onCheckedChange={() => setIntakeAddOns(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])} />
-                          <label htmlFor={`intake-${key}`} className="text-sm cursor-pointer text-gray-600">{addon.label} (+${addon.price})</label>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Frequency</Label>
-                      <Select value={intakeFrequency} onValueChange={setIntakeFrequency}>
-                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="One-Time">One-Time</SelectItem><SelectItem value="Weekly">Weekly</SelectItem>
-                          <SelectItem value="Biweekly">Biweekly</SelectItem><SelectItem value="Monthly">Monthly</SelectItem>
-                          <SelectItem value="Quarterly">Quarterly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Scheduling */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><Clock className="w-5 h-5" /> Scheduling</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Service Date *</Label>
+                    <Input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Time Slot *</Label>
+                    <Select value={timeSlot} onValueChange={setTimeSlot}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select time" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="8:00 AM - 12:00 PM">8:00 AM - 12:00 PM</SelectItem>
+                        <SelectItem value="12:00 PM - 4:00 PM">12:00 PM - 4:00 PM</SelectItem>
+                        <SelectItem value="4:00 PM - 8:00 PM">4:00 PM - 8:00 PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Duration (hours)</Label>
+                    <Input type="number" value={estimatedDuration} onChange={(e) => setEstimatedDuration(e.target.value)} placeholder="Auto" className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Arrival Window</Label>
+                    <Input value={arrivalWindow} onChange={(e) => setArrivalWindow(e.target.value)} placeholder="e.g., 10-11 AM" className="bg-white border-gray-300 text-gray-900" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Scheduling */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><Clock className="w-5 h-5" /> Scheduling</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-gray-600">Service Date *</Label>
-                        <Input type="date" value={intakeServiceDate} onChange={(e) => setIntakeServiceDate(e.target.value)} className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                      <div className="space-y-2"><Label className="text-gray-600">Time Slot *</Label>
-                        <Select value={intakeTimeSlot} onValueChange={setIntakeTimeSlot}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select time" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="8:00 AM - 12:00 PM">8:00 AM - 12:00 PM</SelectItem>
-                            <SelectItem value="12:00 PM - 4:00 PM">12:00 PM - 4:00 PM</SelectItem>
-                            <SelectItem value="4:00 PM - 8:00 PM">4:00 PM - 8:00 PM</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-gray-600">Duration (hours)</Label>
-                        <Input type="number" value={intakeEstimatedDuration} onChange={(e) => setIntakeEstimatedDuration(e.target.value)} placeholder="Auto" className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                      <div className="space-y-2"><Label className="text-gray-600">Arrival Window</Label>
-                        <Input value={intakeArrivalWindow} onChange={(e) => setIntakeArrivalWindow(e.target.value)} placeholder="e.g., 10-11 AM" className="bg-white border-gray-300 text-gray-900" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Booking Configuration */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><DollarSign className="w-5 h-5" /> Booking Configuration</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Booking Channel</Label>
+                    <Select value={bookingChannel} onValueChange={setBookingChannel}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["Phone","SMS","Facebook","Google","Referral","AI","Other","Website"].map(c =>
+                          <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Payment Method</Label>
+                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["Card","Cash","ACH","Other"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label className="text-gray-600">Payment Status</Label>
+                    <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Unpaid">Unpaid</SelectItem>
+                        <SelectItem value="Deposit Paid">Deposit Paid</SelectItem>
+                        <SelectItem value="Paid in Full">Paid in Full</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-gray-600">Membership</Label>
+                    <Select value={membershipPlan} onValueChange={setMembershipPlan}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Membership</SelectItem>
+                        {Object.entries(MEMBERSHIP_PLANS).filter(([k]) => k !== "none").map(([k, p]) =>
+                          <SelectItem key={k} value={k}>{p.label} ({(p.discount * 100)}% off)</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-6">
+                    <Checkbox id="newDiscount" checked={applyNewCustomerDiscount}
+                      onCheckedChange={(c) => setApplyNewCustomerDiscount(c === true)} />
+                    <label htmlFor="newDiscount" className="text-sm cursor-pointer text-gray-600">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Booking Config */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><DollarSign className="w-5 h-5" /> Booking Configuration</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-gray-600">Booking Channel</Label>
-                        <Select value={intakeBookingChannel} onValueChange={setIntakeBookingChannel}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["Phone","SMS","Facebook","Google","Referral","AI","Other","Website"].map(c =>
-                              <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2"><Label className="text-gray-600">Payment Method</Label>
-                        <Select value={intakePaymentMethod} onValueChange={setIntakePaymentMethod}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["Card","Cash","ACH","Other"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Payment Status</Label>
-                      <Select value={intakePaymentStatus} onValueChange={setIntakePaymentStatus}>
-                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Unpaid">Unpaid</SelectItem>
-                          <SelectItem value="Deposit Paid">Deposit Paid</SelectItem>
-                          <SelectItem value="Paid in Full">Paid in Full</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Membership</Label>
-                      <Select value={intakeMembershipPlan} onValueChange={setIntakeMembershipPlan}>
-                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No Membership</SelectItem>
-                          {Object.entries(MEMBERSHIP_PLANS).filter(([k]) => k !== "none").map(([k, p]) =>
-                            <SelectItem key={k} value={k}>{p.label} ({(p.discount * 100)}% off)</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox id="intakeNewDiscount" checked={intakeApplyNewCustomerDiscount}
-                        onCheckedChange={(c) => setIntakeApplyNewCustomerDiscount(c === true)} />
-                      <label htmlFor="intakeNewDiscount" className="text-sm cursor-pointer text-gray-600">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Notes */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader><CardTitle className="text-gray-900">Notes</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2"><Label className="text-gray-600">General Notes</Label>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Jot anything — pain points, timeline, specific needs..." rows={3} className="bg-white border-gray-300 text-gray-900" />
+                </div>
+                <div className="space-y-2"><Label className="text-gray-600">Access Notes</Label>
+                  <Textarea value={accessNotes} onChange={(e) => setAccessNotes(e.target.value)} placeholder="Gate codes, key locations..." rows={3} className="bg-white border-gray-300 text-gray-900" />
+                </div>
+                <div className="space-y-2"><Label className="text-gray-600">Team Notes (Internal)</Label>
+                  <Textarea value={teamNotes} onChange={(e) => setTeamNotes(e.target.value)} placeholder="Internal notes" rows={3} className="bg-white border-gray-300 text-gray-900" />
+                </div>
+                <div className="space-y-2"><Label className="text-gray-600">Dispatch Notes (Cleaner-Facing)</Label>
+                  <Textarea value={dispatchNotes} onChange={(e) => setDispatchNotes(e.target.value)} placeholder="Notes for cleaner" rows={3} className="bg-white border-gray-300 text-gray-900" />
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Notes */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader><CardTitle className="text-gray-900">Notes</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2"><Label className="text-gray-600">Access Notes</Label>
-                      <Textarea value={intakeAccessNotes} onChange={(e) => setIntakeAccessNotes(e.target.value)} placeholder="Gate codes, key locations..." rows={3} className="bg-white border-gray-300 text-gray-900" />
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Team Notes (Internal)</Label>
-                      <Textarea value={intakeTeamNotes} onChange={(e) => setIntakeTeamNotes(e.target.value)} placeholder="Internal notes" rows={3} className="bg-white border-gray-300 text-gray-900" />
-                    </div>
-                    <div className="space-y-2"><Label className="text-gray-600">Dispatch Notes (Cleaner-Facing)</Label>
-                      <Textarea value={intakeDispatchNotes} onChange={(e) => setIntakeDispatchNotes(e.target.value)} placeholder="Notes for cleaner" rows={3} className="bg-white border-gray-300 text-gray-900" />
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Cleaner Team Assignment */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader>
+                <CardTitle className="text-gray-900 flex items-center gap-2">
+                  <Users className="w-5 h-5" /> Cleaner Team Assignment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Number of Cleaners</Label>
+                    <Select value={numCleaners.toString()} onValueChange={(v) => setNumCleaners(parseInt(v))}>
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Cleaner</SelectItem>
+                        <SelectItem value="2">2 Cleaners</SelectItem>
+                        <SelectItem value="3">3 Cleaners</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-400">Auto-calculated from home size (editable)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Pay Rate</Label>
+                    <Input value="$18/hr" readOnly className="bg-gray-50 border-gray-300 text-gray-900" />
+                    <p className="text-xs text-gray-400">Fixed rate for all cleaners</p>
+                  </div>
+                </div>
+                <CleanerMultiSelect
+                  cleaners={cleaners}
+                  selectedCleaners={selectedCleaners}
+                  onSelectionChange={setSelectedCleaners}
+                  maxCleaners={numCleaners}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-                {/* Cleaner Assignment */}
-                <Card className="bg-white border-gray-200">
-                  <CardHeader>
-                    <CardTitle className="text-gray-900 flex items-center gap-2">
-                      <Users className="w-5 h-5" /> Cleaner Team Assignment
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">Number of Cleaners</Label>
-                        <Select value={intakeNumCleaners.toString()} onValueChange={(v) => setIntakeNumCleaners(parseInt(v))}>
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1">1 Cleaner</SelectItem>
-                            <SelectItem value="2">2 Cleaners</SelectItem>
-                            <SelectItem value="3">3 Cleaners</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-gray-400">Auto-calculated from home size (editable)</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-gray-600">Pay Rate</Label>
-                        <Input value="$18/hr" readOnly className="bg-gray-50 border-gray-300 text-gray-900" />
-                        <p className="text-xs text-gray-400">Fixed rate for all cleaners</p>
-                      </div>
-                    </div>
-                    <CleanerMultiSelect
-                      cleaners={intakeCleaners}
-                      selectedCleaners={intakeSelectedCleaners}
-                      onSelectionChange={setIntakeSelectedCleaners}
-                      maxCleaners={intakeNumCleaners}
-                    />
-                  </CardContent>
-                </Card>
-              </div>
+          {/* Right: Sticky Sidebar */}
+          <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+            {/* Live Quote */}
+            <Card className="bg-white border-gray-200 p-4">
+              <LiveQuotePanel
+                homeSizeId={homeSizeId}
+                serviceType={serviceType}
+                frequency={frequency}
+                addOns={addOns}
+                isNewCustomer={isNewCustomer}
+                bedrooms={bedrooms ? parseInt(bedrooms) : undefined}
+                bathrooms={bathrooms ? parseFloat(bathrooms) : undefined}
+                leadEmail={email}
+                leadId={savedLeadId}
+                leadFirstName={firstName}
+                onStatusAdvance={(s) => toast.info(`Lead status → "${s}"`)}
+              />
+            </Card>
 
-              {/* Pricing Sidebar */}
-              <div className="lg:col-span-1">
-                <IntakePricingSidebar homeSizeId={intakeHomeSizeId} serviceType={intakeServiceType}
-                  addOns={intakeAddOns} membershipPlan={intakeMembershipPlan}
-                  applyNewCustomerDiscount={intakeApplyNewCustomerDiscount}
-                  selectedCleaners={intakeSelectedCleaners}
-                  estimatedHours={parseFloat(intakeEstimatedDuration || "0")} />
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+            {/* Pricing Breakdown */}
+            <IntakePricingSidebar
+              homeSizeId={homeSizeId}
+              serviceType={serviceType}
+              addOns={addOns}
+              membershipPlan={membershipPlan}
+              applyNewCustomerDiscount={applyNewCustomerDiscount}
+              selectedCleaners={selectedCleaners}
+              estimatedHours={parseFloat(estimatedDuration || "0")}
+            />
+
+            {/* Sales Assist */}
+            <Card className="bg-white border-gray-200 p-4">
+              <SalesAssistPanel activeChannel={activeChannel} currentStep={currentStep} />
+            </Card>
+
+            {/* Follow-Up Scheduler */}
+            {savedLeadId && (
+              <Card className="bg-white border-gray-200 p-4">
+                <FollowUpScheduler leadId={savedLeadId} leadName={firstName || "there"} activeChannel={activeChannel} />
+              </Card>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
