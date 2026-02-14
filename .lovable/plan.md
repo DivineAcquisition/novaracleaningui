@@ -1,90 +1,117 @@
 
-# Combine Sales Tool + Booking Intake into One Standalone Page
+# Branded Sales & Intake Tool + Cleaner Management Overhaul
 
-## What Changes
+## Overview
 
-The current `/admin/sales` (Sales Closer) and `/admin/intake` (Phone Booking Intake) pages will be merged into a single standalone page at `/admin/sales`. The Intake page (`/admin/intake`) will redirect to `/admin/sales` for backwards compatibility.
+Three areas of work:
 
-### Key Design Decisions
-
-1. **PIN gate first** -- The combined page uses the same 4-digit PIN gate pattern from the current Intake form. No admin sidebar, no admin layout. It is a fully independent page.
-
-2. **Tabbed layout** -- The page has two main tabs:
-   - **Sales Closer** -- The existing lead intake, qualification, live quote, scripts, and follow-up flow (for warm leads, calls, and deal-closing)
-   - **Booking Intake** -- The existing full booking form with address autocomplete, cleaner assignment, scheduling, payment config, and notes (for confirmed phone bookings)
-
-3. **Shared customer search** -- The unified customer search (across customers, bookings, abandoned_carts) sits above both tabs so the VA can look up a customer once and the data flows into whichever tab they use.
-
-4. **No AdminLayout wrapper** -- The page renders its own minimal header with a back/logout button instead of the sidebar navigation. Completely standalone.
-
-5. **Session persistence** -- PIN auth stays in `sessionStorage` so it persists across tab refreshes but not new browser sessions.
+1. **Brand the Sales & Intake page** with the Novara logo, green color scheme, and polished styling
+2. **Add cleaner assignment fields to the Intake form** (number of cleaners, $18/hr rate, cleaner search/select with duplicate prevention) and enrich the booking webhook with SDR rep name and cleaner data
+3. **Overhaul the Cleaner Management page** (`/admin/cleaners`) to be fully functional with inline editing, status toggling, service ZIP management, search/filter, and action completeness
 
 ---
 
-## Page Structure
+## 1. Brand the Sales & Intake Page
 
-```text
-+--------------------------------------------------+
-|  [Lock icon]  Enter 4-digit PIN                   |
-|  [____] [____] [____] [____]                      |
-|  [Access Form]                                    |
-+--------------------------------------------------+
+Currently the page uses a generic `bg-slate-950` dark theme with amber accents. It needs to use the Novara brand:
 
-        (after PIN is accepted)
+- Add the Novara logo (`/novara-logo.png`) to the header alongside the title
+- Replace the amber accent color scheme with the Novara green (`hsl(142, 76%, 36%)`) for buttons, active tab indicators, badges, and highlights
+- Update the PIN gate screen with the logo and green button styling
+- Keep the dark background for contrast but use green for all interactive elements
 
-+--------------------------------------------------+
-|  Novara Sales & Intake    [Pipeline] [New] [Save] |
-+--------------------------------------------------+
-|  [Search customers, bookings, carts...]           |
-+--------------------------------------------------+
-|  [ Sales Closer ]  [ Booking Intake ]   (tabs)    |
-+--------------------------------------------------+
-|                                                   |
-|  (tab content here)                               |
-|                                                   |
-+--------------------------------------------------+
+### Files modified
+- `src/pages/admin/SalesTool.tsx` -- Header logo, color classes
+
+---
+
+## 2. Cleaner Fields in the Intake Form
+
+### 2a. New "SDR Rep Name" field
+- Add an `intakeSdrRepName` state field in the intake tab
+- Simple text input for the rep's name (e.g., "Maria G.")
+- This value gets saved to the booking
+
+### 2b. Cleaner team configuration section (replaces current optional section)
+- **Number of Cleaners**: Auto-calculated from home size (2 for homes up to 2500 sqft, 3 for larger), but editable by the SDR
+- **Pay Rate**: Fixed at $18/hr, displayed as read-only with explanation
+- **Cleaner Search & Select**: The existing `CleanerMultiSelect` component already handles this, but needs:
+  - A search/filter input at the top to find cleaners by name
+  - Duplicate prevention (already exists -- checkbox toggle prevents re-adding)
+  - The max count should match the "Number of Cleaners" field instead of being hardcoded at 3
+
+### 2c. Database migration
+- Add `sdr_rep_name` column (text, nullable) to the `bookings` table
+- Add `num_cleaners_assigned` column (integer, nullable) to the `bookings` table
+
+### 2d. Save SDR rep name and cleaner count on booking insert
+- Pass `sdr_rep_name` and `num_cleaners_assigned` to the bookings insert in `handleIntakeSubmit`
+
+### 2e. Enrich the booking webhook payload
+- Add `"SDR Rep Name"` field to the `send-zapier-webhook` edge function's booking payload
+- Add `"Num Cleaners Assigned"` to the payload
+- The webhook already includes cleaner details for assigned cleaners; add the intake-assigned cleaner names as well
+
+### 2f. Trigger the booking webhook from Intake form
+- After booking creation in `handleIntakeSubmit`, call `send-zapier-webhook` with the new booking ID (currently not done)
+- Also call `send-booking-email` for the confirmation email
+
+### Files modified
+- `src/pages/admin/SalesTool.tsx` -- New state fields, UI for SDR rep, cleaner count, search filter, webhook calls after submit
+- `src/components/admin/CleanerMultiSelect.tsx` -- Add name search filter input, dynamic max count prop
+- `supabase/functions/send-zapier-webhook/index.ts` -- Add SDR Rep Name and cleaner count fields to payload
+
+### Database migration
+```sql
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS sdr_rep_name text;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS num_cleaners_assigned integer;
 ```
 
 ---
 
-## Technical Changes
+## 3. Cleaner Management Page Overhaul
 
-### 1. Rewrite `src/pages/admin/SalesTool.tsx`
+The current `/admin/cleaners` page is functional but limited. Here is what needs to be fixed and added:
 
-- Remove the `AdminLayout` wrapper
-- Add the 4-digit PIN gate (same pattern as current BookingIntake)
-- Add a minimal standalone header (no sidebar)
-- Add `Tabs` component with "Sales Closer" and "Booking Intake" tabs
-- Move the existing Sales Closer content into the first tab
-- Move the existing Booking Intake form content into the second tab (inline, not importing the old page)
-- Shared customer search at the top that auto-fills whichever tab is active
-- Keep all existing functionality: autosave, lead loading via URL params, quote emailing, booking confirmation triggers
+### 3a. Missing functionality to fix
+- **No search/filter**: Add a search input to filter by name, email, or phone
+- **No status toggling**: Add inline buttons to activate/deactivate cleaners
+- **No ZIP code display**: Show service ZIP codes for each cleaner in the table
+- **No edit capability**: Add an edit dialog to update cleaner details (name, phone, state, home ZIP, service ZIPs, pay rate, max travel miles)
+- **No delete/deactivate**: Add a button to deactivate a cleaner (set `status = 'inactive'` and `available_for_bookings = false`)
+- **No rating display**: Show average rating and total ratings in the table
+- **Missing columns**: Add `state`, `home_zip`, `service_zip_codes`, `pay_rate_hr`, `average_rating` to the table view
 
-### 2. Update `src/pages/admin/BookingIntake.tsx`
+### 3b. Improved stats cards
+- Add: Pending Approval count, Total Completed Bookings across all cleaners, Average Rating
 
-- Replace the entire file with a simple redirect to `/admin/sales?tab=intake`
-- This preserves backwards compatibility for any bookmarks or links
+### 3c. Actions column improvements
+- "Approve" button for unapproved cleaners (exists, keep)
+- "Edit" button to open edit dialog
+- "Activate/Deactivate" toggle
+- "Stripe Onboarding" link (exists, keep)
+- "Check Status" button (exists, keep)
+- "View Profile" link to the cleaner directory entry
 
-### 3. Update `src/App.tsx`
-
-- Remove the `ProtectedRoute` and `DomainRestricted` wrappers from `/admin/sales` since the page handles its own PIN authentication
-- Keep the `/admin/intake` route pointing to the redirect component
-
-### 4. Update `src/components/admin/AdminLayout.tsx`
-
-- Remove "Sales" and "Intake" from the sidebar nav items since they are now a standalone page outside the admin layout
-
-### 5. No changes to edge functions, database, or existing components
-
-All sales sub-components (`LeadIntakeSection`, `QualificationSection`, `LiveQuotePanel`, `BookingConfirmationSection`, `FollowUpScheduler`, `SalesAssistPanel`) remain unchanged. The Intake-specific components (`IntakePricingSidebar`, `CleanerMultiSelect`, `CustomerRecognitionCard`, `AddressAutocomplete`) are reused directly.
+### Files modified
+- `src/pages/admin/Cleaners.tsx` -- Complete rewrite of the table with search, filters, edit dialog, action buttons, expanded columns
 
 ---
 
-## What the VA Experiences
+## Technical Details
 
-1. Navigate to `/admin/sales` (or click a bookmark)
-2. Enter the 4-digit PIN (1234)
-3. See a clean, standalone page with a customer search bar at the top
-4. Choose the **Sales Closer** tab for lead management and deal-closing, or the **Booking Intake** tab for creating confirmed bookings with full address, cleaner assignment, and payment details
-5. Search results auto-fill the active tab's form
-6. No sidebar, no admin chrome -- just the tool they need
+### Component changes summary
+
+| File | Changes |
+|------|---------|
+| `src/pages/admin/SalesTool.tsx` | Add Novara logo + green branding. Add SDR rep name field. Add cleaner count field (auto-calculated). Add search filter to cleaner section. Call `send-zapier-webhook` and `send-booking-email` after intake submit. |
+| `src/components/admin/CleanerMultiSelect.tsx` | Add `maxCleaners` prop (replaces hardcoded 3). Add name search/filter input at top of available cleaners list. |
+| `src/pages/admin/Cleaners.tsx` | Add search input. Add edit dialog with all cleaner fields. Add activate/deactivate toggles. Show service ZIPs, pay rate, rating, state in table. Improve stats cards. |
+| `supabase/functions/send-zapier-webhook/index.ts` | Add `"SDR Rep Name"` and `"Num Cleaners Assigned"` to booking webhook payload. |
+
+### New database columns
+- `bookings.sdr_rep_name` (text, nullable)
+- `bookings.num_cleaners_assigned` (integer, nullable)
+
+### No new edge functions needed
+All webhook and email functions already exist; they just need to be called from the intake form submission handler.
