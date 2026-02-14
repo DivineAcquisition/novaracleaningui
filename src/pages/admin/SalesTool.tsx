@@ -4,48 +4,35 @@ import { LeadIntakeSection, LeadIntakeData } from "@/components/sales/LeadIntake
 import { QualificationSection, QualificationData } from "@/components/sales/QualificationSection";
 import { LiveQuotePanel } from "@/components/sales/LiveQuotePanel";
 import { SalesAssistPanel } from "@/components/sales/SalesAssistPanel";
+import { BookingConfirmationSection } from "@/components/sales/BookingConfirmationSection";
+import { FollowUpScheduler } from "@/components/sales/FollowUpScheduler";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Headset, Save, CheckCircle } from "lucide-react";
+import { Headset, Save, CheckCircle, BarChart3 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const initialLead: LeadIntakeData = {
-  firstName: "",
-  lastName: "",
-  phone: "",
-  email: "",
-  source: "Website",
-  channel: "Phone Call",
-  activeChannel: "Phone Call",
-  notes: "",
-  isExistingCustomer: false,
+  firstName: "", lastName: "", phone: "", email: "",
+  source: "Website", channel: "Phone Call", activeChannel: "Phone Call",
+  notes: "", isExistingCustomer: false,
 };
 
 const initialQualification: QualificationData = {
-  serviceType: "standard",
-  propertyType: "",
-  bedrooms: 0,
-  bathrooms: 0,
-  sqft: "",
-  homeSizeId: "",
-  zipCode: "",
-  frequency: "One-Time",
-  preferredDate: "",
-  preferredTime: "",
-  specialRequests: "",
-  urgency: "",
-  addOns: [],
+  serviceType: "standard", propertyType: "", bedrooms: 0, bathrooms: 0,
+  sqft: "", homeSizeId: "", zipCode: "", frequency: "One-Time",
+  preferredDate: "", preferredTime: "", specialRequests: "", urgency: "", addOns: [],
 };
 
 export default function SalesTool() {
+  const navigate = useNavigate();
   const [lead, setLead] = useState<LeadIntakeData>(initialLead);
   const [qual, setQual] = useState<QualificationData>(initialQualification);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savedLeadId, setSavedLeadId] = useState<string | null>(null);
+  const [booked, setBooked] = useState(false);
 
-  // Determine current qualification step for contextual scripts
   const currentStep = useMemo(() => {
     if (!qual.serviceType) return "service_type";
     if (!qual.homeSizeId) return "home_size";
@@ -64,42 +51,28 @@ export default function SalesTool() {
     setSaving(true);
     try {
       const { data, error } = await supabase.from("leads").insert({
-        first_name: lead.firstName,
-        last_name: lead.lastName,
-        phone: lead.phone || null,
-        email: lead.email || null,
-        source: lead.source,
-        channel: lead.channel,
-        active_channel: lead.activeChannel,
-        notes: lead.notes || null,
+        first_name: lead.firstName, last_name: lead.lastName,
+        phone: lead.phone || null, email: lead.email || null,
+        source: lead.source, channel: lead.channel,
+        active_channel: lead.activeChannel, notes: lead.notes || null,
         is_existing_customer: lead.isExistingCustomer,
-        service_type: qual.serviceType || null,
-        property_type: qual.propertyType || null,
-        bedrooms: qual.bedrooms || null,
-        bathrooms: qual.bathrooms || null,
-        sqft: qual.sqft ? parseInt(qual.sqft) : null,
-        zip_code: qual.zipCode || null,
-        frequency: qual.frequency || null,
-        preferred_date: qual.preferredDate || null,
-        preferred_time: qual.preferredTime || null,
-        special_requests: qual.specialRequests || null,
-        urgency: qual.urgency || null,
-        status: "new",
+        service_type: qual.serviceType || null, property_type: qual.propertyType || null,
+        bedrooms: qual.bedrooms || null, bathrooms: qual.bathrooms || null,
+        sqft: qual.sqft ? parseInt(qual.sqft) : null, zip_code: qual.zipCode || null,
+        frequency: qual.frequency || null, preferred_date: qual.preferredDate || null,
+        preferred_time: qual.preferredTime || null, special_requests: qual.specialRequests || null,
+        urgency: qual.urgency || null, status: "new",
       } as any).select().single();
 
       if (error) throw error;
-
-      // Log activity
       if (data) {
+        setSavedLeadId((data as any).id);
         await supabase.from("lead_activity_log").insert({
-          lead_id: (data as any).id,
-          action: "created",
+          lead_id: (data as any).id, action: "created",
           notes: `Lead created from ${lead.source} via ${lead.channel}`,
         } as any);
       }
-
-      toast.success("Lead saved successfully!");
-      setSaved(true);
+      toast.success("Lead saved!");
     } catch (err: any) {
       toast.error("Failed to save lead: " + err.message);
     } finally {
@@ -110,7 +83,8 @@ export default function SalesTool() {
   const handleReset = () => {
     setLead(initialLead);
     setQual(initialQualification);
-    setSaved(false);
+    setSavedLeadId(null);
+    setBooked(false);
   };
 
   return (
@@ -128,17 +102,24 @@ export default function SalesTool() {
             </div>
           </div>
           <div className="flex gap-2">
-            {saved && (
+            <Button
+              variant="outline"
+              onClick={() => navigate("/admin/pipeline")}
+              className="border-slate-600 text-slate-300"
+            >
+              <BarChart3 className="w-4 h-4 mr-2" /> Pipeline
+            </Button>
+            {savedLeadId && (
               <Button variant="outline" onClick={handleReset} className="border-slate-600 text-slate-300">
                 New Lead
               </Button>
             )}
             <Button
               onClick={handleSaveLead}
-              disabled={saving || saved || !lead.firstName}
+              disabled={saving || !!savedLeadId || !lead.firstName}
               className="bg-amber-500 hover:bg-amber-600 text-black font-semibold"
             >
-              {saved ? (
+              {savedLeadId ? (
                 <><CheckCircle className="w-4 h-4 mr-2" /> Saved</>
               ) : (
                 <><Save className="w-4 h-4 mr-2" /> Save Lead</>
@@ -157,6 +138,19 @@ export default function SalesTool() {
             <Card className="bg-slate-900 border-slate-800 p-6">
               <QualificationSection data={qual} onChange={setQual} />
             </Card>
+
+            {/* Booking Confirmation - only show after lead is saved */}
+            {savedLeadId && !booked && (
+              <Card className="bg-slate-900 border-slate-800 p-6">
+                <BookingConfirmationSection
+                  leadId={savedLeadId}
+                  lead={lead}
+                  qualification={qual}
+                  isNewCustomer={isNewCustomer}
+                  onBooked={() => setBooked(true)}
+                />
+              </Card>
+            )}
           </div>
 
           {/* Sticky Sidebar */}
@@ -173,6 +167,17 @@ export default function SalesTool() {
                 leadEmail={lead.email}
               />
             </Card>
+
+            {/* Follow-Up Scheduler - show after lead saved */}
+            {savedLeadId && (
+              <Card className="bg-slate-900 border-slate-800 p-4">
+                <FollowUpScheduler
+                  leadId={savedLeadId}
+                  leadName={lead.firstName || "there"}
+                  activeChannel={lead.activeChannel}
+                />
+              </Card>
+            )}
 
             <Card className="bg-slate-900 border-slate-800 p-4">
               <SalesAssistPanel
