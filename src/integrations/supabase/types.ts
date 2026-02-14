@@ -258,6 +258,7 @@ export type Database = {
           job_id: string | null
           last_name: string
           membership_plan: string | null
+          num_cleaners_assigned: number | null
           payment_intent_id: string | null
           payment_method: string | null
           payment_option: string | null
@@ -269,6 +270,7 @@ export type Database = {
           rating: number | null
           rating_submitted: boolean | null
           review_text: string | null
+          sdr_rep_name: string | null
           service_date: string
           service_type: string
           sqft: number | null
@@ -330,6 +332,7 @@ export type Database = {
           job_id?: string | null
           last_name: string
           membership_plan?: string | null
+          num_cleaners_assigned?: number | null
           payment_intent_id?: string | null
           payment_method?: string | null
           payment_option?: string | null
@@ -341,6 +344,7 @@ export type Database = {
           rating?: number | null
           rating_submitted?: boolean | null
           review_text?: string | null
+          sdr_rep_name?: string | null
           service_date: string
           service_type: string
           sqft?: number | null
@@ -402,6 +406,7 @@ export type Database = {
           job_id?: string | null
           last_name?: string
           membership_plan?: string | null
+          num_cleaners_assigned?: number | null
           payment_intent_id?: string | null
           payment_method?: string | null
           payment_option?: string | null
@@ -413,6 +418,7 @@ export type Database = {
           rating?: number | null
           rating_submitted?: boolean | null
           review_text?: string | null
+          sdr_rep_name?: string | null
           service_date?: string
           service_type?: string
           sqft?: number | null

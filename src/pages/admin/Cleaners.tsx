@@ -1,16 +1,16 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Plus, UserCheck, UserX, DollarSign, MapPin, Mail, Phone } from "lucide-react";
+import { Plus, UserCheck, UserX, DollarSign, MapPin, Mail, Phone, Search, Pencil, Star, CheckCircle, XCircle, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { US_STATES } from "@/lib/us-states";
 
@@ -32,235 +32,173 @@ interface Cleaner {
   created_at: string;
   approved: boolean;
   user_id: string | null;
+  state: string | null;
+  home_zip: string | null;
+  pay_rate_hr: number;
+  average_rating: number | null;
+  total_ratings: number | null;
+  max_travel_miles: number | null;
 }
 
 export default function AdminCleaners() {
+  const navigate = useNavigate();
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editCleaner, setEditCleaner] = useState<Cleaner | null>(null);
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18", maxTravelMiles: "20" });
   const [newCleaner, setNewCleaner] = useState({
-    email: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    state: "",
-    homeZip: "",
-    serviceZipCodes: "",
-    payRateHr: "18",
+    email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18",
   });
 
-  useEffect(() => {
-    fetchCleaners();
-  }, []);
+  useEffect(() => { fetchCleaners(); }, []);
 
   const fetchCleaners = async () => {
     try {
-      const { data, error } = await supabase
-        .from("cleaners")
-        .select("*")
-        .order("created_at", { ascending: false });
-
+      const { data, error } = await supabase.from("cleaners").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      setCleaners(data || []);
+      setCleaners((data as any[]) || []);
     } catch (error: any) {
-      toast({
-        title: "Error loading cleaners",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+      toast({ title: "Error loading cleaners", description: error.message, variant: "destructive" });
+    } finally { setLoading(false); }
   };
 
+  const filteredCleaners = useMemo(() => {
+    return cleaners.filter(c => {
+      const matchesSearch = !searchQuery || 
+        `${c.first_name} ${c.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.phone.includes(searchQuery);
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "active" && c.status === "active") ||
+        (statusFilter === "inactive" && c.status === "inactive") ||
+        (statusFilter === "pending" && !c.approved);
+      return matchesSearch && matchesStatus;
+    });
+  }, [cleaners, searchQuery, statusFilter]);
+
+  const stats = useMemo(() => ({
+    total: cleaners.length,
+    active: cleaners.filter(c => c.status === "active").length,
+    pending: cleaners.filter(c => !c.approved).length,
+    totalBookings: cleaners.reduce((s, c) => s + (c.completed_bookings || 0), 0),
+    avgRating: cleaners.filter(c => c.average_rating).length > 0
+      ? (cleaners.reduce((s, c) => s + (c.average_rating || 0), 0) / cleaners.filter(c => c.average_rating).length).toFixed(1)
+      : "N/A",
+    totalPayouts: cleaners.reduce((s, c) => s + (c.total_earnings_cents || 0), 0) / 100,
+  }), [cleaners]);
+
   const handleAddCleaner = async () => {
-    if (!newCleaner.email || !newCleaner.firstName || !newCleaner.lastName || 
-        !newCleaner.phone || !newCleaner.state || !newCleaner.homeZip || 
-        !newCleaner.serviceZipCodes) {
-      toast({
-        title: "Missing fields",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
+    if (!newCleaner.email || !newCleaner.firstName || !newCleaner.lastName || !newCleaner.phone || !newCleaner.state || !newCleaner.homeZip || !newCleaner.serviceZipCodes) {
+      toast({ title: "Missing fields", description: "Please fill in all required fields", variant: "destructive" }); return;
     }
-
-    // Validate ZIP codes
     const zipCodes = newCleaner.serviceZipCodes.split(',').map(z => z.trim()).filter(Boolean);
-    if (zipCodes.length === 0) {
-      toast({
-        title: "Invalid ZIP codes",
-        description: "Please enter at least one service ZIP code",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate pay rate
-    const payRate = parseFloat(newCleaner.payRateHr);
-    if (isNaN(payRate) || payRate < 15 || payRate > 50) {
-      toast({
-        title: "Invalid pay rate",
-        description: "Pay rate must be between $15 and $50 per hour",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (zipCodes.length === 0) { toast({ title: "Invalid ZIP codes", variant: "destructive" }); return; }
 
     try {
-      // Create cleaner account with auto-generated password
-      const { data: createData, error: createError } = await supabase.functions.invoke(
-        "create-cleaner-account",
-        {
-          body: {
-            email: newCleaner.email,
-            firstName: newCleaner.firstName,
-            lastName: newCleaner.lastName,
-            phone: newCleaner.phone,
-            state: newCleaner.state,
-            homeZip: newCleaner.homeZip,
-            serviceZipCodes: zipCodes,
-            payRateHr: payRate,
-          },
-        }
-      );
-
+      const { data: createData, error: createError } = await supabase.functions.invoke("create-cleaner-account", {
+        body: { email: newCleaner.email, firstName: newCleaner.firstName, lastName: newCleaner.lastName, phone: newCleaner.phone, state: newCleaner.state, homeZip: newCleaner.homeZip, serviceZipCodes: zipCodes, payRateHr: parseFloat(newCleaner.payRateHr) },
+      });
       if (createError) throw createError;
       if (!createData?.success) throw new Error("Failed to create cleaner account");
 
-      // Send invitation email directing to onboarding landing
-      const { error: emailError } = await supabase.functions.invoke("send-cleaner-email", {
-        body: {
-          type: "invitation",
-          email: newCleaner.email,
-          data: {
-            firstName: newCleaner.firstName,
-            lastName: newCleaner.lastName,
-            email: newCleaner.email,
-            onboardingUrl: "https://book.novaracleaning.com/cleaner/onboarding-landing",
-          },
-        },
-      });
+      await supabase.functions.invoke("send-cleaner-email", {
+        body: { type: "invitation", email: newCleaner.email, data: { firstName: newCleaner.firstName, lastName: newCleaner.lastName, email: newCleaner.email, onboardingUrl: "https://book.novaracleaning.com/cleaner/onboarding-landing" } },
+      }).catch(console.error);
 
-      if (emailError) {
-        console.error("Failed to send credentials email:", emailError);
-      }
-
-      toast({
-        title: "Cleaner invited",
-        description: `Invitation email sent to ${newCleaner.firstName} ${newCleaner.lastName}.`,
-      });
-
+      toast({ title: "Cleaner invited", description: `Invitation sent to ${newCleaner.firstName} ${newCleaner.lastName}.` });
       setIsAddDialogOpen(false);
-      setNewCleaner({
-        email: "",
-        firstName: "",
-        lastName: "",
-        phone: "",
-        state: "",
-        homeZip: "",
-        serviceZipCodes: "",
-        payRateHr: "18",
-      });
+      setNewCleaner({ email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18" });
       fetchCleaners();
     } catch (error: any) {
-      toast({
-        title: "Error adding cleaner",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error adding cleaner", description: error.message, variant: "destructive" });
     }
   };
 
-  const handleOnboardCleaner = async (cleanerId: string) => {
+  const handleToggleStatus = async (cleaner: Cleaner) => {
+    const newStatus = cleaner.status === "active" ? "inactive" : "active";
+    const newAvailable = newStatus === "active";
     try {
-      const { data, error } = await supabase.functions.invoke("onboard-cleaner", {
-        body: { cleanerId },
-      });
-
+      const { error } = await supabase.from("cleaners").update({ status: newStatus, available_for_bookings: newAvailable } as any).eq("id", cleaner.id);
       if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, "_blank");
-        toast({
-          title: "Onboarding link opened",
-          description: "Complete the Stripe Connect onboarding in the new tab.",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error starting onboarding",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleCheckStatus = async (cleanerId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("check-cleaner-status", {
-        body: { cleanerId },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Status updated",
-        description: data.onboarding_complete
-          ? "Onboarding complete!"
-          : "Onboarding still in progress",
-      });
-
+      toast({ title: `Cleaner ${newStatus === "active" ? "activated" : "deactivated"}` });
       fetchCleaners();
     } catch (error: any) {
-      toast({
-        title: "Error checking status",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
   const handleApproveCleaner = async (cleanerId: string) => {
     try {
-      const { error } = await supabase
-        .from("cleaners")
-        .update({ approved: true })
-        .eq("id", cleanerId);
-
+      const { error } = await supabase.from("cleaners").update({ approved: true } as any).eq("id", cleanerId);
       if (error) throw error;
-
-      toast({
-        title: "Cleaner approved",
-        description: "The cleaner can now create their account.",
-      });
-
+      toast({ title: "Cleaner approved" });
       fetchCleaners();
     } catch (error: any) {
-      toast({
-        title: "Error approving cleaner",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error approving", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleOnboardCleaner = async (cleanerId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("onboard-cleaner", { body: { cleanerId } });
+      if (error) throw error;
+      if (data?.url) { window.open(data.url, "_blank"); toast({ title: "Onboarding link opened" }); }
+    } catch (error: any) {
+      toast({ title: "Error starting onboarding", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleCheckStatus = async (cleanerId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("check-cleaner-status", { body: { cleanerId } });
+      if (error) throw error;
+      toast({ title: "Status updated", description: data.onboarding_complete ? "Onboarding complete!" : "Still in progress" });
+      fetchCleaners();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const openEditDialog = (cleaner: Cleaner) => {
+    setEditCleaner(cleaner);
+    setEditForm({
+      firstName: cleaner.first_name, lastName: cleaner.last_name, phone: cleaner.phone,
+      state: cleaner.state || "", homeZip: cleaner.home_zip || "",
+      serviceZipCodes: (cleaner.service_zip_codes || []).join(", "),
+      payRateHr: String(cleaner.pay_rate_hr || 18),
+      maxTravelMiles: String(cleaner.max_travel_miles || 20),
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editCleaner) return;
+    const zipCodes = editForm.serviceZipCodes.split(',').map(z => z.trim()).filter(Boolean);
+    try {
+      const { error } = await supabase.from("cleaners").update({
+        first_name: editForm.firstName, last_name: editForm.lastName, phone: editForm.phone,
+        state: editForm.state || null, home_zip: editForm.homeZip || null,
+        service_zip_codes: zipCodes, pay_rate_hr: parseFloat(editForm.payRateHr) || 18,
+        max_travel_miles: parseInt(editForm.maxTravelMiles) || 20,
+      } as any).eq("id", editCleaner.id);
+      if (error) throw error;
+      toast({ title: "Cleaner updated" });
+      setEditCleaner(null);
+      fetchCleaners();
+    } catch (error: any) {
+      toast({ title: "Error updating", description: error.message, variant: "destructive" });
     }
   };
 
   const getStatusBadge = (cleaner: Cleaner) => {
-    if (!cleaner.approved) {
-      return <Badge variant="destructive">Pending Approval</Badge>;
-    }
-    if (!cleaner.user_id) {
-      return <Badge className="bg-blue-500">Approved - No Account</Badge>;
-    }
-    if (cleaner.status === "active" && cleaner.payouts_enabled) {
-      return <Badge className="bg-green-500">Active</Badge>;
-    }
-    if (cleaner.onboarding_complete) {
-      return <Badge className="bg-yellow-500">Onboarding Complete</Badge>;
-    }
-    if (cleaner.stripe_account_id) {
-      return <Badge className="bg-blue-500">Onboarding Started</Badge>;
-    }
+    if (!cleaner.approved) return <Badge variant="destructive">Pending Approval</Badge>;
+    if (!cleaner.user_id) return <Badge className="bg-blue-500 text-white">Approved - No Account</Badge>;
+    if (cleaner.status === "active" && cleaner.payouts_enabled) return <Badge className="bg-green-500 text-white">Active</Badge>;
+    if (cleaner.status === "inactive") return <Badge variant="secondary">Inactive</Badge>;
+    if (cleaner.onboarding_complete) return <Badge className="bg-yellow-500 text-white">Onboarding Complete</Badge>;
+    if (cleaner.stripe_account_id) return <Badge className="bg-blue-500 text-white">Onboarding Started</Badge>;
     return <Badge variant="secondary">Pending</Badge>;
   };
 
@@ -280,274 +218,190 @@ export default function AdminCleaners() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-bold font-jakarta">Cleaner Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your cleaning team and track their performance
-          </p>
+          <p className="text-muted-foreground mt-2">Manage your cleaning team and track performance</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Cleaner
-            </Button>
+            <Button><Plus className="mr-2 h-4 w-4" /> Add Cleaner</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Cleaner</DialogTitle>
-              <DialogDescription>
-                Enter cleaner details. A login account will be created automatically.
-              </DialogDescription>
+              <DialogDescription>Enter cleaner details. A login account will be created automatically.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-6 py-4">
-              {/* Personal Information */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Personal Information</h3>
-                <div className="grid gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="cleaner@example.com"
-                      value={newCleaner.email}
-                      onChange={(e) => setNewCleaner({ ...newCleaner, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor="firstName">First Name *</Label>
-                      <Input
-                        id="firstName"
-                        placeholder="John"
-                        value={newCleaner.firstName}
-                        onChange={(e) => setNewCleaner({ ...newCleaner, firstName: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="lastName">Last Name *</Label>
-                      <Input
-                        id="lastName"
-                        placeholder="Doe"
-                        value={newCleaner.lastName}
-                        onChange={(e) => setNewCleaner({ ...newCleaner, lastName: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="phone">Phone *</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="(555) 555-5555"
-                      value={newCleaner.phone}
-                      onChange={(e) => setNewCleaner({ ...newCleaner, phone: e.target.value })}
-                    />
-                  </div>
-                </div>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={newCleaner.email} onChange={(e) => setNewCleaner({ ...newCleaner, email: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2"><Label>First Name *</Label><Input value={newCleaner.firstName} onChange={(e) => setNewCleaner({ ...newCleaner, firstName: e.target.value })} /></div>
+                <div className="grid gap-2"><Label>Last Name *</Label><Input value={newCleaner.lastName} onChange={(e) => setNewCleaner({ ...newCleaner, lastName: e.target.value })} /></div>
               </div>
-
-              {/* Location & Service Areas */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Location & Service Areas</h3>
-                <div className="grid gap-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor="state">State *</Label>
-                      <Select
-                        value={newCleaner.state}
-                        onValueChange={(value) => setNewCleaner({ ...newCleaner, state: value })}
-                      >
-                        <SelectTrigger id="state">
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {US_STATES.map((state) => (
-                            <SelectItem key={state.value} value={state.value}>
-                              {state.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="homeZip">Home ZIP Code *</Label>
-                      <Input
-                        id="homeZip"
-                        placeholder="12345"
-                        maxLength={5}
-                        value={newCleaner.homeZip}
-                        onChange={(e) => setNewCleaner({ ...newCleaner, homeZip: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="serviceZipCodes">Service ZIP Codes *</Label>
-                    <Input
-                      id="serviceZipCodes"
-                      placeholder="12345, 12346, 12347"
-                      value={newCleaner.serviceZipCodes}
-                      onChange={(e) => setNewCleaner({ ...newCleaner, serviceZipCodes: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Enter multiple ZIP codes separated by commas
-                    </p>
-                  </div>
+              <div className="grid gap-2"><Label>Phone *</Label><Input type="tel" value={newCleaner.phone} onChange={(e) => setNewCleaner({ ...newCleaner, phone: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2"><Label>State *</Label>
+                  <Select value={newCleaner.state} onValueChange={(v) => setNewCleaner({ ...newCleaner, state: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+                    <SelectContent>{US_STATES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
+                <div className="grid gap-2"><Label>Home ZIP *</Label><Input maxLength={5} value={newCleaner.homeZip} onChange={(e) => setNewCleaner({ ...newCleaner, homeZip: e.target.value })} /></div>
               </div>
-
-              {/* Pay Configuration */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Pay Configuration</h3>
-                <div className="grid gap-2">
-                  <Label htmlFor="payRateHr">Hourly Pay Rate *</Label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">$</span>
-                    <Input
-                      id="payRateHr"
-                      type="number"
-                      min="15"
-                      max="50"
-                      step="0.50"
-                      placeholder="18.00"
-                      value={newCleaner.payRateHr}
-                      onChange={(e) => setNewCleaner({ ...newCleaner, payRateHr: e.target.value })}
-                      className="flex-1"
-                    />
-                    <span className="text-sm text-muted-foreground">/hr</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Typical range: $18-22/hour based on experience
-                  </p>
-                </div>
-              </div>
-
-              <Button onClick={handleAddCleaner} className="w-full">
-                Create Cleaner Account
-              </Button>
+              <div className="grid gap-2"><Label>Service ZIP Codes *</Label><Input placeholder="12345, 12346" value={newCleaner.serviceZipCodes} onChange={(e) => setNewCleaner({ ...newCleaner, serviceZipCodes: e.target.value })} /><p className="text-xs text-muted-foreground">Comma-separated</p></div>
+              <div className="grid gap-2"><Label>Pay Rate ($/hr)</Label><Input type="number" min="15" max="50" value={newCleaner.payRateHr} onChange={(e) => setNewCleaner({ ...newCleaner, payRateHr: e.target.value })} /></div>
+              <Button onClick={handleAddCleaner} className="w-full">Create Cleaner Account</Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Cleaners</CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{cleaners.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Cleaners</CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {cleaners.filter((c) => c.status === "active").length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Payouts</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              $
-              {(
-                cleaners.reduce((sum, c) => sum + c.total_earnings_cents, 0) / 100
-              ).toFixed(2)}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-5 mb-8">
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.total}</div></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Active</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{stats.active}</div></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Pending Approval</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-yellow-600">{stats.pending}</div></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg Rating</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold flex items-center gap-1"><Star className="w-4 h-4 text-yellow-500" />{stats.avgRating}</div></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Payouts</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">${stats.totalPayouts.toFixed(0)}</div></CardContent></Card>
       </div>
 
+      {/* Search & Filter */}
+      <div className="flex gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-48"><SelectValue placeholder="Filter status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Cleaners</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="pending">Pending Approval</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Cleaners List</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Rate</TableHead>
+                <TableHead>Rating</TableHead>
                 <TableHead>Bookings</TableHead>
                 <TableHead>Earnings</TableHead>
+                <TableHead>Service ZIPs</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cleaners.map((cleaner) => (
+              {filteredCleaners.map((cleaner) => (
                 <TableRow key={cleaner.id}>
-                  <TableCell className="font-medium">
-                    {cleaner.first_name} {cleaner.last_name}
-                  </TableCell>
+                  <TableCell className="font-medium">{cleaner.first_name} {cleaner.last_name}</TableCell>
                   <TableCell>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-3 w-3 text-muted-foreground" />
-                        {cleaner.email}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-3 w-3 text-muted-foreground" />
-                        {cleaner.phone}
-                      </div>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground" />{cleaner.email}</div>
+                      <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" />{cleaner.phone}</div>
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(cleaner)}</TableCell>
                   <TableCell>
-                    {cleaner.completed_bookings} / {cleaner.total_bookings}
+                    <div className="text-xs">
+                      {cleaner.state && <div>{cleaner.state}</div>}
+                      {cleaner.home_zip && <div className="text-muted-foreground">{cleaner.home_zip}</div>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">${cleaner.pay_rate_hr || 18}/hr</TableCell>
+                  <TableCell>
+                    {cleaner.average_rating ? (
+                      <div className="flex items-center gap-1 text-sm">
+                        <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                        {Number(cleaner.average_rating).toFixed(1)}
+                        <span className="text-xs text-muted-foreground">({cleaner.total_ratings || 0})</span>
+                      </div>
+                    ) : <span className="text-xs text-muted-foreground">No ratings</span>}
+                  </TableCell>
+                  <TableCell className="text-sm">{cleaner.completed_bookings || 0} / {cleaner.total_bookings || 0}</TableCell>
+                  <TableCell className="text-sm">${((cleaner.total_earnings_cents || 0) / 100).toFixed(0)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-[120px]">
+                      {(cleaner.service_zip_codes || []).slice(0, 3).map(z => (
+                        <Badge key={z} variant="outline" className="text-xs">{z}</Badge>
+                      ))}
+                      {(cleaner.service_zip_codes || []).length > 3 && (
+                        <Badge variant="outline" className="text-xs">+{(cleaner.service_zip_codes || []).length - 3}</Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    ${(cleaner.total_earnings_cents / 100).toFixed(2)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-1 flex-wrap">
                       {!cleaner.approved && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => handleApproveCleaner(cleaner.id)}
-                        >
-                          Approve
-                        </Button>
+                        <Button size="sm" variant="default" onClick={() => handleApproveCleaner(cleaner.id)}>Approve</Button>
                       )}
-                      {cleaner.approved && !cleaner.user_id && (
-                        <Badge variant="outline" className="text-xs">
-                          Waiting for signup
-                        </Badge>
-                      )}
-                      {cleaner.user_id && !cleaner.onboarding_complete && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleOnboardCleaner(cleaner.id)}
-                        >
-                          Start Onboarding
-                        </Button>
-                      )}
-                      {cleaner.stripe_account_id && !cleaner.payouts_enabled && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleCheckStatus(cleaner.id)}
-                        >
-                          Check Status
-                        </Button>
+                      {cleaner.approved && (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => openEditDialog(cleaner)}><Pencil className="w-3 h-3" /></Button>
+                          <Button size="sm" variant={cleaner.status === "active" ? "destructive" : "default"} onClick={() => handleToggleStatus(cleaner)}>
+                            {cleaner.status === "active" ? <XCircle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                          </Button>
+                          {cleaner.user_id && !cleaner.onboarding_complete && (
+                            <Button size="sm" variant="outline" onClick={() => handleOnboardCleaner(cleaner.id)}>Stripe</Button>
+                          )}
+                          {cleaner.stripe_account_id && !cleaner.payouts_enabled && (
+                            <Button size="sm" variant="outline" onClick={() => handleCheckStatus(cleaner.id)}>Check</Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => navigate(`/admin/directory?cleaner=${cleaner.id}`)}><Eye className="w-3 h-3" /></Button>
+                        </>
                       )}
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
+              {filteredCleaners.length === 0 && (
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No cleaners found</TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editCleaner} onOpenChange={(open) => !open && setEditCleaner(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Cleaner</DialogTitle>
+            <DialogDescription>{editCleaner?.first_name} {editCleaner?.last_name}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2"><Label>First Name</Label><Input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} /></div>
+              <div className="grid gap-2"><Label>Last Name</Label><Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></div>
+            </div>
+            <div className="grid gap-2"><Label>Phone</Label><Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2"><Label>State</Label>
+                <Select value={editForm.state} onValueChange={(v) => setEditForm({ ...editForm, state: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>{US_STATES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2"><Label>Home ZIP</Label><Input maxLength={5} value={editForm.homeZip} onChange={(e) => setEditForm({ ...editForm, homeZip: e.target.value })} /></div>
+            </div>
+            <div className="grid gap-2"><Label>Service ZIP Codes</Label><Input value={editForm.serviceZipCodes} onChange={(e) => setEditForm({ ...editForm, serviceZipCodes: e.target.value })} /><p className="text-xs text-muted-foreground">Comma-separated</p></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2"><Label>Pay Rate ($/hr)</Label><Input type="number" value={editForm.payRateHr} onChange={(e) => setEditForm({ ...editForm, payRateHr: e.target.value })} /></div>
+              <div className="grid gap-2"><Label>Max Travel (mi)</Label><Input type="number" value={editForm.maxTravelMiles} onChange={(e) => setEditForm({ ...editForm, maxTravelMiles: e.target.value })} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditCleaner(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

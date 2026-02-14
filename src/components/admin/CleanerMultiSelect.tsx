@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, MapPin } from "lucide-react";
+import { X, MapPin, Search } from "lucide-react";
 
 export interface SelectedCleaner {
   id: string;
@@ -29,22 +30,34 @@ interface CleanerMultiSelectProps {
   cleaners: CleanerOption[];
   selectedCleaners: SelectedCleaner[];
   onSelectionChange: (cleaners: SelectedCleaner[]) => void;
+  maxCleaners?: number;
 }
 
 export function CleanerMultiSelect({
   cleaners,
   selectedCleaners,
   onSelectionChange,
+  maxCleaners = 3,
 }: CleanerMultiSelectProps) {
+  const [searchFilter, setSearchFilter] = useState("");
+
+  const filteredCleaners = cleaners.filter(c => {
+    if (!searchFilter) return true;
+    const fullName = `${c.first_name} ${c.last_name}`.toLowerCase();
+    return fullName.includes(searchFilter.toLowerCase());
+  });
+
   const handleToggleCleaner = (cleaner: CleanerOption) => {
     const isSelected = selectedCleaners.some(c => c.id === cleaner.id);
     
     if (isSelected) {
-      onSelectionChange(selectedCleaners.filter(c => c.id !== cleaner.id));
-    } else {
-      if (selectedCleaners.length >= 3) {
-        return; // Max 3 cleaners
+      const remaining = selectedCleaners.filter(c => c.id !== cleaner.id);
+      if (remaining.length > 0 && !remaining.some(c => c.role === 'Lead')) {
+        remaining[0].role = 'Lead';
       }
+      onSelectionChange(remaining);
+    } else {
+      if (selectedCleaners.length >= maxCleaners) return;
       
       const newCleaner: SelectedCleaner = {
         id: cleaner.id,
@@ -66,23 +79,11 @@ export function CleanerMultiSelect({
     );
   };
 
-  const handleHourlyRateChange = (cleanerId: string, rate: number) => {
-    const validRate = Math.max(18, Math.min(20, rate)); // Enforce 18-20 range
-    onSelectionChange(
-      selectedCleaners.map(c => 
-        c.id === cleanerId ? { ...c, hourlyRate: validRate } : c
-      )
-    );
-  };
-
   const handleRemoveCleaner = (cleanerId: string) => {
     const remaining = selectedCleaners.filter(c => c.id !== cleanerId);
-    
-    // If removing the lead, promote first remaining to lead
     if (remaining.length > 0 && !remaining.some(c => c.role === 'Lead')) {
       remaining[0].role = 'Lead';
     }
-    
     onSelectionChange(remaining);
   };
 
@@ -92,7 +93,7 @@ export function CleanerMultiSelect({
       {selectedCleaners.length > 0 && (
         <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center justify-between">
-            <Label className="font-semibold">Selected Cleaners ({selectedCleaners.length}/3)</Label>
+            <Label className="font-semibold">Selected Cleaners ({selectedCleaners.length}/{maxCleaners})</Label>
           </div>
           
           {selectedCleaners.map((cleaner) => (
@@ -129,15 +130,12 @@ export function CleanerMultiSelect({
                   </div>
                   
                   <div className="space-y-1">
-                    <Label className="text-xs">Hourly Rate ($18-$20)</Label>
+                    <Label className="text-xs">Pay Rate</Label>
                     <Input
-                      type="number"
-                      min={18}
-                      max={20}
-                      step={1}
-                      value={cleaner.hourlyRate}
-                      onChange={(e) => handleHourlyRateChange(cleaner.id, parseFloat(e.target.value))}
-                      className="h-8 text-sm"
+                      type="text"
+                      value={`$${cleaner.hourlyRate}/hr`}
+                      readOnly
+                      className="h-8 text-sm bg-muted"
                     />
                   </div>
                 </div>
@@ -156,16 +154,27 @@ export function CleanerMultiSelect({
         </div>
       )}
 
+      {/* Search Filter */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search cleaners by name..."
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
       {/* Available Cleaners */}
       <div className="space-y-2">
         <Label className="font-semibold">
-          Available Cleaners {selectedCleaners.length >= 3 && "(Max reached)"}
+          Available Cleaners {selectedCleaners.length >= maxCleaners && "(Max reached)"}
         </Label>
         
         <div className="space-y-2 max-h-[300px] overflow-y-auto">
-          {cleaners.map((cleaner) => {
+          {filteredCleaners.map((cleaner) => {
             const isSelected = selectedCleaners.some(c => c.id === cleaner.id);
-            const isDisabled = !isSelected && selectedCleaners.length >= 3;
+            const isDisabled = !isSelected && selectedCleaners.length >= maxCleaners;
             
             return (
               <div
@@ -203,6 +212,11 @@ export function CleanerMultiSelect({
               </div>
             );
           })}
+          {filteredCleaners.length === 0 && (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              {searchFilter ? "No cleaners match your search" : "No cleaners available"}
+            </p>
+          )}
         </div>
       </div>
     </div>
