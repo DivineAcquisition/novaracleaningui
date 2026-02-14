@@ -69,19 +69,19 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-amber-400" />
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
           Qualification
         </h2>
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-400">{completedSteps}/{steps.length} complete</span>
+          <span className="text-gray-500">{completedSteps}/{steps.length} complete</span>
           <Progress value={progressPct} className="w-32 h-2" />
         </div>
       </div>
 
       {/* Service Type */}
       <div className="space-y-3">
-        <Label className="text-slate-300">Service Type</Label>
+        <Label className="text-gray-600">Service Type</Label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {SERVICE_TIERS.map((tier) => (
             <button
@@ -90,14 +90,14 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
               className={cn(
                 "text-left p-4 rounded-xl border-2 transition-all",
                 data.serviceType === tier.id
-                  ? "border-amber-500 bg-amber-500/10"
-                  : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
+                  ? "border-emerald-500 bg-emerald-500/10"
+                  : "border-gray-200 bg-gray-50 hover:border-gray-400"
               )}
             >
-              <div className="font-semibold text-white text-sm">{tier.name}</div>
-              <div className="text-xs text-slate-400 mt-1">{tier.description}</div>
+              <div className="font-semibold text-gray-900 text-sm">{tier.name}</div>
+              <div className="text-xs text-gray-500 mt-1">{tier.description}</div>
               {tier.additionalCost > 0 && (
-                <Badge className="mt-2 bg-slate-700 text-slate-300 text-xs">+${tier.additionalCost}</Badge>
+                <Badge className="mt-2 bg-gray-200 text-gray-600 text-xs">+${tier.additionalCost}</Badge>
               )}
             </button>
           ))}
@@ -107,9 +107,9 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
       {/* Property Type & Rooms */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="space-y-2">
-          <Label className="text-slate-300">Property Type</Label>
+          <Label className="text-gray-600">Property Type</Label>
           <Select value={data.propertyType} onValueChange={(v) => update("propertyType", v)}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+            <SelectTrigger className="bg-white border-gray-300 text-gray-900">
               <SelectValue placeholder="Select type" />
             </SelectTrigger>
             <SelectContent>
@@ -120,9 +120,9 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
           </Select>
         </div>
         <div className="space-y-2">
-          <Label className="text-slate-300">Bedrooms</Label>
+          <Label className="text-gray-600">Bedrooms</Label>
           <Select value={String(data.bedrooms || "")} onValueChange={(v) => update("bedrooms", parseInt(v))}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+            <SelectTrigger className="bg-white border-gray-300 text-gray-900">
               <SelectValue placeholder="# BR" />
             </SelectTrigger>
             <SelectContent>
@@ -133,9 +133,9 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
           </Select>
         </div>
         <div className="space-y-2">
-          <Label className="text-slate-300">Bathrooms</Label>
+          <Label className="text-gray-600">Bathrooms</Label>
           <Select value={String(data.bathrooms || "")} onValueChange={(v) => update("bathrooms", parseFloat(v))}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+            <SelectTrigger className="bg-white border-gray-300 text-gray-900">
               <SelectValue placeholder="# BA" />
             </SelectTrigger>
             <SelectContent>
@@ -146,19 +146,19 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
           </Select>
         </div>
         <div className="space-y-2">
-          <Label className="text-slate-300">Approx. Sqft</Label>
+          <Label className="text-gray-600">Approx. Sqft</Label>
           <Input
             value={data.sqft}
             onChange={(e) => update("sqft", e.target.value)}
             placeholder="e.g. 2000"
-            className="bg-slate-800 border-slate-700 text-white"
+            className="bg-white border-gray-300 text-gray-900"
           />
         </div>
       </div>
 
       {/* Home Size Selector */}
       <div className="space-y-3">
-        <Label className="text-slate-300">Home Size (for pricing)</Label>
+        <Label className="text-gray-600">Home Size (for pricing)</Label>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           {HOME_SIZES.map((size) => (
             <button
@@ -167,13 +167,13 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
               className={cn(
                 "p-3 rounded-lg border text-center transition-all text-sm",
                 data.homeSizeId === size.id
-                  ? "border-amber-500 bg-amber-500/10 text-white"
-                  : "border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600"
+                  ? "border-emerald-500 bg-emerald-500/10 text-gray-900"
+                  : "border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-400"
               )}
             >
               <div className="font-bold">{size.label}</div>
               <div className="text-xs mt-1">{size.sqftRange}</div>
-              <div className="text-xs text-amber-400 mt-1">${size.basePrice}</div>
+              <div className="text-xs text-emerald-600 mt-1">${size.basePrice}</div>
             </button>
           ))}
         </div>
@@ -182,7 +182,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
       {/* ZIP + Service Area Validation */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-slate-300 flex items-center gap-2">
+          <Label className="text-gray-600 flex items-center gap-2">
             <MapPin className="w-4 h-4" /> ZIP Code
           </Label>
           <Input
@@ -190,7 +190,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
             onChange={(e) => update("zipCode", e.target.value)}
             placeholder="e.g. 20814"
             maxLength={5}
-            className="bg-slate-800 border-slate-700 text-white"
+            className="bg-white border-gray-300 text-gray-900"
           />
           {data.zipCode.length >= 5 && !checkingZip && (
             coverage ? (
@@ -207,9 +207,9 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
           )}
         </div>
         <div className="space-y-2">
-          <Label className="text-slate-300">Urgency</Label>
+          <Label className="text-gray-600">Urgency</Label>
           <Select value={data.urgency} onValueChange={(v) => update("urgency", v)}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+            <SelectTrigger className="bg-white border-gray-300 text-gray-900">
               <SelectValue placeholder="How soon?" />
             </SelectTrigger>
             <SelectContent>
@@ -223,7 +223,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
 
       {/* Frequency */}
       <div className="space-y-3">
-        <Label className="text-slate-300">Frequency</Label>
+        <Label className="text-gray-600">Frequency</Label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {frequencyOptions.map(({ label, discount }) => (
             <button
@@ -232,8 +232,8 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
               className={cn(
                 "p-3 rounded-lg border text-center transition-all",
                 data.frequency === label
-                  ? "border-amber-500 bg-amber-500/10 text-white"
-                  : "border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600"
+                  ? "border-emerald-500 bg-emerald-500/10 text-gray-900"
+                  : "border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-400"
               )}
             >
               <div className="font-semibold text-sm">{label}</div>
@@ -248,22 +248,22 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
       {/* Date / Time */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-slate-300 flex items-center gap-2">
+          <Label className="text-gray-600 flex items-center gap-2">
             <Calendar className="w-4 h-4" /> Preferred Date
           </Label>
           <Input
             type="date"
             value={data.preferredDate}
             onChange={(e) => update("preferredDate", e.target.value)}
-            className="bg-slate-800 border-slate-700 text-white"
+            className="bg-white border-gray-300 text-gray-900"
           />
         </div>
         <div className="space-y-2">
-          <Label className="text-slate-300 flex items-center gap-2">
+          <Label className="text-gray-600 flex items-center gap-2">
             <Clock className="w-4 h-4" /> Preferred Time
           </Label>
           <Select value={data.preferredTime} onValueChange={(v) => update("preferredTime", v)}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+            <SelectTrigger className="bg-white border-gray-300 text-gray-900">
               <SelectValue placeholder="Time preference" />
             </SelectTrigger>
             <SelectContent>
@@ -277,7 +277,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
 
       {/* Add-ons */}
       <div className="space-y-3">
-        <Label className="text-slate-300">Add-ons</Label>
+        <Label className="text-gray-600">Add-ons</Label>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {ADD_ONS.map((addon) => (
             <button
@@ -286,16 +286,16 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
               className={cn(
                 "p-3 rounded-lg border text-left transition-all text-sm",
                 data.addOns?.includes(addon.id)
-                  ? "border-amber-500 bg-amber-500/10"
-                  : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
+                  ? "border-emerald-500 bg-emerald-500/10"
+                  : "border-gray-200 bg-gray-50 hover:border-gray-400"
               )}
             >
               <div className="flex justify-between items-start">
-                <span className="text-white font-medium">{addon.name}</span>
-                <span className="text-amber-400 text-xs">+${addon.price}</span>
+                <span className="text-gray-900 font-medium">{addon.name}</span>
+                <span className="text-emerald-600 text-xs">+${addon.price}</span>
               </div>
               {addon.description && (
-                <div className="text-xs text-slate-400 mt-1">{addon.description}</div>
+                <div className="text-xs text-gray-500 mt-1">{addon.description}</div>
               )}
             </button>
           ))}
@@ -304,14 +304,14 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
 
       {/* Special Requests */}
       <div className="space-y-2">
-        <Label className="text-slate-300 flex items-center gap-2">
+        <Label className="text-gray-600 flex items-center gap-2">
           <PawPrint className="w-4 h-4" /> Special Requests
         </Label>
         <Textarea
           value={data.specialRequests}
           onChange={(e) => update("specialRequests", e.target.value)}
           placeholder="Pets, allergies, focus areas, access instructions, gate codes..."
-          className="bg-slate-800 border-slate-700 text-white min-h-[60px]"
+          className="bg-white border-gray-300 text-gray-900 min-h-[60px]"
         />
       </div>
     </div>

@@ -84,7 +84,6 @@ export function LiveQuotePanel({
     navigator.clipboard.writeText(text);
     toast.success("Quote copied to clipboard");
     await saveQuoteToDb("clipboard");
-    // Auto-advance lead status to "quoted"
     if (leadId) {
       await supabase.from("leads").update({ status: "quoted" } as any).eq("id", leadId);
       onStatusAdvance?.("quoted");
@@ -121,13 +120,11 @@ export function LiveQuotePanel({
       if (error) throw error;
       toast.success(`Quote emailed to ${leadEmail}`);
       await saveQuoteToDb("email");
-      // Auto-advance lead status to "quoted"
       if (leadId) {
         await supabase.from("leads").update({ status: "quoted" } as any).eq("id", leadId);
         onStatusAdvance?.("quoted");
       }
 
-      // Log activity
       if (leadId) {
         await supabase.from("lead_activity_log").insert({
           lead_id: leadId,
@@ -144,7 +141,7 @@ export function LiveQuotePanel({
 
   if (!homeSizeId) {
     return (
-      <div className="p-6 text-center text-slate-500">
+      <div className="p-6 text-center text-gray-400">
         <Calculator className="w-10 h-10 mx-auto mb-3 opacity-50" />
         <p className="text-sm">Select a home size to see pricing</p>
       </div>
@@ -154,8 +151,8 @@ export function LiveQuotePanel({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-white flex items-center gap-2">
-          <Calculator className="w-4 h-4 text-amber-400" />
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+          <Calculator className="w-4 h-4 text-emerald-600" />
           Live Quote
         </h3>
         {quote.discountPct > 0 && (
@@ -167,16 +164,16 @@ export function LiveQuotePanel({
       </div>
 
       <div className="space-y-2 text-sm">
-        <div className="flex justify-between text-slate-300">
+        <div className="flex justify-between text-gray-600">
           <span>{serviceName}</span>
           <span>{formatCents(quote.basePriceCents)}</span>
         </div>
         {quote.homeSizeLabel && (
-          <div className="text-xs text-slate-500">{quote.homeSizeLabel} • ~{quote.estimatedHours}hrs</div>
+          <div className="text-xs text-gray-400">{quote.homeSizeLabel} • ~{quote.estimatedHours}hrs</div>
         )}
 
         {quote.serviceTierCost > 0 && (
-          <div className="flex justify-between text-slate-400">
+          <div className="flex justify-between text-gray-500">
             <span>Service upgrade</span>
             <span>+{formatCents(quote.serviceTierCost)}</span>
           </div>
@@ -184,9 +181,9 @@ export function LiveQuotePanel({
 
         {selectedAddOns.length > 0 && (
           <>
-            <Separator className="bg-slate-700" />
+            <Separator className="bg-gray-200" />
             {selectedAddOns.map((addon) => (
-              <div key={addon!.id} className="flex justify-between text-slate-400 text-xs">
+              <div key={addon!.id} className="flex justify-between text-gray-500 text-xs">
                 <span>{addon!.name}</span>
                 <span>+${addon!.price}</span>
               </div>
@@ -196,7 +193,7 @@ export function LiveQuotePanel({
 
         {(quote.discountCents > 0 || isNewCustomer) && (
           <>
-            <Separator className="bg-slate-700" />
+            <Separator className="bg-gray-200" />
             {quote.discountCents > 0 && (
               <div className="flex justify-between text-emerald-400">
                 <span>{frequency} discount</span>
@@ -213,32 +210,32 @@ export function LiveQuotePanel({
         )}
       </div>
 
-      <Separator className="bg-slate-600" />
+      <Separator className="bg-gray-300" />
 
       <div className="space-y-2">
-        <div className="flex justify-between text-white font-bold text-lg">
+        <div className="flex justify-between text-gray-900 font-bold text-lg">
           <span>Per Clean</span>
           <span>{formatCents(quote.perCleanCents)}</span>
         </div>
         {quote.subtotalCents !== quote.finalPriceCents && (
-          <div className="flex justify-between text-slate-500 text-xs">
+          <div className="flex justify-between text-gray-400 text-xs">
             <span>Was</span>
             <span className="line-through">{formatCents(quote.subtotalCents)}</span>
           </div>
         )}
       </div>
 
-      <div className="bg-slate-800/50 rounded-lg p-3 space-y-2 text-sm">
-        <div className="flex justify-between text-amber-400 font-semibold">
+      <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+        <div className="flex justify-between text-emerald-600 font-semibold">
           <span>💰 Deposit Today</span>
           <span>{formatCents(quote.depositCents)}</span>
         </div>
-        <div className="flex justify-between text-slate-300">
+        <div className="flex justify-between text-gray-600">
           <span>Balance After Service</span>
           <span>{formatCents(quote.balanceDueCents)}</span>
         </div>
         {frequency !== "One-Time" && (
-          <div className="flex justify-between text-slate-300">
+          <div className="flex justify-between text-gray-600">
             <span>📅 Monthly Total</span>
             <span>{formatCents(quote.monthlyTotalCents)}</span>
           </div>
@@ -249,7 +246,7 @@ export function LiveQuotePanel({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+          className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
           onClick={handleCopy}
         >
           <Copy className="w-3 h-3 mr-1" /> Copy Quote
@@ -257,7 +254,7 @@ export function LiveQuotePanel({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+          className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
           disabled={!leadEmail || sendingEmail}
           onClick={handleEmailQuote}
         >

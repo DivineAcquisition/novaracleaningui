@@ -42,10 +42,10 @@ interface BookingConfirmationProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: "booked", label: "Booked", color: "bg-emerald-500/20 text-emerald-400" },
-  { value: "follow_up", label: "Follow-Up Needed", color: "bg-amber-500/20 text-amber-400" },
-  { value: "lost", label: "Lost / Not Interested", color: "bg-red-500/20 text-red-400" },
-  { value: "outside_area", label: "Outside Service Area", color: "bg-slate-500/20 text-slate-400" },
+  { value: "booked", label: "Booked", color: "bg-emerald-500/20 text-emerald-600" },
+  { value: "follow_up", label: "Follow-Up Needed", color: "bg-amber-500/20 text-amber-600" },
+  { value: "lost", label: "Lost / Not Interested", color: "bg-red-500/20 text-red-600" },
+  { value: "outside_area", label: "Outside Service Area", color: "bg-gray-100 text-gray-500" },
 ];
 
 const PAYMENT_METHODS = ["Card", "Cash", "ACH", "Other"];
@@ -64,7 +64,6 @@ export function BookingConfirmationSection({
   const [city, setCity] = useState(coverageCity || "");
   const [state, setState] = useState(coverageState || "MD");
 
-  // Auto-fill city/state when coverage data arrives
   useEffect(() => {
     if (coverageCity && !city) setCity(coverageCity);
     if (coverageState) setState(coverageState);
@@ -88,7 +87,6 @@ export function BookingConfirmationSection({
   const triggerPostBookingActions = async (bookingData: any) => {
     const fullAddress = `${address}, ${city}, ${state} ${qualification.zipCode}`;
     
-    // Fire confirmation email
     try {
       await supabase.functions.invoke("send-booking-email", {
         body: {
@@ -122,7 +120,6 @@ export function BookingConfirmationSection({
       console.error("[BookingConfirmation] Email failed:", err);
     }
 
-    // Fire GHL/Zapier webhook
     try {
       await supabase.functions.invoke("send-lead-capture-webhook", {
         body: {
@@ -141,7 +138,6 @@ export function BookingConfirmationSection({
       console.error("[BookingConfirmation] Webhook failed:", err);
     }
 
-    // Fire Google Calendar event
     try {
       await supabase.functions.invoke("create-google-calendar-event", {
         body: {
@@ -171,7 +167,6 @@ export function BookingConfirmationSection({
 
     setConfirming(true);
     try {
-      // Update lead status
       if (leadId) {
         await supabase.from("leads").update({
           status,
@@ -185,7 +180,6 @@ export function BookingConfirmationSection({
       }
 
       if (status === "booked") {
-        // Create actual booking in bookings table
         const fullAddress = `${address}, ${city}, ${state} ${qualification.zipCode}`;
         const { data: bookingData, error: bookingError } = await supabase.from("bookings").insert({
           first_name: lead.firstName,
@@ -216,7 +210,6 @@ export function BookingConfirmationSection({
 
         if (bookingError) throw bookingError;
 
-        // Fire post-booking side effects (non-blocking)
         triggerPostBookingActions(bookingData).catch(console.error);
 
         toast.success("Booking confirmed and saved!");
@@ -237,10 +230,10 @@ export function BookingConfirmationSection({
     return (
       <div className="text-center py-8">
         <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-        <h3 className="text-lg font-semibold text-white">
+        <h3 className="text-lg font-semibold text-gray-900">
           {status === "booked" ? "Booking Confirmed!" : "Lead Updated"}
         </h3>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-gray-500 mt-1">
           {status === "booked"
             ? `${serviceName} for ${lead.firstName} on ${qualification.preferredDate}`
             : `Status: ${STATUS_OPTIONS.find((s) => s.value === status)?.label}`}
@@ -252,13 +245,13 @@ export function BookingConfirmationSection({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <CheckCircle className="w-5 h-5 text-amber-400" />
-        <h2 className="text-lg font-semibold text-white">Close & Confirm</h2>
+        <CheckCircle className="w-5 h-5 text-emerald-600" />
+        <h2 className="text-lg font-semibold text-gray-900">Close & Confirm</h2>
       </div>
 
       {/* Status Selection */}
       <div className="space-y-3">
-        <Label className="text-slate-300">Outcome</Label>
+        <Label className="text-gray-600">Outcome</Label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {STATUS_OPTIONS.map((opt) => (
             <button
@@ -267,8 +260,8 @@ export function BookingConfirmationSection({
               className={cn(
                 "p-3 rounded-lg border text-center transition-all text-sm font-medium",
                 status === opt.value
-                  ? `border-amber-500 ${opt.color}`
-                  : "border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600"
+                  ? `border-emerald-500 ${opt.color}`
+                  : "border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-400"
               )}
             >
               {opt.label}
@@ -279,11 +272,11 @@ export function BookingConfirmationSection({
 
       {status === "booked" && (
         <>
-          <Separator className="bg-slate-700" />
+          <Separator className="bg-gray-200" />
 
           {/* Address */}
           <div className="space-y-4">
-            <Label className="text-slate-300 flex items-center gap-2">
+            <Label className="text-gray-600 flex items-center gap-2">
               <MapPin className="w-4 h-4" /> Service Address
             </Label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -292,25 +285,25 @@ export function BookingConfirmationSection({
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Street address"
-                  className="bg-slate-800 border-slate-700 text-white"
+                  className="bg-white border-gray-300 text-gray-900"
                 />
               </div>
               <Input
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="City"
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-white border-gray-300 text-gray-900"
               />
               <Input
                 value={state}
                 onChange={(e) => setState(e.target.value)}
                 placeholder="State"
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-white border-gray-300 text-gray-900"
               />
               <Input
                 value={qualification.zipCode}
                 disabled
-                className="bg-slate-800/50 border-slate-700 text-slate-400"
+                className="bg-gray-50 border-gray-300 text-gray-500"
               />
             </div>
           </div>
@@ -318,24 +311,24 @@ export function BookingConfirmationSection({
           {/* Confirmed Date/Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-slate-300 flex items-center gap-2">
+              <Label className="text-gray-600 flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Confirmed Date
               </Label>
               <Input
                 type="date"
                 value={qualification.preferredDate}
                 disabled
-                className="bg-slate-800/50 border-slate-700 text-slate-300"
+                className="bg-gray-50 border-gray-300 text-gray-600"
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-slate-300 flex items-center gap-2">
+              <Label className="text-gray-600 flex items-center gap-2">
                 <Clock className="w-4 h-4" /> Time Window
               </Label>
               <Input
                 value={qualification.preferredTime || "TBD"}
                 disabled
-                className="bg-slate-800/50 border-slate-700 text-slate-300"
+                className="bg-gray-50 border-gray-300 text-gray-600"
               />
             </div>
           </div>
@@ -343,11 +336,11 @@ export function BookingConfirmationSection({
           {/* Payment */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-slate-300 flex items-center gap-2">
+              <Label className="text-gray-600 flex items-center gap-2">
                 <CreditCard className="w-4 h-4" /> Payment Method
               </Label>
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                <SelectTrigger className="bg-white border-gray-300 text-gray-900">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -359,12 +352,12 @@ export function BookingConfirmationSection({
             </div>
             <div className="flex items-center gap-3 pt-6">
               <Switch checked={depositCollected} onCheckedChange={setDepositCollected} />
-              <Label className="text-slate-300">Deposit collected ({formatCents(quote.depositCents)})</Label>
+              <Label className="text-gray-600">Deposit collected ({formatCents(quote.depositCents)})</Label>
             </div>
           </div>
 
           {!depositCollected && (
-            <div className="flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               Booking will be saved as "Pending Payment" until deposit is collected.
             </div>
@@ -372,28 +365,28 @@ export function BookingConfirmationSection({
 
           {/* Access Notes */}
           <div className="space-y-2">
-            <Label className="text-slate-300">Access Instructions</Label>
+            <Label className="text-gray-600">Access Instructions</Label>
             <Textarea
               value={accessNotes}
               onChange={(e) => setAccessNotes(e.target.value)}
               placeholder="Gate codes, key location, parking instructions..."
-              className="bg-slate-800 border-slate-700 text-white min-h-[60px]"
+              className="bg-white border-gray-300 text-gray-900 min-h-[60px]"
             />
           </div>
 
           {/* Summary */}
-          <div className="bg-slate-800/50 rounded-lg p-4 space-y-2 text-sm">
-            <div className="font-semibold text-white mb-2">Booking Summary</div>
-            <div className="flex justify-between text-slate-300">
+          <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+            <div className="font-semibold text-gray-900 mb-2">Booking Summary</div>
+            <div className="flex justify-between text-gray-600">
               <span>Service</span><span>{serviceName}</span>
             </div>
-            <div className="flex justify-between text-slate-300">
-              <span>Per Clean</span><span className="font-semibold text-white">{formatCents(quote.perCleanCents)}</span>
+            <div className="flex justify-between text-gray-600">
+              <span>Per Clean</span><span className="font-semibold text-gray-900">{formatCents(quote.perCleanCents)}</span>
             </div>
-            <div className="flex justify-between text-amber-400">
+            <div className="flex justify-between text-emerald-600">
               <span>Deposit</span><span>{formatCents(quote.depositCents)}</span>
             </div>
-            <div className="flex justify-between text-slate-300">
+            <div className="flex justify-between text-gray-600">
               <span>Balance After</span><span>{formatCents(quote.balanceDueCents)}</span>
             </div>
           </div>
@@ -403,7 +396,7 @@ export function BookingConfirmationSection({
       <Button
         onClick={handleConfirmBooking}
         disabled={confirming}
-        className="w-full bg-amber-500 hover:bg-amber-600 text-black font-semibold h-12"
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-12"
       >
         {confirming ? (
           <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
