@@ -463,7 +463,11 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Cleaner Payout Per Cleaner": formatCurrency(perCleanerPayoutCents),
       "Total Team Payout": formatCurrency(totalTeamPayoutCents),
       "Company Net": formatCurrency(companyNetCents),
-      "Tip": formatCurrency(booking.tip_cents || 0)
+      "Tip": formatCurrency(booking.tip_cents || 0),
+      
+      // SDR & Intake Data
+      "SDR Rep Name": booking.sdr_rep_name || "",
+      "Num Cleaners Assigned": booking.num_cleaners_assigned || teamSize,
     };
 
   // Send to all configured booking webhooks in parallel
