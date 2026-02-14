@@ -1,51 +1,59 @@
 
 
-# Fix Black Page -- Apply Novara Branding to Sales & Intake Backgrounds
+# Fix Field Colors & Text Visibility in Sales & Intake Tool
 
 ## Problem
 
-The Sales & Intake page still uses a near-black color scheme (`bg-slate-950` page, `bg-slate-900` cards, `border-slate-800` borders). The Novara green was only applied to buttons and the logo, not to the overall page background and card styling.
+The parent page (`SalesTool.tsx`) was updated to a light theme (white/gray backgrounds), but **6 child components** still use dark slate styling (`bg-slate-800`, `border-slate-700`, `text-white`, `text-slate-300`). This causes:
+- Dark input fields sitting on white cards
+- White text on light backgrounds (invisible)
+- Dark dropdowns and search results clashing with the light page
 
-## Fix
+## Files to Update
 
-Replace the dark slate background with a light/white theme that matches the Novara brand:
+All 6 sub-components need the same dark-to-light class replacements:
 
-- **Page background**: Change from `bg-slate-950` to `bg-gray-50` (light gray)
-- **Cards**: Change from `bg-slate-900 border-slate-800` to `bg-white border-gray-200`
-- **Header bar**: Change from `bg-slate-900/50` to `bg-white border-gray-200`
-- **Text colors**: Change from `text-white` to `text-gray-900`, `text-slate-300` to `text-gray-600`, `text-slate-400` to `text-gray-500`
-- **Inputs**: Change from `bg-slate-800 border-slate-700 text-white` to `bg-white border-gray-300 text-gray-900`
-- **PIN gate**: Same treatment -- light background with green accents
-- **Search popover**: Light background instead of dark
-- **Tab styling**: Light background tabs with green active indicator
+1. **`src/components/sales/LeadIntakeSection.tsx`** -- Customer search, lead source/channel selects, name/phone/email inputs, notes textarea
+2. **`src/components/sales/QualificationSection.tsx`** -- Service type cards, property selects, home size buttons, ZIP input, frequency buttons, add-on cards, date/time inputs
+3. **`src/components/sales/LiveQuotePanel.tsx`** -- Quote breakdown text, deposit section, copy/email buttons, separators
+4. **`src/components/sales/SalesAssistPanel.tsx`** -- Channel tips, closing techniques, objection handling accordion
+5. **`src/components/sales/BookingConfirmationSection.tsx`** -- Status buttons, address inputs, payment selects, booking summary, confirm button
+6. **`src/components/sales/FollowUpScheduler.tsx`** -- Date/time inputs, channel select, message textarea, schedule button
 
-## Scope
-
-Only one file changes: `src/pages/admin/SalesTool.tsx`
-
-Every instance of the dark slate classes gets replaced with light equivalents. All green brand accents (buttons, badges, highlights) stay the same. The result is a clean, professional white page with Novara green accents -- no more "black page."
-
-## Technical Details
-
-### Class replacements (applied throughout the file)
+## Class Replacements (applied across all 6 files)
 
 | Dark class | Light replacement |
 |---|---|
-| `bg-slate-950` | `bg-gray-50` |
-| `bg-slate-900` | `bg-white` |
-| `bg-slate-900/50` | `bg-white/90` |
-| `bg-slate-800` | `bg-gray-50` or `bg-white` (inputs) |
-| `border-slate-800` | `border-gray-200` |
+| `bg-slate-800` | `bg-white` (inputs) or `bg-gray-50` (sections) |
+| `bg-slate-800/50` | `bg-gray-50` |
 | `border-slate-700` | `border-gray-300` |
+| `border-slate-700/50` | `border-gray-200` |
 | `border-slate-600` | `border-gray-300` |
-| `border-white/10` | `border-gray-200` |
 | `text-white` | `text-gray-900` |
 | `text-slate-300` | `text-gray-600` |
 | `text-slate-400` | `text-gray-500` |
 | `text-slate-500` | `text-gray-400` |
-| `hover:bg-slate-800` | `hover:bg-gray-100` |
-| `placeholder:text-slate-500` | `placeholder:text-gray-400` |
+| `text-slate-600` | `text-gray-500` |
+| `hover:bg-slate-700/50` | `hover:bg-gray-100` |
+| `hover:bg-slate-800/50` | `hover:bg-gray-100` |
+| `hover:border-slate-600` | `hover:border-gray-400` |
+| `hover:text-white` | `hover:text-gray-900` |
+| `bg-slate-700` | `bg-gray-200` (badges) |
+| `text-amber-400` | Novara green `text-emerald-600` (icon accents) |
+| `border-amber-500` | `border-emerald-500` (active selections) |
+| `bg-amber-500/10` | `bg-emerald-500/10` (active highlights) |
+| `bg-amber-500` | Novara green button style (confirm buttons) |
+| `bg-slate-500/20 text-slate-400` | `bg-gray-100 text-gray-500` |
+| `Separator bg-slate-700` | `Separator bg-gray-200` |
+| `Separator bg-slate-600` | `Separator bg-gray-300` |
 
-### File modified
-- `src/pages/admin/SalesTool.tsx` -- All background, card, input, text, and border classes updated from dark slate to light theme
+## Additional Branding Changes
+
+- Replace amber accent color with Novara green throughout (active states, icons, buttons)
+- Update "Confirm Booking" and "Schedule Follow-Up" buttons from `bg-amber-500 text-black` to Novara green with white text
+- Keep emerald green for discount/savings indicators (already correct)
+
+## No functional changes
+
+Only CSS class swaps -- no logic, state, or data flow changes.
 
