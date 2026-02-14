@@ -7,6 +7,8 @@ export interface CustomerSearchResult {
   lastName: string;
   email: string;
   phone: string;
+  allEmails: string[];
+  allPhones: string[];
   source: "customer" | "booking" | "abandoned_cart";
   badge: string;
   badgeColor: string;
@@ -46,8 +48,13 @@ export function useCustomerSearch(query: string) {
 
       const byEmail = new Map<string, CustomerSearchResult>();
       const byPhone = new Map<string, CustomerSearchResult>();
+      const byName = new Map<string, CustomerSearchResult>();
 
-      function findExisting(email: string, phone: string): CustomerSearchResult | undefined {
+      function nameKey(first: string, last: string): string {
+        return `${(first || '').trim()} ${(last || '').trim()}`.toLowerCase().trim();
+      }
+
+      function findExisting(email: string, phone: string, first?: string, last?: string): CustomerSearchResult | undefined {
         if (email) {
           const found = byEmail.get(email.toLowerCase());
           if (found) return found;
@@ -59,25 +66,49 @@ export function useCustomerSearch(query: string) {
             if (found) return found;
           }
         }
+        if (first && last) {
+          const nk = nameKey(first, last);
+          if (nk.length > 1) {
+            const found = byName.get(nk);
+            if (found) return found;
+          }
+        }
         return undefined;
+      }
+
+      function mergeContact(existing: CustomerSearchResult, email: string, phone: string) {
+        if (email && !existing.allEmails.includes(email.toLowerCase())) {
+          existing.allEmails.push(email.toLowerCase());
+        }
+        if (phone) {
+          const digits = phone.replace(/\D/g, '');
+          if (digits.length >= 10 && !existing.allPhones.some(p => p.replace(/\D/g, '') === digits)) {
+            existing.allPhones.push(phone);
+          }
+        }
       }
 
       function register(result: CustomerSearchResult) {
         if (result.email) byEmail.set(result.email.toLowerCase(), result);
         const digits = result.phone?.replace(/\D/g, '');
         if (digits && digits.length >= 10) byPhone.set(digits, result);
+        const nk = nameKey(result.firstName, result.lastName);
+        if (nk.length > 1) byName.set(nk, result);
       }
 
-      // Bookings first (highest signal)
+      // Bookings first (highest signal, most recent data)
       for (const b of bookingsRes.data || []) {
         if (!b.email) continue;
-        const existing = findExisting(b.email, b.phone || "");
+        const existing = findExisting(b.email, b.phone || "", b.first_name, b.last_name);
         if (existing) {
           existing.bookingCount = (existing.bookingCount || 0) + 1;
+          mergeContact(existing, b.email, b.phone || "");
         } else {
           const entry: CustomerSearchResult = {
             firstName: b.first_name, lastName: b.last_name,
             email: b.email, phone: b.phone || "",
+            allEmails: [b.email.toLowerCase()],
+            allPhones: b.phone ? [b.phone] : [],
             source: "booking", badge: "Booked Before",
             badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
             bookingCount: 1, lastDate: b.service_date, serviceType: b.service_type,
@@ -88,10 +119,15 @@ export function useCustomerSearch(query: string) {
 
       // Customers
       for (const c of customersRes.data || []) {
-        if (!findExisting(c.email, c.phone || "")) {
+        const existing = findExisting(c.email, c.phone || "", c.first_name, c.last_name);
+        if (existing) {
+          mergeContact(existing, c.email, c.phone || "");
+        } else {
           const entry: CustomerSearchResult = {
             firstName: c.first_name, lastName: c.last_name,
             email: c.email, phone: c.phone || "",
+            allEmails: [c.email.toLowerCase()],
+            allPhones: c.phone ? [c.phone] : [],
             source: "customer", badge: "Customer Record",
             badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
           };
@@ -101,10 +137,15 @@ export function useCustomerSearch(query: string) {
 
       // Abandoned carts
       for (const a of cartsRes.data || []) {
-        if (!findExisting(a.email, a.phone || "")) {
+        const existing = findExisting(a.email, a.phone || "", a.first_name || "", a.last_name || "");
+        if (existing) {
+          mergeContact(existing, a.email, a.phone || "");
+        } else {
           const entry: CustomerSearchResult = {
             firstName: a.first_name || "", lastName: a.last_name || "",
             email: a.email, phone: a.phone || "",
+            allEmails: [a.email.toLowerCase()],
+            allPhones: a.phone ? [a.phone] : [],
             source: "abandoned_cart", badge: "Abandoned Cart",
             badgeColor: "bg-amber-500/20 text-amber-400 border-amber-500/30",
           };

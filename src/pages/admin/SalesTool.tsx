@@ -582,15 +582,34 @@ export default function SalesTool() {
                 <div className="max-h-64 overflow-y-auto">
                   {searchResults.map((r, i) => (
                     <button key={`${r.email}-${i}`} onClick={() => handleSelectSearchResult(r)}
-                      className="w-full p-3 text-left hover:bg-gray-100 border-b border-gray-200 last:border-0 flex items-center justify-between">
-                      <div>
+                      className="w-full p-3 text-left hover:bg-gray-100 border-b border-gray-200 last:border-0">
+                      <div className="flex items-center justify-between mb-1">
                         <p className="text-sm font-medium text-gray-900">{r.firstName} {r.lastName}</p>
-                        <p className="text-xs text-gray-500">{r.email}{r.phone ? ` • ${r.phone}` : ""}</p>
+                        <Badge variant={r.source === "booking" ? "default" : r.source === "abandoned_cart" ? "secondary" : "outline"}
+                          className="text-xs shrink-0 ml-2">
+                          {r.badge}{r.bookingCount && r.bookingCount > 1 ? ` (${r.bookingCount}x)` : ""}
+                        </Badge>
                       </div>
-                      <Badge variant={r.source === "booking" ? "default" : r.source === "abandoned_cart" ? "secondary" : "outline"}
-                        className="text-xs shrink-0 ml-2">
-                        {r.badge}
-                      </Badge>
+                      <div className="space-y-0.5">
+                        {r.allEmails && r.allEmails.length > 0 ? (
+                          <p className="text-xs text-gray-500">
+                            📧 {r.allEmails.map((e, idx) => (
+                              <span key={e}>{idx === 0 ? <strong>{e}</strong> : e}{idx < r.allEmails.length - 1 ? ", " : ""}</span>
+                            ))}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-500">📧 {r.email}</p>
+                        )}
+                        {r.allPhones && r.allPhones.length > 0 ? (
+                          <p className="text-xs text-gray-500">
+                            📱 {r.allPhones.map((p, idx) => (
+                              <span key={p}>{idx === 0 ? <strong>{p}</strong> : p}{idx < r.allPhones.length - 1 ? ", " : ""}</span>
+                            ))}
+                          </p>
+                        ) : r.phone ? (
+                          <p className="text-xs text-gray-500">📱 {r.phone}</p>
+                        ) : null}
+                      </div>
                     </button>
                   ))}
                 </div>
