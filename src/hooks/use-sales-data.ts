@@ -44,53 +44,75 @@ export function useCustomerSearch(query: string) {
           .limit(10),
       ]);
 
-      const seen = new Map<string, CustomerSearchResult>();
+      const byEmail = new Map<string, CustomerSearchResult>();
+      const byPhone = new Map<string, CustomerSearchResult>();
+
+      function findExisting(email: string, phone: string): CustomerSearchResult | undefined {
+        if (email) {
+          const found = byEmail.get(email.toLowerCase());
+          if (found) return found;
+        }
+        if (phone) {
+          const digits = phone.replace(/\D/g, '');
+          if (digits.length >= 10) {
+            const found = byPhone.get(digits);
+            if (found) return found;
+          }
+        }
+        return undefined;
+      }
+
+      function register(result: CustomerSearchResult) {
+        if (result.email) byEmail.set(result.email.toLowerCase(), result);
+        const digits = result.phone?.replace(/\D/g, '');
+        if (digits && digits.length >= 10) byPhone.set(digits, result);
+      }
 
       // Bookings first (highest signal)
       for (const b of bookingsRes.data || []) {
         if (!b.email) continue;
-        const key = b.email.toLowerCase();
-        const existing = seen.get(key);
+        const existing = findExisting(b.email, b.phone || "");
         if (existing) {
           existing.bookingCount = (existing.bookingCount || 0) + 1;
         } else {
-          seen.set(key, {
+          const entry: CustomerSearchResult = {
             firstName: b.first_name, lastName: b.last_name,
             email: b.email, phone: b.phone || "",
             source: "booking", badge: "Booked Before",
             badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
             bookingCount: 1, lastDate: b.service_date, serviceType: b.service_type,
-          });
+          };
+          register(entry);
         }
       }
 
       // Customers
       for (const c of customersRes.data || []) {
-        const key = c.email.toLowerCase();
-        if (!seen.has(key)) {
-          seen.set(key, {
+        if (!findExisting(c.email, c.phone || "")) {
+          const entry: CustomerSearchResult = {
             firstName: c.first_name, lastName: c.last_name,
             email: c.email, phone: c.phone || "",
             source: "customer", badge: "Customer Record",
             badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-          });
+          };
+          register(entry);
         }
       }
 
       // Abandoned carts
       for (const a of cartsRes.data || []) {
-        const key = a.email.toLowerCase();
-        if (!seen.has(key)) {
-          seen.set(key, {
+        if (!findExisting(a.email, a.phone || "")) {
+          const entry: CustomerSearchResult = {
             firstName: a.first_name || "", lastName: a.last_name || "",
             email: a.email, phone: a.phone || "",
             source: "abandoned_cart", badge: "Abandoned Cart",
             badgeColor: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-          });
+          };
+          register(entry);
         }
       }
 
-      return Array.from(seen.values());
+      return [...byEmail.values()].filter((v, i, arr) => arr.indexOf(v) === i);
     },
     enabled: debouncedQuery.length >= 2,
   });
