@@ -39,8 +39,6 @@ const navItems = [
   { title: "Cleaners", url: "/admin/cleaners", icon: HardHat },
   { title: "Directory", url: "/admin/directory", icon: MapPin },
   { title: "Dispatch", url: "/admin/dispatch", icon: Truck },
-  { title: "Intake", url: "/admin/intake", icon: ClipboardPlus },
-  { title: "Sales", url: "/admin/sales", icon: Headset },
   { title: "Pipeline", url: "/admin/pipeline", icon: BarChart3 },
   { title: "Webhooks", url: "/admin/webhooks", icon: Webhook },
 ];
