@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +37,8 @@ interface BookingConfirmationProps {
   };
   isNewCustomer: boolean;
   onBooked: () => void;
+  coverageCity?: string;
+  coverageState?: string;
 }
 
 const STATUS_OPTIONS = [
@@ -54,11 +56,19 @@ export function BookingConfirmationSection({
   qualification,
   isNewCustomer,
   onBooked,
+  coverageCity,
+  coverageState,
 }: BookingConfirmationProps) {
   const [status, setStatus] = useState("booked");
   const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("MD");
+  const [city, setCity] = useState(coverageCity || "");
+  const [state, setState] = useState(coverageState || "MD");
+
+  // Auto-fill city/state when coverage data arrives
+  useEffect(() => {
+    if (coverageCity && !city) setCity(coverageCity);
+    if (coverageState) setState(coverageState);
+  }, [coverageCity, coverageState]);
   const [accessNotes, setAccessNotes] = useState(qualification.specialRequests || "");
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [depositCollected, setDepositCollected] = useState(false);

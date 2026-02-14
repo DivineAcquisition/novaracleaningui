@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { LeadIntakeSection, LeadIntakeData } from "@/components/sales/LeadIntakeSection";
+import { useServiceCoverage } from "@/hooks/use-sales-data";
 import { QualificationSection, QualificationData } from "@/components/sales/QualificationSection";
 import { LiveQuotePanel } from "@/components/sales/LiveQuotePanel";
 import { SalesAssistPanel } from "@/components/sales/SalesAssistPanel";
@@ -151,6 +152,7 @@ export default function SalesTool() {
   }, [qual]);
 
   const isNewCustomer = !lead.isExistingCustomer;
+  const { data: coverageData } = useServiceCoverage(qual.zipCode);
 
   const handleSaveLead = async () => {
     if (!lead.firstName || !lead.lastName) {
@@ -300,6 +302,8 @@ export default function SalesTool() {
                   qualification={qual}
                   isNewCustomer={isNewCustomer}
                   onBooked={() => setBooked(true)}
+                  coverageCity={coverageData?.city}
+                  coverageState={coverageData?.state}
                 />
               </Card>
             )}
@@ -319,6 +323,9 @@ export default function SalesTool() {
                 leadEmail={lead.email}
                 leadId={savedLeadId}
                 leadFirstName={lead.firstName}
+                onStatusAdvance={(status) => {
+                  toast.info(`Lead status advanced to "${status}"`);
+                }}
               />
             </Card>
 
