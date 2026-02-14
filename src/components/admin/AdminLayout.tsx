@@ -26,6 +26,7 @@ import {
   Webhook,
   LogOut,
   Shield,
+  Headset,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +39,7 @@ const navItems = [
   { title: "Directory", url: "/admin/directory", icon: MapPin },
   { title: "Dispatch", url: "/admin/dispatch", icon: Truck },
   { title: "Intake", url: "/admin/intake", icon: ClipboardPlus },
+  { title: "Sales", url: "/admin/sales", icon: Headset },
   { title: "Webhooks", url: "/admin/webhooks", icon: Webhook },
 ];
 

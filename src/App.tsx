@@ -27,6 +27,7 @@ import WebhookTester from "./pages/admin/WebhookTester";
 import DispatchQueue from "./pages/admin/DispatchQueue";
 import CleanerDirectory from "./pages/admin/CleanerDirectory";
 import BookingIntake from "./pages/admin/BookingIntake";
+import SalesTool from "./pages/admin/SalesTool";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminBookings from "./pages/admin/Bookings";
 import AdminCustomers from "./pages/admin/Customers";
@@ -188,6 +189,11 @@ const App = () => (
               <Route path="/admin/intake" element={
                 <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
                   <ProtectedRoute requiredRole="admin"><BookingIntake /></ProtectedRoute>
+                </DomainRestricted>
+              } />
+              <Route path="/admin/sales" element={
+                <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
+                  <ProtectedRoute requiredRole="admin"><SalesTool /></ProtectedRoute>
                 </DomainRestricted>
               } />
               {/* Cleaner Portal - Domain restricted to contractor subdomain */}
