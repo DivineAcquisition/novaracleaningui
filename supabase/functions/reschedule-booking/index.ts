@@ -157,25 +157,31 @@ serve(async (req) => {
 
     // Send reschedule data to GHL webhook
     try {
+      const fmtDate = (d: string) => {
+        const [y, m, day] = d.split('-');
+        return `${m}/${day}/${y}`;
+      };
+
       const ghlPayload = {
-        event_type: 'booking_rescheduled',
-        booking_id: bookingId,
-        email: booking.email,
-        first_name: booking.first_name,
-        last_name: booking.last_name,
-        phone: booking.phone,
-        old_date: oldDate,
-        old_time_slot: oldTimeSlot,
-        new_date: newDate,
-        new_time_slot: newTimeSlot,
-        service_type: booking.service_type,
-        address: booking.address,
-        city: booking.city,
-        state: booking.state,
-        zip_code: booking.zip_code,
-        total_estimate_cents: booking.total_estimate_cents,
-        home_size_id: booking.home_size_id,
-        rescheduled_at: new Date().toISOString(),
+        "Event Type": "booking_rescheduled",
+        "Booking ID": bookingId,
+        "Customer Email": booking.email,
+        "First Name": booking.first_name,
+        "Last Name": booking.last_name,
+        "Full Name": `${booking.first_name} ${booking.last_name}`,
+        "Customer Phone": booking.phone,
+        "Previous Date": fmtDate(oldDate),
+        "Previous Time Slot": oldTimeSlot,
+        "New Scheduled Date": fmtDate(newDate),
+        "New Time Slot": newTimeSlot,
+        "Service Type": booking.service_type,
+        "Service Address": `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
+        "City": booking.city,
+        "State": booking.state,
+        "Zip Code": booking.zip_code,
+        "Total Estimate": `$${(booking.total_estimate_cents / 100).toFixed(2)}`,
+        "Home Size": booking.home_size_id,
+        "Rescheduled At": new Date().toISOString(),
       };
 
       const ghlRes = await fetch(
