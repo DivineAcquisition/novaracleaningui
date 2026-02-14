@@ -5,16 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, CreditCard, Calendar, LogOut, Settings, Loader2, CheckCircle2, Lock, Clock, MapPin, Package, AlertCircle, Home, X, UserPlus } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  User, CreditCard, Calendar, LogOut, Loader2, CheckCircle2, Lock, Clock, MapPin,
+  Package, AlertCircle, Home, X, ChevronDown, ChevronUp, Star, Sparkles, ArrowRight
+} from "lucide-react";
 import { ReferralSection } from "@/components/ReferralSection";
 import { toast } from "sonner";
-import { format, isPast, isFuture } from "date-fns";
+import { format, isPast, isFuture, differenceInDays, differenceInHours } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { ModifyBookingDialog } from "@/components/booking/ModifyBookingDialog";
 import { RatingDialog } from "@/components/booking/RatingDialog";
+import { cn } from "@/lib/utils";
 
 interface Booking {
   id: string;
@@ -62,6 +65,7 @@ export default function Account() {
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const [ratingBooking, setRatingBooking] = useState<Booking | null>(null);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [pastBookingsOpen, setPastBookingsOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -75,7 +79,6 @@ export default function Account() {
 
   const fetchBookings = async () => {
     if (!user?.email) return;
-    
     setIsLoadingBookings(true);
     try {
       const { data, error } = await supabase
@@ -83,7 +86,6 @@ export default function Account() {
         .select('*')
         .eq('email', user.email)
         .order('service_date', { ascending: false });
-
       if (error) throw error;
       setBookings(data || []);
     } catch (error: any) {
@@ -96,14 +98,12 @@ export default function Account() {
 
   const fetchMembershipCredits = async () => {
     if (!user?.email) return;
-    
     try {
       const { data, error } = await supabase
         .from('membership_credits')
         .select('*')
         .eq('email', user.email)
         .maybeSingle();
-
       if (error) throw error;
       setMembershipCredits(data);
     } catch (error: any) {
@@ -119,17 +119,13 @@ export default function Account() {
 
   const handleManageSubscription = async () => {
     try {
-      // Check if user has a Stripe customer record
       if (!subscription?.hasCustomer) {
         toast.error("Please complete a booking first to access the customer portal");
         return;
       }
-      
       await openCustomerPortal();
     } catch (error: any) {
       const errorMessage = error.message || "Failed to open customer portal";
-      
-      // Provide more specific error messages
       if (errorMessage.includes("No Stripe customer found")) {
         toast.error("No payment methods on file. Complete a booking to add one.");
       } else {
@@ -140,16 +136,13 @@ export default function Account() {
 
   const handleChangePassword = async () => {
     if (!user?.email) return;
-    
     setIsResettingPassword(true);
     const { error } = await resetPassword(user.email);
-    
     if (error) {
       toast.error(error.message || "Failed to send reset email");
     } else {
       toast.success("Password reset link sent to your email!");
     }
-    
     setIsResettingPassword(false);
   };
 
@@ -185,7 +178,6 @@ export default function Account() {
   };
 
   const handleCancel = (booking: Booking) => {
-    // Open GoHighLevel form with pre-filled booking data
     const ghlFormUrl = 'https://novaracleaning.com/cancel-booking';
     const params = new URLSearchParams({
       booking_id: booking.id,
@@ -200,19 +192,34 @@ export default function Account() {
     window.open(`${ghlFormUrl}?${params.toString()}`, '_blank');
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", label: string }> = {
-      confirmed: { variant: "default", label: "Confirmed" },
-      pending_payment: { variant: "secondary", label: "Pending Payment" },
-      cancelled: { variant: "destructive", label: "Cancelled" },
-      completed: { variant: "outline", label: "Completed" },
+  const getStatusConfig = (status: string) => {
+    const configs: Record<string, { color: string; bg: string; label: string }> = {
+      confirmed: { color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200", label: "Confirmed" },
+      pending_payment: { color: "text-amber-700", bg: "bg-amber-50 border-amber-200", label: "Pending Payment" },
+      cancelled: { color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", label: "Cancelled" },
+      completed: { color: "text-primary", bg: "bg-primary/10 border-primary/20", label: "Completed" },
     };
-    
-    const config = variants[status] || { variant: "outline", label: status };
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+    return configs[status] || { color: "text-muted-foreground", bg: "bg-muted border-border", label: status };
   };
 
-  // Only show incomplete bookings from last 24 hours
+  const getCountdown = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const days = differenceInDays(date, now);
+    if (days > 1) return `in ${days} days`;
+    const hours = differenceInHours(date, now);
+    if (hours > 0) return `in ${hours} hours`;
+    return "today";
+  };
+
+  const upcomingBookings = bookings.filter(b =>
+    isFuture(new Date(b.service_date)) && b.status === 'confirmed'
+  );
+  const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[upcomingBookings.length - 1] : null;
+  const otherUpcoming = upcomingBookings.filter(b => b.id !== nextBooking?.id);
+  const pastBookings = bookings.filter(b =>
+    (isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled') && b.status !== 'pending_payment'
+  );
   const incompleteBookings = bookings
     .filter(b => {
       if (b.status !== 'pending_payment') return false;
@@ -220,493 +227,309 @@ export default function Account() {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       return bookingCreatedAt > twentyFourHoursAgo;
     })
-    .slice(0, 1); // Limit to only 1 most recent incomplete booking
-  
-  const upcomingBookings = bookings.filter(b => 
-    isFuture(new Date(b.service_date)) && 
-    b.status === 'confirmed'
-  );
-  const pastBookings = bookings.filter(b => (isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled') && b.status !== 'pending_payment');
+    .slice(0, 1);
+
+  const userName = user?.email?.split('@')[0]?.replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'there';
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
-      <div className="container max-w-7xl mx-auto px-4 py-12">
-        <div className="mb-8 flex items-center justify-between">
+    <div className="min-h-screen" style={{ background: 'var(--gradient-hero)' }}>
+      {/* Header */}
+      <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-20">
+        <div className="container max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold font-jakarta mb-2">My Account</h1>
-            <p className="text-muted-foreground">Manage your profile, bookings, and subscriptions</p>
+            <h1 className="text-xl md:text-2xl font-bold">Welcome back, {userName} 👋</h1>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
           </div>
-          <Button variant="outline" onClick={() => navigate("/")}>
-            <Home className="w-4 h-4 mr-2" />
-            Home
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => navigate("/book/zip")}>
+              <Calendar className="w-4 h-4 mr-1" /> Book
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+              <Home className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
+      </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Profile Card */}
-          <Card className="border-2 border-primary/30 shadow-card">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
-                  <User className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="font-semibold">Profile</CardTitle>
-                  <CardDescription>Your account information</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">{user.email}</p>
-              </div>
-              <Separator />
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handleChangePassword}
-                disabled={isResettingPassword}
-              >
-                {isResettingPassword ? (
-                  <>
-                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-                    Sending reset link...
-                  </>
-                ) : (
-                  <>
-                    <Lock className="mr-2 w-4 h-4" />
-                    Change Password
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handleSignOut}
-              >
-                <LogOut className="mr-2 w-4 h-4" />
-                Sign Out
-              </Button>
-            </CardContent>
-          </Card>
+      <div className="container max-w-5xl mx-auto px-4 py-6 space-y-6">
 
-          {/* Subscription Card */}
-          <Card className="border-2 border-primary/30 shadow-card">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
-                  <CreditCard className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="font-semibold">Subscription</CardTitle>
-                  <CardDescription>Your current plan</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {subscription?.subscribed ? (
-                <>
-                  <div className="flex items-center justify-between">
+        {/* Incomplete Bookings Alert */}
+        {incompleteBookings.length > 0 && (
+          <Card className="border-2 border-amber-300 bg-amber-50/50">
+            <CardContent className="p-4">
+              {incompleteBookings.map(booking => (
+                <div key={booking.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
                     <div>
-                      <p className="font-semibold">{subscription.plan_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Status: <Badge variant="default" className="ml-1">Active</Badge>
+                      <p className="font-semibold text-sm">Incomplete Booking</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(booking.service_date), "MMMM d")} • {booking.service_type} • ${(booking.total_estimate_cents / 100).toFixed(2)}
                       </p>
                     </div>
-                    <CheckCircle2 className="w-8 h-8 text-success" />
                   </div>
-                  
-                  {subscription.subscription_end && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="w-4 h-4" />
-                      <span>
-                        Renews {format(new Date(subscription.subscription_end), "MMM d, yyyy")}
-                      </span>
-                    </div>
-                  )}
-                  
-                  <Separator />
-                  
-                  <Button
-                    className="w-full bg-gradient-primary hover:opacity-90"
-                    onClick={handleManageSubscription}
-                  >
-                    <Settings className="mr-2 w-4 h-4" />
-                    Manage Subscription
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={() => navigate(`/book/checkout?booking_id=${booking.id}`)}>
+                    Complete Payment <ArrowRight className="w-3 h-3 ml-1" />
                   </Button>
-                </>
-              ) : (
-                <>
-                  <div className="text-center py-6">
-                    <p className="text-muted-foreground mb-4">
-                      {subscription?.hasCustomer 
-                        ? "No active subscription"
-                        : "Start your cleaning journey"}
-                    </p>
-                    <Button
-                      className="bg-gradient-primary hover:opacity-90 shadow-lavender"
-                      onClick={() => navigate("/book/zip")}
-                    >
-                      Book Your First Cleaning
-                    </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Hero: Next Booking */}
+        {nextBooking ? (
+          <Card className="border-2 border-primary/30 overflow-hidden">
+            <div className="h-1.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-1">Next Cleaning</p>
+                  <h2 className="text-2xl md:text-3xl font-bold">
+                    {format(new Date(nextBooking.service_date), "EEEE, MMMM d")}
+                  </h2>
+                  <p className="text-muted-foreground mt-1">{nextBooking.time_slot}</p>
+                </div>
+                <Badge variant="secondary" className="text-sm font-semibold bg-primary/10 text-primary border-primary/20">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  {getCountdown(nextBooking.service_date)}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium">{nextBooking.address}</p>
+                    <p className="text-muted-foreground">{nextBooking.city}, {nextBooking.state}</p>
                   </div>
-                  
-                  {subscription?.hasCustomer && (
-                    <>
-                      <Separator />
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={handleManageSubscription}
-                      >
-                        <Settings className="mr-2 w-4 h-4" />
-                        View Billing History
-                      </Button>
-                    </>
-                  )}
-                </>
-              )}
+                </div>
+                <div className="flex items-start gap-2">
+                  <Package className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium">{nextBooking.service_type}</p>
+                    <p className="text-muted-foreground">{nextBooking.home_size_id}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CreditCard className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-primary">${(nextBooking.total_estimate_cents / 100).toFixed(2)}</p>
+                    {nextBooking.uses_credit && <p className="text-muted-foreground">Using credit</p>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleModify(nextBooking)}>
+                  Modify
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleReschedule(nextBooking)}>
+                  <Calendar className="w-3 h-3 mr-1" /> Reschedule
+                </Button>
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleCancel(nextBooking)}>
+                  <X className="w-3 h-3 mr-1" /> Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-2 border-dashed border-primary/30">
+            <CardContent className="p-8 text-center">
+              <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+              <h2 className="text-lg font-semibold mb-1">No upcoming cleanings</h2>
+              <p className="text-sm text-muted-foreground mb-4">Book your next cleaning today</p>
+              <Button onClick={() => navigate("/book/zip")}>
+                <Sparkles className="w-4 h-4 mr-1" /> Book a Cleaning
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Membership + Account Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Membership Credits */}
+          {membershipCredits ? (
+            <Card className="border-primary/20" style={{ background: 'var(--gradient-lavender)' }}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary" />
+                    <span className="font-semibold text-sm">
+                      {membershipCredits.membership_plan.charAt(0).toUpperCase() + membershipCredits.membership_plan.slice(1)} Membership
+                    </span>
+                  </div>
+                  <Badge variant="default" className="bg-primary">Active</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center mb-4">
+                  <div className="rounded-lg bg-background/60 p-3">
+                    <p className="text-2xl font-bold text-primary">{membershipCredits.credits_remaining}</p>
+                    <p className="text-xs text-muted-foreground">Available</p>
+                  </div>
+                  <div className="rounded-lg bg-background/60 p-3">
+                    <p className="text-2xl font-bold">{membershipCredits.credits_used}</p>
+                    <p className="text-xs text-muted-foreground">Used</p>
+                  </div>
+                  <div className="rounded-lg bg-background/60 p-3">
+                    <p className="text-lg font-bold">{format(new Date(membershipCredits.current_period_end), "MMM d")}</p>
+                    <p className="text-xs text-muted-foreground">Refreshes</p>
+                  </div>
+                </div>
+                {membershipCredits.credits_remaining > 0 && (
+                  <Button className="w-full" onClick={() => navigate("/portal/book")}>
+                    <Calendar className="w-4 h-4 mr-2" /> Use Credit to Book
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-primary/20">
+              <CardContent className="p-5 flex flex-col items-center justify-center text-center h-full">
+                <Sparkles className="w-8 h-8 text-primary mb-2" />
+                <p className="font-semibold mb-1">Save with a Membership</p>
+                <p className="text-xs text-muted-foreground mb-3">Get monthly credits and save up to 20%</p>
+                <Button variant="outline" size="sm" onClick={() => navigate("/membership")}>
+                  View Plans
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Account & Quick Actions */}
+          <Card className="border-border">
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--gradient-primary)' }}>
+                  <User className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Account</p>
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" className="justify-start text-xs h-9"
+                  onClick={() => navigate("/book/zip")}>
+                  <Calendar className="w-3 h-3 mr-1" /> Book Cleaning
+                </Button>
+                {subscription?.hasCustomer && (
+                  <Button variant="outline" size="sm" className="justify-start text-xs h-9"
+                    onClick={handleManageSubscription}>
+                    <CreditCard className="w-3 h-3 mr-1" /> Billing
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="justify-start text-xs h-9"
+                  onClick={handleChangePassword} disabled={isResettingPassword}>
+                  <Lock className="w-3 h-3 mr-1" /> {isResettingPassword ? "Sending..." : "Password"}
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start text-xs h-9"
+                  onClick={() => navigate("/membership")}>
+                  <Package className="w-3 h-3 mr-1" /> Plans
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Membership Credits */}
-        {membershipCredits && (
-          <Card className="mt-6 border-2 border-primary/40 bg-gradient-lavender shadow-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 font-semibold">
-                    <Package className="w-5 h-5 text-primary" />
-                    Membership Credits
-                  </CardTitle>
-                  <CardDescription>
-                    {membershipCredits.membership_plan.charAt(0).toUpperCase() + membershipCredits.membership_plan.slice(1)} Plan
-                  </CardDescription>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl md:text-3xl font-bold text-primary">{membershipCredits.credits_remaining}</p>
-                  <p className="text-sm text-muted-foreground">Credits Available</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-xl font-semibold">{membershipCredits.credits_per_month}</p>
-                  <p className="text-xs text-muted-foreground">Per Month</p>
-                </div>
-                <div>
-                  <p className="text-xl font-semibold">{membershipCredits.credits_used}</p>
-                  <p className="text-xs text-muted-foreground">Used</p>
-                </div>
-                <div>
-                  <p className="text-xl font-semibold">
-                    {format(new Date(membershipCredits.current_period_end), "MMM d")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Next Refresh</p>
-                </div>
-              </div>
-              
-              {/* Use Credit Button */}
-              {membershipCredits.credits_remaining > 0 && (
-                <Button 
-                  className="w-full bg-gradient-primary hover:opacity-90 shadow-lavender h-12 text-lg"
-                  onClick={() => navigate("/portal/book")}
-                >
-                  <Calendar className="w-5 h-5 mr-2" />
-                  Use Credit to Book a Cleaning
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {/* Referral */}
+        {user?.email && <ReferralSection email={user.email} />}
 
-        {/* Referral Section */}
-        {user?.email && (
-          <div className="mt-6">
-            <ReferralSection email={user.email} />
-          </div>
-        )}
-
-        {/* Incomplete Bookings */}
-        {incompleteBookings.length > 0 && (
-          <Card className="mt-6 border-2 border-warning/60 bg-warning/5 shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 font-semibold">
-                <AlertCircle className="w-5 h-5 text-warning" />
-                Incomplete Bookings
-              </CardTitle>
-              <CardDescription>Complete your payment to confirm these bookings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {incompleteBookings.map((booking) => (
-                  <Alert key={booking.id} className="border-warning/50">
-                    <AlertCircle className="h-4 w-4 text-warning" />
-                    <AlertDescription>
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-2">
-                          <p className="font-semibold">
-                            {format(new Date(booking.service_date), "EEEE, MMMM d, yyyy")} at {booking.time_slot}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {booking.address}, {booking.city}, {booking.state}
-                          </p>
-                          <div className="flex gap-2">
-                            <Badge variant="outline">{booking.service_type}</Badge>
-                            <Badge variant="secondary">Payment Pending</Badge>
+        {/* Other Upcoming Bookings */}
+        {otherUpcoming.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Upcoming Bookings ({otherUpcoming.length})
+            </h3>
+            <div className="space-y-2">
+              {otherUpcoming.map(booking => {
+                const sc = getStatusConfig(booking.status);
+                return (
+                  <Card key={booking.id} className={cn("border", sc.bg)}>
+                    <CardContent className="p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-4">
+                          <div className="text-center min-w-[50px]">
+                            <p className="text-xs text-muted-foreground">{format(new Date(booking.service_date), 'MMM')}</p>
+                            <p className="text-2xl font-bold">{format(new Date(booking.service_date), 'd')}</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{booking.time_slot} • {booking.service_type}</p>
+                            <p className="text-xs text-muted-foreground">{booking.address}, {booking.city}</p>
                           </div>
                         </div>
-                        <div className="text-right space-y-2">
-                          <p className="text-xl font-bold text-warning">
-                            ${(booking.total_estimate_cents / 100).toFixed(2)}
-                          </p>
-                          <Button
-                            size="sm"
-                            className="bg-warning hover:bg-warning/90 text-warning-foreground"
-                            onClick={() => navigate(`/book/checkout?booking_id=${booking.id}`)}
-                          >
-                            Complete Payment
-                          </Button>
-                        </div>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Upcoming Services */}
-        <Card className="mt-6 border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 font-semibold">
-              <Calendar className="w-5 h-5 text-primary" />
-              Upcoming Services
-            </CardTitle>
-            <CardDescription>Your confirmed cleanings</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingBookings ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : upcomingBookings.length === 0 ? (
-              <div className="text-center py-8">
-                <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                <p className="text-muted-foreground mb-4">No upcoming cleanings scheduled</p>
-                <Button onClick={() => navigate("/book/zip")} className="bg-gradient-primary">
-                  Book a Cleaning
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {upcomingBookings.map((booking) => (
-                  <Card key={booking.id} className="border-primary/20">
-                    <CardContent className="pt-6">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-3 flex-1">
-                          <div className="flex items-start gap-3">
-                            <Clock className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="font-semibold text-lg">
-                                {format(new Date(booking.service_date), "EEEE, MMMM d, yyyy")}
-                              </p>
-                              <p className="text-sm text-muted-foreground">{booking.time_slot}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-3">
-                            <MapPin className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="font-medium">{booking.address}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {booking.city}, {booking.state} {booking.zip_code}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4 flex-wrap">
-                            <Badge variant="outline">{booking.service_type}</Badge>
-                            <Badge variant="outline">{booking.home_size_id}</Badge>
-                            {booking.uses_credit && <Badge className="bg-primary">Using Credit</Badge>}
-                            {getStatusBadge(booking.status)}
-                          </div>
-                        </div>
-                        <div className="text-right space-y-2">
-                          <p className="text-2xl font-bold text-primary">
-                            ${(booking.total_estimate_cents / 100).toFixed(2)}
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleModify(booking)}
-                            >
-                              Modify
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleReschedule(booking)}
-                            >
-                              Reschedule
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleCancel(booking)}
-                            >
-                              <X className="w-3 h-3 mr-1" />
-                              Cancel
-                            </Button>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm">${(booking.total_estimate_cents / 100).toFixed(2)}</span>
+                          <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleReschedule(booking)}>Reschedule</Button>
+                          <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive" onClick={() => handleCancel(booking)}>Cancel</Button>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Booking History */}
-        <Card className="mt-6 border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
-              Booking History
-            </CardTitle>
-            <CardDescription>Your past cleanings</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingBookings ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : pastBookings.length === 0 ? (
-              <div className="text-center py-8">
-                <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                <p className="text-muted-foreground">No booking history yet</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Service</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                     {pastBookings.map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell className="font-medium">
-                          {format(new Date(booking.service_date), "MMM d, yyyy")}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{booking.service_type}</p>
-                            <p className="text-xs text-muted-foreground">{booking.home_size_id}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm">{booking.city}, {booking.state}</p>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(booking.status)}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          ${(booking.total_estimate_cents / 100).toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {booking.status === "completed" && booking.cleaner_id && !booking.rating_submitted ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRating(booking)}
-                            >
-                              Rate Cleaner
-                            </Button>
-                          ) : booking.rating_submitted ? (
-                            <Badge variant="secondary">Rated</Badge>
-                          ) : null}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card className="mt-6 border-primary/20">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks and shortcuts</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Button
-                variant="outline"
-                className="h-auto py-4 justify-start"
-                onClick={() => navigate("/book/zip")}
-              >
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-5 h-5 text-primary mt-0.5" />
-                  <div className="text-left">
-                    <p className="font-semibold">Book a Cleaning</p>
-                    <p className="text-xs text-muted-foreground">Schedule your next service</p>
-                  </div>
-                </div>
-              </Button>
-              
-              {subscription?.hasCustomer && (
-                <Button
-                  variant="outline"
-                  className="h-auto py-4 justify-start"
-                  onClick={handleManageSubscription}
-                >
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="w-5 h-5 text-primary mt-0.5" />
-                    <div className="text-left">
-                      <p className="font-semibold">Payment Methods</p>
-                      <p className="text-xs text-muted-foreground">Update your billing info</p>
-                    </div>
-                  </div>
-                </Button>
-              )}
-
-              <Button
-                variant="outline"
-                className="h-auto py-4 justify-start"
-                onClick={() => navigate("/membership")}
-              >
-                <div className="flex items-start gap-3">
-                  <Package className="w-5 h-5 text-primary mt-0.5" />
-                  <div className="text-left">
-                    <p className="font-semibold">Membership Plans</p>
-                    <p className="text-xs text-muted-foreground">Save with a membership</p>
-                  </div>
-                </div>
-              </Button>
+                );
+              })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
+
+        {/* Past Bookings - Collapsible */}
+        {pastBookings.length > 0 && (
+          <Collapsible open={pastBookingsOpen} onOpenChange={setPastBookingsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between text-muted-foreground hover:text-foreground">
+                <span className="text-sm font-semibold uppercase tracking-wide">
+                  Past Bookings ({pastBookings.length})
+                </span>
+                {pastBookingsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 mt-2">
+              {pastBookings.map(booking => {
+                const sc = getStatusConfig(booking.status);
+                return (
+                  <Card key={booking.id} className="border bg-muted/30">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="text-center min-w-[40px]">
+                            <p className="text-xs text-muted-foreground">{format(new Date(booking.service_date), 'MMM')}</p>
+                            <p className="text-lg font-bold">{format(new Date(booking.service_date), 'd')}</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{booking.service_type} • {booking.home_size_id}</p>
+                            <p className="text-xs text-muted-foreground">{booking.city}, {booking.state}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn("text-xs", sc.color)}>{sc.label}</Badge>
+                          <span className="text-sm font-medium">${(booking.total_estimate_cents / 100).toFixed(2)}</span>
+                          {booking.status === "completed" && booking.cleaner_id && !booking.rating_submitted && (
+                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleRating(booking)}>
+                              <Star className="w-3 h-3 mr-1" /> Rate
+                            </Button>
+                          )}
+                          {booking.rating_submitted && (
+                            <Badge variant="secondary" className="text-xs"><Star className="w-3 h-3 mr-0.5 fill-current" /> Rated</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
       </div>
 
       {rescheduleBooking && (
@@ -717,7 +540,6 @@ export default function Account() {
           onSuccess={handleRescheduleSuccess}
         />
       )}
-
       {modifyBooking && (
         <ModifyBookingDialog
           open={modifyDialogOpen}
@@ -726,13 +548,12 @@ export default function Account() {
           onSuccess={handleModifySuccess}
         />
       )}
-
       {ratingBooking && (
         <RatingDialog
           open={ratingDialogOpen}
           onOpenChange={setRatingDialogOpen}
           bookingId={ratingBooking.id}
-          cleanerName={`Your Cleaner`}
+          cleanerName="Your Cleaner"
           onRatingSubmitted={handleRatingSubmitted}
         />
       )}

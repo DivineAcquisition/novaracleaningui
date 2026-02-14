@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { format, addDays, parse } from "date-fns";
+import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Clock, Calendar, Loader2 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Clock, CalendarIcon, Loader2, MapPin, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateTimeSlots } from "@/lib/time-slots";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +36,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
   const [isRescheduling, setIsRescheduling] = useState(false);
 
   const minDate = addDays(new Date(), 2);
+  const maxDate = addDays(new Date(), 60);
   const timeSlots = generateTimeSlots(booking.service_duration || 2, booking.service_type);
 
   useEffect(() => {
@@ -81,101 +82,128 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
     }
   };
 
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0; // Only disable Sundays
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Reschedule Booking</DialogTitle>
-          <DialogDescription>
-            Current appointment: {format(new Date(booking.service_date), 'MMMM d, yyyy')} at {booking.time_slot}
-          </DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Reschedule Booking</DialogTitle>
+          <DialogDescription className="sr-only">Choose a new date and time for your booking</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Date Selection */}
+        {/* Current Booking Summary */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <CalendarIcon className="w-5 h-5 text-primary" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Current Appointment</p>
+                  <p className="font-semibold">
+                    {format(new Date(booking.service_date), 'MMMM d, yyyy')} at {booking.time_slot}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="w-4 h-4" />
+                {booking.city}, {booking.state}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-2">
+          {/* Date Selection - Calendar Grid */}
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4" />
               Select New Date
             </h3>
-            <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
-              <div className="flex gap-3 p-4">
-                {Array.from({ length: 30 }, (_, i) => {
-                  const date = addDays(minDate, i);
-                  const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-                  
-                  return (
-                    <Card
-                      key={i}
-                      onClick={() => setSelectedDate(date)}
-                      className={cn(
-                        "flex-shrink-0 w-20 cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95",
-                        isSelected 
-                          ? "bg-primary text-primary-foreground border-primary shadow-lg scale-110 ring-2 ring-primary/50" 
-                          : "hover:border-primary/50"
-                      )}
-                    >
-                      <CardContent className="p-3 text-center space-y-1">
-                        <p className={cn(
-                          "text-xs font-semibold uppercase tracking-wide",
-                          isSelected ? "opacity-95" : "opacity-70"
-                        )}>
-                          {format(date, 'EEE')}
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {format(date, 'd')}
-                        </p>
-                        <p className={cn(
-                          "text-xs font-medium",
-                          isSelected ? "opacity-95" : "opacity-70"
-                        )}>
-                          {format(date, 'MMM')}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </ScrollArea>
+            <div className="border rounded-lg p-1">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                disabled={(date) => date < minDate || date > maxDate || isWeekend(date)}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </div>
           </div>
 
-          {/* Time Slot Selection */}
-          {selectedDate && (
-            <div className="space-y-3 animate-fade-in">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Select New Time
-              </h3>
-              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-                {timeSlots.map((slot) => (
-                  <Card
-                    key={slot.id}
-                    className={cn(
-                      "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 active:scale-95",
-                      selectedTime === slot.id && "ring-2 ring-primary shadow-lg scale-105 bg-primary/5"
-                    )}
-                    onClick={() => setSelectedTime(slot.id)}
-                  >
-                    <CardContent className="p-4 text-center space-y-2">
-                      <Clock className="mx-auto w-6 h-6 text-primary" />
-                      <p className="font-semibold text-sm">{slot.label}</p>
+          {/* Time Slot Selection - Vertical List */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Select New Time
+            </h3>
+            {selectedDate ? (
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {timeSlots.map((slot) => {
+                  const isSelected = selectedTime === slot.id;
+                  return (
+                    <button
+                      key={slot.id}
+                      onClick={() => setSelectedTime(slot.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left",
+                        isSelected
+                          ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                          : "border-border hover:border-primary/40 hover:bg-muted/50"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-3 h-3 rounded-full border-2 transition-all",
+                          isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
+                        )} />
+                        <span className="font-medium text-sm">{slot.label}</span>
+                      </div>
                       <Badge variant="secondary" className="text-xs">
                         {slot.estimatedDuration}h
                       </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center justify-center h-[320px] text-sm text-muted-foreground border rounded-lg bg-muted/30">
+                Select a date to see available times
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex gap-3 justify-end pt-4 border-t">
+        {/* Confirmation Summary */}
+        {selectedDate && selectedTime && (
+          <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-accent/5 animate-fade-in">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-center gap-4 text-sm">
+                <div className="text-center">
+                  <p className="text-muted-foreground text-xs">From</p>
+                  <p className="font-medium">{format(new Date(booking.service_date), 'MMM d')}</p>
+                  <p className="text-xs text-muted-foreground">{booking.time_slot}</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-primary" />
+                <div className="text-center">
+                  <p className="text-muted-foreground text-xs">To</p>
+                  <p className="font-semibold text-primary">{format(selectedDate, 'MMM d')}</p>
+                  <p className="text-xs text-primary">{selectedTime}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="flex gap-3 justify-end pt-2 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isRescheduling}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleReschedule} 
+          <Button
+            onClick={handleReschedule}
             disabled={!selectedDate || !selectedTime || isRescheduling}
           >
             {isRescheduling && <Loader2 className="mr-2 w-4 h-4 animate-spin" />}

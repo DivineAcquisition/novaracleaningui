@@ -155,6 +155,42 @@ serve(async (req) => {
       console.error('Google Calendar update failed (non-critical):', calendarError);
     }
 
+    // Send reschedule data to GHL webhook
+    try {
+      const ghlPayload = {
+        event_type: 'booking_rescheduled',
+        booking_id: bookingId,
+        email: booking.email,
+        first_name: booking.first_name,
+        last_name: booking.last_name,
+        phone: booking.phone,
+        old_date: oldDate,
+        old_time_slot: oldTimeSlot,
+        new_date: newDate,
+        new_time_slot: newTimeSlot,
+        service_type: booking.service_type,
+        address: booking.address,
+        city: booking.city,
+        state: booking.state,
+        zip_code: booking.zip_code,
+        total_estimate_cents: booking.total_estimate_cents,
+        home_size_id: booking.home_size_id,
+        rescheduled_at: new Date().toISOString(),
+      };
+
+      const ghlRes = await fetch(
+        'https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/f8326cbb-8ef8-4220-bd54-746e909bcb2f',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ghlPayload),
+        }
+      );
+      console.log('GHL reschedule webhook sent, status:', ghlRes.status);
+    } catch (ghlError) {
+      console.error('GHL webhook failed (non-critical):', ghlError);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,
