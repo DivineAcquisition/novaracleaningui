@@ -20,6 +20,7 @@ interface LiveQuotePanelProps {
   leadEmail?: string;
   leadId?: string | null;
   leadFirstName?: string;
+  onStatusAdvance?: (status: string) => void;
 }
 
 export function LiveQuotePanel({
@@ -33,6 +34,7 @@ export function LiveQuotePanel({
   leadEmail,
   leadId,
   leadFirstName,
+  onStatusAdvance,
 }: LiveQuotePanelProps) {
   const [sendingEmail, setSendingEmail] = useState(false);
 
@@ -82,6 +84,11 @@ export function LiveQuotePanel({
     navigator.clipboard.writeText(text);
     toast.success("Quote copied to clipboard");
     await saveQuoteToDb("clipboard");
+    // Auto-advance lead status to "quoted"
+    if (leadId) {
+      await supabase.from("leads").update({ status: "quoted" } as any).eq("id", leadId);
+      onStatusAdvance?.("quoted");
+    }
   };
 
   const handleEmailQuote = async () => {
@@ -114,6 +121,11 @@ export function LiveQuotePanel({
       if (error) throw error;
       toast.success(`Quote emailed to ${leadEmail}`);
       await saveQuoteToDb("email");
+      // Auto-advance lead status to "quoted"
+      if (leadId) {
+        await supabase.from("leads").update({ status: "quoted" } as any).eq("id", leadId);
+        onStatusAdvance?.("quoted");
+      }
 
       // Log activity
       if (leadId) {

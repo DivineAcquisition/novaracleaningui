@@ -1,12 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCustomerLookup, useCustomerBookings } from "@/hooks/use-sales-data";
-import { User, Phone, Mail, MessageSquare, Search, CheckCircle2 } from "lucide-react";
+import { useCustomerSearch, CustomerSearchResult } from "@/hooks/use-sales-data";
+import { User, Phone, Mail, Search, CheckCircle2, Loader2 } from "lucide-react";
 
 const LEAD_SOURCES = [
   "Google Ads", "Facebook", "Instagram DM", "Referral", "Website", "Cold Outreach", "Other"
@@ -34,6 +34,10 @@ interface LeadIntakeSectionProps {
 }
 
 export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
   const update = useCallback(
     (field: keyof LeadIntakeData, value: string | boolean) => {
       onChange({ ...data, [field]: value });
@@ -41,18 +45,86 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
     [data, onChange]
   );
 
-  const { data: existingCustomer, isLoading: lookingUp } = useCustomerLookup(
-    data.isExistingCustomer ? data.email : ""
-  );
-  const { data: pastBookings } = useCustomerBookings(
-    data.isExistingCustomer && existingCustomer ? data.email : ""
-  );
+  const { data: searchResults, isLoading: searching } = useCustomerSearch(searchQuery) as { data: CustomerSearchResult[] | undefined; isLoading: boolean };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowResults(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelectResult = (result: CustomerSearchResult) => {
+    onChange({
+      ...data,
+      firstName: result.firstName,
+      lastName: result.lastName,
+      email: result.email,
+      phone: result.phone,
+      isExistingCustomer: true,
+    });
+    setSearchQuery("");
+    setShowResults(false);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-2">
         <User className="w-5 h-5 text-amber-400" />
         <h2 className="text-lg font-semibold text-white">Lead Intake</h2>
+      </div>
+
+      {/* Customer Search */}
+      <div ref={searchRef} className="relative">
+        <Label className="text-slate-300 mb-2 block">Search Customers</Label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); }}
+            onFocus={() => setShowResults(true)}
+            placeholder="Search by name, email, or phone..."
+            className="bg-slate-800 border-slate-700 text-white pl-9"
+          />
+          {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />}
+        </div>
+
+        {showResults && searchQuery.length >= 2 && (
+          <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+            {searching && !(searchResults && searchResults.length > 0) && (
+              <div className="p-3 text-sm text-slate-400 text-center">Searching...</div>
+            )}
+            {!searching && searchResults && searchResults.length === 0 && (
+              <div className="p-3 text-sm text-slate-400 text-center">No results found</div>
+            )}
+            {searchResults?.map((r) => (
+              <button
+                key={r.email}
+                onClick={() => handleSelectResult(r)}
+                className="w-full text-left p-3 hover:bg-slate-700/50 transition-colors border-b border-slate-700/50 last:border-0"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-white font-medium text-sm">
+                    {r.firstName} {r.lastName}
+                  </span>
+                  <Badge className={`text-xs ${r.badgeColor}`}>{r.badge}</Badge>
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">{r.email}{r.phone ? ` • ${r.phone}` : ""}</div>
+                {r.bookingCount && (
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {r.bookingCount} booking{r.bookingCount > 1 ? "s" : ""}
+                    {r.lastDate ? ` • Last: ${r.lastDate}` : ""}
+                    {r.serviceType ? ` • ${r.serviceType}` : ""}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -152,20 +224,9 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
           />
           <Label className="text-slate-300">Existing Customer?</Label>
         </div>
-        {data.isExistingCustomer && lookingUp && (
-          <Badge variant="secondary" className="bg-slate-700 text-slate-300">
-            <Search className="w-3 h-3 mr-1 animate-spin" /> Looking up...
-          </Badge>
-        )}
-        {data.isExistingCustomer && existingCustomer && (
+        {data.isExistingCustomer && (
           <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-            <CheckCircle2 className="w-3 h-3 mr-1" />
-            Found: {existingCustomer.first_name} {existingCustomer.last_name} • {pastBookings?.length || 0} bookings
-          </Badge>
-        )}
-        {data.isExistingCustomer && !lookingUp && !existingCustomer && data.email.includes("@") && (
-          <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 border-amber-500/30">
-            No customer record found
+            <CheckCircle2 className="w-3 h-3 mr-1" /> Marked as existing
           </Badge>
         )}
       </div>
