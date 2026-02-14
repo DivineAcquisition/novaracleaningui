@@ -1,12 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SERVICE_TIERS, ADD_ONS } from "@/config/brand-config";
 import { calculateQuote, formatCents } from "@/lib/sales-pricing";
-import { Copy, Mail, Calculator, TrendingDown } from "lucide-react";
+import { Copy, Mail, Calculator, TrendingDown, Loader2 } from "lucide-react";
 import { formatQuoteText } from "@/lib/sales-pricing";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LiveQuotePanelProps {
   homeSizeId: string;
@@ -17,6 +18,8 @@ interface LiveQuotePanelProps {
   bedrooms?: number;
   bathrooms?: number;
   leadEmail?: string;
+  leadId?: string | null;
+  leadFirstName?: string;
 }
 
 export function LiveQuotePanel({
@@ -28,7 +31,11 @@ export function LiveQuotePanel({
   bedrooms,
   bathrooms,
   leadEmail,
+  leadId,
+  leadFirstName,
 }: LiveQuotePanelProps) {
+  const [sendingEmail, setSendingEmail] = useState(false);
+
   const quote = useMemo(
     () =>
       calculateQuote({
@@ -44,10 +51,83 @@ export function LiveQuotePanel({
   const serviceName = SERVICE_TIERS.find((t) => t.id === serviceType)?.name || "Standard Clean";
   const selectedAddOns = addOns.map((id) => ADD_ONS.find((a) => a.id === id)).filter(Boolean);
 
-  const handleCopy = () => {
+  const saveQuoteToDb = async (sentVia: string) => {
+    if (!leadId || !homeSizeId) return;
+    try {
+      await supabase.from("sales_quotes").insert({
+        lead_id: leadId,
+        service_type: serviceType,
+        home_size_id: homeSizeId,
+        frequency,
+        add_ons: addOns,
+        base_price_cents: quote.basePriceCents,
+        add_ons_total_cents: quote.addOnsCents,
+        discount_pct: quote.discountPct,
+        discount_amount_cents: quote.discountCents,
+        final_price_cents: quote.finalPriceCents,
+        deposit_cents: quote.depositCents,
+        monthly_total_cents: quote.monthlyTotalCents,
+        bedrooms: bedrooms || null,
+        bathrooms: bathrooms || null,
+        sent_via: sentVia,
+        sent_at: new Date().toISOString(),
+      } as any);
+    } catch (err) {
+      console.error("Failed to save quote:", err);
+    }
+  };
+
+  const handleCopy = async () => {
     const text = formatQuoteText(quote, { serviceName, frequency, bedrooms, bathrooms, isNewCustomer });
     navigator.clipboard.writeText(text);
     toast.success("Quote copied to clipboard");
+    await saveQuoteToDb("clipboard");
+  };
+
+  const handleEmailQuote = async () => {
+    if (!leadEmail) return;
+    setSendingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-sales-quote-email", {
+        body: {
+          email: leadEmail,
+          firstName: leadFirstName || "there",
+          serviceName,
+          homeSizeLabel: quote.homeSizeLabel,
+          frequency,
+          bedrooms,
+          bathrooms,
+          basePriceCents: quote.basePriceCents,
+          serviceTierCost: quote.serviceTierCost,
+          addOnsCents: quote.addOnsCents,
+          discountPct: quote.discountPct,
+          discountCents: quote.discountCents,
+          finalPriceCents: quote.finalPriceCents,
+          depositCents: quote.depositCents,
+          balanceDueCents: quote.balanceDueCents,
+          monthlyTotalCents: quote.monthlyTotalCents,
+          isNewCustomer,
+          addOns: selectedAddOns.map((a) => a!.name),
+        },
+      });
+
+      if (error) throw error;
+      toast.success(`Quote emailed to ${leadEmail}`);
+      await saveQuoteToDb("email");
+
+      // Log activity
+      if (leadId) {
+        await supabase.from("lead_activity_log").insert({
+          lead_id: leadId,
+          action: "quote_emailed",
+          notes: `Quote for ${formatCents(quote.finalPriceCents)}/clean emailed to ${leadEmail}`,
+        } as any);
+      }
+    } catch (err: any) {
+      toast.error("Failed to send quote: " + err.message);
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   if (!homeSizeId) {
@@ -166,10 +246,14 @@ export function LiveQuotePanel({
           variant="outline"
           size="sm"
           className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
-          disabled={!leadEmail}
-          onClick={() => toast.info("Email quote feature coming in Phase 2")}
+          disabled={!leadEmail || sendingEmail}
+          onClick={handleEmailQuote}
         >
-          <Mail className="w-3 h-3 mr-1" /> Email Quote
+          {sendingEmail ? (
+            <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Sending...</>
+          ) : (
+            <><Mail className="w-3 h-3 mr-1" /> Email Quote</>
+          )}
         </Button>
       </div>
     </div>

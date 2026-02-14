@@ -75,6 +75,82 @@ export function BookingConfirmationSection({
 
   const serviceName = SERVICE_TIERS.find((t) => t.id === qualification.serviceType)?.name || "Standard Clean";
 
+  const triggerPostBookingActions = async (bookingData: any) => {
+    const fullAddress = `${address}, ${city}, ${state} ${qualification.zipCode}`;
+    
+    // Fire confirmation email
+    try {
+      await supabase.functions.invoke("send-booking-email", {
+        body: {
+          type: "confirmation",
+          email: lead.email,
+          data: {
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            bookingId: bookingData?.id,
+            serviceDate: qualification.preferredDate,
+            timeSlot: qualification.preferredTime || "Morning (8am-12pm)",
+            serviceType: qualification.serviceType,
+            homeSizeId: qualification.homeSizeId,
+            bedrooms: qualification.bedrooms,
+            bathrooms: qualification.bathrooms,
+            address: fullAddress,
+            city,
+            state,
+            zipCode: qualification.zipCode,
+            totalAmount: quote.finalPriceCents,
+            depositAmount: quote.depositCents,
+            balanceAmount: quote.balanceDueCents,
+            frequency: qualification.frequency,
+            addOns: qualification.addOns,
+            paymentMethod,
+          },
+        },
+      });
+      console.log("[BookingConfirmation] Confirmation email sent");
+    } catch (err) {
+      console.error("[BookingConfirmation] Email failed:", err);
+    }
+
+    // Fire GHL/Zapier webhook
+    try {
+      await supabase.functions.invoke("send-lead-capture-webhook", {
+        body: {
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          email: lead.email,
+          phone: lead.phone,
+          zipCode: qualification.zipCode,
+          city,
+          state,
+          source: "Sales Tool - Booking Confirmed",
+        },
+      });
+      console.log("[BookingConfirmation] Webhook sent");
+    } catch (err) {
+      console.error("[BookingConfirmation] Webhook failed:", err);
+    }
+
+    // Fire Google Calendar event
+    try {
+      await supabase.functions.invoke("create-google-calendar-event", {
+        body: {
+          bookingId: bookingData?.id,
+          serviceDate: qualification.preferredDate,
+          timeSlot: qualification.preferredTime || "Morning (8am-12pm)",
+          serviceType: serviceName,
+          address: fullAddress,
+          customerName: `${lead.firstName} ${lead.lastName}`,
+          customerPhone: lead.phone,
+          customerEmail: lead.email,
+        },
+      });
+      console.log("[BookingConfirmation] Calendar event created");
+    } catch (err) {
+      console.error("[BookingConfirmation] Calendar failed:", err);
+    }
+  };
+
   const handleConfirmBooking = async () => {
     if (status === "booked") {
       if (!address || !city || !qualification.preferredDate) {
@@ -101,7 +177,7 @@ export function BookingConfirmationSection({
       if (status === "booked") {
         // Create actual booking in bookings table
         const fullAddress = `${address}, ${city}, ${state} ${qualification.zipCode}`;
-        const { error: bookingError } = await supabase.from("bookings").insert({
+        const { data: bookingData, error: bookingError } = await supabase.from("bookings").insert({
           first_name: lead.firstName,
           last_name: lead.lastName,
           email: lead.email,
@@ -126,9 +202,12 @@ export function BookingConfirmationSection({
           status: depositCollected ? "confirmed" : "pending_payment",
           bedrooms: qualification.bedrooms || null,
           bathrooms: qualification.bathrooms || null,
-        });
+        }).select().single();
 
         if (bookingError) throw bookingError;
+
+        // Fire post-booking side effects (non-blocking)
+        triggerPostBookingActions(bookingData).catch(console.error);
 
         toast.success("Booking confirmed and saved!");
       } else {
