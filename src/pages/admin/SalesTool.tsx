@@ -484,16 +484,16 @@ export default function SalesTool() {
   // ─── PIN Gate ───
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md p-8 bg-slate-900 border-slate-800">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md p-8 bg-white border-gray-200">
           <div className="flex flex-col items-center space-y-6">
             <img src="/novara-logo.png" alt="Novara Cleaning" className="h-12 object-contain" />
             <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: `${BRAND_GREEN}20` }}>
               <Lock className="w-8 h-8" style={{ color: BRAND_GREEN }} />
             </div>
             <div className="text-center">
-              <h1 className="text-2xl font-semibold text-white mb-2">Enter Access Code</h1>
-              <p className="text-sm text-slate-400">Enter the 4-digit PIN to access the Sales & Intake tool</p>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">Enter Access Code</h1>
+              <p className="text-sm text-gray-500">Enter the 4-digit PIN to access the Sales & Intake tool</p>
             </div>
             <div className="flex gap-3">
               {pinCode.map((digit, i) => (
@@ -503,7 +503,7 @@ export default function SalesTool() {
                     if (e.key === "Backspace" && !digit && i > 0) document.getElementById(`sales-pin-${i - 1}`)?.focus();
                     if (e.key === "Enter" && pinCode.every(d => d)) handlePinSubmit();
                   }}
-                  className="w-14 h-14 text-center text-2xl font-semibold bg-slate-800 border-slate-700 text-white" autoFocus={i === 0}
+                  className="w-14 h-14 text-center text-2xl font-semibold bg-white border-gray-300 text-gray-900" autoFocus={i === 0}
                 />
               ))}
             </div>
@@ -520,24 +520,24 @@ export default function SalesTool() {
 
   // ─── Main Layout ───
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-gray-50">
       {/* Standalone Header */}
-      <div className="border-b border-white/10 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-20">
+      <div className="border-b border-gray-200 bg-white/90 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/novara-logo.png" alt="Novara" className="h-8 object-contain" />
             <div>
-              <h1 className="text-lg font-bold text-white">Novara Sales & Intake</h1>
-              <p className="text-xs text-slate-400">
+              <h1 className="text-lg font-bold text-gray-900">Novara Sales & Intake</h1>
+              <p className="text-xs text-gray-500">
                 {isEditing ? `Editing: ${lead.firstName} ${lead.lastName}` : "Sales closer & booking intake"}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/admin/pipeline")} className="border-slate-600 text-slate-300">
+            <Button variant="outline" size="sm" onClick={() => navigate("/admin/pipeline")} className="border-gray-300 text-gray-600">
               <BarChart3 className="w-4 h-4 mr-1" /> Pipeline
             </Button>
-            <Button variant="outline" size="sm" onClick={handleReset} className="border-slate-600 text-slate-300">
+            <Button variant="outline" size="sm" onClick={handleReset} className="border-gray-300 text-gray-600">
               New
             </Button>
             {activeTab === "sales" && (
@@ -568,7 +568,7 @@ export default function SalesTool() {
               <span className="text-sm">Unsaved form data from a previous session.</span>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={handleDiscardRestore} className="border-slate-600 text-slate-300 text-xs">Discard</Button>
+              <Button size="sm" variant="outline" onClick={handleDiscardRestore} className="border-gray-300 text-gray-600 text-xs">Discard</Button>
               <Button size="sm" onClick={handleRestore} className="text-white text-xs" style={{ backgroundColor: BRAND_GREEN }}>Restore</Button>
             </div>
           </div>
@@ -579,27 +579,27 @@ export default function SalesTool() {
           <Popover open={searchOpen && searchQuery.length >= 2} onOpenChange={setSearchOpen}>
             <PopoverTrigger asChild>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
                   placeholder="Search customers, bookings, abandoned carts..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
                   onFocus={() => { if (searchQuery.length >= 2) setSearchOpen(true); }}
-                  className="pl-10 bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+                  className="pl-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400"
                 />
               </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[500px] p-0 bg-slate-900 border-slate-700" align="start">
+            <PopoverContent className="w-[500px] p-0 bg-white border-gray-200" align="start">
               {searchLoading ? (
-                <div className="p-4 text-sm text-slate-400">Searching...</div>
+                <div className="p-4 text-sm text-gray-500">Searching...</div>
               ) : searchResults && searchResults.length > 0 ? (
                 <div className="max-h-64 overflow-y-auto">
                   {searchResults.map((r, i) => (
                     <button key={`${r.email}-${i}`} onClick={() => handleSelectSearchResult(r)}
-                      className="w-full p-3 text-left hover:bg-slate-800 border-b border-slate-800 last:border-0 flex items-center justify-between">
+                      className="w-full p-3 text-left hover:bg-gray-100 border-b border-gray-200 last:border-0 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-white">{r.firstName} {r.lastName}</p>
-                        <p className="text-xs text-slate-400">{r.email}{r.phone ? ` • ${r.phone}` : ""}</p>
+                        <p className="text-sm font-medium text-gray-900">{r.firstName} {r.lastName}</p>
+                        <p className="text-xs text-gray-500">{r.email}{r.phone ? ` • ${r.phone}` : ""}</p>
                       </div>
                       <Badge variant={r.source === "booking" ? "default" : r.source === "abandoned_cart" ? "secondary" : "outline"}
                         className="text-xs shrink-0 ml-2">
@@ -609,7 +609,7 @@ export default function SalesTool() {
                   ))}
                 </div>
               ) : searchQuery.length >= 2 ? (
-                <div className="p-4 text-sm text-slate-400">No results found</div>
+                <div className="p-4 text-sm text-gray-500">No results found</div>
               ) : null}
             </PopoverContent>
           </Popover>
@@ -617,12 +617,12 @@ export default function SalesTool() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="bg-slate-900 border border-slate-800 mb-6">
-            <TabsTrigger value="sales" className="data-[state=active]:text-white" style={{ ["--tw-ring-color" as any]: BRAND_GREEN }}
+          <TabsList className="bg-gray-100 border border-gray-200 mb-6">
+            <TabsTrigger value="sales" className="data-[state=active]:text-gray-900" style={{ ["--tw-ring-color" as any]: BRAND_GREEN }}
               data-active-style={{ backgroundColor: `${BRAND_GREEN}20`, color: BRAND_GREEN }}>
               <Headset className="w-4 h-4 mr-2" /> Sales Closer
             </TabsTrigger>
-            <TabsTrigger value="intake" className="data-[state=active]:text-white"
+            <TabsTrigger value="intake" className="data-[state=active]:text-gray-900"
               style={{ ["--tw-ring-color" as any]: BRAND_GREEN }}>
               <DollarSign className="w-4 h-4 mr-2" /> Booking Intake
             </TabsTrigger>
@@ -632,14 +632,14 @@ export default function SalesTool() {
           <TabsContent value="sales">
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
               <div className="space-y-6">
-                <Card className="bg-slate-900 border-slate-800 p-6">
+                <Card className="bg-white border-gray-200 p-6">
                   <LeadIntakeSection data={lead} onChange={setLead} />
                 </Card>
-                <Card className="bg-slate-900 border-slate-800 p-6">
+                <Card className="bg-white border-gray-200 p-6">
                   <QualificationSection data={qual} onChange={setQual} />
                 </Card>
                 {savedLeadId && !booked && (
-                  <Card className="bg-slate-900 border-slate-800 p-6">
+                  <Card className="bg-white border-gray-200 p-6">
                     <BookingConfirmationSection leadId={savedLeadId} lead={lead} qualification={qual}
                       isNewCustomer={isNewCustomer} onBooked={() => setBooked(true)}
                       coverageCity={coverageData?.city} coverageState={coverageData?.state} />
@@ -647,7 +647,7 @@ export default function SalesTool() {
                 )}
               </div>
               <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-                <Card className="bg-slate-900 border-slate-800 p-4">
+                <Card className="bg-white border-gray-200 p-4">
                   <LiveQuotePanel homeSizeId={qual.homeSizeId} serviceType={qual.serviceType}
                     frequency={qual.frequency} addOns={qual.addOns} isNewCustomer={isNewCustomer}
                     bedrooms={qual.bedrooms} bathrooms={qual.bathrooms} leadEmail={lead.email}
@@ -655,11 +655,11 @@ export default function SalesTool() {
                     onStatusAdvance={(s) => toast.info(`Lead status → "${s}"`)} />
                 </Card>
                 {savedLeadId && (
-                  <Card className="bg-slate-900 border-slate-800 p-4">
+                  <Card className="bg-white border-gray-200 p-4">
                     <FollowUpScheduler leadId={savedLeadId} leadName={lead.firstName || "there"} activeChannel={lead.activeChannel} />
                   </Card>
                 )}
-                <Card className="bg-slate-900 border-slate-800 p-4">
+                <Card className="bg-white border-gray-200 p-4">
                   <SalesAssistPanel activeChannel={lead.activeChannel} currentStep={currentStep} />
                 </Card>
               </div>
@@ -671,40 +671,40 @@ export default function SalesTool() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
                 {/* Customer Info */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader><CardTitle className="text-white">Customer Information</CardTitle></CardHeader>
+                <Card className="bg-white border-gray-200">
+                  <CardHeader><CardTitle className="text-gray-900">Customer Information</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-slate-300">First Name *</Label>
-                        <Input value={intakeFirstName} onChange={(e) => setIntakeFirstName(e.target.value)} placeholder="John" className="bg-slate-800 border-slate-700 text-white" />
+                        <Label className="text-gray-600">First Name *</Label>
+                        <Input value={intakeFirstName} onChange={(e) => setIntakeFirstName(e.target.value)} placeholder="John" className="bg-white border-gray-300 text-gray-900" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Last Name *</Label>
-                        <Input value={intakeLastName} onChange={(e) => setIntakeLastName(e.target.value)} placeholder="Smith" className="bg-slate-800 border-slate-700 text-white" />
+                        <Label className="text-gray-600">Last Name *</Label>
+                        <Input value={intakeLastName} onChange={(e) => setIntakeLastName(e.target.value)} placeholder="Smith" className="bg-white border-gray-300 text-gray-900" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Email *</Label>
-                        <Input type="email" value={intakeEmail} onChange={(e) => setIntakeEmail(e.target.value)} placeholder="john@example.com" className="bg-slate-800 border-slate-700 text-white" />
+                        <Label className="text-gray-600">Email *</Label>
+                        <Input type="email" value={intakeEmail} onChange={(e) => setIntakeEmail(e.target.value)} placeholder="john@example.com" className="bg-white border-gray-300 text-gray-900" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Phone *</Label>
-                        <Input type="tel" value={intakePhone} onChange={(e) => setIntakePhone(e.target.value)} placeholder="(555) 123-4567" className="bg-slate-800 border-slate-700 text-white" />
+                        <Label className="text-gray-600">Phone *</Label>
+                        <Input type="tel" value={intakePhone} onChange={(e) => setIntakePhone(e.target.value)} placeholder="(555) 123-4567" className="bg-white border-gray-300 text-gray-900" />
                       </div>
                     </div>
                     {checkingIntakeCustomer && (
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
                         <RefreshCw className="w-4 h-4 animate-spin" /> Checking customer status...
                       </div>
                     )}
                     <CustomerRecognitionCard status={intakeCustomerStatus} />
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Customer Source</Label>
+                        <Label className="text-gray-600">Customer Source</Label>
                         <Select value={intakeCustomerSource} onValueChange={setIntakeCustomerSource}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="New Lead">New Lead</SelectItem>
                             <SelectItem value="Member">Member</SelectItem>
@@ -714,41 +714,41 @@ export default function SalesTool() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-slate-300">SDR Rep Name</Label>
+                        <Label className="text-gray-600">SDR Rep Name</Label>
                         <Input value={intakeSdrRepName} onChange={(e) => setIntakeSdrRepName(e.target.value)}
-                          placeholder="e.g., Maria G." className="bg-slate-800 border-slate-700 text-white" />
+                          placeholder="e.g., Maria G." className="bg-white border-gray-300 text-gray-900" />
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Service Address */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader><CardTitle className="text-white">Service Address</CardTitle></CardHeader>
+                <Card className="bg-white border-gray-200">
+                  <CardHeader><CardTitle className="text-gray-900">Service Address</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     <AddressAutocomplete onAddressSelect={handleIntakeAddressSelect} initialValue={intakeStreet} />
-                    <div className="text-xs text-slate-400">Auto-filled from address above</div>
+                    <div className="text-xs text-gray-500">Auto-filled from address above</div>
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2"><Label className="text-slate-300">City *</Label><Input value={intakeCity} readOnly className="bg-slate-800 border-slate-700 text-white" /></div>
-                      <div className="space-y-2"><Label className="text-slate-300">State *</Label><Input value={intakeState} readOnly className="bg-slate-800 border-slate-700 text-white" /></div>
-                      <div className="space-y-2"><Label className="text-slate-300">ZIP *</Label><Input value={intakeZipCode} readOnly className="bg-slate-800 border-slate-700 text-white" maxLength={5} /></div>
+                      <div className="space-y-2"><Label className="text-gray-600">City *</Label><Input value={intakeCity} readOnly className="bg-gray-50 border-gray-300 text-gray-900" /></div>
+                      <div className="space-y-2"><Label className="text-gray-600">State *</Label><Input value={intakeState} readOnly className="bg-gray-50 border-gray-300 text-gray-900" /></div>
+                      <div className="space-y-2"><Label className="text-gray-600">ZIP *</Label><Input value={intakeZipCode} readOnly className="bg-gray-50 border-gray-300 text-gray-900" maxLength={5} /></div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2"><Label className="text-slate-300">Bedrooms</Label>
+                      <div className="space-y-2"><Label className="text-gray-600">Bedrooms</Label>
                         <Select value={intakeBedrooms} onValueChange={setIntakeBedrooms}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>{[1,2,3,4,5,6,7].map(n => <SelectItem key={n} value={n.toString()}>{n}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2"><Label className="text-slate-300">Bathrooms</Label>
+                      <div className="space-y-2"><Label className="text-gray-600">Bathrooms</Label>
                         <Select value={intakeBathrooms} onValueChange={setIntakeBathrooms}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>{["1","1.5","2","2.5","3","3.5","4"].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2"><Label className="text-slate-300">Pets</Label>
+                      <div className="space-y-2"><Label className="text-gray-600">Pets</Label>
                         <Select value={intakePets} onValueChange={setIntakePets}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="None">None</SelectItem><SelectItem value="Dog(s)">Dog(s)</SelectItem>
                             <SelectItem value="Cat(s)">Cat(s)</SelectItem><SelectItem value="Multiple">Multiple</SelectItem>
@@ -757,9 +757,9 @@ export default function SalesTool() {
                         </Select>
                       </div>
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Dwelling Type</Label>
+                    <div className="space-y-2"><Label className="text-gray-600">Dwelling Type</Label>
                       <Select value={intakeDwellingType} onValueChange={setIntakeDwellingType}>
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue placeholder="Select dwelling type" /></SelectTrigger>
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select dwelling type" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="house">House</SelectItem><SelectItem value="apartment">Apartment</SelectItem>
                           <SelectItem value="condo">Condo</SelectItem><SelectItem value="office_space">Office Space</SelectItem>
@@ -771,18 +771,18 @@ export default function SalesTool() {
                 </Card>
 
                 {/* Service Details */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader><CardTitle className="text-white">Service Details</CardTitle></CardHeader>
+                <Card className="bg-white border-gray-200">
+                  <CardHeader><CardTitle className="text-gray-900">Service Details</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2"><Label className="text-slate-300">Home Size *</Label>
+                    <div className="space-y-2"><Label className="text-gray-600">Home Size *</Label>
                       <Select value={intakeHomeSizeId} onValueChange={setIntakeHomeSizeId}>
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue placeholder="Select home size" /></SelectTrigger>
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select home size" /></SelectTrigger>
                         <SelectContent>{HOME_SIZE_RANGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label} ({s.baseHours}h)</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Service Type *</Label>
+                    <div className="space-y-2"><Label className="text-gray-600">Service Type *</Label>
                       <Select value={intakeServiceType} onValueChange={setIntakeServiceType}>
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="standard">Standard Cleaning</SelectItem>
                           <SelectItem value="deep">Deep Clean (+${SERVICE_TIER_PRICING.deep.addition})</SelectItem>
@@ -790,18 +790,18 @@ export default function SalesTool() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-3"><Label className="text-slate-300">Add-ons</Label>
+                    <div className="space-y-3"><Label className="text-gray-600">Add-ons</Label>
                       {Object.entries(ADD_ONS).map(([key, addon]) => (
                         <div key={key} className="flex items-center space-x-2">
                           <Checkbox id={`intake-${key}`} checked={intakeAddOns.includes(key)}
                             onCheckedChange={() => setIntakeAddOns(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])} />
-                          <label htmlFor={`intake-${key}`} className="text-sm cursor-pointer text-slate-300">{addon.label} (+${addon.price})</label>
+                          <label htmlFor={`intake-${key}`} className="text-sm cursor-pointer text-gray-600">{addon.label} (+${addon.price})</label>
                         </div>
                       ))}
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Frequency</Label>
+                    <div className="space-y-2"><Label className="text-gray-600">Frequency</Label>
                       <Select value={intakeFrequency} onValueChange={setIntakeFrequency}>
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="One-Time">One-Time</SelectItem><SelectItem value="Weekly">Weekly</SelectItem>
                           <SelectItem value="Biweekly">Biweekly</SelectItem><SelectItem value="Monthly">Monthly</SelectItem>
@@ -813,16 +813,16 @@ export default function SalesTool() {
                 </Card>
 
                 {/* Scheduling */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader><CardTitle className="text-white flex items-center gap-2"><Clock className="w-5 h-5" /> Scheduling</CardTitle></CardHeader>
+                <Card className="bg-white border-gray-200">
+                  <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><Clock className="w-5 h-5" /> Scheduling</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-slate-300">Service Date *</Label>
-                        <Input type="date" value={intakeServiceDate} onChange={(e) => setIntakeServiceDate(e.target.value)} className="bg-slate-800 border-slate-700 text-white" />
+                      <div className="space-y-2"><Label className="text-gray-600">Service Date *</Label>
+                        <Input type="date" value={intakeServiceDate} onChange={(e) => setIntakeServiceDate(e.target.value)} className="bg-white border-gray-300 text-gray-900" />
                       </div>
-                      <div className="space-y-2"><Label className="text-slate-300">Time Slot *</Label>
+                      <div className="space-y-2"><Label className="text-gray-600">Time Slot *</Label>
                         <Select value={intakeTimeSlot} onValueChange={setIntakeTimeSlot}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue placeholder="Select time" /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select time" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="8:00 AM - 12:00 PM">8:00 AM - 12:00 PM</SelectItem>
                             <SelectItem value="12:00 PM - 4:00 PM">12:00 PM - 4:00 PM</SelectItem>
@@ -832,42 +832,42 @@ export default function SalesTool() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-slate-300">Duration (hours)</Label>
-                        <Input type="number" value={intakeEstimatedDuration} onChange={(e) => setIntakeEstimatedDuration(e.target.value)} placeholder="Auto" className="bg-slate-800 border-slate-700 text-white" />
+                      <div className="space-y-2"><Label className="text-gray-600">Duration (hours)</Label>
+                        <Input type="number" value={intakeEstimatedDuration} onChange={(e) => setIntakeEstimatedDuration(e.target.value)} placeholder="Auto" className="bg-white border-gray-300 text-gray-900" />
                       </div>
-                      <div className="space-y-2"><Label className="text-slate-300">Arrival Window</Label>
-                        <Input value={intakeArrivalWindow} onChange={(e) => setIntakeArrivalWindow(e.target.value)} placeholder="e.g., 10-11 AM" className="bg-slate-800 border-slate-700 text-white" />
+                      <div className="space-y-2"><Label className="text-gray-600">Arrival Window</Label>
+                        <Input value={intakeArrivalWindow} onChange={(e) => setIntakeArrivalWindow(e.target.value)} placeholder="e.g., 10-11 AM" className="bg-white border-gray-300 text-gray-900" />
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Booking Config */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader><CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5" /> Booking Configuration</CardTitle></CardHeader>
+                <Card className="bg-white border-gray-200">
+                  <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><DollarSign className="w-5 h-5" /> Booking Configuration</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-slate-300">Booking Channel</Label>
+                      <div className="space-y-2"><Label className="text-gray-600">Booking Channel</Label>
                         <Select value={intakeBookingChannel} onValueChange={setIntakeBookingChannel}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {["Phone","SMS","Facebook","Google","Referral","AI","Other","Website"].map(c =>
                               <SelectItem key={c} value={c}>{c}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2"><Label className="text-slate-300">Payment Method</Label>
+                      <div className="space-y-2"><Label className="text-gray-600">Payment Method</Label>
                         <Select value={intakePaymentMethod} onValueChange={setIntakePaymentMethod}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {["Card","Cash","ACH","Other"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Payment Status</Label>
+                    <div className="space-y-2"><Label className="text-gray-600">Payment Status</Label>
                       <Select value={intakePaymentStatus} onValueChange={setIntakePaymentStatus}>
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Unpaid">Unpaid</SelectItem>
                           <SelectItem value="Deposit Paid">Deposit Paid</SelectItem>
@@ -875,9 +875,9 @@ export default function SalesTool() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Membership</Label>
+                    <div className="space-y-2"><Label className="text-gray-600">Membership</Label>
                       <Select value={intakeMembershipPlan} onValueChange={setIntakeMembershipPlan}>
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No Membership</SelectItem>
                           {Object.entries(MEMBERSHIP_PLANS).filter(([k]) => k !== "none").map(([k, p]) =>
@@ -888,52 +888,52 @@ export default function SalesTool() {
                     <div className="flex items-center space-x-2">
                       <Checkbox id="intakeNewDiscount" checked={intakeApplyNewCustomerDiscount}
                         onCheckedChange={(c) => setIntakeApplyNewCustomerDiscount(c === true)} />
-                      <label htmlFor="intakeNewDiscount" className="text-sm cursor-pointer text-slate-300">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
+                      <label htmlFor="intakeNewDiscount" className="text-sm cursor-pointer text-gray-600">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Notes */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader><CardTitle className="text-white">Notes</CardTitle></CardHeader>
+                <Card className="bg-white border-gray-200">
+                  <CardHeader><CardTitle className="text-gray-900">Notes</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2"><Label className="text-slate-300">Access Notes</Label>
-                      <Textarea value={intakeAccessNotes} onChange={(e) => setIntakeAccessNotes(e.target.value)} placeholder="Gate codes, key locations..." rows={3} className="bg-slate-800 border-slate-700 text-white" />
+                    <div className="space-y-2"><Label className="text-gray-600">Access Notes</Label>
+                      <Textarea value={intakeAccessNotes} onChange={(e) => setIntakeAccessNotes(e.target.value)} placeholder="Gate codes, key locations..." rows={3} className="bg-white border-gray-300 text-gray-900" />
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Team Notes (Internal)</Label>
-                      <Textarea value={intakeTeamNotes} onChange={(e) => setIntakeTeamNotes(e.target.value)} placeholder="Internal notes" rows={3} className="bg-slate-800 border-slate-700 text-white" />
+                    <div className="space-y-2"><Label className="text-gray-600">Team Notes (Internal)</Label>
+                      <Textarea value={intakeTeamNotes} onChange={(e) => setIntakeTeamNotes(e.target.value)} placeholder="Internal notes" rows={3} className="bg-white border-gray-300 text-gray-900" />
                     </div>
-                    <div className="space-y-2"><Label className="text-slate-300">Dispatch Notes (Cleaner-Facing)</Label>
-                      <Textarea value={intakeDispatchNotes} onChange={(e) => setIntakeDispatchNotes(e.target.value)} placeholder="Notes for cleaner" rows={3} className="bg-slate-800 border-slate-700 text-white" />
+                    <div className="space-y-2"><Label className="text-gray-600">Dispatch Notes (Cleaner-Facing)</Label>
+                      <Textarea value={intakeDispatchNotes} onChange={(e) => setIntakeDispatchNotes(e.target.value)} placeholder="Notes for cleaner" rows={3} className="bg-white border-gray-300 text-gray-900" />
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Cleaner Assignment */}
-                <Card className="bg-slate-900 border-slate-800">
+                <Card className="bg-white border-gray-200">
                   <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2">
+                    <CardTitle className="text-gray-900 flex items-center gap-2">
                       <Users className="w-5 h-5" /> Cleaner Team Assignment
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Number of Cleaners</Label>
+                        <Label className="text-gray-600">Number of Cleaners</Label>
                         <Select value={intakeNumCleaners.toString()} onValueChange={(v) => setIntakeNumCleaners(parseInt(v))}>
-                          <SelectTrigger className="bg-slate-800 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="1">1 Cleaner</SelectItem>
                             <SelectItem value="2">2 Cleaners</SelectItem>
                             <SelectItem value="3">3 Cleaners</SelectItem>
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-slate-500">Auto-calculated from home size (editable)</p>
+                        <p className="text-xs text-gray-400">Auto-calculated from home size (editable)</p>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Pay Rate</Label>
-                        <Input value="$18/hr" readOnly className="bg-slate-800 border-slate-700 text-white" />
-                        <p className="text-xs text-slate-500">Fixed rate for all cleaners</p>
+                        <Label className="text-gray-600">Pay Rate</Label>
+                        <Input value="$18/hr" readOnly className="bg-gray-50 border-gray-300 text-gray-900" />
+                        <p className="text-xs text-gray-400">Fixed rate for all cleaners</p>
                       </div>
                     </div>
                     <CleanerMultiSelect
