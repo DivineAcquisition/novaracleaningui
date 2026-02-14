@@ -80,12 +80,12 @@ export function FollowUpScheduler({ leadId, leadName, activeChannel }: FollowUpS
     return (
       <div className="text-center py-6">
         <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-        <p className="text-sm text-white font-medium">Follow-up scheduled</p>
-        <p className="text-xs text-slate-400">{date} via {channel}</p>
+        <p className="text-sm text-gray-900 font-medium">Follow-up scheduled</p>
+        <p className="text-xs text-gray-500">{date} via {channel}</p>
         <Button
           variant="ghost"
           size="sm"
-          className="mt-2 text-slate-400"
+          className="mt-2 text-gray-500"
           onClick={() => setSaved(false)}
         >
           Schedule another
@@ -97,35 +97,35 @@ export function FollowUpScheduler({ leadId, leadName, activeChannel }: FollowUpS
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <CalendarClock className="w-5 h-5 text-amber-400" />
-        <h3 className="font-semibold text-white">Schedule Follow-Up</h3>
+        <CalendarClock className="w-5 h-5 text-emerald-600" />
+        <h3 className="font-semibold text-gray-900">Schedule Follow-Up</h3>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-slate-400 text-xs">Date</Label>
+          <Label className="text-gray-500 text-xs">Date</Label>
           <Input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="bg-slate-800 border-slate-700 text-white h-9 text-sm"
+            className="bg-white border-gray-300 text-gray-900 h-9 text-sm"
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-slate-400 text-xs">Time</Label>
+          <Label className="text-gray-500 text-xs">Time</Label>
           <Input
             type="time"
             value={time}
             onChange={(e) => setTime(e.target.value)}
-            className="bg-slate-800 border-slate-700 text-white h-9 text-sm"
+            className="bg-white border-gray-300 text-gray-900 h-9 text-sm"
           />
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-slate-400 text-xs">Channel</Label>
+        <Label className="text-gray-500 text-xs">Channel</Label>
         <Select value={channel} onValueChange={handleChannelChange}>
-          <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-9 text-sm">
+          <SelectTrigger className="bg-white border-gray-300 text-gray-900 h-9 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -137,18 +137,18 @@ export function FollowUpScheduler({ leadId, leadName, activeChannel }: FollowUpS
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-slate-400 text-xs">Pre-written Message</Label>
+        <Label className="text-gray-500 text-xs">Pre-written Message</Label>
         <Textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          className="bg-slate-800 border-slate-700 text-white min-h-[80px] text-sm"
+          className="bg-white border-gray-300 text-gray-900 min-h-[80px] text-sm"
         />
       </div>
 
       <Button
         onClick={handleSave}
         disabled={saving || !leadId}
-        className="w-full bg-amber-500 hover:bg-amber-600 text-black font-semibold h-9 text-sm"
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-9 text-sm"
       >
         {saving ? (
           <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Saving...</>
