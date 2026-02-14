@@ -192,11 +192,7 @@ const App = () => (
                   <ProtectedRoute requiredRole="admin"><BookingIntake /></ProtectedRoute>
                 </DomainRestricted>
               } />
-              <Route path="/admin/sales" element={
-                <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
-                  <ProtectedRoute requiredRole="admin"><SalesTool /></ProtectedRoute>
-                </DomainRestricted>
-              } />
+              <Route path="/admin/sales" element={<SalesTool />} />
               <Route path="/admin/pipeline" element={
                 <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
                   <ProtectedRoute requiredRole="admin"><LeadPipeline /></ProtectedRoute>
