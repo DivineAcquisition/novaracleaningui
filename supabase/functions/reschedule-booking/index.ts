@@ -162,6 +162,21 @@ serve(async (req) => {
         return `${m}/${day}/${y}`;
       };
 
+      const fmtTime = (slot: string) => {
+        // Handle formats like "9-11am", "10-12", "8-10" etc.
+        const clean = slot.replace(/[ap]m/gi, '').trim();
+        const parts = clean.split('-');
+        if (parts.length !== 2) return slot;
+        const fmt = (h: string) => {
+          const hr = parseInt(h, 10);
+          if (isNaN(hr)) return h;
+          const period = hr >= 12 ? 'PM' : 'AM';
+          const display = hr > 12 ? hr - 12 : hr === 0 ? 12 : hr;
+          return `${display}:00 ${period}`;
+        };
+        return `${fmt(parts[0])} - ${fmt(parts[1])}`;
+      };
+
       const ghlPayload = {
         "Event Type": "booking_rescheduled",
         "Booking ID": bookingId,
@@ -171,9 +186,9 @@ serve(async (req) => {
         "Full Name": `${booking.first_name} ${booking.last_name}`,
         "Customer Phone": booking.phone,
         "Previous Date": fmtDate(oldDate),
-        "Previous Time Slot": oldTimeSlot,
+        "Previous Time Slot": fmtTime(oldTimeSlot),
         "New Scheduled Date": fmtDate(newDate),
-        "New Time Slot": newTimeSlot,
+        "New Time Slot": fmtTime(newTimeSlot),
         "Service Type": booking.service_type,
         "Service Address": `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
         "City": booking.city,
