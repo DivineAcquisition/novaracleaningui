@@ -953,6 +953,50 @@ export type Database = {
           },
         ]
       }
+      follow_ups: {
+        Row: {
+          channel: string | null
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          message: string | null
+          scheduled_date: string
+          scheduled_time: string | null
+        }
+        Insert: {
+          channel?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          message?: string | null
+          scheduled_date: string
+          scheduled_time?: string | null
+        }
+        Update: {
+          channel?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          message?: string | null
+          scheduled_date?: string
+          scheduled_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follow_ups_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_assignments: {
         Row: {
           assigned_at: string
@@ -1107,6 +1151,125 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lead_activity_log: {
+        Row: {
+          action: string
+          created_at: string
+          created_by: string | null
+          id: string
+          lead_id: string
+          notes: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_id: string
+          notes?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_id?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_activity_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          active_channel: string | null
+          bathrooms: number | null
+          bedrooms: number | null
+          channel: string
+          created_at: string
+          email: string | null
+          existing_customer_id: string | null
+          first_name: string
+          frequency: string | null
+          id: string
+          is_existing_customer: boolean | null
+          last_name: string
+          notes: string | null
+          phone: string | null
+          preferred_date: string | null
+          preferred_time: string | null
+          property_type: string | null
+          service_type: string | null
+          source: string
+          special_requests: string | null
+          sqft: number | null
+          status: string
+          updated_at: string
+          urgency: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          active_channel?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          channel?: string
+          created_at?: string
+          email?: string | null
+          existing_customer_id?: string | null
+          first_name: string
+          frequency?: string | null
+          id?: string
+          is_existing_customer?: boolean | null
+          last_name: string
+          notes?: string | null
+          phone?: string | null
+          preferred_date?: string | null
+          preferred_time?: string | null
+          property_type?: string | null
+          service_type?: string | null
+          source?: string
+          special_requests?: string | null
+          sqft?: number | null
+          status?: string
+          updated_at?: string
+          urgency?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          active_channel?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          channel?: string
+          created_at?: string
+          email?: string | null
+          existing_customer_id?: string | null
+          first_name?: string
+          frequency?: string | null
+          id?: string
+          is_existing_customer?: boolean | null
+          last_name?: string
+          notes?: string | null
+          phone?: string | null
+          preferred_date?: string | null
+          preferred_time?: string | null
+          property_type?: string | null
+          service_type?: string | null
+          source?: string
+          special_requests?: string | null
+          sqft?: number | null
+          status?: string
+          updated_at?: string
+          urgency?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
       }
       membership_credits: {
         Row: {
@@ -1494,6 +1657,125 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sales_quotes: {
+        Row: {
+          add_ons: string[] | null
+          add_ons_total_cents: number | null
+          base_price_cents: number
+          bathrooms: number | null
+          bedrooms: number | null
+          created_at: string
+          deposit_cents: number | null
+          discount_amount_cents: number | null
+          discount_pct: number | null
+          final_price_cents: number
+          frequency: string | null
+          home_size_id: string | null
+          id: string
+          lead_id: string
+          monthly_total_cents: number | null
+          notes: string | null
+          property_type: string | null
+          sent_at: string | null
+          sent_via: string | null
+          service_type: string
+          sqft: number | null
+        }
+        Insert: {
+          add_ons?: string[] | null
+          add_ons_total_cents?: number | null
+          base_price_cents?: number
+          bathrooms?: number | null
+          bedrooms?: number | null
+          created_at?: string
+          deposit_cents?: number | null
+          discount_amount_cents?: number | null
+          discount_pct?: number | null
+          final_price_cents?: number
+          frequency?: string | null
+          home_size_id?: string | null
+          id?: string
+          lead_id: string
+          monthly_total_cents?: number | null
+          notes?: string | null
+          property_type?: string | null
+          sent_at?: string | null
+          sent_via?: string | null
+          service_type: string
+          sqft?: number | null
+        }
+        Update: {
+          add_ons?: string[] | null
+          add_ons_total_cents?: number | null
+          base_price_cents?: number
+          bathrooms?: number | null
+          bedrooms?: number | null
+          created_at?: string
+          deposit_cents?: number | null
+          discount_amount_cents?: number | null
+          discount_pct?: number | null
+          final_price_cents?: number
+          frequency?: string | null
+          home_size_id?: string | null
+          id?: string
+          lead_id?: string
+          monthly_total_cents?: number | null
+          notes?: string | null
+          property_type?: string | null
+          sent_at?: string | null
+          sent_via?: string | null
+          service_type?: string
+          sqft?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_quotes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_scripts: {
+        Row: {
+          category: string
+          channel: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          script_text: string
+          sort_order: number | null
+          title: string
+          trigger_context: string | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          channel?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          script_text: string
+          sort_order?: number | null
+          title: string
+          trigger_context?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          channel?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          script_text?: string
+          sort_order?: number | null
+          title?: string
+          trigger_context?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       service_coverage_zones: {
         Row: {
