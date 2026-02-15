@@ -17,6 +17,7 @@ export default function BookingZip() {
   const [searchParams] = useSearchParams();
   const { updateBookingData } = useBooking();
   const referralCode = searchParams.get('ref');
+  const fbclid = searchParams.get('fbclid');
 
   // Capture referral code from URL on mount
   useEffect(() => {
@@ -107,6 +108,7 @@ export default function BookingZip() {
           state: cityState.split(', ')[1] || '',
           source: 'Website',
           landingPage: '/book/zip',
+          fbclid: fbclid || undefined,
         }
       }).then(() => {
         const updated = [...capturedEmails, email.toLowerCase()];
