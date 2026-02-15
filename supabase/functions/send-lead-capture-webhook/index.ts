@@ -27,6 +27,7 @@ interface LeadCapturePayload {
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+  fbclid?: string;
 }
 
 serve(async (req) => {
@@ -120,6 +121,9 @@ serve(async (req) => {
       "UTM Source": leadData.utmSource || "",
       "UTM Medium": leadData.utmMedium || "",
       "UTM Campaign": leadData.utmCampaign || "",
+      
+      // Meta Ads Attribution
+      "Facebook Click ID": leadData.fbclid || "",
       
       // Metadata
       "Captured At": new Date().toISOString(),

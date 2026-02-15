@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 import {
@@ -76,8 +76,10 @@ const TESTIMONIALS = [
 
 const Index = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signOut } = useAuth();
   const { updateBookingData } = useBooking();
+  const fbclid = searchParams.get('fbclid');
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [zipValidated, setZipValidated] = useState(false);
@@ -139,6 +141,7 @@ const Index = () => {
             state: cityState.split(", ")[1] || "",
             source: "Website",
             landingPage: "/",
+            fbclid: fbclid || undefined,
           },
         })
         .then(() => {
