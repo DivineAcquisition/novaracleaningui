@@ -1,37 +1,49 @@
 
+# Sales Intake Form Improvements
 
-# Capture fbclid and Pass to GHL Webhook
+## 1. Send Booking Data to GHL Webhook
 
-## What This Does
+When "Create Booking" is clicked, send all form data to the new GHL webhook endpoint:
+`https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/dQxXR74sgYXEvShKnBKO`
 
-Captures the `fbclid` parameter from the URL (added by Meta when someone clicks a Facebook/Instagram ad) and sends it to GHL in the lead capture webhook payload. GHL needs this to trigger its Meta Conversions API action and attribute the lead back to the ad click.
+This will be added directly in `handleCreateBooking()` in `SalesTool.tsx`, right after the booking is created and before navigation. The payload will include all customer, address, service, scheduling, pricing, and cleaner assignment data.
 
-## How It Works
+## 2. More Time Slots
 
-When a user lands on the site from a Meta ad, the URL looks like:
-`https://novaracleaning.com/?fbclid=AbCdEfG123...`
+Currently only 3 time slots exist (8AM-12PM, 12PM-4PM, 4PM-8PM). Replace with hourly slots from 8AM to 6PM:
+- 8:00 AM, 9:00 AM, 10:00 AM, 11:00 AM, 12:00 PM, 1:00 PM, 2:00 PM, 3:00 PM, 4:00 PM, 5:00 PM, 6:00 PM
 
-We capture that value on page load and include it in the webhook payload sent to GHL.
+These will be individual start times rather than 4-hour windows, since the intake tool already captures estimated duration separately.
 
-## Changes
+## 3. Fix Duplicate Cleaners in Selection
 
-### 1. `src/pages/book/Zip.tsx`
-- Read `fbclid` from URL search params (alongside existing `ref` param)
-- Include `fbclid` in the `send-lead-capture-webhook` body
+The cleaner fetch query (`line 294`) doesn't filter by `status = 'active'` or deduplicate. Will add:
+- Filter to only `status = 'active'` cleaners
+- Deduplicate by cleaner `id` (in case the distance recalculation effect re-runs and creates duplicates in state)
 
-### 2. `src/pages/Index.tsx`
-- Read `fbclid` from URL search params
-- Include `fbclid` in the `send-lead-capture-webhook` body
+## 4. Add Delete Cleaner Ability
 
-### 3. `supabase/functions/send-lead-capture-webhook/index.ts`
-- Add `fbclid` to the `LeadCapturePayload` interface
-- Add `"Facebook Click ID": leadData.fbclid` to the GHL webhook payload so GHL can map it to its Meta CAPI action
+The `CleanerMultiSelect` component already has a remove (X) button for selected cleaners. However, the user likely wants the ability to delete/deactivate cleaners from the database entirely. Will add a delete button next to each cleaner in the available list that sets their `approved = false` (soft delete) after confirmation.
 
-### Files Changed
+## 5. Remove Frequency/Membership Discounts from Sales Pricing
+
+The `sales-pricing.ts` file applies frequency-based discounts (Weekly 20%, Bi-Weekly 15%, Monthly 10%). Since membership/frequency/recurring are the same thing and memberships have their own fixed pricing, these percentage discounts should be removed. The `LiveQuotePanel` uses `sales-pricing.ts`, while `IntakePricingSidebar` uses `pricing-system.ts`.
+
+Changes:
+- In `sales-pricing.ts`: Set all `FREQUENCY_DISCOUNTS` to 0 (remove the discount logic)
+- Remove the membership select dropdown from the Booking Configuration section (since frequency already captures this)
+- The `IntakePricingSidebar` currently uses `calculatePrice()` from `pricing-system.ts` which applies membership discounts on extras -- will pass `membershipPlan` as `'none'` since frequency handles recurrence
+
+## 6. Consistent Pricing
+
+Both the `LiveQuotePanel` (uses `sales-pricing.ts` / `brand-config.ts`) and `IntakePricingSidebar` (uses `pricing-system.ts`) should show the same prices. Both source files share the same base price matrix (Zone B). With frequency discounts removed, they will be consistent. The `IntakePricingSidebar` displays prices in cents while `LiveQuotePanel` also uses cents -- both use the same base prices from the v2 matrix so they'll align once the discount discrepancy is removed.
+
+---
+
+## Technical: Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/book/Zip.tsx` | Capture `fbclid` from URL, pass to webhook |
-| `src/pages/Index.tsx` | Capture `fbclid` from URL, pass to webhook |
-| `supabase/functions/send-lead-capture-webhook/index.ts` | Accept and forward `fbclid` in GHL payload |
-
+| `src/pages/admin/SalesTool.tsx` | Add GHL webhook call in `handleCreateBooking`, expand time slots, fix cleaner fetch query, remove membership dropdown, add cleaner delete functionality |
+| `src/lib/sales-pricing.ts` | Remove frequency discount percentages (set all to 0) |
+| `src/components/admin/CleanerMultiSelect.tsx` | Add delete/deactivate button for cleaners in the available list |
