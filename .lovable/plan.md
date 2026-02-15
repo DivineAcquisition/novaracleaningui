@@ -1,28 +1,45 @@
 
 
-# Activate All Maryland ZIP Codes in Service Area
+# Add Real-Time Lead Alert Emails
 
-## What's Happening Now
+## What This Does
 
-The `service_coverage_zones` database table already contains **301 Maryland ZIP codes** with city names and tier classifications. However, only **12 are active** (the Bethesda ZIP codes). The remaining 289 are set to `is_active = false`, which causes the booking flow to redirect customers to the waitlist.
+Every time a new lead fills out the post-ZIP contact form (on `/book/zip` or the landing page `/`), an instant email notification will be sent to **contact@novaracleaning.com** with the lead's details (name, email, phone, ZIP, city/state, source).
 
-## The Fix
+## How It Works
 
-Run a single SQL update to set `is_active = true` for all Maryland ZIP codes:
+The `send-lead-capture-webhook` edge function already runs on every new lead submission. We simply add a Resend email send to that function -- right after the duplicate check passes and before the external webhook calls.
 
-```sql
-UPDATE service_coverage_zones
-SET is_active = true
-WHERE state = 'MD' AND is_active = false;
+## Changes
+
+### 1. Update `supabase/functions/send-lead-capture-webhook/index.ts`
+
+After the duplicate detection block (which returns early for existing customers), add:
+
+- Import Resend
+- Send a notification email to `contact@novaracleaning.com` with subject like "New Lead: John S. -- 21230"
+- Email body: clean HTML table with First Name, Last Name, Email, Phone, ZIP, City, State, Source, Landing Page, and timestamp
+- Fire-and-forget (don't block the webhook sends if email fails)
+
+No other files need to change. The existing client-side code in `Zip.tsx` and `Index.tsx` already calls this function on every new lead.
+
+## Technical Details
+
+```text
+send-lead-capture-webhook flow (updated):
+
+  1. Receive lead data
+  2. Duplicate check against customers table
+  3. [NEW] Send alert email to contact@novaracleaning.com via Resend
+  4. Send to GHL + Zapier webhooks (unchanged)
+  5. Return response
 ```
 
-This will activate all 289 currently inactive Maryland ZIP codes. No code changes are needed -- the booking flow (`src/pages/book/Zip.tsx`) already queries `service_coverage_zones` with `eq('is_active', true)`, so all Maryland ZIPs will immediately start working.
+The RESEND_API_KEY secret is already configured. No new secrets needed.
 
-## What Changes
+### Files Changed
 
-- **Before**: Only 12 Bethesda ZIP codes accepted; all other MD ZIPs go to waitlist
-- **After**: All 301 Maryland ZIP codes accepted in the booking flow
+| File | Action |
+|---|---|
+| `supabase/functions/send-lead-capture-webhook/index.ts` | Edit -- add Resend email alert |
 
-## Files Changed
-
-No file changes needed. This is a database-only update.
