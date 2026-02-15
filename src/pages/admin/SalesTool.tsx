@@ -10,14 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { toast as toastHook } from "@/hooks/use-toast";
 import {
   Save, CheckCircle, BarChart3, RotateCcw, Pencil, Lock,
-  Clock, DollarSign, RefreshCw, Users,
+  Clock, DollarSign, RefreshCw, Users, AlertTriangle, Tag, Loader2,
 } from "lucide-react";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, calculatePrice, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, calculatePrice, DEPOSIT_AMOUNT, applyPromoCode } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
 import { calculateServiceDuration } from "@/lib/time-slots";
 import { CleanerMultiSelect, SelectedCleaner } from "@/components/admin/CleanerMultiSelect";
@@ -28,6 +29,7 @@ import { useCustomerSearch, CustomerSearchResult } from "@/hooks/use-sales-data"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { calculateProfit } from "@/lib/profit-calculator";
 
 const ACCESS_PIN = "1234";
 const AUTOSAVE_KEY = "sales_tool_autosave";
@@ -149,6 +151,11 @@ export default function SalesTool() {
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [membershipPlan, setMembershipPlan] = useState("none");
   const [customDiscount, setCustomDiscount] = useState(0);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoMessage, setPromoMessage] = useState("");
+  const [promoValid, setPromoValid] = useState(false);
+  const [applyingPromo, setApplyingPromo] = useState(false);
 
   // Notes
   const [accessNotes, setAccessNotes] = useState("");
@@ -279,6 +286,7 @@ export default function SalesTool() {
     setServiceDate(""); setTimeSlot(""); setEstimatedDuration(""); setArrivalWindow("");
     setBookingChannel("Phone"); setPaymentStatus("Deposit Paid"); setPaymentMethod("Card");
     setMembershipPlan("none"); setCustomDiscount(0);
+    setPromoCode(""); setPromoDiscount(0); setPromoMessage(""); setPromoValid(false);
     setAccessNotes(""); setTeamNotes(""); setDispatchNotes("");
     setSelectedCleaners([]); setCustomerStatus(null); setCustomerLocation(null);
     setNumCleaners(2); setSavedLeadId(null); setIsEditing(false);
@@ -370,6 +378,42 @@ export default function SalesTool() {
 
   const isNewCustomer = customerStatus?.isNew !== false;
 
+  // Profit margin warning
+  const profitWarning = useMemo(() => {
+    if (!homeSizeId || customDiscount <= 0) return null;
+    const pricing = calculatePrice(homeSizeId, serviceType, addOns, 'none', false, false);
+    const totalAfterDiscount = pricing.total - (customDiscount * 100) - (promoDiscount * 100);
+    if (totalAfterDiscount <= 0) return { margin: 0, warning: true };
+    const calc = calculateProfit(totalAfterDiscount / 100, homeSizeId);
+    return calc.profitMargin < 0.20 ? { margin: calc.profitMargin, warning: true } : null;
+  }, [homeSizeId, serviceType, addOns, customDiscount, promoDiscount]);
+
+  // Promo code handler
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setApplyingPromo(true);
+    try {
+      const pricing = calculatePrice(homeSizeId, serviceType, addOns, 'none', false, false);
+      const result = await applyPromoCode(promoCode, pricing.subtotal, homeSizeId, isNewCustomer, email, supabase);
+      setPromoMessage(result.message || "");
+      setPromoValid(result.valid);
+      setPromoDiscount(result.valid ? result.discount : 0);
+    } catch {
+      setPromoMessage("Error applying promo code");
+      setPromoValid(false);
+      setPromoDiscount(0);
+    } finally {
+      setApplyingPromo(false);
+    }
+  };
+
+  const handleClearPromo = () => {
+    setPromoCode("");
+    setPromoDiscount(0);
+    setPromoMessage("");
+    setPromoValid(false);
+  };
+
   // ─── Save Lead ───
   const handleSaveLead = async () => {
     if (!firstName || !lastName) { toast.error("Lead name is required"); return; }
@@ -417,7 +461,7 @@ export default function SalesTool() {
     setLoading(true);
     try {
       const pricing = calculatePrice(homeSizeId, serviceType, addOns, 'none', false, false);
-      const adjustedTotal = Math.max(0, pricing.total - (customDiscount * 100));
+      const adjustedTotal = Math.max(0, pricing.total - (customDiscount * 100) - (promoDiscount * 100));
       let bookingStatus = "pending_payment";
       if (paymentStatus === "Deposit Paid" || paymentStatus === "Paid in Full") bookingStatus = "confirmed";
       const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
@@ -482,6 +526,8 @@ export default function SalesTool() {
           deposit_cents: DEPOSIT_AMOUNT,
           total_estimate_cents: adjustedTotal,
           custom_discount: customDiscount,
+          promo_code: promoValid ? promoCode : null,
+          promo_discount: promoDiscount,
           booking_channel: bookingChannel,
           booker_source: customerSource,
           payment_method: paymentMethod,
@@ -913,19 +959,56 @@ export default function SalesTool() {
                     </Select>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-600">Discount ($)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={customDiscount || ""}
-                    onChange={(e) => setCustomDiscount(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="bg-white border-gray-300 text-gray-900 w-40"
-                  />
-                  <p className="text-xs text-gray-400">Enter dollar amount to discount</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Discount ($)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={customDiscount || ""}
+                      onChange={(e) => setCustomDiscount(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="bg-white border-gray-300 text-gray-900"
+                    />
+                    <p className="text-xs text-gray-400">Manual dollar discount</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-600">Promo Code</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. SAVE20"
+                        className="bg-white border-gray-300 text-gray-900"
+                        disabled={promoValid}
+                      />
+                      {promoValid ? (
+                        <Button variant="outline" size="sm" onClick={handleClearPromo} className="shrink-0 border-gray-300 text-gray-600">
+                          Clear
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={handleApplyPromo} disabled={applyingPromo || !promoCode.trim()} className="shrink-0 border-gray-300 text-gray-600">
+                          {applyingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                        </Button>
+                      )}
+                    </div>
+                    {promoMessage && (
+                      <p className={`text-xs ${promoValid ? "text-green-600" : "text-red-500"}`}>{promoMessage}</p>
+                    )}
+                    {promoValid && promoDiscount > 0 && (
+                      <p className="text-xs text-green-600 font-medium">-${promoDiscount.toFixed(2)} applied</p>
+                    )}
+                  </div>
                 </div>
+                {profitWarning && (
+                  <Alert variant="destructive" className="border-red-300 bg-red-50">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      ⚠️ Profit margin is {(profitWarning.margin * 100).toFixed(0)}% — below the 20% minimum. Reduce the discount or increase the price.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
 
@@ -995,7 +1078,7 @@ export default function SalesTool() {
                 serviceType={serviceType}
                 frequency={frequency}
                 addOns={addOns}
-                customDiscount={customDiscount}
+                customDiscount={customDiscount + promoDiscount}
                 bedrooms={bedrooms ? parseInt(bedrooms) : undefined}
                 bathrooms={bathrooms ? parseFloat(bathrooms) : undefined}
                 leadEmail={email}
@@ -1011,7 +1094,7 @@ export default function SalesTool() {
               serviceType={serviceType}
               addOns={addOns}
               membershipPlan="none"
-              customDiscount={customDiscount}
+              customDiscount={customDiscount + promoDiscount}
               selectedCleaners={selectedCleaners}
               estimatedHours={parseFloat(estimatedDuration || "0")}
             />
