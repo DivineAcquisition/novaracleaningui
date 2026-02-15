@@ -295,8 +295,11 @@ export default function SalesTool() {
         .from("cleaners")
         .select("id, first_name, last_name, status, home_lat, home_lng, pay_rate_hr, max_travel_miles")
         .eq("approved", true)
+        .eq("status", "active")
         .order("first_name");
-      setCleaners(data || []);
+      // Deduplicate by id
+      const unique = (data || []).filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i);
+      setCleaners(unique);
     };
     fetchCleaners();
   }, [isAuthenticated]);
@@ -416,7 +419,7 @@ export default function SalesTool() {
 
     setLoading(true);
     try {
-      const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, false, applyNewCustomerDiscount);
+      const pricing = calculatePrice(homeSizeId, serviceType, addOns, 'none', false, applyNewCustomerDiscount);
       let bookingStatus = "pending_payment";
       if (paymentStatus === "Deposit Paid" || paymentStatus === "Paid in Full") bookingStatus = "confirmed";
       const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
@@ -462,6 +465,49 @@ export default function SalesTool() {
 
       try { await supabase.functions.invoke("send-zapier-webhook", { body: { bookingId: booking.id } }); } catch (e) { console.error("Webhook error:", e); }
       try { await supabase.functions.invoke("send-booking-email", { body: { bookingId: booking.id, type: "confirmation" } }); } catch (e) { console.error("Email error:", e); }
+
+      // Send all data to GHL webhook
+      try {
+        const ghlPayload = {
+          booking_id: booking.id,
+          first_name: firstName, last_name: lastName, email, phone,
+          address: street, city, state, zip_code: zipCode,
+          bedrooms: bedrooms ? parseInt(bedrooms) : null,
+          bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+          dwelling_type: dwellingType || null, pets,
+          home_size_id: homeSizeId, service_type: serviceType,
+          add_ons: addOns, frequency,
+          service_date: serviceDate, time_slot: timeSlot,
+          estimated_duration_hours: estimatedDuration,
+          arrival_window: arrivalWindow || null,
+          base_price_cents: pricing.basePrice,
+          deposit_cents: DEPOSIT_AMOUNT,
+          total_estimate_cents: pricing.total,
+          booking_channel: bookingChannel,
+          booker_source: customerSource,
+          payment_method: paymentMethod,
+          payment_status: paymentStatus,
+          sdr_rep_name: sdrRepName || null,
+          num_cleaners_assigned: numCleaners,
+          access_notes: accessNotes || null,
+          team_notes: teamNotes || null,
+          dispatch_notes: dispatchNotes || null,
+          notes: notes || null,
+          lead_source: leadSource,
+          contact_channel: channel,
+          is_new_customer: isNewCustomer,
+          apply_new_customer_discount: applyNewCustomerDiscount,
+          assigned_cleaners: selectedCleaners.map(c => ({
+            id: c.id, name: c.name, role: c.role,
+            hourly_rate: c.hourlyRate, distance: c.distance,
+          })),
+        };
+        await fetch("https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/dQxXR74sgYXEvShKnBKO", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ghlPayload),
+        });
+      } catch (e) { console.error("GHL webhook error:", e); }
 
       localStorage.removeItem("admin_intake_autosave");
       toast.success(`Booking created: ${booking.id}`);
@@ -802,9 +848,9 @@ export default function SalesTool() {
                     <Select value={timeSlot} onValueChange={setTimeSlot}>
                       <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue placeholder="Select time" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="8:00 AM - 12:00 PM">8:00 AM - 12:00 PM</SelectItem>
-                        <SelectItem value="12:00 PM - 4:00 PM">12:00 PM - 4:00 PM</SelectItem>
-                        <SelectItem value="4:00 PM - 8:00 PM">4:00 PM - 8:00 PM</SelectItem>
+                        {["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM"].map(t =>
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -853,22 +899,10 @@ export default function SalesTool() {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-gray-600">Membership</Label>
-                    <Select value={membershipPlan} onValueChange={setMembershipPlan}>
-                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Membership</SelectItem>
-                        {Object.entries(MEMBERSHIP_PLANS).filter(([k]) => k !== "none").map(([k, p]) =>
-                          <SelectItem key={k} value={k}>{p.label} ({(p.discount * 100)}% off)</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2 pt-6">
-                    <Checkbox id="newDiscount" checked={applyNewCustomerDiscount}
-                      onCheckedChange={(c) => setApplyNewCustomerDiscount(c === true)} />
-                    <label htmlFor="newDiscount" className="text-sm cursor-pointer text-gray-600">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="newDiscount" checked={applyNewCustomerDiscount}
+                    onCheckedChange={(c) => setApplyNewCustomerDiscount(c === true)} />
+                  <label htmlFor="newDiscount" className="text-sm cursor-pointer text-gray-600">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
                 </div>
               </CardContent>
             </Card>
@@ -924,6 +958,7 @@ export default function SalesTool() {
                   selectedCleaners={selectedCleaners}
                   onSelectionChange={setSelectedCleaners}
                   maxCleaners={numCleaners}
+                  onCleanerDeleted={(id) => setCleaners(prev => prev.filter(c => c.id !== id))}
                 />
               </CardContent>
             </Card>
@@ -953,7 +988,7 @@ export default function SalesTool() {
               homeSizeId={homeSizeId}
               serviceType={serviceType}
               addOns={addOns}
-              membershipPlan={membershipPlan}
+              membershipPlan="none"
               applyNewCustomerDiscount={applyNewCustomerDiscount}
               selectedCleaners={selectedCleaners}
               estimatedHours={parseFloat(estimatedDuration || "0")}

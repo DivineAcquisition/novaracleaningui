@@ -18,9 +18,9 @@ export interface QuoteCalculation {
 
 const FREQUENCY_DISCOUNTS: Record<string, number> = {
   "One-Time": 0,
-  "Weekly": 20,
-  "Bi-Weekly": 15,
-  "Monthly": 10,
+  "Weekly": 0,
+  "Bi-Weekly": 0,
+  "Monthly": 0,
 };
 
 export function getFrequencyDiscount(frequency: string): number {

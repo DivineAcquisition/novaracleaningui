@@ -5,7 +5,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, MapPin, Search } from "lucide-react";
+import { X, MapPin, Search, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export interface SelectedCleaner {
   id: string;
@@ -31,6 +33,7 @@ interface CleanerMultiSelectProps {
   selectedCleaners: SelectedCleaner[];
   onSelectionChange: (cleaners: SelectedCleaner[]) => void;
   maxCleaners?: number;
+  onCleanerDeleted?: (cleanerId: string) => void;
 }
 
 export function CleanerMultiSelect({
@@ -38,8 +41,25 @@ export function CleanerMultiSelect({
   selectedCleaners,
   onSelectionChange,
   maxCleaners = 3,
+  onCleanerDeleted,
 }: CleanerMultiSelectProps) {
   const [searchFilter, setSearchFilter] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteCleaner = async (cleaner: CleanerOption) => {
+    if (!confirm(`Deactivate ${cleaner.first_name} ${cleaner.last_name}? They will be removed from the available pool.`)) return;
+    setDeletingId(cleaner.id);
+    try {
+      const { error } = await supabase.from("cleaners").update({ approved: false } as any).eq("id", cleaner.id);
+      if (error) throw error;
+      // Remove from selected if present
+      onSelectionChange(selectedCleaners.filter(c => c.id !== cleaner.id));
+      onCleanerDeleted?.(cleaner.id);
+      toast.success(`${cleaner.first_name} ${cleaner.last_name} deactivated`);
+    } catch (err: any) {
+      toast.error("Failed to deactivate: " + err.message);
+    } finally { setDeletingId(null); }
+  };
 
   const filteredCleaners = cleaners.filter(c => {
     if (!searchFilter) return true;
@@ -209,6 +229,16 @@ export function CleanerMultiSelect({
                     <span>${cleaner.pay_rate_hr || 18}/hr</span>
                   </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteCleaner(cleaner); }}
+                  disabled={deletingId === cleaner.id}
+                  title="Deactivate cleaner"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
               </div>
             );
           })}
