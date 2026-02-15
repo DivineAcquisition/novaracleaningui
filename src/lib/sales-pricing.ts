@@ -54,7 +54,7 @@ export function calculateQuote(params: {
   }
 
   const basePriceCents = homeSize.basePrice * 100;
-  const serviceTierCost = (serviceTier?.additionalCost || 0) * 100;
+  const serviceTierCost = Math.round(homeSize.basePrice * ((serviceTier?.multiplier || 1) - 1)) * 100;
   const addOnsCents = params.addOnIds.reduce((sum, id) => {
     const addon = ADD_ONS.find((a) => a.id === id);
     return sum + (addon ? addon.price * 100 : 0);

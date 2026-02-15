@@ -94,8 +94,9 @@ export const TYPOGRAPHY = {
 export const PRICING = {
   hourlyRate: 75,              // $ per hour
   depositAmount: 39,           // $ deposit collected at booking
-  newCustomerDiscount: 30,     // $ off first booking
+  newCustomerDiscount: 60,     // $ off first booking (V2)
   overtimeRate: 75,            // $ per additional hour
+  firstCleanSurcharge: 75,     // $ deep clean surcharge for new members
 } as const;
 
 // =============================================================================
@@ -112,16 +113,16 @@ export interface HomeSizeConfig {
 }
 
 export const HOME_SIZES: HomeSizeConfig[] = [
-  { id: "0_999",      label: "XS",   sqftRange: "0-999",      bedrooms: "Studio-1",  baseHours: 2,  basePrice: 150 },
-  { id: "1000_1500",  label: "S",    sqftRange: "1,000-1,500", bedrooms: "1-2",      baseHours: 3,  basePrice: 225 },
-  { id: "1501_2000",  label: "M",    sqftRange: "1,501-2,000", bedrooms: "2-3",      baseHours: 4,  basePrice: 300 },
-  { id: "2001_2500",  label: "L",    sqftRange: "2,001-2,500", bedrooms: "3-4",      baseHours: 5,  basePrice: 375 },
-  { id: "2501_3000",  label: "XL",   sqftRange: "2,501-3,000", bedrooms: "4-5",      baseHours: 6,  basePrice: 450 },
-  { id: "3001_3500",  label: "2XL",  sqftRange: "3,001-3,500", bedrooms: "5+",       baseHours: 7,  basePrice: 525 },
-  { id: "3501_4000",  label: "3XL",  sqftRange: "3,501-4,000", bedrooms: "5+",       baseHours: 8,  basePrice: 600 },
-  { id: "4001_4500",  label: "4XL",  sqftRange: "4,001-4,500", bedrooms: "6+",       baseHours: 9,  basePrice: 675 },
-  { id: "4501_5000",  label: "5XL",  sqftRange: "4,501-5,000", bedrooms: "6+",       baseHours: 10, basePrice: 750 },
-  { id: "5000_plus",  label: "6XL",  sqftRange: "5,001+",      bedrooms: "7+",       baseHours: 12, basePrice: 900 },
+  { id: "0_999",      label: "XS",   sqftRange: "0-999",       bedrooms: "Studio-1",  baseHours: 2,    basePrice: 150 },
+  { id: "1000_1500",  label: "S",    sqftRange: "1,000-1,500", bedrooms: "1-2",       baseHours: 2.5,  basePrice: 189 },
+  { id: "1501_2000",  label: "M",    sqftRange: "1,501-2,000", bedrooms: "2-3",       baseHours: 3,    basePrice: 239 },
+  { id: "2001_2500",  label: "L",    sqftRange: "2,001-2,500", bedrooms: "3-4",       baseHours: 3.5,  basePrice: 279 },
+  { id: "2501_3000",  label: "XL",   sqftRange: "2,501-3,000", bedrooms: "4-5",       baseHours: 4,    basePrice: 339 },
+  { id: "3001_3500",  label: "2XL",  sqftRange: "3,001-3,500", bedrooms: "5+",        baseHours: 4.5,  basePrice: 379 },
+  { id: "3501_4000",  label: "3XL",  sqftRange: "3,501-4,000", bedrooms: "5+",        baseHours: 5,    basePrice: 439 },
+  { id: "4001_4500",  label: "4XL",  sqftRange: "4,001-4,500", bedrooms: "6+",        baseHours: 5.5,  basePrice: 489 },
+  { id: "4501_5000",  label: "5XL",  sqftRange: "4,501-5,000", bedrooms: "6+",        baseHours: 6,    basePrice: 539 },
+  { id: "5000_plus",  label: "6XL",  sqftRange: "5,001+",      bedrooms: "7+",        baseHours: 0,    basePrice: 0 },
 ];
 
 // =============================================================================
@@ -132,7 +133,8 @@ export interface ServiceTierConfig {
   id: string;
   name: string;
   description: string;
-  additionalCost: number;
+  multiplier: number;
+  additionalCost: number; // Kept for backward compat; use multiplier for calculations
   features: string[];
 }
 
@@ -141,6 +143,7 @@ export const SERVICE_TIERS: ServiceTierConfig[] = [
     id: "standard",
     name: "Standard Clean",
     description: "Regular maintenance cleaning",
+    multiplier: 1.0,
     additionalCost: 0,
     features: [
       "Dusting all surfaces",
@@ -154,7 +157,8 @@ export const SERVICE_TIERS: ServiceTierConfig[] = [
     id: "deep",
     name: "Deep Clean",
     description: "Thorough top-to-bottom cleaning",
-    additionalCost: 50,
+    multiplier: 1.5,
+    additionalCost: 0,
     features: [
       "Everything in Standard Clean",
       "Inside cabinet cleaning",
@@ -167,7 +171,8 @@ export const SERVICE_TIERS: ServiceTierConfig[] = [
     id: "move",
     name: "Move-In/Out Clean",
     description: "Complete clean for moving",
-    additionalCost: 120,
+    multiplier: 2.0,
+    additionalCost: 0,
     features: [
       "Everything in Deep Clean",
       "Inside all cabinets & drawers",
@@ -190,9 +195,9 @@ export interface AddOnConfig {
 }
 
 export const ADD_ONS: AddOnConfig[] = [
-  { id: "fridge",           name: "Inside Fridge",        price: 35, description: "Deep clean inside refrigerator" },
-  { id: "oven",             name: "Inside Oven",          price: 35, description: "Deep clean inside oven" },
-  { id: "interior_windows", name: "Interior Windows",     price: 45, description: "Clean all interior windows" },
+  { id: "fridge",           name: "Inside Fridge",        price: 30, description: "Deep clean inside refrigerator" },
+  { id: "oven",             name: "Inside Oven",          price: 30, description: "Deep clean inside oven" },
+  { id: "interior_windows", name: "Interior Windows",     price: 40, description: "Clean all interior windows" },
   { id: "laundry",          name: "Laundry",              price: 25, description: "Wash, dry, fold one load" },
   { id: "garage",           name: "Garage Sweep",         price: 40, description: "Sweep and tidy garage" },
   { id: "organization",     name: "Light Organization",   price: 50, description: "Organize closets/pantry" },
@@ -355,7 +360,7 @@ export function calculateBasePrice(
   
   if (!homeSize) return 0;
   
-  return homeSize.basePrice + (serviceTier?.additionalCost || 0);
+  return Math.round(homeSize.basePrice * (serviceTier?.multiplier || 1));
 }
 
 /**
