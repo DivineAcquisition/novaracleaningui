@@ -17,7 +17,7 @@ import {
   Save, CheckCircle, BarChart3, RotateCcw, Pencil, Lock,
   Clock, DollarSign, RefreshCw, Users,
 } from "lucide-react";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, calculatePrice, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, calculatePrice, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
 import { calculateServiceDuration } from "@/lib/time-slots";
 import { CleanerMultiSelect, SelectedCleaner } from "@/components/admin/CleanerMultiSelect";
@@ -148,7 +148,7 @@ export default function SalesTool() {
   const [paymentStatus, setPaymentStatus] = useState("Deposit Paid");
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [membershipPlan, setMembershipPlan] = useState("none");
-  const [applyNewCustomerDiscount, setApplyNewCustomerDiscount] = useState(true);
+  const [customDiscount, setCustomDiscount] = useState(0);
 
   // Notes
   const [accessNotes, setAccessNotes] = useState("");
@@ -278,7 +278,7 @@ export default function SalesTool() {
     setHomeSizeId(""); setServiceType("standard"); setAddOns([]); setFrequency("One-Time");
     setServiceDate(""); setTimeSlot(""); setEstimatedDuration(""); setArrivalWindow("");
     setBookingChannel("Phone"); setPaymentStatus("Deposit Paid"); setPaymentMethod("Card");
-    setMembershipPlan("none"); setApplyNewCustomerDiscount(true);
+    setMembershipPlan("none"); setCustomDiscount(0);
     setAccessNotes(""); setTeamNotes(""); setDispatchNotes("");
     setSelectedCleaners([]); setCustomerStatus(null); setCustomerLocation(null);
     setNumCleaners(2); setSavedLeadId(null); setIsEditing(false);
@@ -323,7 +323,6 @@ export default function SalesTool() {
           .gt("current_period_end", new Date().toISOString()).order("current_period_end", { ascending: false }).maybeSingle();
         if (!customer) {
           setCustomerStatus({ isNew: true, hasMembership: false });
-          setApplyNewCustomerDiscount(true);
         } else if (membership) {
           setCustomerStatus({
             isNew: false, hasMembership: true, membershipPlan: membership.membership_plan,
@@ -331,10 +330,8 @@ export default function SalesTool() {
             currentPeriodEnd: membership.current_period_end,
           });
           setMembershipPlan(membership.membership_plan);
-          setApplyNewCustomerDiscount(false);
         } else {
           setCustomerStatus({ isNew: false, hasMembership: false });
-          setApplyNewCustomerDiscount(false);
         }
       } catch {} finally { setCheckingCustomer(false); }
     }, 500);
@@ -419,7 +416,8 @@ export default function SalesTool() {
 
     setLoading(true);
     try {
-      const pricing = calculatePrice(homeSizeId, serviceType, addOns, 'none', false, applyNewCustomerDiscount);
+      const pricing = calculatePrice(homeSizeId, serviceType, addOns, 'none', false, false);
+      const adjustedTotal = Math.max(0, pricing.total - (customDiscount * 100));
       let bookingStatus = "pending_payment";
       if (paymentStatus === "Deposit Paid" || paymentStatus === "Paid in Full") bookingStatus = "confirmed";
       const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
@@ -433,7 +431,7 @@ export default function SalesTool() {
         home_size_id: homeSizeId, service_type: serviceType, add_ons: addOns, frequency,
         service_date: serviceDate, time_slot: timeSlot,
         estimated_duration_hours: parseInt(estimatedDuration || "0"), arrival_window: arrivalWindow || null,
-        base_price_cents: pricing.basePrice, deposit_cents: DEPOSIT_AMOUNT, total_estimate_cents: pricing.total,
+        base_price_cents: pricing.basePrice, deposit_cents: DEPOSIT_AMOUNT, total_estimate_cents: adjustedTotal,
         booking_channel: bookingChannel, booker_source: customerSource,
         payment_method: paymentMethod, payment_option: paymentStatus === "Paid in Full" ? "full" : "deposit",
         membership_plan: membershipPlan, status: bookingStatus,
@@ -482,7 +480,8 @@ export default function SalesTool() {
           arrival_window: arrivalWindow || null,
           base_price_cents: pricing.basePrice,
           deposit_cents: DEPOSIT_AMOUNT,
-          total_estimate_cents: pricing.total,
+          total_estimate_cents: adjustedTotal,
+          custom_discount: customDiscount,
           booking_channel: bookingChannel,
           booker_source: customerSource,
           payment_method: paymentMethod,
@@ -496,7 +495,6 @@ export default function SalesTool() {
           lead_source: leadSource,
           contact_channel: channel,
           is_new_customer: isNewCustomer,
-          apply_new_customer_discount: applyNewCustomerDiscount,
           assigned_cleaners: selectedCleaners.map(c => ({
             id: c.id, name: c.name, role: c.role,
             hourly_rate: c.hourlyRate, distance: c.distance,
@@ -810,16 +808,32 @@ export default function SalesTool() {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-gray-600">Frequency</Label>
-                    <Select value={frequency} onValueChange={setFrequency}>
-                      <SelectTrigger className="bg-white border-gray-300 text-gray-900"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="One-Time">One-Time</SelectItem><SelectItem value="Weekly">Weekly</SelectItem>
-                        <SelectItem value="Biweekly">Biweekly</SelectItem><SelectItem value="Monthly">Monthly</SelectItem>
-                        <SelectItem value="Quarterly">Quarterly</SelectItem>
-                      </SelectContent>
-                    </Select>
+                {/* Novara Glow Membership */}
+                <div className="space-y-3">
+                  <Label className="text-gray-600">Novara Glow Membership</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      { value: "One-Time", label: "One-Time", desc: "Pay Per Clean" },
+                      { value: "Monthly", label: "Glow Monthly", desc: "1 clean/month" },
+                      { value: "Bi-Weekly", label: "Glow Bi-Weekly", desc: "2 cleans/month", popular: true },
+                      { value: "Weekly", label: "Glow Weekly", desc: "4 cleans/month" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setFrequency(opt.value)}
+                        className={`p-3 rounded-lg border text-center transition-all relative ${
+                          frequency === opt.value
+                            ? "border-emerald-500 bg-emerald-50 text-gray-900"
+                            : "border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-400"
+                        }`}
+                      >
+                        {opt.popular && (
+                          <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full font-semibold">Popular</span>
+                        )}
+                        <div className="font-semibold text-sm">{opt.label}</div>
+                        <div className="text-xs text-gray-400 mt-1">{opt.desc}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="space-y-3"><Label className="text-gray-600">Add-ons</Label>
@@ -899,10 +913,18 @@ export default function SalesTool() {
                     </Select>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="newDiscount" checked={applyNewCustomerDiscount}
-                    onCheckedChange={(c) => setApplyNewCustomerDiscount(c === true)} />
-                  <label htmlFor="newDiscount" className="text-sm cursor-pointer text-gray-600">Apply New Customer Discount (-${NEW_CUSTOMER_DISCOUNT})</label>
+                <div className="space-y-2">
+                  <Label className="text-gray-600">Discount ($)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={customDiscount || ""}
+                    onChange={(e) => setCustomDiscount(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="bg-white border-gray-300 text-gray-900 w-40"
+                  />
+                  <p className="text-xs text-gray-400">Enter dollar amount to discount</p>
                 </div>
               </CardContent>
             </Card>
@@ -973,7 +995,7 @@ export default function SalesTool() {
                 serviceType={serviceType}
                 frequency={frequency}
                 addOns={addOns}
-                isNewCustomer={isNewCustomer}
+                customDiscount={customDiscount}
                 bedrooms={bedrooms ? parseInt(bedrooms) : undefined}
                 bathrooms={bathrooms ? parseFloat(bathrooms) : undefined}
                 leadEmail={email}
@@ -989,7 +1011,7 @@ export default function SalesTool() {
               serviceType={serviceType}
               addOns={addOns}
               membershipPlan="none"
-              applyNewCustomerDiscount={applyNewCustomerDiscount}
+              customDiscount={customDiscount}
               selectedCleaners={selectedCleaners}
               estimatedHours={parseFloat(estimatedDuration || "0")}
             />

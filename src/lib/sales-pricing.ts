@@ -39,7 +39,8 @@ export function calculateQuote(params: {
   serviceType: string;
   frequency: string;
   addOnIds: string[];
-  isNewCustomer: boolean;
+  isNewCustomer?: boolean;
+  customDiscountCents?: number;
 }): QuoteCalculation {
   const homeSize = HOME_SIZES.find((h) => h.id === params.homeSizeId);
   const serviceTier = SERVICE_TIERS.find((t) => t.id === params.serviceType);
@@ -65,8 +66,8 @@ export function calculateQuote(params: {
   const discountCents = Math.round(subtotalCents * (discountPct / 100));
   
   let finalPriceCents = subtotalCents - discountCents;
-  if (params.isNewCustomer) {
-    finalPriceCents -= 6000; // $60 new customer discount
+  if (params.customDiscountCents && params.customDiscountCents > 0) {
+    finalPriceCents -= params.customDiscountCents;
   }
   finalPriceCents = Math.max(0, finalPriceCents);
 
@@ -124,8 +125,8 @@ export function formatQuoteText(quote: QuoteCalculation, params: {
     lines.push(`Add-ons: +${formatCents(quote.addOnsCents)}`);
   if (quote.discountPct > 0)
     lines.push(`${params.frequency} Discount (${quote.discountPct}%): -${formatCents(quote.discountCents)}`);
-  if (params.isNewCustomer)
-    lines.push(`New Customer Discount: -$60.00`);
+  if (params.isNewCustomer && (quote as any).customDiscountCents > 0)
+    lines.push(`Discount: -${formatCents((quote as any).customDiscountCents)}`);
   lines.push(``);
   lines.push(`✅ Per Clean: ${formatCents(quote.perCleanCents)}`);
   lines.push(`💰 Deposit Due Today: ${formatCents(quote.depositCents)}`);

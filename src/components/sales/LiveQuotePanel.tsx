@@ -14,7 +14,8 @@ interface LiveQuotePanelProps {
   serviceType: string;
   frequency: string;
   addOns: string[];
-  isNewCustomer: boolean;
+  isNewCustomer?: boolean;
+  customDiscount?: number;
   bedrooms?: number;
   bathrooms?: number;
   leadEmail?: string;
@@ -29,6 +30,7 @@ export function LiveQuotePanel({
   frequency,
   addOns,
   isNewCustomer,
+  customDiscount = 0,
   bedrooms,
   bathrooms,
   leadEmail,
@@ -45,9 +47,9 @@ export function LiveQuotePanel({
         serviceType,
         frequency,
         addOnIds: addOns,
-        isNewCustomer,
+        customDiscountCents: customDiscount * 100,
       }),
-    [homeSizeId, serviceType, frequency, addOns, isNewCustomer]
+    [homeSizeId, serviceType, frequency, addOns, customDiscount]
   );
 
   const serviceName = SERVICE_TIERS.find((t) => t.id === serviceType)?.name || "Standard Clean";
@@ -191,7 +193,7 @@ export function LiveQuotePanel({
           </>
         )}
 
-        {(quote.discountCents > 0 || isNewCustomer) && (
+      {(quote.discountCents > 0 || customDiscount > 0) && (
           <>
             <Separator className="bg-gray-200" />
             {quote.discountCents > 0 && (
@@ -200,10 +202,10 @@ export function LiveQuotePanel({
                 <span>-{formatCents(quote.discountCents)}</span>
               </div>
             )}
-            {isNewCustomer && (
+            {customDiscount > 0 && (
               <div className="flex justify-between text-emerald-400">
-                <span>New customer discount</span>
-                <span>-$60.00</span>
+                <span>Custom discount</span>
+                <span>-${customDiscount.toFixed(2)}</span>
               </div>
             )}
           </>
