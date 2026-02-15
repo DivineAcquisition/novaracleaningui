@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,6 +59,45 @@ serve(async (req) => {
         JSON.stringify({ success: true, skipped: true, reason: "duplicate" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
+    }
+
+    // --- Send real-time alert email (fire-and-forget) ---
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (resendApiKey) {
+      try {
+        const resend = new Resend(resendApiKey);
+        const lastInitial = leadData.lastName ? leadData.lastName.charAt(0) + "." : "";
+        const subject = `New Lead: ${leadData.firstName} ${lastInitial} — ${leadData.zipCode}`;
+        
+        const html = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #8B5CF6; margin-bottom: 4px;">🔔 New Lead Captured</h2>
+            <p style="color: #6B7280; margin-top: 0;">A new lead just filled out the contact form.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600; width: 140px;">First Name</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.firstName}</td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">Last Name</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.lastName}</td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">Email</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><a href="mailto:${leadData.email}">${leadData.email}</a></td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><a href="tel:${leadData.phone}">${leadData.phone}</a></td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">ZIP Code</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.zipCode}</td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">City</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.city || "—"}</td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">State</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.state || "—"}</td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">Source</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.source || "Website"}</td></tr>
+              <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">Landing Page</td><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${leadData.landingPage || "/"}</td></tr>
+              <tr><td style="padding: 8px; font-weight: 600;">Captured At</td><td style="padding: 8px;">${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}</td></tr>
+            </table>
+          </div>`;
+
+        resend.emails.send({
+          from: "Novara Cleaning <hello@novaracleaning.com>",
+          to: ["contact@novaracleaning.com"],
+          subject,
+          html,
+        }).then(() => logStep("Alert email sent"))
+          .catch((e: any) => logStep("Alert email failed (non-blocking)", { error: String(e) }));
+        
+      } catch (emailErr) {
+        logStep("Alert email setup error (non-blocking)", { error: String(emailErr) });
+      }
     }
 
     // Build standardized payload for external webhooks
