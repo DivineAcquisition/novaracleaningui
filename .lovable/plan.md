@@ -1,45 +1,37 @@
 
 
-# Add Real-Time Lead Alert Emails
+# Capture fbclid and Pass to GHL Webhook
 
 ## What This Does
 
-Every time a new lead fills out the post-ZIP contact form (on `/book/zip` or the landing page `/`), an instant email notification will be sent to **contact@novaracleaning.com** with the lead's details (name, email, phone, ZIP, city/state, source).
+Captures the `fbclid` parameter from the URL (added by Meta when someone clicks a Facebook/Instagram ad) and sends it to GHL in the lead capture webhook payload. GHL needs this to trigger its Meta Conversions API action and attribute the lead back to the ad click.
 
 ## How It Works
 
-The `send-lead-capture-webhook` edge function already runs on every new lead submission. We simply add a Resend email send to that function -- right after the duplicate check passes and before the external webhook calls.
+When a user lands on the site from a Meta ad, the URL looks like:
+`https://novaracleaning.com/?fbclid=AbCdEfG123...`
+
+We capture that value on page load and include it in the webhook payload sent to GHL.
 
 ## Changes
 
-### 1. Update `supabase/functions/send-lead-capture-webhook/index.ts`
+### 1. `src/pages/book/Zip.tsx`
+- Read `fbclid` from URL search params (alongside existing `ref` param)
+- Include `fbclid` in the `send-lead-capture-webhook` body
 
-After the duplicate detection block (which returns early for existing customers), add:
+### 2. `src/pages/Index.tsx`
+- Read `fbclid` from URL search params
+- Include `fbclid` in the `send-lead-capture-webhook` body
 
-- Import Resend
-- Send a notification email to `contact@novaracleaning.com` with subject like "New Lead: John S. -- 21230"
-- Email body: clean HTML table with First Name, Last Name, Email, Phone, ZIP, City, State, Source, Landing Page, and timestamp
-- Fire-and-forget (don't block the webhook sends if email fails)
-
-No other files need to change. The existing client-side code in `Zip.tsx` and `Index.tsx` already calls this function on every new lead.
-
-## Technical Details
-
-```text
-send-lead-capture-webhook flow (updated):
-
-  1. Receive lead data
-  2. Duplicate check against customers table
-  3. [NEW] Send alert email to contact@novaracleaning.com via Resend
-  4. Send to GHL + Zapier webhooks (unchanged)
-  5. Return response
-```
-
-The RESEND_API_KEY secret is already configured. No new secrets needed.
+### 3. `supabase/functions/send-lead-capture-webhook/index.ts`
+- Add `fbclid` to the `LeadCapturePayload` interface
+- Add `"Facebook Click ID": leadData.fbclid` to the GHL webhook payload so GHL can map it to its Meta CAPI action
 
 ### Files Changed
 
-| File | Action |
+| File | Change |
 |---|---|
-| `supabase/functions/send-lead-capture-webhook/index.ts` | Edit -- add Resend email alert |
+| `src/pages/book/Zip.tsx` | Capture `fbclid` from URL, pass to webhook |
+| `src/pages/Index.tsx` | Capture `fbclid` from URL, pass to webhook |
+| `supabase/functions/send-lead-capture-webhook/index.ts` | Accept and forward `fbclid` in GHL payload |
 
