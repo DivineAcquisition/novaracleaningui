@@ -221,25 +221,31 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
         </div>
       </div>
 
-      {/* Frequency */}
+      {/* Novara Glow Membership */}
       <div className="space-y-3">
-        <Label className="text-gray-600">Frequency</Label>
+        <Label className="text-gray-600">Novara Glow Membership</Label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {frequencyOptions.map(({ label, discount }) => (
+          {[
+            { value: "One-Time", label: "One-Time", desc: "Pay Per Clean" },
+            { value: "Monthly", label: "Glow Monthly", desc: "1 clean/month" },
+            { value: "Bi-Weekly", label: "Glow Bi-Weekly", desc: "2 cleans/month", popular: true },
+            { value: "Weekly", label: "Glow Weekly", desc: "4 cleans/month" },
+          ].map((opt) => (
             <button
-              key={label}
-              onClick={() => update("frequency", label)}
+              key={opt.value}
+              onClick={() => update("frequency", opt.value)}
               className={cn(
-                "p-3 rounded-lg border text-center transition-all",
-                data.frequency === label
+                "p-3 rounded-lg border text-center transition-all relative",
+                data.frequency === opt.value
                   ? "border-emerald-500 bg-emerald-500/10 text-gray-900"
                   : "border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-400"
               )}
             >
-              <div className="font-semibold text-sm">{label}</div>
-              {discount > 0 && (
-                <div className="text-xs text-emerald-400 mt-1">Save {discount}%</div>
+              {opt.popular && (
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full font-semibold">Popular</span>
               )}
+              <div className="font-semibold text-sm">{opt.label}</div>
+              <div className="text-xs text-gray-400 mt-1">{opt.desc}</div>
             </button>
           ))}
         </div>

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, NEW_CUSTOMER_DISCOUNT, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
 import { DollarSign, TrendingDown, User } from "lucide-react";
 
 interface SelectedCleaner {
@@ -17,7 +17,7 @@ interface IntakePricingSidebarProps {
   serviceType: string;
   addOns: string[];
   membershipPlan: string;
-  applyNewCustomerDiscount: boolean;
+  customDiscount?: number;
   selectedCleaners: SelectedCleaner[];
   estimatedHours: number;
 }
@@ -27,7 +27,7 @@ export function IntakePricingSidebar({
   serviceType,
   addOns,
   membershipPlan,
-  applyNewCustomerDiscount,
+  customDiscount = 0,
   selectedCleaners,
   estimatedHours,
 }: IntakePricingSidebarProps) {
@@ -37,22 +37,26 @@ export function IntakePricingSidebar({
     addOns,
     membershipPlan,
     false,
-    applyNewCustomerDiscount
+    false
   );
+
+  // Apply custom discount
+  const customDiscountCents = customDiscount * 100;
+  const adjustedTotal = Math.max(0, pricing.total - customDiscountCents);
 
   // Calculate total cleaner payout from selected cleaners
   const totalCleanerPayout = selectedCleaners.reduce((sum, cleaner) => {
     return sum + (cleaner.hourlyRate * estimatedHours);
   }, 0);
   
-  const companyProfit = (pricing.total / 100) - totalCleanerPayout;
+  const companyProfit = (adjustedTotal / 100) - totalCleanerPayout;
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
   };
 
   const depositAmount = DEPOSIT_AMOUNT;
-  const remainingBalance = pricing.total - depositAmount;
+  const remainingBalance = adjustedTotal - depositAmount;
 
   return (
     <Card className="sticky top-4">
@@ -98,7 +102,7 @@ export function IntakePricingSidebar({
         </div>
 
         {/* Discounts */}
-        {(applyNewCustomerDiscount || pricing.membershipDiscount > 0) && (
+        {customDiscount > 0 && (
           <div className="space-y-2">
             <Separator />
             <div className="flex items-center gap-2 text-sm font-medium text-primary">
@@ -106,21 +110,10 @@ export function IntakePricingSidebar({
               <span>Savings</span>
             </div>
 
-            {pricing.newCustomerDiscount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-green-600">New Customer Discount</span>
-                <span className="text-green-600 font-medium">-${pricing.newCustomerDiscount}</span>
-              </div>
-            )}
-
-            {pricing.membershipDiscount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-green-600">
-                  {MEMBERSHIP_PLANS[membershipPlan as keyof typeof MEMBERSHIP_PLANS]?.label} Discount
-                </span>
-                <span className="text-green-600 font-medium">-${pricing.membershipDiscount}</span>
-              </div>
-            )}
+            <div className="flex justify-between text-sm">
+              <span className="text-green-600">Custom Discount</span>
+              <span className="text-green-600 font-medium">-${customDiscount.toFixed(2)}</span>
+            </div>
           </div>
         )}
 
@@ -130,7 +123,7 @@ export function IntakePricingSidebar({
         <div className="space-y-3">
           <div className="flex justify-between text-lg font-bold">
             <span>Total</span>
-            <span className="text-primary">${pricing.total}</span>
+            <span className="text-primary">${adjustedTotal}</span>
           </div>
 
           <div className="bg-muted/50 p-3 rounded-lg space-y-2">
