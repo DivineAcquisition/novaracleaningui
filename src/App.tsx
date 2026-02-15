@@ -10,6 +10,8 @@ import Demo from "./pages/Demo";
 import Auth from "./pages/Auth";
 import Account from "./pages/Account";
 import Membership from "./pages/Membership";
+import PlanDetail from "./pages/membership/PlanDetail";
+import MembershipSuccess from "./pages/membership/MembershipSuccess";
 import ResetPassword from "./pages/ResetPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
@@ -88,6 +90,16 @@ const App = () => (
               <Route path="/membership" element={
                 <DomainRestricted allowedDomains={APP_ALLOWED_DOMAINS} redirectTo="/">
                   <Membership />
+                </DomainRestricted>
+              } />
+              <Route path="/membership/success" element={
+                <DomainRestricted allowedDomains={APP_ALLOWED_DOMAINS} redirectTo="/">
+                  <MembershipSuccess />
+                </DomainRestricted>
+              } />
+              <Route path="/membership/:planId" element={
+                <DomainRestricted allowedDomains={APP_ALLOWED_DOMAINS} redirectTo="/">
+                  <PlanDetail />
                 </DomainRestricted>
               } />
               <Route path="/reset-password" element={<ResetPassword />} />
