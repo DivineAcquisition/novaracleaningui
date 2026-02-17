@@ -26,6 +26,14 @@ export function trackInitiateCheckout(value: number) {
   });
 }
 
+/** Fires when a user submits a valid ZIP code (early funnel signal). */
+export function trackLead(zipCode: string) {
+  callFbq('Lead', {
+    content_name: 'ZIP Entry',
+    content_category: zipCode,
+  });
+}
+
 /** Fires when the booking is confirmed (Success page). */
 export function trackPurchase(
   value: number,
