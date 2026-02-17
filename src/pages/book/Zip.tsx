@@ -9,6 +9,7 @@ import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
+import { trackLead } from "@/lib/meta-pixel";
 
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
@@ -53,12 +54,47 @@ export default function BookingZip() {
       .single();
     
     setIsValidating(false);
-    
+
+    // --- Track ZIP submission in database (fire-and-forget) ---
+    const placeholderEmail = `anonymous-${crypto.randomUUID()}@placeholder`;
+
+    // Insert into abandoned_carts
+    Promise.resolve(
+      supabase
+        .from('abandoned_carts')
+        .insert({ email: placeholderEmail, zip_code: zipCode, last_step: 'zip' })
+        .select('id')
+        .single()
+    ).then(({ data }) => {
+      if (data?.id) {
+        localStorage.setItem('abandoned_cart_id', data.id);
+        localStorage.setItem('abandoned_cart_email', placeholderEmail);
+      }
+    }).catch(err => console.error('Abandoned cart insert error:', err));
+
+    // Insert into leads
+    Promise.resolve(
+      supabase
+        .from('leads')
+        .insert({
+          first_name: 'Anonymous',
+          last_name: 'Visitor',
+          zip_code: zipCode,
+          status: 'zip_only',
+          source: 'Website',
+          channel: 'Website',
+        })
+    ).then(({ error }) => { if (error) console.error('Lead insert error:', error); })
+      .catch(err => console.error('Lead insert error:', err));
+
     if (coverage) {
       // ZIP is in service area - show contact form
       setCityState(`${coverage.city}, ${coverage.state}`);
       setFormMode('contact');
       updateBookingData({ zipCode });
+
+      // Fire Meta Pixel Lead event for in-area ZIPs
+      trackLead(zipCode);
     } else {
       // ZIP is NOT in service area - show waitlist form
       setCityState("");
@@ -82,17 +118,39 @@ export default function BookingZip() {
       phone: formattedPhone,
     });
     
-    // Track abandoned cart
-    supabase.functions.invoke('track-abandoned-cart', {
-      body: {
-        email,
-        firstName,
-        lastName,
-        phone: formattedPhone,
-        zipCode,
-        lastStep: 'contact',
-      }
-    }).catch(err => console.error('Track cart error:', err));
+    // Update existing abandoned_cart row (or create new one)
+    const existingCartId = localStorage.getItem('abandoned_cart_id');
+    const existingCartEmail = localStorage.getItem('abandoned_cart_email');
+    
+    if (existingCartId && existingCartEmail) {
+      // Update the placeholder row with real contact info
+      supabase
+        .from('abandoned_carts')
+        .update({
+          email,
+          first_name: firstName,
+          last_name: lastName,
+          phone: formattedPhone,
+          last_step: 'contact',
+        })
+        .eq('id', existingCartId)
+        .then(({ error }) => { if (error) console.error('Cart update error:', error); });
+      
+      // Clean up localStorage placeholder
+      localStorage.removeItem('abandoned_cart_email');
+    } else {
+      // Fallback: create via edge function if no existing cart
+      supabase.functions.invoke('track-abandoned-cart', {
+        body: {
+          email,
+          firstName,
+          lastName,
+          phone: formattedPhone,
+          zipCode,
+          lastStep: 'contact',
+        }
+      }).catch(err => console.error('Track cart error:', err));
+    }
     
     // Send lead capture webhook with client-side duplicate guard
     const capturedEmails: string[] = JSON.parse(localStorage.getItem('lead_captured_emails') || '[]');
