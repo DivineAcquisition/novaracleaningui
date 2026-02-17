@@ -1,78 +1,67 @@
 
-# Sales Intake Form: Fixes, Membership Replacement, and Custom Discount
 
-## Issues Found
+# Capture ZIP Entry Data and Fix Lead Tracking Gap
 
-1. **Add-ons section broken** -- The form iterates `ADD_ONS` from `pricing-system.ts` (an object with keys `fridge`, `oven`, `windows`) using `Object.entries()` and accesses `.label`/`.price`, which works. However, the `addOns` state stores keys like `"fridge"` from `pricing-system.ts`, but `LiveQuotePanel` looks up add-ons from `brand-config.ts` (an array with `.id` like `"fridge"`). The IDs happen to match, so this works -- but the sidebar shows 3 add-ons while the form shows 3, so this is consistent. No actual breakage here, just messy dual-source pattern.
+## Problem
 
-2. **Frequency dropdown uses wrong values** -- The dropdown includes "Biweekly" and "Quarterly" but `sales-pricing.ts` only knows "One-Time", "Weekly", "Bi-Weekly", "Monthly". "Biweekly" vs "Bi-Weekly" is a mismatch, and "Quarterly" has no pricing logic at all.
+Facebook reports 20 people filled out the ZIP form, but the database has 0 abandoned carts, 0 leads, and only 8 customers (most without ZIP data). The root cause: entering a ZIP and clicking "Continue" only saves to browser memory. Nothing is written to the database until the user completes the full contact form (name, email, phone). If they bounce after entering their ZIP, the data is lost entirely.
 
-3. **New customer discount still active** -- The checkbox on line 902-906 applies a hardcoded $60 discount. `sales-pricing.ts` line 68-69 also hardcodes `-$60` for new customers. Both need removal.
+## Solution
 
-4. **LiveQuotePanel shows stale discount UI** -- Even with frequency discounts set to 0, it still renders the "New customer discount -$60.00" line when `isNewCustomer` is true.
+### 1. Track ZIP Submissions Immediately
 
-5. **Two pricing calculators showing different things** -- `LiveQuotePanel` (uses `sales-pricing.ts`) and `IntakePricingSidebar` (uses `pricing-system.ts`) can show different totals because they use different discount logic paths.
+When a user enters a valid ZIP and clicks "Continue" on `/book/zip`, immediately insert a row into `abandoned_carts` with just the ZIP code and timestamp. This captures intent even if the user never fills out the contact form.
 
----
+- Insert into `abandoned_carts` with `zip_code`, `last_step = 'zip'`, and a placeholder email (e.g., `anonymous-{uuid}@placeholder`) since `email` is required and NOT NULL.
+- Store the generated `abandoned_cart_id` in localStorage so the contact form step can update that same row (instead of creating a duplicate).
 
-## Plan
+### 2. Update the Existing Row on Contact Form Completion
 
-### 1. Replace "Frequency" with "Novara Glow Membership" (3 options + One-Time)
+When the user fills out the contact form and submits, update the existing `abandoned_carts` row with their name, email, and phone instead of creating a new one via `track-abandoned-cart`.
 
-**File: `src/pages/admin/SalesTool.tsx`**
-- Rename the `frequency` state conceptually (keep the variable name for compatibility)
-- Replace the frequency dropdown (lines 813-824) with 4 styled buttons:
-  - **One-Time** (Pay Per Clean)
-  - **Glow Monthly** (1 clean/month)
-  - **Glow Bi-Weekly** (2 cleans/month) -- marked "Popular"
-  - **Glow Weekly** (4 cleans/month)
-- Label the section "Novara Glow Membership" instead of "Frequency"
-- Use consistent values: `"One-Time"`, `"Monthly"`, `"Bi-Weekly"`, `"Weekly"`
+### 3. Fire a Meta Pixel `Lead` Event on ZIP Submission
 
-### 2. Remove New Customer Discount, Add Custom Discount Input
+Add a `trackLead` helper to `meta-pixel.ts` and fire it when a valid ZIP is confirmed in the service area. This gives Facebook a signal earlier in the funnel, improving ad optimization.
 
-**File: `src/pages/admin/SalesTool.tsx`**
-- Remove the `applyNewCustomerDiscount` state and checkbox (lines 151, 902-906)
-- Add a new `customDiscount` state (number, in dollars)
-- Add an input field in Booking Configuration: "Discount ($)" with a number input
-- Pass `customDiscount` to both pricing panels and the booking creation logic
+### 4. Add a `leads` Table Insert for ZIP-Only Visitors
 
-**File: `src/lib/sales-pricing.ts`**
-- Remove the hardcoded `isNewCustomer` $60 deduction (lines 68-70)
-- Add a `customDiscountCents` parameter to `calculateQuote` instead
-- Update `formatQuoteText` to show custom discount if applied
-
-**File: `src/components/sales/LiveQuotePanel.tsx`**
-- Remove `isNewCustomer` prop
-- Add `customDiscount` prop (dollars)
-- Pass it to `calculateQuote` as `customDiscountCents`
-- Update the UI to show "Discount" line instead of "New customer discount"
-
-**File: `src/components/admin/IntakePricingSidebar.tsx`**
-- Remove `applyNewCustomerDiscount` prop
-- Add `customDiscount` prop (dollars)
-- Subtract custom discount from total instead of calling `calculatePrice` with new customer flag
-
-### 3. Fix Pricing Consistency
-
-**File: `src/pages/admin/SalesTool.tsx`**
-- In `handleCreateBooking` (line 422): remove `applyNewCustomerDiscount` parameter, add custom discount to the pricing call
-- Send `customDiscount` amount in the GHL webhook payload
-
-### 4. Remove Frequency Discount References
-
-**File: `src/components/sales/QualificationSection.tsx`**
-- Rename "Frequency" label to "Novara Glow Membership"
-- Keep existing button-based UI but update labels to match membership plan names
+Insert a minimal row into the `leads` table on ZIP submission with `status = 'zip_only'`, `zip_code`, and `source = 'Website'`. This populates the lead pipeline even without contact info, giving visibility into demand by ZIP code.
 
 ---
 
-## Technical: Files Changed
+## Technical Details
 
+### Files to Create
+| File | Purpose |
+|---|---|
+| (none) | No new files needed |
+
+### Files to Modify
 | File | Change |
 |---|---|
-| `src/pages/admin/SalesTool.tsx` | Replace frequency dropdown with membership buttons, remove new customer discount checkbox, add custom discount input, update booking creation and webhook payload |
-| `src/lib/sales-pricing.ts` | Remove `isNewCustomer` $60 logic, add `customDiscountCents` param |
-| `src/components/sales/LiveQuotePanel.tsx` | Replace `isNewCustomer` prop with `customDiscount`, update display |
-| `src/components/admin/IntakePricingSidebar.tsx` | Replace `applyNewCustomerDiscount` with `customDiscount` prop |
-| `src/components/sales/QualificationSection.tsx` | Rename "Frequency" to "Novara Glow Membership" |
+| `src/pages/book/Zip.tsx` | Add database insert on ZIP submit (abandoned_carts + leads), fire Meta Pixel Lead event, update existing row on contact form submit |
+| `src/lib/meta-pixel.ts` | Add `trackLead()` helper function |
+
+### Database Changes
+None required -- both `abandoned_carts` and `leads` tables already exist with the needed columns. The `abandoned_carts.email` column is NOT NULL, so we'll use a placeholder for ZIP-only entries. The `leads` table has `first_name` as NOT NULL with no default, so we'll use "Anonymous" as placeholder.
+
+### Edge Function Changes
+None -- the existing `track-abandoned-cart` and `send-lead-capture-webhook` functions work fine. The issue is they were never being reached because users bounced before the contact form.
+
+### Flow After Changes
+
+```text
+User enters ZIP + clicks Continue
+  |
+  +--> INSERT into abandoned_carts (zip_code, last_step='zip')
+  +--> INSERT into leads (zip_code, status='zip_only', source='Website')
+  +--> Fire Meta Pixel Lead event (if in service area)
+  +--> Store cart ID in localStorage
+  |
+User fills contact form + submits
+  |
+  +--> UPDATE abandoned_carts row with name, email, phone
+  +--> Fire send-lead-capture-webhook (GHL + Zapier)
+  +--> Navigate to /book/sqft
+```
+
