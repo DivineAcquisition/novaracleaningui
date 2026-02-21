@@ -293,6 +293,18 @@ export interface PromoConfig {
   appliesTo?: string[];
 }
 
+// =============================================================================
+// $99 FIRST CLEAN PROMO (Toggle on/off here)
+// =============================================================================
+
+export const FIRST_CLEAN_PROMO = {
+  enabled: true,               // Set to false to disable the promo entirely
+  price: 99,                   // Flat $99 for first clean
+  label: "$99 First Clean",
+  description: "Standard clean only. First-time customers. One per household.",
+  serviceTypeRestriction: "standard" as const,
+} as const;
+
 export const ACTIVE_PROMOS: PromoConfig[] = [
   {
     code: "NEWYEAR60",

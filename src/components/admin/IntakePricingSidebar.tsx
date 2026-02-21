@@ -20,6 +20,7 @@ interface IntakePricingSidebarProps {
   customDiscount?: number;
   selectedCleaners: SelectedCleaner[];
   estimatedHours: number;
+  firstCleanPromo?: boolean;
 }
 
 export function IntakePricingSidebar({
@@ -30,6 +31,7 @@ export function IntakePricingSidebar({
   customDiscount = 0,
   selectedCleaners,
   estimatedHours,
+  firstCleanPromo = false,
 }: IntakePricingSidebarProps) {
   const pricing = calculatePrice(
     homeSizeId,
@@ -64,6 +66,11 @@ export function IntakePricingSidebar({
         <CardTitle className="flex items-center gap-2">
           <DollarSign className="w-5 h-5" />
           Live Pricing Calculator
+          {firstCleanPromo && (
+            <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 text-xs font-bold ml-2">
+              🎉 $99 Promo
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

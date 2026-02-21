@@ -22,6 +22,7 @@ interface LiveQuotePanelProps {
   leadId?: string | null;
   leadFirstName?: string;
   onStatusAdvance?: (status: string) => void;
+  firstCleanPromo?: boolean;
 }
 
 export function LiveQuotePanel({
@@ -37,6 +38,7 @@ export function LiveQuotePanel({
   leadId,
   leadFirstName,
   onStatusAdvance,
+  firstCleanPromo = false,
 }: LiveQuotePanelProps) {
   const [sendingEmail, setSendingEmail] = useState(false);
 
@@ -157,13 +159,26 @@ export function LiveQuotePanel({
           <Calculator className="w-4 h-4 text-emerald-600" />
           Live Quote
         </h3>
-        {quote.discountPct > 0 && (
-          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-            <TrendingDown className="w-3 h-3 mr-1" />
-            {quote.discountPct}% off
-          </Badge>
-        )}
+        <div className="flex gap-1">
+          {firstCleanPromo && (
+            <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 text-xs font-bold">
+              🎉 $99 First Clean
+            </Badge>
+          )}
+          {quote.discountPct > 0 && (
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+              <TrendingDown className="w-3 h-3 mr-1" />
+              {quote.discountPct}% off
+            </Badge>
+          )}
+        </div>
       </div>
+
+      {firstCleanPromo && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-700">
+          Promo applied: flat $99 standard clean. Regular price: {formatCents(quote.basePriceCents)}
+        </div>
+      )}
 
       <div className="space-y-2 text-sm">
         <div className="flex justify-between text-gray-600">

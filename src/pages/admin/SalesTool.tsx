@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { FIRST_CLEAN_PROMO } from "@/config/brand-config";
 import { LiveQuotePanel } from "@/components/sales/LiveQuotePanel";
 import { SalesAssistPanel } from "@/components/sales/SalesAssistPanel";
 import { FollowUpScheduler } from "@/components/sales/FollowUpScheduler";
@@ -156,6 +157,7 @@ export default function SalesTool() {
   const [promoMessage, setPromoMessage] = useState("");
   const [promoValid, setPromoValid] = useState(false);
   const [applyingPromo, setApplyingPromo] = useState(false);
+  const [applyFirstCleanPromo, setApplyFirstCleanPromo] = useState(false);
 
   // Notes
   const [accessNotes, setAccessNotes] = useState("");
@@ -290,6 +292,7 @@ export default function SalesTool() {
     setAccessNotes(""); setTeamNotes(""); setDispatchNotes("");
     setSelectedCleaners([]); setCustomerStatus(null); setCustomerLocation(null);
     setNumCleaners(2); setSavedLeadId(null); setIsEditing(false);
+    setApplyFirstCleanPromo(false);
     setSearchParams({});
     localStorage.removeItem(AUTOSAVE_KEY);
     localStorage.removeItem("admin_intake_autosave");
@@ -319,6 +322,33 @@ export default function SalesTool() {
       if (hs) setEstimatedDuration(calculateServiceDuration(homeSizeId, serviceType, hs.baseHours).toString());
     }
   }, [homeSizeId, serviceType]);
+
+  // Auto-disable $99 promo if service type changes away from standard
+  useEffect(() => {
+    if (serviceType !== "standard" && applyFirstCleanPromo) {
+      setApplyFirstCleanPromo(false);
+      setCustomDiscount(0);
+    }
+  }, [serviceType]);
+
+  // Auto-calculate discount when $99 promo is toggled
+  useEffect(() => {
+    if (applyFirstCleanPromo && homeSizeId && serviceType === "standard") {
+      const pricing = calculatePrice(homeSizeId, "standard", [], "none", false, false);
+      const regularPrice = pricing.total / 100;
+      const discount = Math.max(0, regularPrice - FIRST_CLEAN_PROMO.price);
+      setCustomDiscount(discount);
+    } else if (!applyFirstCleanPromo) {
+      // Only reset if the discount matches a promo-calculated value
+      const pricing = homeSizeId ? calculatePrice(homeSizeId, "standard", [], "none", false, false) : null;
+      if (pricing) {
+        const expectedDiscount = Math.max(0, (pricing.total / 100) - FIRST_CLEAN_PROMO.price);
+        if (customDiscount === expectedDiscount) {
+          setCustomDiscount(0);
+        }
+      }
+    }
+  }, [applyFirstCleanPromo, homeSizeId]);
 
   // Customer recognition
   useEffect(() => {
@@ -479,7 +509,7 @@ export default function SalesTool() {
         booking_channel: bookingChannel, booker_source: customerSource,
         payment_method: paymentMethod, payment_option: paymentStatus === "Paid in Full" ? "full" : "deposit",
         membership_plan: membershipPlan, status: bookingStatus,
-        access_notes: accessNotes || null, team_notes: teamNotes || null, dispatch_notes: dispatchNotes || null,
+        access_notes: accessNotes || null, team_notes: (applyFirstCleanPromo ? "[🎉 $99 First Clean Promo] " : "") + (teamNotes || ""), dispatch_notes: dispatchNotes || null,
         sdr_rep_name: sdrRepName || null,
         num_cleaners_assigned: numCleaners,
       } as any).select().single();
@@ -535,9 +565,10 @@ export default function SalesTool() {
           sdr_rep_name: sdrRepName || null,
           num_cleaners_assigned: numCleaners,
           access_notes: accessNotes || null,
-          team_notes: teamNotes || null,
+          team_notes: (applyFirstCleanPromo ? "[🎉 $99 First Clean Promo] " : "") + (teamNotes || ""),
           dispatch_notes: dispatchNotes || null,
           notes: notes || null,
+          first_clean_promo: applyFirstCleanPromo,
           lead_source: leadSource,
           contact_channel: channel,
           is_new_customer: isNewCustomer,
@@ -967,9 +998,10 @@ export default function SalesTool() {
                       min="0"
                       step="1"
                       value={customDiscount || ""}
-                      onChange={(e) => setCustomDiscount(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => { setCustomDiscount(parseFloat(e.target.value) || 0); setApplyFirstCleanPromo(false); }}
                       placeholder="0"
                       className="bg-white border-gray-300 text-gray-900"
+                      disabled={applyFirstCleanPromo}
                     />
                     <p className="text-xs text-gray-400">Manual dollar discount</p>
                   </div>
@@ -1001,6 +1033,29 @@ export default function SalesTool() {
                     )}
                   </div>
                 </div>
+
+                {/* $99 First Clean Promo Toggle */}
+                {FIRST_CLEAN_PROMO.enabled && customerStatus?.isNew && serviceType === "standard" && (
+                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-2">
+                    <div className="flex items-center space-x-3">
+                      <Checkbox
+                        id="first-clean-promo"
+                        checked={applyFirstCleanPromo}
+                        onCheckedChange={(checked) => setApplyFirstCleanPromo(checked === true)}
+                      />
+                      <label htmlFor="first-clean-promo" className="text-sm font-semibold text-amber-800 cursor-pointer">
+                        🎉 Apply {FIRST_CLEAN_PROMO.label} Promo
+                      </label>
+                    </div>
+                    <p className="text-xs text-amber-700 ml-7">{FIRST_CLEAN_PROMO.description}</p>
+                    {applyFirstCleanPromo && (
+                      <p className="text-xs text-amber-800 ml-7 font-medium">
+                        Discount auto-set to ${customDiscount.toFixed(2)} → Final price: ${FIRST_CLEAN_PROMO.price}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {profitWarning && (
                   <Alert variant="destructive" className="border-red-300 bg-red-50">
                     <AlertTriangle className="h-4 w-4" />
@@ -1085,6 +1140,7 @@ export default function SalesTool() {
                 leadId={savedLeadId}
                 leadFirstName={firstName}
                 onStatusAdvance={(s) => toast.info(`Lead status → "${s}"`)}
+                firstCleanPromo={applyFirstCleanPromo}
               />
             </Card>
 
@@ -1097,6 +1153,7 @@ export default function SalesTool() {
               customDiscount={customDiscount + promoDiscount}
               selectedCleaners={selectedCleaners}
               estimatedHours={parseFloat(estimatedDuration || "0")}
+              firstCleanPromo={applyFirstCleanPromo}
             />
 
             {/* Sales Assist */}
