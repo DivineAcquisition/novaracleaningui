@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Check, ArrowLeft, Phone, ChevronRight, Star, Crown, Sparkles } from "lucide-react";
+import { Check, ArrowLeft, Phone, ChevronRight, Star, Crown, Sparkles, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PromoBanner } from "@/components/booking/PromoBanner";
@@ -20,6 +20,7 @@ import {
   MEMBERSHIP_PRICES,
   getServicePrice,
 } from "@/lib/pricing-system";
+import { FIRST_CLEAN_PROMO } from "@/config/brand-config";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -53,7 +54,7 @@ export default function BookingOffer() {
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showDeepCleanModal, setShowDeepCleanModal] = useState(false);
   const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<'deep' | 'membership' | null>(null);
+  const [selectedService, setSelectedService] = useState<'deep' | 'membership' | 'promo' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -95,6 +96,18 @@ export default function BookingOffer() {
 
   // Check for custom quote requirement (5000+ sq ft)
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
+
+  const handleSelectPromo = () => {
+    setSelectedService('promo');
+    updateBookingData({
+      serviceType: 'standard',
+      membershipPlan: 'none',
+    });
+    trackViewContent(FIRST_CLEAN_PROMO.price, '$99 First Clean Promo');
+    setTimeout(() => {
+      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
 
   const handleSelectDeepClean = () => {
     setSelectedService('deep');
@@ -193,6 +206,47 @@ export default function BookingOffer() {
             
             <GoogleGuaranteedBadge variant="compact" />
           </div>
+
+          {/* $99 First Clean Promo Card */}
+          {FIRST_CLEAN_PROMO.enabled && (
+            <div className="col-span-full">
+              <Card className="relative overflow-hidden border-2 border-amber-400/60 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 hover:border-amber-400 transition-all duration-300 hover:shadow-xl">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CardContent className="pt-6 pb-6 px-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-amber-500 text-white font-bold px-3 py-1">
+                          <Zap className="w-3 h-3 mr-1" />
+                          Limited Offer
+                        </Badge>
+                      </div>
+                      <h3 className="text-2xl font-bold font-jakarta">{FIRST_CLEAN_PROMO.label}</h3>
+                      <p className="text-muted-foreground text-sm max-w-md">
+                        {FIRST_CLEAN_PROMO.description}
+                      </p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black text-amber-600 dark:text-amber-400">${FIRST_CLEAN_PROMO.price}</span>
+                        {selectedHomeSize && (
+                          <span className="text-lg text-muted-foreground line-through">${prices.standard}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <Button
+                        size="lg"
+                        className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+                        onClick={handleSelectPromo}
+                      >
+                        Claim Offer
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Offer Cards */}
           <div id="offers-section" className="grid md:grid-cols-2 gap-4 md:gap-6">
