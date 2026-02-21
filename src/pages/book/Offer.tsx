@@ -33,14 +33,6 @@ const BOOKING_STEPS = [
   { number: 6, label: "Confirm", path: "/book/confirmation" },
 ];
 
-// Deep clean features
-const DEEP_CLEAN_FEATURES = [
-  "40-point Deep Clean checklist",
-  "Professional team",
-  "All supplies & equipment included",
-  "48-hour re-clean guarantee",
-];
-
 // Membership features
 const MEMBERSHIP_FEATURES = [
   "Same trusted cleaning team",
@@ -52,9 +44,8 @@ const MEMBERSHIP_FEATURES = [
 export default function BookingOffer() {
   const navigate = useNavigate();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
-  const [showDeepCleanModal, setShowDeepCleanModal] = useState(false);
   const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<'deep' | 'membership' | 'promo' | null>(null);
+  const [selectedService, setSelectedService] = useState<'membership' | 'promo' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -109,17 +100,6 @@ export default function BookingOffer() {
     }, 100);
   };
 
-  const handleSelectDeepClean = () => {
-    setSelectedService('deep');
-    updateBookingData({
-      serviceType: 'deep',
-      membershipPlan: 'none',
-    });
-    trackViewContent(prices.deepClean, 'Deep Clean');
-    setTimeout(() => {
-      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  };
 
   const handleSelectMembership = () => {
     setSelectedService('membership');
@@ -249,57 +229,8 @@ export default function BookingOffer() {
           )}
 
           {/* Offer Cards */}
-          <div id="offers-section" className="grid md:grid-cols-2 gap-4 md:gap-6">
-            {/* Card A: Deep Clean (One-Time) */}
-            <Card className="relative overflow-hidden border-2 border-primary/30 hover:border-primary/60 transition-all duration-300 hover:shadow-xl">
-              <CardContent className="pt-8 pb-6 px-5 space-y-5">
-                <div>
-                  <h3 className="text-2xl font-bold font-jakarta">Deep Clean</h3>
-                  <p className="text-muted-foreground">One-time top-to-bottom reset</p>
-                </div>
-                
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-primary">${prices.deepClean}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Pay only ${DEPOSIT_AMOUNT} deposit today
-                  </p>
-                </div>
-                
-                <ul className="space-y-2.5">
-                  {DEEP_CLEAN_FEATURES.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm">
-                      <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-primary" />
-                      </div>
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                
-                <div className="space-y-2 pt-2">
-                  <Button 
-                    size="lg" 
-                    className="w-full bg-gradient-primary font-semibold"
-                    onClick={handleSelectDeepClean}
-                  >
-                    Get Started — ${DEPOSIT_AMOUNT} Today
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full"
-                    onClick={() => setShowDeepCleanModal(true)}
-                  >
-                    What's Included?
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card B: Novara Glow Membership (Most Popular) */}
+          <div id="offers-section" className="max-w-xl mx-auto">
+            {/* Novara Glow Membership (Most Popular) */}
             <div className="relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                 <Badge className="bg-success text-white font-bold shadow-lg px-4 py-1.5">
@@ -414,45 +345,6 @@ export default function BookingOffer() {
             </Button>
           </div>
         </div>
-
-        {/* Deep Clean Modal */}
-        <Dialog open={showDeepCleanModal} onOpenChange={setShowDeepCleanModal}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-jakarta">Deep Clean — What's Included</DialogTitle>
-              <DialogDescription>
-                Our thorough top-to-bottom cleaning for a complete home reset.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid gap-3">
-                {[
-                  "40-point cleaning checklist",
-                  "All rooms deep cleaned",
-                  "Baseboards & door frames wiped",
-                  "Light fixtures & ceiling fans dusted",
-                  "Inside oven & fridge cleaned",
-                  "Interior windows cleaned",
-                  "Bathroom grout scrubbed",
-                  "Kitchen appliances detailed",
-                  "All supplies & equipment included",
-                  "Professional team",
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-sm">{item}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-2 text-center">
-                <p className="text-lg font-bold text-primary">${prices.deepClean} — Pay ${DEPOSIT_AMOUNT} today</p>
-              </div>
-              <Button className="w-full" onClick={() => { setShowDeepCleanModal(false); handleSelectDeepClean(); }}>
-                Select Deep Clean
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         {/* Membership Modal */}
         <Dialog open={showMembershipModal} onOpenChange={setShowMembershipModal}>
