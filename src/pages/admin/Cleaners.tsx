@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { Plus, UserCheck, UserX, DollarSign, MapPin, Mail, Phone, Search, Pencil, Star, CheckCircle, XCircle, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { US_STATES } from "@/lib/us-states";
+import { SEO } from "@/components/SEO";
 
 interface Cleaner {
   id: string;
@@ -215,6 +216,7 @@ export default function AdminCleaners() {
 
   return (
     <div className="container mx-auto py-8 px-4">
+      <SEO title="Cleaner Management" noindex />
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-bold font-jakarta">Cleaner Management</h1>

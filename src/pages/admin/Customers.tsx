@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, ChevronDown, ChevronUp } from "lucide-react";
+import { SEO } from "@/components/SEO";
 
 interface Customer {
   id: string;
@@ -127,6 +128,7 @@ export default function AdminCustomers() {
 
   return (
     <AdminLayout>
+      <SEO title="Customer Management" noindex />
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-white">Customers</h1>
 

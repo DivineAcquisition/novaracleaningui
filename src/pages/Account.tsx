@@ -22,6 +22,7 @@ import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { ModifyBookingDialog } from "@/components/booking/ModifyBookingDialog";
 import { RatingDialog } from "@/components/booking/RatingDialog";
 import { cn } from "@/lib/utils";
+import { SEO } from "@/components/SEO";
 
 const BOOKING_URL = "https://try.novaracleaning.com/book/zip";
 const goToBooking = () => { window.location.href = BOOKING_URL; };
@@ -255,6 +256,7 @@ export default function Account() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="My Account" description="Manage your bookings, membership credits, and account settings. View upcoming and past cleanings." noindex />
       {/* Dashboard Header */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0" style={{ background: 'var(--gradient-primary)', opacity: 0.06 }} />

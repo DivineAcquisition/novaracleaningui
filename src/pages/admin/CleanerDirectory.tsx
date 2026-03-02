@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Search, Star, MapPin, Calendar, TrendingUp } from "lucide-react";
+import { SEO } from "@/components/SEO";
 
 interface Cleaner {
   id: string;
@@ -118,6 +119,7 @@ export default function CleanerDirectory() {
 
   return (
     <div className="min-h-screen bg-background p-4">
+      <SEO title="Cleaner Directory" noindex />
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold font-jakarta">Cleaner Directory</h1>

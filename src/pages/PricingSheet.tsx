@@ -16,6 +16,7 @@ import {
   DEPOSIT_AMOUNT, NEW_CUSTOMER_DISCOUNT, FIRST_CLEAN_SURCHARGE,
   type ZoneId,
 } from "@/lib/pricing-system";
+import { SEO } from "@/components/SEO";
 
 // ─── Precomputed pricing rows from the PDF ──────────────
 const STANDARD_PRICES: Record<string, Record<ZoneId, number>> = {
@@ -101,6 +102,7 @@ export default function PricingSheet() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO title="Pricing" description="Transparent home cleaning pricing based on your home size. Standard, deep, and move-in/out cleaning available. Starting at $99." />
       {/* Nav */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-white/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

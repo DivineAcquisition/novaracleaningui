@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { CleanerSelector } from '@/components/portal/CleanerSelector';
 import { SchedulePicker } from '@/components/booking/SchedulePicker';
 import { HOME_SIZE_RANGES } from '@/lib/pricing-system';
+import { SEO } from "@/components/SEO";
 
 const STEPS = [
   { id: 'address', label: 'Address', icon: MapPin },
@@ -387,6 +388,7 @@ export default function MemberBooking() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
+      <SEO title="Book with Credit" description="Use your membership credit to book a cleaning. Choose your address, schedule, and preferred cleaner." noindex />
       {/* Header */}
       <div className="bg-background border-b border-border/50 sticky top-0 z-10">
         <div className="container max-w-4xl mx-auto px-4">

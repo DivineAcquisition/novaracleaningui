@@ -2,6 +2,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Calendar, User, ArrowRight, Sparkles, Gift } from "lucide-react";
+import { SEO } from "@/components/SEO";
 
 const PLAN_NAMES: Record<string, string> = {
   monthly: "Glow Monthly",
@@ -17,6 +18,7 @@ export default function MembershipSuccess() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <SEO title="Welcome to Novara!" description="Your membership is active. Schedule your first cleaning now." noindex />
       <Card className="max-w-lg w-full border-0 shadow-xl overflow-hidden animate-scale-in">
         <div className="h-1 w-full" style={{ background: 'var(--gradient-primary)' }} />
         <CardContent className="pt-10 pb-8 space-y-6 text-center">

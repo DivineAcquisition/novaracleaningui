@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Loader2, Mail, Lock, Sparkles, Briefcase } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { z } from "zod";
+import { SEO } from "@/components/SEO";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -184,6 +185,7 @@ export default function CleanerAuth() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center p-4">
+      <SEO title="Contractor Login" noindex />
       <div className="w-full max-w-[380px]">
         {/* Logo & Header */}
         <div className="text-center mb-6">

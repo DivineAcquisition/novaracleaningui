@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Loader2, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { SEO } from "@/components/SEO";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 
@@ -46,6 +47,7 @@ export default function CleanerResetPassword() {
 
   return (
     <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
+      <SEO title="Reset Password" noindex />
       <Card className="max-w-sm w-full shadow-xl border-primary/20">
         <CardHeader className="text-center space-y-1 pb-3 pt-5">
           <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>

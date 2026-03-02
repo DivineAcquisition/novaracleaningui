@@ -13,6 +13,7 @@ import {
 import { PauseResumeDialog } from "@/components/membership/PauseResumeDialog";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 import { cn } from "@/lib/utils";
+import { SEO } from "@/components/SEO";
 
 const MEMBERSHIP_TIERS = [
   {
@@ -71,6 +72,7 @@ export default function Membership() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Membership Plans" description="Save up to 30% with a Novara Glow membership. Choose from monthly, bi-weekly, or weekly plans with dedicated cleaners and priority scheduling." />
       {/* Navigation */}
       <div className="border-b border-border/50">
         <div className="container max-w-7xl mx-auto px-4 py-3">

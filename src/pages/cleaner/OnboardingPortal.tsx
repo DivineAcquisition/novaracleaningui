@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { SEO } from "@/components/SEO";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
@@ -418,6 +419,7 @@ export default function OnboardingPortal() {
   // ─── Render ───────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+      <SEO title="Onboarding Portal" noindex />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/40">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">

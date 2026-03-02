@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { SEO } from "@/components/SEO";
 
 /**
  * Handles OAuth callback specifically for cleaner/contractor authentication.
@@ -93,6 +94,7 @@ export default function CleanerAuthCallback() {
 
   return (
     <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+      <SEO title="Authenticating..." noindex />
       <div className="text-center space-y-4">
         <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
         <p className="text-muted-foreground">{status}</p>

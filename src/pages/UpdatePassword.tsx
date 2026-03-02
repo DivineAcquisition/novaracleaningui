@@ -9,6 +9,7 @@ import { Loader2, Lock, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { SEO } from "@/components/SEO";
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
@@ -93,6 +94,7 @@ export default function UpdatePassword() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6">
+      <SEO title="Update Password" description="Choose a new password for your Novara Cleaning account." noindex />
       <Card className="max-w-sm w-full shadow-xl border-0 overflow-hidden animate-scale-in">
         <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
         <CardHeader className="text-center space-y-1 pb-3 pt-6">

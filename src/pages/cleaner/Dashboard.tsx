@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { SEO } from "@/components/SEO";
 import { 
   Loader2, 
   LogOut, 
@@ -146,6 +147,7 @@ export default function CleanerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+      <SEO title="Contractor Dashboard" noindex />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">

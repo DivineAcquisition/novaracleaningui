@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react";
+import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 
 interface Stats {
@@ -112,6 +113,7 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout>
+      <SEO title="Admin Dashboard" noindex />
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
 

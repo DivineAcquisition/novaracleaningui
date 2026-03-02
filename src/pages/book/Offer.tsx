@@ -21,6 +21,7 @@ import {
   getServicePrice,
 } from "@/lib/pricing-system";
 import { FIRST_CLEAN_PROMO } from "@/config/brand-config";
+import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -170,6 +171,7 @@ export default function BookingOffer() {
   return (
     <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+        <SEO title="Choose Your Service" description="Select your cleaning service type and schedule. Standard, deep clean, or Novara Glow membership." />
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
         <PromoBanner />
 

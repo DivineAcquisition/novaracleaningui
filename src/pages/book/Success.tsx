@@ -13,6 +13,7 @@ import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pr
 import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
 import { trackPurchase } from "@/lib/meta-pixel";
+import { SEO } from "@/components/SEO";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -348,6 +349,7 @@ export default function BookingSuccess() {
 
   return (
     <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 pb-24 md:pb-12">
+      <SEO title="Booking Confirmed" description="Your cleaning is confirmed! Check your email for details." noindex />
       <div className="container max-w-3xl mx-auto">
         {/* Show verification error if payment failed */}
         {verificationError && (

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -169,6 +170,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Professional Home Cleaning in Maryland & DMV"
+        description="Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, $99 first clean, transparent pricing, and 100% satisfaction guarantee. Book online in 60 seconds."
+        canonical="https://novaracleaning.com"
+      />
       {/* Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

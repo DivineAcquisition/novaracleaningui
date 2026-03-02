@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { toast as toastHook } from "@/hooks/use-toast";
+import { SEO } from "@/components/SEO";
 import {
   Save, CheckCircle, BarChart3, RotateCcw, Pencil, Lock,
   Clock, DollarSign, RefreshCw, Users, AlertTriangle, Tag, Loader2,
@@ -656,6 +657,7 @@ export default function SalesTool() {
   // ─── Main Layout ───
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEO title="Sales & Intake" noindex />
       {/* Header */}
       <div className="border-b border-gray-200 bg-white/90 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between">

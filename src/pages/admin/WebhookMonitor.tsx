@@ -11,6 +11,7 @@ import { WebhookTestButton } from "@/components/admin/WebhookTestButton";
 import ZapierDirectTest from "@/components/admin/ZapierDirectTest";
 import { WebhookHistoryProvider } from "@/contexts/WebhookHistoryContext";
 import { WebhookPayloadInspector } from "@/components/admin/WebhookPayloadInspector";
+import { SEO } from "@/components/SEO";
 
 interface WebhookFailure {
   id: string;
@@ -103,6 +104,7 @@ const WebhookMonitor = () => {
 
   return (
     <WebhookHistoryProvider>
+      <SEO title="Webhook Monitor" noindex />
       <div className="container mx-auto py-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>

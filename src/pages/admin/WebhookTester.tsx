@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Send, Copy, CheckCircle, XCircle, Loader2, ArrowLeft } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 
 interface WebhookResponse {
   success: boolean;
@@ -71,6 +72,7 @@ const WebhookTester = () => {
 
   return (
     <div className="container mx-auto py-8 space-y-6">
+      <SEO title="Webhook Tester" noindex />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link to="/admin/webhooks">

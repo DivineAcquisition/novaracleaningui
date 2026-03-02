@@ -13,6 +13,7 @@ import {
 } from "@remixicon/react";
 import logo from "@/assets/logo.png";
 import { z } from "zod";
+import { SEO } from "@/components/SEO";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -97,6 +98,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex">
+      <SEO title="Sign In" description="Sign in to your Novara Cleaning account to manage bookings, track membership credits, and schedule cleanings." />
       {/* Left Panel - Branding (hidden on mobile) */}
       <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden items-center justify-center p-12" style={{ background: 'var(--gradient-primary)' }}>
         <div className="absolute inset-0 opacity-10">

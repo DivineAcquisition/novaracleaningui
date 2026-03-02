@@ -9,6 +9,7 @@ import { ArrowLeft, Home, Loader2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
+import { SEO } from "@/components/SEO";
 
 export default function CustomQuote() {
   const navigate = useNavigate();
@@ -112,6 +113,7 @@ export default function CustomQuote() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      <SEO title="Custom Quote" description="Request a custom quote for homes over 5,000 sq ft. We'll get back to you within 24 hours." />
       <div className="container max-w-3xl mx-auto px-4 py-12">
         <Card className="shadow-xl">
           <CardHeader className="text-center space-y-2 pb-8">

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { SEO } from "@/components/SEO";
 import { 
   Loader2, 
   MapPin, 
@@ -319,6 +320,7 @@ export default function CleanerOnboarding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 py-8 px-4">
+      <SEO title="Contractor Onboarding" noindex />
       <div className="max-w-lg mx-auto">
         {/* Header */}
         <div className="text-center mb-8">

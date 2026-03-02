@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { toast } from "sonner";
 import { Search, X, ExternalLink, Save } from "lucide-react";
 import { CancelBookingDialog } from "@/components/admin/CancelBookingDialog";
+import { SEO } from "@/components/SEO";
 
 type Booking = {
   id: string;
@@ -166,6 +167,7 @@ export default function AdminBookings() {
 
   return (
     <AdminLayout>
+      <SEO title="Manage Bookings" noindex />
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-white">Bookings</h1>
 

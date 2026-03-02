@@ -27,6 +27,7 @@ import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
+import { SEO } from "@/components/SEO";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -464,6 +465,7 @@ export default function BookingCheckout() {
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
   return <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+        <SEO title="Checkout" description="Complete your booking with secure payment. Deposit or pay in full." noindex />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">

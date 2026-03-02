@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { SEO } from "@/components/SEO";
 
 interface Job {
   id: string;
@@ -155,6 +156,7 @@ export default function DispatchQueue() {
 
   return (
     <div className="min-h-screen bg-background p-4">
+      <SEO title="Dispatch Queue" noindex />
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>

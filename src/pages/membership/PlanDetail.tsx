@@ -16,6 +16,7 @@ import {
   Clock, CalendarCheck, Star, Users, Repeat, Crown, Loader2, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SEO } from "@/components/SEO";
 
 const PLAN_META = {
   monthly: {
@@ -117,6 +118,7 @@ export default function PlanDetail() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Plan Details" description="View detailed pricing and benefits for your Novara Glow membership plan. Select your home size to see your exact monthly cost." />
       {/* Navigation */}
       <div className="border-b border-border/50">
         <div className="container max-w-4xl mx-auto px-4 py-3">

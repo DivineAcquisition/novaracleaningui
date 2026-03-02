@@ -3,10 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { ArrowRight, Tag, Crown } from "lucide-react";
 import selestialLogo from "@/assets/selestial-logo.png";
+import { SEO } from "@/components/SEO";
 
 export default function Demo() {
   return (
     <div className="min-h-screen bg-gradient-hero">
+      <SEO title="Demo" description="See Novara Cleaning in action." noindex />
       {/* Header */}
       <header className="container mx-auto px-4 py-4 md:py-6">
         <div className="flex justify-between items-center gap-2">

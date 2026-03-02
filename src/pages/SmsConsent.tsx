@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { MessageSquare, Shield, Bell, Clock } from "lucide-react";
+import { SEO } from "@/components/SEO";
 
 const SmsConsent = () => {
   const navigate = useNavigate();
@@ -62,6 +63,7 @@ const SmsConsent = () => {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      <SEO title="SMS Consent" description="Opt in to receive SMS updates about your Novara Cleaning bookings." noindex />
       <div className="container max-w-2xl py-12 px-4">
         <div className="mb-8 text-center">
           <MessageSquare className="mx-auto h-16 w-16 text-primary mb-4" />

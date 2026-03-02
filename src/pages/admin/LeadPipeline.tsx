@@ -13,6 +13,7 @@ import {
   MessageSquare, Search, Filter, BarChart3, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SEO } from "@/components/SEO";
 import { formatCents } from "@/lib/sales-pricing";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -142,6 +143,7 @@ export default function LeadPipeline() {
 
   return (
     <AdminLayout>
+      <SEO title="Lead Pipeline" noindex />
       <div className="max-w-[1800px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
