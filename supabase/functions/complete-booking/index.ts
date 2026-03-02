@@ -88,6 +88,41 @@ serve(async (req) => {
       logStep("Payout triggered successfully");
     }
 
+    // Send completion email to cleaner
+    if (booking.cleaner_id) {
+      try {
+        const { data: cleaner } = await supabase
+          .from("cleaners")
+          .select("first_name, email")
+          .eq("id", booking.cleaner_id)
+          .single();
+
+        if (cleaner?.email) {
+          const estimatedEarnings = booking.total_estimate_cents
+            ? Math.round(booking.total_estimate_cents * 0.45)
+            : 0;
+
+          await supabase.functions.invoke('send-cleaner-email', {
+            body: {
+              type: 'completion',
+              email: cleaner.email,
+              data: {
+                cleanerFirstName: cleaner.first_name,
+                bookingId,
+                serviceDate: booking.service_date,
+                customerName: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+                earnings: estimatedEarnings,
+                payoutStatus: payoutResponse.error ? 'processing' : 'initiated',
+              },
+            },
+          });
+          logStep("Cleaner completion email sent");
+        }
+      } catch (emailError) {
+        logStep("Cleaner email failed (non-critical)", { error: emailError });
+      }
+    }
+
     // Trigger Zapier webhook for completed booking
     try {
       await supabase.functions.invoke('send-zapier-webhook', {
@@ -95,7 +130,6 @@ serve(async (req) => {
       });
       logStep("Zapier webhook triggered");
     } catch (webhookError) {
-      // Log but don't fail the completion if webhook fails
       logStep("Zapier webhook failed (non-critical)", { error: webhookError });
     }
 

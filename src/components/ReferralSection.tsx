@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Share2, Copy, UserPlus, Check, Gift } from "lucide-react";
+import { RiShareLine, RiFileCopyLine, RiUserAddLine, RiCheckLine, RiGiftLine } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -43,7 +43,7 @@ export function ReferralSection({ email }: ReferralSectionProps) {
     return null;
   }
 
-  const referralLink = `${window.location.origin}/book/zip?ref=${referralCode}`;
+  const referralLink = `https://try.novaracleaning.com/book/zip?ref=${referralCode}`;
 
   const copyToClipboard = async (text: string, field: string) => {
     try {
@@ -83,7 +83,7 @@ export function ReferralSection({ email }: ReferralSectionProps) {
           <div className="flex-1 space-y-3">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-primary)' }}>
-                <Gift className="w-5 h-5 text-white" />
+                <RiGiftLine className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h3 className="font-bold text-base">Give $50, Get $50</h3>
@@ -112,7 +112,7 @@ export function ReferralSection({ email }: ReferralSectionProps) {
                   className="h-10 w-10 rounded-lg flex-shrink-0"
                   onClick={() => copyToClipboard(referralCode, 'code')}
                 >
-                  {copiedField === 'code' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  {copiedField === 'code' ? <RiCheckLine className="w-4 h-4 text-emerald-600" /> : <RiFileCopyLine className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
@@ -121,7 +121,7 @@ export function ReferralSection({ email }: ReferralSectionProps) {
               onClick={handleShare} 
               className="w-full h-10 rounded-lg bg-gradient-primary shadow-sm"
             >
-              <Share2 className="mr-2 h-4 w-4" />
+              <RiShareLine className="mr-2 h-4 w-4" />
               Share & Earn
             </Button>
           </div>

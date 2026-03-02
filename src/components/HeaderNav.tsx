@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCredits } from "@/hooks/use-membership-credits";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { User, LogOut, Ticket } from "lucide-react";
+import { RiUserLine, RiLogoutBoxRLine, RiCoupon3Line } from "@remixicon/react";
 import logo from "@/assets/logo.png";
 
 interface HeaderNavProps {
@@ -27,7 +27,7 @@ export function HeaderNav({ onSignOut }: HeaderNavProps) {
             {hasCredits && credits && (
               <Link to="/portal/book">
                 <Badge className="bg-gradient-primary text-white border-0 h-8 md:h-9 px-2.5 md:px-3 gap-1 hover:opacity-90 transition-opacity cursor-pointer shadow-sm rounded-lg">
-                  <Ticket className="w-3.5 h-3.5" />
+                  <RiCoupon3Line className="w-3.5 h-3.5" />
                   <span className="font-semibold text-xs md:text-sm">{credits.credits_remaining}</span>
                   <span className="hidden sm:inline text-xs font-medium opacity-90">
                     {credits.credits_remaining === 1 ? 'Credit' : 'Credits'}
@@ -37,12 +37,12 @@ export function HeaderNav({ onSignOut }: HeaderNavProps) {
             )}
             <Link to="/account">
               <Button variant="outline" size="sm" className="h-8 md:h-9 rounded-lg border-border/60">
-                <User className="w-4 h-4 md:mr-1.5" />
+                <RiUserLine className="w-4 h-4 md:mr-1.5" />
                 <span className="hidden md:inline text-xs">Account</span>
               </Button>
             </Link>
             <Button variant="ghost" size="icon" onClick={onSignOut} className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground hover:text-destructive rounded-lg" aria-label="Sign out">
-              <LogOut className="w-4 h-4" />
+              <RiLogoutBoxRLine className="w-4 h-4" />
             </Button>
           </div>
         ) : (

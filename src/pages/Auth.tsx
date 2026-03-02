@@ -7,7 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, Sparkles, ArrowLeft, Shield, Star, CheckCircle2 } from "lucide-react";
+import {
+  RiLoader4Line, RiMailLine, RiLockLine, RiSparklingLine, RiArrowLeftLine,
+  RiShieldCheckLine, RiStarLine, RiCheckboxCircleLine
+} from "@remixicon/react";
 import logo from "@/assets/logo.png";
 import { z } from "zod";
 
@@ -115,9 +118,9 @@ export default function Auth() {
           </div>
           <div className="space-y-4 pt-4">
             {[
-              { icon: Shield, text: "Google Guaranteed & fully insured" },
-              { icon: Star, text: "4.9 average rating from 500+ cleans" },
-              { icon: CheckCircle2, text: "Satisfaction guaranteed or we reclean free" },
+              { icon: RiShieldCheckLine, text: "Google Guaranteed & fully insured" },
+              { icon: RiStarLine, text: "4.9 average rating from 500+ cleans" },
+              { icon: RiCheckboxCircleLine, text: "Satisfaction guaranteed or we reclean free" },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
@@ -136,7 +139,7 @@ export default function Auth() {
           {/* Mobile: Back + Logo */}
           <div className="flex items-center justify-between mb-6 lg:hidden">
             <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="text-muted-foreground -ml-2">
-              <ArrowLeft className="w-4 h-4 mr-1" /> Home
+              <RiArrowLeftLine className="w-4 h-4 mr-1" /> Home
             </Button>
             <img src={logo} alt="Novara" className="w-8 h-8 rounded-lg" />
           </div>
@@ -209,7 +212,7 @@ export default function Auth() {
                         Email
                       </Label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           id="signin-email"
                           type="email"
@@ -236,7 +239,7 @@ export default function Auth() {
                         </Link>
                       </div>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           id="signin-password"
                           type="password"
@@ -257,7 +260,7 @@ export default function Auth() {
                     >
                       {isLoading ? (
                         <>
-                          <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                          <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />
                           Signing in...
                         </>
                       ) : (
@@ -274,7 +277,7 @@ export default function Auth() {
                         Email
                       </Label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           id="signup-email"
                           type="email"
@@ -293,7 +296,7 @@ export default function Auth() {
                         Password
                       </Label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           id="signup-password"
                           type="password"
@@ -317,12 +320,12 @@ export default function Auth() {
                     >
                       {isLoading ? (
                         <>
-                          <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                          <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />
                           Creating account...
                         </>
                       ) : (
                         <>
-                          <Sparkles className="mr-2 w-4 h-4" />
+                          <RiSparklingLine className="mr-2 w-4 h-4" />
                           Create Account
                         </>
                       )}

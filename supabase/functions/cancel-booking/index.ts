@@ -143,11 +143,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Delete Google Calendar event if one exists
+    if (booking.google_calendar_event_id) {
+      try {
+        await supabase.functions.invoke('update-google-calendar-event', {
+          body: { bookingId, action: 'cancel' },
+        });
+        logStep("Google Calendar event deleted");
+      } catch (calError) {
+        logStep("Failed to delete calendar event (non-critical)", calError);
+      }
+    }
+
     // Send cancellation confirmation email
     try {
       await supabase.functions.invoke('send-booking-email', {
         body: {
-          to: booking.email,
+          email: booking.email,
           type: 'cancellation',
           bookingData: {
             ...booking,

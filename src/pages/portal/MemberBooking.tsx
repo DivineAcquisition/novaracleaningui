@@ -295,8 +295,33 @@ export default function MemberBooking() {
       }
 
       try {
+        const addr = isNewAddress
+          ? `${addressForm.street}${addressForm.unit ? ` ${addressForm.unit}` : ''}`
+          : `${selectedAddress?.street}${selectedAddress?.unit ? ` ${selectedAddress?.unit}` : ''}`;
+        const addrCity = isNewAddress ? addressForm.city : selectedAddress?.city || '';
+        const addrState = isNewAddress ? addressForm.state : selectedAddress?.state || '';
+        const addrZip = isNewAddress ? addressForm.zip : selectedAddress?.zip || '';
         await supabase.functions.invoke('send-booking-email', {
-          body: { bookingId: booking.id, type: 'confirmation' },
+          body: {
+            type: 'confirmation',
+            email: user.email,
+            data: {
+              firstName: customer.first_name,
+              lastName: customer.last_name,
+              bookingId: booking.id,
+              serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
+              timeSlot: selectedTimeSlot,
+              serviceType,
+              homeSize: addressData.sqft_tier,
+              address: addr,
+              city: addrCity,
+              state: addrState,
+              zipCode: addrZip,
+              totalAmount: upsellAmount,
+              useCredit: true,
+              membershipPlan: credits.membership_plan,
+            },
+          },
         });
       } catch (emailError) {
         console.error('Email send failed:', emailError);

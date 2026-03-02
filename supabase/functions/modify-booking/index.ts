@@ -226,7 +226,7 @@ serve(async (req) => {
       try {
         await supabaseAdmin.functions.invoke('send-booking-email', {
           body: {
-            to: user.email,
+            email: user.email,
             type: 'modification',
             bookingData: {
               ...booking,

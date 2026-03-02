@@ -8,10 +8,12 @@ import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import {
-  User, CreditCard, Calendar, LogOut, Loader2, CheckCircle2, Lock, Clock, MapPin,
-  Package, AlertCircle, Home, X, ChevronDown, ChevronUp, Star, Sparkles, ArrowRight,
-  Settings, Bell, Gift, Shield, Ticket, ExternalLink
-} from "lucide-react";
+  RiUserLine, RiBankCardLine, RiCalendarLine, RiLogoutBoxRLine, RiLoader4Line,
+  RiCheckboxCircleFill, RiLockLine, RiTimeLine, RiMapPinLine, RiBox3Line,
+  RiAlertLine, RiHomeLine, RiCloseLine, RiArrowDownSLine, RiArrowUpSLine,
+  RiStarLine, RiSparklingLine, RiArrowRightLine, RiSettings3Line, RiNotification3Line,
+  RiGiftLine, RiShieldCheckLine, RiCoupon3Line, RiExternalLinkLine, RiStarFill
+} from "@remixicon/react";
 import { ReferralSection } from "@/components/ReferralSection";
 import { toast } from "sonner";
 import { format, isPast, isFuture, differenceInDays, differenceInHours } from "date-fns";
@@ -20,6 +22,9 @@ import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { ModifyBookingDialog } from "@/components/booking/ModifyBookingDialog";
 import { RatingDialog } from "@/components/booking/RatingDialog";
 import { cn } from "@/lib/utils";
+
+const BOOKING_URL = "https://try.novaracleaning.com/book/zip";
+const goToBooking = () => { window.location.href = BOOKING_URL; };
 
 interface Booking {
   id: string;
@@ -239,7 +244,7 @@ export default function Account() {
   if (!user) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -268,15 +273,15 @@ export default function Account() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 md:gap-2">
-                <Button size="sm" onClick={() => navigate("/book/zip")} className="h-9 px-3 md:px-4 bg-gradient-primary shadow-md hover:shadow-lg transition-shadow">
-                  <Calendar className="w-4 h-4 md:mr-1.5" />
+                <Button size="sm" onClick={goToBooking} className="h-9 px-3 md:px-4 bg-gradient-primary shadow-md hover:shadow-lg transition-shadow">
+                  <RiCalendarLine size={16} className="md:mr-1.5" />
                   <span className="hidden md:inline">Book Now</span>
                 </Button>
                 <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate("/")}>
-                  <Home className="w-4 h-4" />
+                  <RiHomeLine className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={handleSignOut}>
-                  <LogOut className="w-4 h-4" />
+                  <RiLogoutBoxRLine className="w-4 h-4" />
                 </Button>
               </div>
             </div>
@@ -295,7 +300,7 @@ export default function Account() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
-                        <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        <RiAlertLine className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                       </div>
                       <div>
                         <p className="font-semibold text-sm">Complete Your Booking</p>
@@ -306,7 +311,7 @@ export default function Account() {
                     </div>
                     <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
                       onClick={() => navigate(`/book/checkout?booking_id=${booking.id}`)}>
-                      Complete Payment <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                      Complete Payment <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
                     </Button>
                   </div>
                 </CardContent>
@@ -330,7 +335,7 @@ export default function Account() {
                     {format(new Date(nextBooking.service_date), "EEEE, MMMM d")}
                   </h2>
                   <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
+                    <RiTimeLine className="w-3.5 h-3.5" />
                     {nextBooking.time_slot}
                   </p>
                 </div>
@@ -342,7 +347,7 @@ export default function Account() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-muted/40 dark:bg-muted/20 mb-5">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <MapPin className="w-4 h-4 text-primary" />
+                    <RiMapPinLine className="w-4 h-4 text-primary" />
                   </div>
                   <div className="text-sm min-w-0">
                     <p className="font-medium truncate">{nextBooking.address}</p>
@@ -351,7 +356,7 @@ export default function Account() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Sparkles className="w-4 h-4 text-primary" />
+                    <RiSparklingLine className="w-4 h-4 text-primary" />
                   </div>
                   <div className="text-sm">
                     <p className="font-medium">{nextBooking.service_type}</p>
@@ -360,7 +365,7 @@ export default function Account() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <CreditCard className="w-4 h-4 text-primary" />
+                    <RiBankCardLine className="w-4 h-4 text-primary" />
                   </div>
                   <div className="text-sm">
                     <p className="font-semibold text-primary">${(nextBooking.total_estimate_cents / 100).toFixed(2)}</p>
@@ -371,13 +376,13 @@ export default function Account() {
 
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => handleModify(nextBooking)}>
-                  <Settings className="w-3.5 h-3.5 mr-1.5" /> Modify
+                  <RiSettings3Line className="w-3.5 h-3.5 mr-1.5" /> Modify
                 </Button>
                 <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => handleReschedule(nextBooking)}>
-                  <Calendar className="w-3.5 h-3.5 mr-1.5" /> Reschedule
+                  <RiCalendarLine className="w-3.5 h-3.5 mr-1.5" /> Reschedule
                 </Button>
                 <Button variant="ghost" size="sm" className="h-9 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => handleCancel(nextBooking)}>
-                  <X className="w-3.5 h-3.5 mr-1.5" /> Cancel
+                  <RiCloseLine className="w-3.5 h-3.5 mr-1.5" /> Cancel
                 </Button>
               </div>
             </CardContent>
@@ -386,14 +391,14 @@ export default function Account() {
           <Card className="animate-fade-in-up border-dashed border-2 border-border/60">
             <CardContent className="py-12 md:py-16 text-center">
               <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                <Calendar className="w-8 h-8 text-primary/60" />
+                <RiCalendarLine className="w-8 h-8 text-primary/60" />
               </div>
               <h2 className="text-xl font-bold mb-1.5">No upcoming cleanings</h2>
               <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
                 Schedule your next professional cleaning and let us handle the rest.
               </p>
-              <Button onClick={() => navigate("/book/zip")} className="bg-gradient-primary shadow-md h-11 px-6">
-                <Sparkles className="w-4 h-4 mr-2" /> Book a Cleaning
+              <Button onClick={goToBooking} className="bg-gradient-primary shadow-md h-11 px-6">
+                <RiSparklingLine className="w-4 h-4 mr-2" /> Book a Cleaning
               </Button>
             </CardContent>
           </Card>
@@ -409,7 +414,7 @@ export default function Account() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-primary)' }}>
-                      <Ticket className="w-4.5 h-4.5 text-white" />
+                      <RiCoupon3Line className="w-4.5 h-4.5 text-white" />
                     </div>
                     <div>
                       <span className="font-semibold text-sm">
@@ -434,7 +439,7 @@ export default function Account() {
 
                 {membershipCredits.credits_remaining > 0 && (
                   <Button className="w-full h-10 bg-gradient-primary shadow-sm" onClick={() => navigate("/portal/book")}>
-                    <Calendar className="w-4 h-4 mr-2" /> Use Credit to Book
+                    <RiCalendarLine className="w-4 h-4 mr-2" /> Use Credit to Book
                   </Button>
                 )}
               </CardContent>
@@ -443,12 +448,12 @@ export default function Account() {
             <Card className="animate-fade-in-up stagger-1 border-dashed border-2 border-primary/20">
               <CardContent className="p-5 flex flex-col items-center justify-center text-center h-full min-h-[200px]">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
-                  <Gift className="w-6 h-6 text-primary" />
+                  <RiGiftLine className="w-6 h-6 text-primary" />
                 </div>
                 <p className="font-semibold mb-1">Save with a Membership</p>
                 <p className="text-xs text-muted-foreground mb-4 max-w-[200px]">Get monthly credits and save up to 30% on every clean</p>
                 <Button variant="outline" size="sm" onClick={() => navigate("/membership")} className="rounded-lg">
-                  View Plans <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                  View Plans <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
                 </Button>
               </CardContent>
             </Card>
@@ -459,7 +464,7 @@ export default function Account() {
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                  <User className="w-5 h-5 text-foreground" />
+                  <RiUserLine className="w-5 h-5 text-foreground" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm">Account Settings</p>
@@ -469,22 +474,22 @@ export default function Account() {
               <Separator className="mb-4" />
               <div className="grid grid-cols-2 gap-2.5">
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
-                  onClick={() => navigate("/book/zip")}>
-                  <Calendar className="w-4 h-4 mr-2 text-primary" /> Book Cleaning
+                  onClick={goToBooking}>
+                  <RiCalendarLine className="w-4 h-4 mr-2 text-primary" /> Book Cleaning
                 </Button>
                 {subscription?.hasCustomer && (
                   <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
                     onClick={handleManageSubscription}>
-                    <CreditCard className="w-4 h-4 mr-2 text-primary" /> Billing
+                    <RiBankCardLine className="w-4 h-4 mr-2 text-primary" /> Billing
                   </Button>
                 )}
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
                   onClick={handleChangePassword} disabled={isResettingPassword}>
-                  <Lock className="w-4 h-4 mr-2 text-primary" /> {isResettingPassword ? "Sending..." : "Password"}
+                  <RiLockLine className="w-4 h-4 mr-2 text-primary" /> {isResettingPassword ? "Sending..." : "Password"}
                 </Button>
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
                   onClick={() => navigate("/membership")}>
-                  <Package className="w-4 h-4 mr-2 text-primary" /> Membership
+                  <RiBox3Line className="w-4 h-4 mr-2 text-primary" /> Membership
                 </Button>
               </div>
             </CardContent>
@@ -541,7 +546,7 @@ export default function Account() {
                 <span className="text-xs font-bold uppercase tracking-[0.1em]">
                   Past Bookings ({pastBookings.length})
                 </span>
-                <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", pastBookingsOpen && "rotate-180")} />
+                <RiArrowDownSLine className={cn("w-4 h-4 transition-transform duration-200", pastBookingsOpen && "rotate-180")} />
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 mt-1">
@@ -569,11 +574,11 @@ export default function Account() {
                           <span className="text-sm font-medium ml-1">${(booking.total_estimate_cents / 100).toFixed(2)}</span>
                           {booking.status === "completed" && booking.cleaner_id && !booking.rating_submitted && (
                             <Button size="sm" variant="outline" className="text-xs h-7 rounded-lg ml-1" onClick={() => handleRating(booking)}>
-                              <Star className="w-3 h-3 mr-1" /> Rate
+                              <RiStarLine className="w-3 h-3 mr-1" /> Rate
                             </Button>
                           )}
                           {booking.rating_submitted && (
-                            <Badge variant="secondary" className="text-[10px] h-6"><Star className="w-3 h-3 mr-0.5 fill-current text-amber-500" /> Rated</Badge>
+                            <Badge variant="secondary" className="text-[10px] h-6"><RiStarFill className="w-3 h-3 text-amber-500" /> Rated</Badge>
                           )}
                         </div>
                       </div>
@@ -589,7 +594,7 @@ export default function Account() {
         {isLoadingBookings && bookings.length === 0 && (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto mb-3" />
+              <RiLoader4Line className="w-6 h-6 animate-spin text-primary mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">Loading your bookings...</p>
             </div>
           </div>

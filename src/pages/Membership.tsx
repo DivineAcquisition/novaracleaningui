@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight, ArrowLeft, PauseCircle, PlayCircle, AlertCircle, Shield, Star, Clock } from "lucide-react";
+import {
+  RiCheckboxCircleLine, RiSparklingLine, RiCalendarLine, RiGiftLine, RiFlashlightLine,
+  RiVipCrownLine, RiArrowRightLine, RiArrowLeftLine, RiPauseCircleLine, RiPlayCircleLine,
+  RiAlertLine, RiShieldCheckLine, RiStarLine, RiTimeLine
+} from "@remixicon/react";
 import { PauseResumeDialog } from "@/components/membership/PauseResumeDialog";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 import { cn } from "@/lib/utils";
@@ -17,7 +21,7 @@ const MEMBERSHIP_TIERS = [
     startingPrice: MEMBERSHIP_PRICES['0_999'].monthly,
     credits: 1,
     discount: '20%',
-    icon: Calendar,
+    icon: RiCalendarLine,
     features: [
       '1 cleaning credit per month (up to 2 hrs)',
       '48-hour reclean guarantee',
@@ -32,7 +36,7 @@ const MEMBERSHIP_TIERS = [
     startingPrice: MEMBERSHIP_PRICES['0_999'].biweekly,
     credits: 2,
     discount: '25%',
-    icon: Gift,
+    icon: RiGiftLine,
     features: [
       '2 cleaning credits per month (up to 3 hrs each)',
       'Dedicated cleaner match',
@@ -48,7 +52,7 @@ const MEMBERSHIP_TIERS = [
     startingPrice: MEMBERSHIP_PRICES['0_999'].weekly,
     credits: 4,
     discount: '30%',
-    icon: Crown,
+    icon: RiVipCrownLine,
     features: [
       '4 cleaning credits per month (up to 3 hrs each)',
       'Dedicated cleaner & preferred time slot',
@@ -71,7 +75,7 @@ export default function Membership() {
       <div className="border-b border-border/50">
         <div className="container max-w-7xl mx-auto px-4 py-3">
           <Button variant="ghost" size="sm" onClick={() => navigate("/account")} className="text-muted-foreground -ml-2">
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Account
+            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Back to Account
           </Button>
         </div>
       </div>
@@ -83,7 +87,7 @@ export default function Membership() {
         <div className="relative container max-w-7xl mx-auto px-4 py-12 md:py-20">
           <div className="text-center space-y-4 max-w-2xl mx-auto animate-fade-in-up">
             <Badge className="bg-primary/10 text-primary border-primary/20 shadow-none px-4 py-1.5">
-              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
               Membership Plans
             </Badge>
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold font-jakarta tracking-tight">
@@ -117,8 +121,8 @@ export default function Membership() {
                     subscription?.is_paused ? "bg-amber-100 dark:bg-amber-900/40" : "bg-emerald-100 dark:bg-emerald-900/40"
                   )}>
                     {subscription?.is_paused
-                      ? <PauseCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                      : <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                      ? <RiPauseCircleLine className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      : <RiCheckboxCircleLine className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                     }
                   </div>
                   <div>
@@ -148,9 +152,9 @@ export default function Membership() {
                   onClick={() => setPauseResumeDialogOpen(true)}
                 >
                   {subscription?.is_paused ? (
-                    <><PlayCircle className="w-4 h-4 mr-1.5" /> Resume</>
+                    <><RiPlayCircleLine className="w-4 h-4 mr-1.5" /> Resume</>
                   ) : (
-                    <><PauseCircle className="w-4 h-4 mr-1.5" /> Pause</>
+                    <><RiPauseCircleLine className="w-4 h-4 mr-1.5" /> Pause</>
                   )}
                 </Button>
               </div>
@@ -158,7 +162,7 @@ export default function Membership() {
               {subscription?.is_paused && (
                 <div className="mt-4 p-3 rounded-xl bg-amber-100/50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <div className="flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <RiAlertLine className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-muted-foreground">
                       <p className="font-medium text-foreground">Your membership is on hold</p>
                       <p className="mt-0.5">While paused, you won't be charged and credits won't be issued. Resume anytime.</p>
@@ -218,7 +222,7 @@ export default function Membership() {
                   </div>
 
                   <Badge variant="secondary" className="text-xs px-3 py-1 rounded-lg">
-                    <Zap className="w-3 h-3 mr-1" />
+                    <RiFlashlightLine className="w-3 h-3 mr-1" />
                     {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month &middot; Save {tier.discount}
                   </Badge>
                 </CardHeader>
@@ -229,7 +233,7 @@ export default function Membership() {
                   <ul className="space-y-3">
                     {tier.features.map((feature, i) => (
                       <li key={i} className="flex items-start gap-2.5">
-                        <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                         <span className="text-sm text-muted-foreground">{feature}</span>
                       </li>
                     ))}
@@ -240,7 +244,7 @@ export default function Membership() {
                     tier.popular ? "bg-gradient-primary" : "bg-primary hover:bg-primary/90"
                   )}>
                     View Plan Details
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <RiArrowRightLine className="w-4 h-4 ml-2" />
                   </Button>
 
                   <p className="text-[11px] text-center text-muted-foreground">
@@ -264,9 +268,9 @@ export default function Membership() {
           <CardContent className="pb-10">
             <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
               {[
-                { icon: Gift, title: "Monthly Credits", desc: "Use your credits for professional cleaning services, anytime you need them" },
-                { icon: Zap, title: "Exclusive Discounts", desc: "Save up to 30% on all add-ons, upgrades, and extra cleaning hours" },
-                { icon: Calendar, title: "Flexible Scheduling", desc: "Priority booking windows and easy rescheduling with no fees" },
+                { icon: RiGiftLine, title: "Monthly Credits", desc: "Use your credits for professional cleaning services, anytime you need them" },
+                { icon: RiFlashlightLine, title: "Exclusive Discounts", desc: "Save up to 30% on all add-ons, upgrades, and extra cleaning hours" },
+                { icon: RiCalendarLine, title: "Flexible Scheduling", desc: "Priority booking windows and easy rescheduling with no fees" },
               ].map((item, i) => (
                 <div key={i} className="text-center space-y-3">
                   <div className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-lavender)' }}>

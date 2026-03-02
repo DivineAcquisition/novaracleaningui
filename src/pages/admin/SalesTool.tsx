@@ -536,7 +536,29 @@ export default function SalesTool() {
       }
 
       try { await supabase.functions.invoke("send-zapier-webhook", { body: { bookingId: booking.id } }); } catch (e) { console.error("Webhook error:", e); }
-      try { await supabase.functions.invoke("send-booking-email", { body: { bookingId: booking.id, type: "confirmation" } }); } catch (e) { console.error("Email error:", e); }
+      try {
+        await supabase.functions.invoke("send-booking-email", {
+          body: {
+            type: "confirmation",
+            email,
+            data: {
+              firstName, lastName, bookingId: booking.id,
+              serviceDate, timeSlot, serviceType,
+              homeSize: homeSizeId, homeSizeId,
+              address: street, city, state, zipCode,
+              totalAmount: adjustedTotal, depositAmount: DEPOSIT_AMOUNT,
+              balanceAmount: adjustedTotal - DEPOSIT_AMOUNT,
+              paymentOption: paymentStatus === "Paid in Full" ? "full" : "deposit",
+              addOns, frequency,
+            },
+          },
+        });
+      } catch (e) { console.error("Email error:", e); }
+      try {
+        await supabase.functions.invoke("create-google-calendar-event", {
+          body: { bookingId: booking.id },
+        });
+      } catch (e) { console.error("Calendar error:", e); }
 
       // Send all data to GHL webhook
       try {
