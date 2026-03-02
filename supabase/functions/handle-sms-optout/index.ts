@@ -33,7 +33,7 @@ serve(async (req) => {
     const cleanPhone = phone.replace(/\D/g, "");
 
     // Check if message contains STOP keyword
-    const isOptOut = message?.toUpperCase().includes("STOP") || true;
+    const isOptOut = !message || message.toUpperCase().includes("STOP");
 
     if (!isOptOut) {
       return new Response(

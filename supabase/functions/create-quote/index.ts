@@ -49,8 +49,35 @@ serve(async (req) => {
 
     logStep("Quote request stored", { quoteId: data.id });
 
-    // TODO: Send notification email to ops team using Resend
-    // await sendQuoteRequestEmail({ fullName, email, phone, sqft, address });
+    // Send notification email to ops team
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (resendApiKey) {
+      try {
+        const notificationHtml = `
+          <h2>New Custom Quote Request</h2>
+          <table style="border-collapse:collapse;width:100%">
+            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Name</td><td style="padding:8px;border:1px solid #ddd">${fullName}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Email</td><td style="padding:8px;border:1px solid #ddd">${email}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Phone</td><td style="padding:8px;border:1px solid #ddd">${phone}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Address</td><td style="padding:8px;border:1px solid #ddd">${address}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Sq Ft</td><td style="padding:8px;border:1px solid #ddd">${sqft}</td></tr>
+            ${notes ? `<tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Notes</td><td style="padding:8px;border:1px solid #ddd">${notes}</td></tr>` : ''}
+          </table>
+        `;
+
+        const { Resend } = await import("https://esm.sh/resend@4.0.0");
+        const resend = new Resend(resendApiKey);
+        await resend.emails.send({
+          from: "Novara Cleaning <hello@novaracleaning.com>",
+          to: ["admin@novaracleaning.com"],
+          subject: `New Custom Quote Request - ${fullName} (${sqft} sqft)`,
+          html: notificationHtml,
+        });
+        logStep("Notification email sent to ops team");
+      } catch (emailErr: any) {
+        logStep("Failed to send notification email (non-critical)", { error: emailErr.message });
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, message: "Quote request received", quoteId: data.id }),

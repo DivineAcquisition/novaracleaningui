@@ -114,32 +114,50 @@ Deno.serve(async (req) => {
 
     // Release availability slot
     if (booking.service_date && booking.time_slot) {
-      const { error: availError } = await supabase
-        .from('availability')
-        .update({ 
-          capacity: supabase.rpc('increment', { x: 1 }) as any
-        })
-        .eq('service_date', booking.service_date)
-        .eq('time_window', booking.time_slot);
+      try {
+        await supabase.rpc('release_time_slot', {
+          _date: booking.service_date,
+          _start_time: booking.time_slot.split(' - ')[0] || booking.time_slot,
+          _end_time: booking.time_slot.split(' - ')[1] || booking.time_slot,
+        });
+        logStep("Availability slot released via RPC");
+      } catch (rpcError) {
+        // Fallback: decrement current_bookings directly
+        const { error: availError } = await supabase
+          .from('availability_slots')
+          .update({
+            current_bookings: Math.max(0, (booking as any).current_bookings - 1),
+          })
+          .eq('service_date', booking.service_date)
+          .eq('time_slot', booking.time_slot);
 
-      if (availError) {
-        logStep("Failed to release availability (non-critical)", availError);
-      } else {
-        logStep("Availability slot released");
+        if (availError) {
+          logStep("Failed to release availability (non-critical)", availError);
+        } else {
+          logStep("Availability slot released via direct update");
+        }
       }
     }
 
     // If cleaner was assigned, update their stats
     if (booking.cleaner_id) {
-      const { error: cleanerError } = await supabase
+      const { data: cleaner } = await supabase
         .from('cleaners')
-        .update({
-          total_bookings: supabase.rpc('decrement', { x: 1 }) as any,
-        })
-        .eq('id', booking.cleaner_id);
+        .select('total_bookings')
+        .eq('id', booking.cleaner_id)
+        .single();
 
-      if (cleanerError) {
-        logStep("Failed to update cleaner stats (non-critical)", cleanerError);
+      if (cleaner) {
+        const { error: cleanerError } = await supabase
+          .from('cleaners')
+          .update({
+            total_bookings: Math.max(0, (cleaner.total_bookings || 1) - 1),
+          })
+          .eq('id', booking.cleaner_id);
+
+        if (cleanerError) {
+          logStep("Failed to update cleaner stats (non-critical)", cleanerError);
+        }
       }
     }
 

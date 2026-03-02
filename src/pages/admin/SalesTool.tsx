@@ -544,7 +544,8 @@ export default function SalesTool() {
             data: {
               firstName, lastName, bookingId: booking.id,
               serviceDate, timeSlot, serviceType,
-              homeSize: homeSizeId, homeSizeId,
+              homeSize: HOME_SIZE_RANGES.find(h => h.id === homeSizeId)?.label || homeSizeId,
+              homeSizeId,
               address: street, city, state, zipCode,
               totalAmount: adjustedTotal, depositAmount: DEPOSIT_AMOUNT,
               balanceAmount: adjustedTotal - DEPOSIT_AMOUNT,
