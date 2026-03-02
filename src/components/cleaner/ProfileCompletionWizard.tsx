@@ -140,18 +140,18 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
         if (cleaner.avatar_url) {
           const oldPath = cleaner.avatar_url.split("/").pop();
           if (oldPath) {
-            await supabase.storage.from("avatars").remove([`avatars/${oldPath}`]);
+            await supabase.storage.from("cleaner-avatars").remove([`avatars/${oldPath}`]);
           }
         }
 
         // Upload new avatar
         const { error: uploadError } = await supabase.storage
-          .from("avatars")
+          .from("cleaner-avatars")
           .upload(filePath, avatarFile, { upsert: true });
 
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
+        const { data: urlData } = supabase.storage.from("cleaner-avatars").getPublicUrl(filePath);
         avatarUrl = urlData.publicUrl;
       }
 

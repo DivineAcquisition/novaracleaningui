@@ -24,7 +24,7 @@ const MIGMA_TEMPLATES = {
 };
 
 interface BookingEmailRequest {
-  type: 'confirmation' | 'payment_receipt' | 'modification' | 'cancellation';
+  type: 'confirmation' | 'payment_receipt' | 'modification' | 'cancellation' | 'completion';
   email: string;
   data: {
     firstName?: string;
@@ -258,6 +258,10 @@ serve(async (req: Request) => {
       const { BookingCancellation } = await import('../_shared/email-templates/BookingCancellation.tsx');
       html = await renderAsync(React.createElement(BookingCancellation, { bookingData }));
       subject = `Booking Cancelled - Novara Cleaning`;
+    } else if (type === 'completion') {
+      const { BookingThankYou } = await import('../_shared/email-templates/BookingThankYou.tsx');
+      html = await renderAsync(React.createElement(BookingThankYou, data));
+      subject = `Thank You for Choosing Novara Cleaning! ✨`;
     } else {
       throw new Error(`Unknown email type: ${type}`);
     }

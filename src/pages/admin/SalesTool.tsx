@@ -600,7 +600,8 @@ export default function SalesTool() {
             hourly_rate: c.hourlyRate, distance: c.distance,
           })),
         };
-        await fetch("https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/dQxXR74sgYXEvShKnBKO", {
+        const ghlWebhookUrl = import.meta.env.VITE_GHL_BOOKING_WEBHOOK_URL || "https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/dQxXR74sgYXEvShKnBKO";
+        await fetch(ghlWebhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(ghlPayload),

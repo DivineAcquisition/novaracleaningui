@@ -182,3 +182,27 @@ verify_jwt = false
 
 [functions.send-sales-quote-email]
 verify_jwt = false
+
+[functions.modify-booking]
+verify_jwt = true
+
+[functions.handle-sms-optout]
+verify_jwt = false
+
+[functions.create-stripe-login-link]
+verify_jwt = true
+
+[functions.generate-booking-referral-code]
+verify_jwt = false
+
+[functions.get-saved-payment-methods]
+verify_jwt = false
+
+[functions.apply-referral-credit]
+verify_jwt = false
+
+[functions.sms-consent]
+verify_jwt = false
+
+[functions.submit-rating]
+verify_jwt = false

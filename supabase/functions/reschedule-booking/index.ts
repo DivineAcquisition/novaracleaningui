@@ -199,8 +199,9 @@ serve(async (req) => {
         "Rescheduled At": new Date().toISOString(),
       };
 
+      const ghlRescheduleWebhook = Deno.env.get("GHL_RESCHEDULE_WEBHOOK_URL") || 'https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/f8326cbb-8ef8-4220-bd54-746e909bcb2f';
       const ghlRes = await fetch(
-        'https://services.leadconnectorhq.com/hooks/fJddieqJDUjUoYAGOvbk/webhook-trigger/f8326cbb-8ef8-4220-bd54-746e909bcb2f',
+        ghlRescheduleWebhook,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

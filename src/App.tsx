@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -5,48 +6,69 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { BookingProvider } from "@/contexts/BookingContext";
 import { AuthProvider } from "@/contexts/AuthContext";
-import Index from "./pages/Index";
-import Demo from "./pages/Demo";
-import Auth from "./pages/Auth";
-import Account from "./pages/Account";
-import Membership from "./pages/Membership";
-import PlanDetail from "./pages/membership/PlanDetail";
-import MembershipSuccess from "./pages/membership/MembershipSuccess";
-import ResetPassword from "./pages/ResetPassword";
-import UpdatePassword from "./pages/UpdatePassword";
-import AuthCallback from "./pages/AuthCallback";
-import BookingZip from "./pages/book/Zip";
-import BookingHome from "./pages/book/Home";
-import BookingOffer from "./pages/book/Offer";
-import BookingCheckout from "./pages/book/Checkout";
-import PropertyDetails from "./pages/book/PropertyDetails";
-import BookingSuccess from "./pages/book/Success";
-import CustomQuote from "./pages/book/CustomQuote";
-import NotFound from "./pages/NotFound";
-import AdminCleaners from "./pages/admin/Cleaners";
-import AdminWebhooks from "./pages/admin/WebhookMonitor";
-import WebhookTester from "./pages/admin/WebhookTester";
-import DispatchQueue from "./pages/admin/DispatchQueue";
-import CleanerDirectory from "./pages/admin/CleanerDirectory";
-import BookingIntake from "./pages/admin/BookingIntake";
-import SalesTool from "./pages/admin/SalesTool";
-import LeadPipeline from "./pages/admin/LeadPipeline";
-import AdminDashboard from "./pages/admin/Dashboard";
-import AdminBookings from "./pages/admin/Bookings";
-import AdminCustomers from "./pages/admin/Customers";
-import CleanerAuth from "./pages/cleaner/Auth";
-import CleanerAuthCallback from "./pages/cleaner/AuthCallback";
-import CleanerResetPassword from "./pages/cleaner/ResetPassword";
-import CleanerOnboarding from "./pages/cleaner/Onboarding";
-import CleanerDashboard from "./pages/cleaner/Dashboard";
-import CleanerOnboardingPortal from "./pages/cleaner/OnboardingPortal";
-import PricingSheet from "./pages/PricingSheet";
-import SmsConsent from "./pages/SmsConsent";
-import MemberBooking from "./pages/portal/MemberBooking";
-import AdminAuth from "./pages/admin/Auth";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DomainRestricted } from "./components/auth/DomainRestricted";
 import { DomainRouter } from "./components/auth/DomainRouter";
+import { Loader2 } from "lucide-react";
+
+// Eagerly loaded - core customer pages
+import Index from "./pages/Index";
+import Auth from "./pages/Auth";
+import Account from "./pages/Account";
+import AuthCallback from "./pages/AuthCallback";
+import ResetPassword from "./pages/ResetPassword";
+import UpdatePassword from "./pages/UpdatePassword";
+import NotFound from "./pages/NotFound";
+
+// Lazy loaded - booking flow (only on try subdomain)
+const BookingZip = lazy(() => import("./pages/book/Zip"));
+const BookingHome = lazy(() => import("./pages/book/Home"));
+const BookingOffer = lazy(() => import("./pages/book/Offer"));
+const BookingCheckout = lazy(() => import("./pages/book/Checkout"));
+const PropertyDetails = lazy(() => import("./pages/book/PropertyDetails"));
+const BookingSuccess = lazy(() => import("./pages/book/Success"));
+const CustomQuote = lazy(() => import("./pages/book/CustomQuote"));
+
+// Lazy loaded - membership
+const Membership = lazy(() => import("./pages/Membership"));
+const PlanDetail = lazy(() => import("./pages/membership/PlanDetail"));
+const MembershipSuccess = lazy(() => import("./pages/membership/MembershipSuccess"));
+const MemberBooking = lazy(() => import("./pages/portal/MemberBooking"));
+
+// Lazy loaded - admin portal (only on admin subdomain)
+const AdminAuth = lazy(() => import("./pages/admin/Auth"));
+const AdminDashboard = lazy(() => import("./pages/admin/Dashboard"));
+const AdminBookings = lazy(() => import("./pages/admin/Bookings"));
+const AdminCustomers = lazy(() => import("./pages/admin/Customers"));
+const AdminCleaners = lazy(() => import("./pages/admin/Cleaners"));
+const AdminWebhooks = lazy(() => import("./pages/admin/WebhookMonitor"));
+const WebhookTester = lazy(() => import("./pages/admin/WebhookTester"));
+const DispatchQueue = lazy(() => import("./pages/admin/DispatchQueue"));
+const CleanerDirectory = lazy(() => import("./pages/admin/CleanerDirectory"));
+const BookingIntake = lazy(() => import("./pages/admin/BookingIntake"));
+const SalesTool = lazy(() => import("./pages/admin/SalesTool"));
+const LeadPipeline = lazy(() => import("./pages/admin/LeadPipeline"));
+
+// Lazy loaded - cleaner portal (only on contractor subdomain)
+const CleanerAuth = lazy(() => import("./pages/cleaner/Auth"));
+const CleanerAuthCallback = lazy(() => import("./pages/cleaner/AuthCallback"));
+const CleanerResetPassword = lazy(() => import("./pages/cleaner/ResetPassword"));
+const CleanerOnboarding = lazy(() => import("./pages/cleaner/Onboarding"));
+const CleanerDashboard = lazy(() => import("./pages/cleaner/Dashboard"));
+const CleanerOnboardingPortal = lazy(() => import("./pages/cleaner/OnboardingPortal"));
+
+// Lazy loaded - misc
+const Demo = lazy(() => import("./pages/Demo"));
+const PricingSheet = lazy(() => import("./pages/PricingSheet"));
+const SmsConsent = lazy(() => import("./pages/SmsConsent"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 // Allowed domains for each portal
 const BOOKING_ALLOWED_DOMAINS = ['try.novaracleaning.com'];
@@ -74,6 +96,7 @@ const App = () => (
         <AuthProvider>
           <BookingProvider>
             <DomainRouter>
+            <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<Demo />} />
@@ -204,7 +227,11 @@ const App = () => (
                   <ProtectedRoute requiredRole="admin"><BookingIntake /></ProtectedRoute>
                 </DomainRestricted>
               } />
-              <Route path="/admin/sales" element={<SalesTool />} />
+              <Route path="/admin/sales" element={
+                <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
+                  <SalesTool />
+                </DomainRestricted>
+              } />
               <Route path="/admin/pipeline" element={
                 <DomainRestricted allowedDomains={ADMIN_ALLOWED_DOMAINS} redirectTo="/">
                   <ProtectedRoute requiredRole="admin"><LeadPipeline /></ProtectedRoute>
@@ -261,6 +288,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
             </DomainRouter>
           </BookingProvider>
         </AuthProvider>

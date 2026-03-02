@@ -123,6 +123,31 @@ serve(async (req) => {
       }
     }
 
+    // Send thank-you email to customer
+    try {
+      await supabase.functions.invoke('send-booking-email', {
+        body: {
+          type: 'completion',
+          email: booking.email,
+          data: {
+            firstName: booking.first_name,
+            bookingId,
+            serviceDate: booking.service_date,
+            timeSlot: booking.time_slot,
+            serviceType: booking.service_type,
+            address: booking.address,
+            city: booking.city,
+            state: booking.state,
+            zipCode: booking.zip_code,
+            totalAmount: booking.total_estimate_cents,
+          },
+        },
+      });
+      logStep("Customer thank-you email sent");
+    } catch (emailError) {
+      logStep("Customer email failed (non-critical)", { error: emailError });
+    }
+
     // Trigger Zapier webhook for completed booking
     try {
       await supabase.functions.invoke('send-zapier-webhook', {

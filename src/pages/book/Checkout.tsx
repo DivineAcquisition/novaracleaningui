@@ -141,11 +141,13 @@ export default function BookingCheckout() {
           error
         } = await supabase.functions.invoke('get-stripe-publishable-key');
         if (error || !data?.key) {
-          const response = await fetch('https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/get-stripe-publishable-key', {
+          const sbUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co';
+          const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
+          const response = await fetch(`${sbUrl}/functions/v1/get-stripe-publishable-key`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I'
+              'apikey': sbKey
             }
           });
           if (!response.ok) throw new Error('Failed to fetch Stripe key');
@@ -344,8 +346,8 @@ export default function BookingCheckout() {
       email,
       customerEmail: email // Also send as customerEmail for backward compatibility
     };
-    const FUNCTION_URL = 'https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/create-payment-intent';
-    const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
+    const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/create-payment-intent`;
+    const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
     try {
       console.log(`[Checkout] Initializing payment intent (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
       let data: any = null;
