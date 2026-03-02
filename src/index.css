@@ -139,13 +139,11 @@ All colors MUST be HSL.
     @apply bg-background text-foreground font-sans;
   }
   
-  /* Custom focus styles with enhanced visibility and brand consistency */
   *:focus-visible {
     @apply outline-none ring-[3px] ring-primary ring-offset-2 ring-offset-background;
     transition: box-shadow 0.2s ease-in-out;
   }
   
-  /* Enhanced focus for interactive elements */
   button:focus-visible,
   a:focus-visible,
   input:focus-visible,
@@ -159,48 +157,53 @@ All colors MUST be HSL.
     box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 5px hsl(var(--focus-ring));
   }
   
-  /* Focus for card-based interactions */
   .card-interactive:focus-visible {
     @apply ring-[3px] ring-primary ring-offset-2 ring-offset-background border-primary/50;
   }
   
-  /* Skip to content link for keyboard users */
   .skip-to-content:focus {
     @apply fixed top-4 left-4 z-50 px-4 py-2 bg-primary text-primary-foreground rounded-md;
     @apply ring-4 ring-primary-glow ring-offset-2 ring-offset-background;
   }
   
   @keyframes slide-up {
-    from {
-      opacity: 0;
-      transform: translateY(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
   }
   
   @keyframes slide-in-from-right {
-    from {
-      opacity: 0;
-      transform: translateX(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
   }
   
   @keyframes slide-in-from-left {
-    from {
-      opacity: 0;
-      transform: translateX(-20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
   
   .animate-slide-up {
@@ -214,6 +217,24 @@ All colors MUST be HSL.
   .animate-slide-in-left {
     animation: slide-in-from-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
 }
 
 @layer components {
@@ -231,6 +252,27 @@ All colors MUST be HSL.
     @apply hover:border-primary/50 hover:shadow-lg;
     @apply active:border-primary active:shadow-md;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  .glass {
+    @apply bg-background/70 backdrop-blur-xl border border-white/20;
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-lg border border-border/50 shadow-lg;
+  }
+
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .shimmer-bg {
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.08), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
   }
 }
 

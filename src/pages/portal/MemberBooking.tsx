@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMembershipCredits } from '@/hooks/use-membership-credits';
-import { useAvailability } from '@/hooks/use-availability';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,28 +12,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
-  Calendar,
-  Check,
-  Clock,
-  CreditCard,
-  Home,
-  Loader2,
-  MapPin,
-  Sparkles,
-  Star,
-  User,
+  AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, Clock,
+  CreditCard, Home, Loader2, MapPin, Sparkles, Star, User, Ticket,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, addDays, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CleanerSelector } from '@/components/portal/CleanerSelector';
 import { SchedulePicker } from '@/components/booking/SchedulePicker';
 import { HOME_SIZE_RANGES } from '@/lib/pricing-system';
 
-// Steps for the booking flow
 const STEPS = [
   { id: 'address', label: 'Address', icon: MapPin },
   { id: 'schedule', label: 'Schedule', icon: Calendar },
@@ -59,50 +46,33 @@ export default function MemberBooking() {
   const { user, subscription } = useAuth();
   const { credits, loading: creditsLoading, hasCredits } = useMembershipCredits();
 
-  // Form state
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Address state
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [isNewAddress, setIsNewAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({
-    street: '',
-    unit: '',
-    city: '',
-    state: '',
-    zip: '',
-    sqft_tier: '',
-    bedrooms: '',
-    bathrooms: '',
+    street: '', unit: '', city: '', state: '', zip: '', sqft_tier: '', bedrooms: '', bathrooms: '',
   });
 
-  // Contact info state
   const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
-
-  // Service type state
   const [serviceType, setServiceType] = useState<'standard' | 'deep'>('standard');
-  const DEEP_CLEAN_UPSELL = 6500; // $65 in cents
+  const DEEP_CLEAN_UPSELL = 6500;
 
-  // Schedule state
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [startTime, setStartTime] = useState<string>('');
   const [endTime, setEndTime] = useState<string>('');
 
-  // Cleaner state
   const [selectedCleanerId, setSelectedCleanerId] = useState<string | null>(null);
   const [selectedCleanerName, setSelectedCleanerName] = useState<string>('');
   const [specialInstructions, setSpecialInstructions] = useState('');
 
-  // Load saved addresses and customer phone
   useEffect(() => {
     const fetchCustomerData = async () => {
       if (!user?.id) return;
-
-      // Find customer by email
       const { data: customer } = await supabase
         .from('customers')
         .select('id, phone')
@@ -110,11 +80,7 @@ export default function MemberBooking() {
         .single();
 
       if (!customer) return;
-
-      // Set phone if available
-      if (customer.phone) {
-        setPhone(customer.phone);
-      }
+      if (customer.phone) setPhone(customer.phone);
 
       const { data: addresses } = await supabase
         .from('addresses')
@@ -129,22 +95,16 @@ export default function MemberBooking() {
         setIsNewAddress(true);
       }
     };
-
     fetchCustomerData();
   }, [user]);
 
-  // Redirect if not logged in or not a member
   useEffect(() => {
     if (creditsLoading) return;
-    
-    // Not logged in - redirect to auth
     if (!user) {
       toast.error('Please sign in to access member booking');
       navigate('/auth', { state: { returnTo: '/portal/book' } });
       return;
     }
-    
-    // Not a member - redirect to membership page
     if (!subscription?.subscribed) {
       toast.error('You need an active membership to use credits');
       navigate('/membership');
@@ -158,7 +118,6 @@ export default function MemberBooking() {
     return addressForm.zip;
   };
 
-  // Phone number formatting and validation
   const formatPhoneNumber = (value: string) => {
     const digits = value.replace(/\D/g, '');
     if (digits.length <= 3) return digits;
@@ -184,48 +143,27 @@ export default function MemberBooking() {
   const canProceed = () => {
     const phoneDigits = phone.replace(/\D/g, '');
     const hasValidPhone = phoneDigits.length >= 10;
-    
     switch (currentStep) {
-      case 0: // Address + Phone
+      case 0:
         if (isNewAddress) {
-          return (
-            addressForm.street &&
-            addressForm.city &&
-            addressForm.state &&
-            addressForm.zip &&
-            addressForm.sqft_tier &&
-            hasValidPhone
-          );
+          return addressForm.street && addressForm.city && addressForm.state && addressForm.zip && addressForm.sqft_tier && hasValidPhone;
         }
         return selectedAddressId !== null && hasValidPhone;
-      case 1: // Schedule
-        return selectedDate && selectedTimeSlot;
-      case 2: // Cleaner (optional)
-        return true;
-      case 3: // Confirm
-        return true;
-      default:
-        return false;
+      case 1: return selectedDate && selectedTimeSlot;
+      case 2: return true;
+      case 3: return true;
+      default: return false;
     }
   };
 
   const handleNext = () => {
-    // Validate phone on step 0
-    if (currentStep === 0 && !validatePhone()) {
-      return;
-    }
-    
-    if (currentStep < STEPS.length - 1) {
-      setCurrentStep(currentStep + 1);
-    }
+    if (currentStep === 0 && !validatePhone()) return;
+    if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1);
   };
 
   const handleBack = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    } else {
-      navigate('/account');
-    }
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
+    else navigate('/account');
   };
 
   const handleSubmitBooking = async () => {
@@ -233,16 +171,13 @@ export default function MemberBooking() {
       toast.error('Please log in to continue');
       return;
     }
-
     if (!hasCredits) {
       toast.error('No credits available');
       return;
     }
 
     setIsSubmitting(true);
-
     try {
-      // Get or create customer
       let { data: customer } = await supabase
         .from('customers')
         .select('id, first_name, last_name, phone')
@@ -263,22 +198,15 @@ export default function MemberBooking() {
           })
           .select()
           .single();
-
         if (customerError) throw customerError;
         customer = newCustomer;
       } else if (!customer.phone || customer.phone !== phoneDigits) {
-        // Update customer phone if changed or missing
-        await supabase
-          .from('customers')
-          .update({ phone: phoneDigits })
-          .eq('id', customer.id);
+        await supabase.from('customers').update({ phone: phoneDigits }).eq('id', customer.id);
         customer.phone = phoneDigits;
       }
 
-      // Handle address
       let addressData;
       if (isNewAddress) {
-        // Create new address
         const { data: newAddress, error: addressError } = await supabase
           .from('addresses')
           .insert({
@@ -294,26 +222,19 @@ export default function MemberBooking() {
           })
           .select()
           .single();
-
         if (addressError) throw addressError;
         addressData = newAddress;
       } else {
         addressData = selectedAddress;
       }
 
-      if (!addressData) {
-        throw new Error('No address selected');
-      }
+      if (!addressData) throw new Error('No address selected');
 
-      // Build dispatch notes with cleaner request if applicable
-      const dispatchNotes = selectedCleanerId 
-        ? `REQUESTED CLEANER: ${selectedCleanerName} (ID: ${selectedCleanerId})` 
+      const dispatchNotes = selectedCleanerId
+        ? `REQUESTED CLEANER: ${selectedCleanerName} (ID: ${selectedCleanerId})`
         : null;
-
-      // Calculate upsell price for deep clean
       const upsellAmount = serviceType === 'deep' ? DEEP_CLEAN_UPSELL : 0;
 
-      // Create the booking
       const bookingData = {
         customer_id: customer.id,
         email: user.email!,
@@ -334,14 +255,12 @@ export default function MemberBooking() {
         membership_plan: credits.membership_plan,
         uses_credit: true,
         base_price_cents: upsellAmount,
-        deposit_cents: upsellAmount, // Full upsell amount charged at booking
+        deposit_cents: upsellAmount,
         total_estimate_cents: upsellAmount,
-        status: upsellAmount > 0 ? 'pending_payment' : 'confirmed', // Needs payment if upsell
+        status: upsellAmount > 0 ? 'pending_payment' : 'confirmed',
         access_notes: specialInstructions || null,
         dispatch_notes: dispatchNotes,
         booking_channel: 'portal',
-        // cleaner_id left null - will be assigned by dispatch system
-        // The requested cleaner preference is stored in dispatch_notes
       };
 
       const { data: booking, error: bookingError } = await supabase
@@ -349,10 +268,8 @@ export default function MemberBooking() {
         .insert(bookingData)
         .select()
         .single();
-
       if (bookingError) throw bookingError;
 
-      // Decrement credit
       const { error: creditError } = await supabase
         .from('membership_credits')
         .update({
@@ -361,12 +278,8 @@ export default function MemberBooking() {
         })
         .eq('id', (credits as any).id);
 
-      if (creditError) {
-        console.error('Error updating credits:', creditError);
-        // Don't throw - booking was successful
-      }
+      if (creditError) console.error('Error updating credits:', creditError);
 
-      // Reserve the time slot
       if (startTime && endTime) {
         await supabase.rpc('reserve_time_slot', {
           _date: format(selectedDate!, 'yyyy-MM-dd'),
@@ -375,15 +288,12 @@ export default function MemberBooking() {
         });
       }
 
-      // Handle deep clean upsell payment
       if (serviceType === 'deep') {
         toast.success('Booking created! Redirecting to payment...');
-        // Redirect to checkout for the upsell payment
         navigate(`/book/checkout?booking_id=${booking.id}&upsell=deep`);
         return;
       }
 
-      // Send confirmation email for standard clean (no payment needed)
       try {
         await supabase.functions.invoke('send-booking-email', {
           body: { bookingId: booking.id, type: 'confirmation' },
@@ -402,13 +312,12 @@ export default function MemberBooking() {
     }
   };
 
-  // Loading state
   if (creditsLoading || !user) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center animate-fade-in">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {!user ? 'Checking authentication...' : 'Loading your membership...'}
           </p>
         </div>
@@ -416,29 +325,29 @@ export default function MemberBooking() {
     );
   }
 
-  // No credits state
   if (!hasCredits) {
     return (
-      <div className="min-h-screen bg-gradient-hero">
-        <div className="container max-w-2xl mx-auto px-4 py-12">
-          <Card className="border-warning/50">
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-2xl mx-auto px-4 py-16">
+          <Card className="border-amber-200 dark:border-amber-800 shadow-lg animate-scale-in">
             <CardContent className="py-12 text-center space-y-4">
-              <AlertCircle className="w-16 h-16 text-warning mx-auto" />
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+              </div>
               <h2 className="text-2xl font-bold">No Credits Available</h2>
-              <p className="text-muted-foreground max-w-md mx-auto">
-                You've used all your cleaning credits for this period. Your credits will
-                refresh on{' '}
-                {credits?.current_period_end
-                  ? format(new Date(credits.current_period_end), 'MMMM d, yyyy')
-                  : 'your next billing date'}
-                .
+              <p className="text-muted-foreground max-w-md mx-auto text-sm">
+                You've used all your cleaning credits for this period. Credits refresh on{' '}
+                <span className="font-semibold text-foreground">
+                  {credits?.current_period_end
+                    ? format(new Date(credits.current_period_end), 'MMMM d, yyyy')
+                    : 'your next billing date'}
+                </span>.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-                <Button onClick={() => navigate('/account')} variant="outline">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Account
+                <Button onClick={() => navigate('/account')} variant="outline" className="rounded-xl">
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Back to Account
                 </Button>
-                <Button onClick={() => navigate('/book/zip')} className="bg-gradient-primary">
+                <Button onClick={() => navigate('/book/zip')} className="bg-gradient-primary rounded-xl shadow-md">
                   Book Without Credit
                 </Button>
               </div>
@@ -449,29 +358,34 @@ export default function MemberBooking() {
     );
   }
 
+  const progressPercent = ((currentStep + 1) / STEPS.length) * 100;
+
   return (
-    <div className="min-h-screen bg-gradient-hero pb-24 md:pb-8">
+    <div className="min-h-screen bg-background pb-24 md:pb-8">
       {/* Header */}
-      <div className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-10">
-        <div className="container max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={handleBack}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
+      <div className="bg-background border-b border-border/50 sticky top-0 z-10">
+        <div className="container max-w-4xl mx-auto px-4">
+          <div className="flex items-center justify-between h-14">
+            <Button variant="ghost" size="sm" onClick={handleBack} className="-ml-2">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
               {currentStep === 0 ? 'Account' : 'Back'}
             </Button>
-
-            <div className="flex items-center gap-2">
-              <Badge className="bg-primary/10 text-primary">
-                <Sparkles className="w-3 h-3 mr-1" />
-                {credits?.credits_remaining} Credit{credits?.credits_remaining !== 1 ? 's' : ''}{' '}
-                Available
-              </Badge>
-            </div>
+            <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg px-3 py-1">
+              <Ticket className="w-3.5 h-3.5 mr-1.5" />
+              <span className="font-semibold text-xs">{credits?.credits_remaining} Credit{credits?.credits_remaining !== 1 ? 's' : ''}</span>
+            </Badge>
+          </div>
+          {/* Progress bar */}
+          <div className="h-0.5 -mx-4 bg-muted">
+            <div
+              className="h-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%`, background: 'var(--gradient-primary)' }}
+            />
           </div>
         </div>
       </div>
 
-      {/* Progress Steps */}
+      {/* Steps indicator */}
       <div className="container max-w-4xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-8">
           {STEPS.map((step, index) => {
@@ -480,46 +394,29 @@ export default function MemberBooking() {
             const isComplete = index < currentStep;
 
             return (
-              <div
-                key={step.id}
-                className={cn(
-                  'flex flex-col items-center gap-2 flex-1',
-                  index < STEPS.length - 1 && 'relative'
-                )}
-              >
-                <div
-                  className={cn(
-                    'w-10 h-10 rounded-full flex items-center justify-center transition-all',
-                    isActive && 'bg-primary text-white shadow-lg',
-                    isComplete && 'bg-success text-white',
-                    !isActive && !isComplete && 'bg-muted text-muted-foreground'
-                  )}
-                >
-                  {isComplete ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    <StepIcon className="w-5 h-5" />
-                  )}
+              <div key={step.id} className={cn('flex flex-col items-center gap-2 flex-1', index < STEPS.length - 1 && 'relative')}>
+                <div className={cn(
+                  'w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300',
+                  isActive && 'bg-primary text-white shadow-lg scale-110',
+                  isComplete && 'bg-emerald-500 text-white',
+                  !isActive && !isComplete && 'bg-muted text-muted-foreground'
+                )}>
+                  {isComplete ? <Check className="w-5 h-5" /> : <StepIcon className="w-5 h-5" />}
                 </div>
-                <span
-                  className={cn(
-                    'text-xs font-medium hidden sm:block',
-                    isActive && 'text-primary',
-                    isComplete && 'text-success',
-                    !isActive && !isComplete && 'text-muted-foreground'
-                  )}
-                >
+                <span className={cn(
+                  'text-[11px] font-medium hidden sm:block transition-colors',
+                  isActive && 'text-primary',
+                  isComplete && 'text-emerald-600 dark:text-emerald-400',
+                  !isActive && !isComplete && 'text-muted-foreground'
+                )}>
                   {step.label}
                 </span>
 
-                {/* Connector line */}
                 {index < STEPS.length - 1 && (
-                  <div
-                    className={cn(
-                      'absolute top-5 left-[60%] w-[80%] h-0.5',
-                      isComplete ? 'bg-success' : 'bg-muted'
-                    )}
-                  />
+                  <div className={cn(
+                    'absolute top-5 left-[60%] w-[80%] h-0.5 rounded-full transition-colors duration-300',
+                    isComplete ? 'bg-emerald-500' : 'bg-muted'
+                  )} />
                 )}
               </div>
             );
@@ -527,21 +424,20 @@ export default function MemberBooking() {
         </div>
 
         {/* Step Content */}
-        <div className="space-y-6">
-          {/* Step 0: Address Selection */}
+        <div className="space-y-6 animate-fade-in">
+          {/* Step 0: Address */}
           {currentStep === 0 && (
-            <Card>
+            <Card className="shadow-md border-border/60">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <MapPin className="w-5 h-5 text-primary" />
                   Select Your Address
                 </CardTitle>
                 <CardDescription>
-                  Choose a saved address or add a new one for your cleaning
+                  Choose a saved address or add a new one
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Saved Addresses */}
                 {savedAddresses.length > 0 && !isNewAddress && (
                   <div className="space-y-3">
                     {savedAddresses.map((address) => (
@@ -550,43 +446,39 @@ export default function MemberBooking() {
                         className={cn(
                           'cursor-pointer transition-all hover:shadow-md',
                           selectedAddressId === address.id
-                            ? 'border-2 border-primary bg-primary/5'
-                            : 'border hover:border-primary/50'
+                            ? 'border-2 border-primary bg-primary/5 shadow-md'
+                            : 'border hover:border-primary/40'
                         )}
                         onClick={() => setSelectedAddressId(address.id)}
                       >
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-3">
-                              <Home className="w-5 h-5 text-primary mt-0.5" />
+                              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5 flex-shrink-0">
+                                <Home className="w-4 h-4 text-primary" />
+                              </div>
                               <div>
-                                <p className="font-medium">
-                                  {address.street}
-                                  {address.unit && `, ${address.unit}`}
+                                <p className="font-medium text-sm">
+                                  {address.street}{address.unit && `, ${address.unit}`}
                                 </p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                   {address.city}, {address.state} {address.zip}
                                 </p>
                                 <div className="flex gap-2 mt-2">
-                                  <Badge variant="secondary" className="text-xs">
-                                    {HOME_SIZE_RANGES.find((h) => h.id === address.sqft_tier)
-                                      ?.label || address.sqft_tier}
+                                  <Badge variant="secondary" className="text-[10px] rounded-md">
+                                    {HOME_SIZE_RANGES.find((h) => h.id === address.sqft_tier)?.label || address.sqft_tier}
                                   </Badge>
                                   {address.bedrooms && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {address.bedrooms} bed
-                                    </Badge>
+                                    <Badge variant="outline" className="text-[10px] rounded-md">{address.bedrooms} bed</Badge>
                                   )}
                                   {address.bathrooms && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {address.bathrooms} bath
-                                    </Badge>
+                                    <Badge variant="outline" className="text-[10px] rounded-md">{address.bathrooms} bath</Badge>
                                   )}
                                 </div>
                               </div>
                             </div>
                             {selectedAddressId === address.id && (
-                              <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                              <div className="w-6 h-6 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
                                 <Check className="w-4 h-4 text-white" />
                               </div>
                             )}
@@ -594,162 +486,74 @@ export default function MemberBooking() {
                         </CardContent>
                       </Card>
                     ))}
-
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        setIsNewAddress(true);
-                        setSelectedAddressId(null);
-                      }}
-                    >
+                    <Button variant="outline" className="w-full rounded-xl" onClick={() => { setIsNewAddress(true); setSelectedAddressId(null); }}>
                       + Add New Address
                     </Button>
                   </div>
                 )}
 
-                {/* New Address Form */}
                 {isNewAddress && (
                   <div className="space-y-4">
                     {savedAddresses.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setIsNewAddress(false);
-                          setSelectedAddressId(savedAddresses[0]?.id || null);
-                        }}
-                      >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Use Saved Address
+                      <Button variant="ghost" size="sm" onClick={() => { setIsNewAddress(false); setSelectedAddressId(savedAddresses[0]?.id || null); }}>
+                        <ArrowLeft className="w-4 h-4 mr-2" /> Use Saved Address
                       </Button>
                     )}
-
                     <div className="grid gap-4">
                       <div className="grid grid-cols-3 gap-4">
                         <div className="col-span-2">
                           <Label htmlFor="street">Street Address</Label>
-                          <Input
-                            id="street"
-                            placeholder="123 Main St"
-                            value={addressForm.street}
-                            onChange={(e) =>
-                              setAddressForm({ ...addressForm, street: e.target.value })
-                            }
-                          />
+                          <Input id="street" placeholder="123 Main St" value={addressForm.street} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, street: e.target.value })} />
                         </div>
                         <div>
                           <Label htmlFor="unit">Unit/Apt</Label>
-                          <Input
-                            id="unit"
-                            placeholder="Apt 4B"
-                            value={addressForm.unit}
-                            onChange={(e) =>
-                              setAddressForm({ ...addressForm, unit: e.target.value })
-                            }
-                          />
+                          <Input id="unit" placeholder="Apt 4B" value={addressForm.unit} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, unit: e.target.value })} />
                         </div>
                       </div>
-
                       <div className="grid grid-cols-3 gap-4">
                         <div>
                           <Label htmlFor="city">City</Label>
-                          <Input
-                            id="city"
-                            placeholder="Dallas"
-                            value={addressForm.city}
-                            onChange={(e) =>
-                              setAddressForm({ ...addressForm, city: e.target.value })
-                            }
-                          />
+                          <Input id="city" placeholder="Dallas" value={addressForm.city} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} />
                         </div>
                         <div>
                           <Label htmlFor="state">State</Label>
-                          <Input
-                            id="state"
-                            placeholder="TX"
-                            maxLength={2}
-                            value={addressForm.state}
-                            onChange={(e) =>
-                              setAddressForm({
-                                ...addressForm,
-                                state: e.target.value.toUpperCase(),
-                              })
-                            }
-                          />
+                          <Input id="state" placeholder="TX" maxLength={2} value={addressForm.state} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value.toUpperCase() })} />
                         </div>
                         <div>
                           <Label htmlFor="zip">ZIP Code</Label>
-                          <Input
-                            id="zip"
-                            placeholder="75001"
-                            maxLength={5}
-                            value={addressForm.zip}
-                            onChange={(e) =>
-                              setAddressForm({ ...addressForm, zip: e.target.value })
-                            }
-                          />
+                          <Input id="zip" placeholder="75001" maxLength={5} value={addressForm.zip} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, zip: e.target.value })} />
                         </div>
                       </div>
-
                       <div>
                         <Label htmlFor="sqft_tier">Home Size</Label>
-                        <Select
-                          value={addressForm.sqft_tier}
-                          onValueChange={(value) =>
-                            setAddressForm({ ...addressForm, sqft_tier: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select home size" />
-                          </SelectTrigger>
+                        <Select value={addressForm.sqft_tier} onValueChange={(value) => setAddressForm({ ...addressForm, sqft_tier: value })}>
+                          <SelectTrigger className="rounded-lg"><SelectValue placeholder="Select home size" /></SelectTrigger>
                           <SelectContent>
                             {HOME_SIZE_RANGES.map((size) => (
-                              <SelectItem key={size.id} value={size.id}>
-                                {size.label}
-                              </SelectItem>
+                              <SelectItem key={size.id} value={size.id}>{size.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="bedrooms">Bedrooms</Label>
-                          <Select
-                            value={addressForm.bedrooms}
-                            onValueChange={(value) =>
-                              setAddressForm({ ...addressForm, bedrooms: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select" />
-                            </SelectTrigger>
+                          <Select value={addressForm.bedrooms} onValueChange={(value) => setAddressForm({ ...addressForm, bedrooms: value })}>
+                            <SelectTrigger className="rounded-lg"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               {[1, 2, 3, 4, 5, 6].map((num) => (
-                                <SelectItem key={num} value={num.toString()}>
-                                  {num} bedroom{num > 1 ? 's' : ''}
-                                </SelectItem>
+                                <SelectItem key={num} value={num.toString()}>{num} bedroom{num > 1 ? 's' : ''}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
                         <div>
                           <Label htmlFor="bathrooms">Bathrooms</Label>
-                          <Select
-                            value={addressForm.bathrooms}
-                            onValueChange={(value) =>
-                              setAddressForm({ ...addressForm, bathrooms: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select" />
-                            </SelectTrigger>
+                          <Select value={addressForm.bathrooms} onValueChange={(value) => setAddressForm({ ...addressForm, bathrooms: value })}>
+                            <SelectTrigger className="rounded-lg"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((num) => (
-                                <SelectItem key={num} value={num.toString()}>
-                                  {num} bathroom{num > 1 ? 's' : ''}
-                                </SelectItem>
+                                <SelectItem key={num} value={num.toString()}>{num} bathroom{num > 1 ? 's' : ''}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -759,101 +563,72 @@ export default function MemberBooking() {
                   </div>
                 )}
 
-                {/* Phone Number - Required for all bookings */}
-                <Separator className="my-4" />
+                <Separator />
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="flex items-center gap-2">
-                    Phone Number <span className="text-destructive">*</span>
+                    Phone Number <span className="text-destructive text-xs">Required</span>
                   </Label>
                   <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="(972) 555-0123"
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    className={phoneError ? 'border-destructive' : ''}
+                    id="phone" type="tel" placeholder="(972) 555-0123"
+                    value={phone} onChange={handlePhoneChange}
+                    className={cn("rounded-lg", phoneError && 'border-destructive')}
                   />
-                  {phoneError && (
-                    <p className="text-sm text-destructive">{phoneError}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    We'll send booking confirmations and updates via SMS
-                  </p>
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+                  <p className="text-[11px] text-muted-foreground">We'll send booking updates via SMS</p>
                 </div>
 
-                {/* Service Type Selection */}
-                <Separator className="my-4" />
+                <Separator />
                 <div className="space-y-3">
                   <Label className="text-base font-semibold">Service Type</Label>
                   <div className="grid gap-3">
-                    {/* Standard Clean - Free with credit */}
                     <Card
                       className={cn(
                         'cursor-pointer transition-all hover:shadow-md',
-                        serviceType === 'standard'
-                          ? 'border-2 border-primary bg-primary/5'
-                          : 'border hover:border-primary/50'
+                        serviceType === 'standard' ? 'border-2 border-primary bg-primary/5 shadow-md' : 'border hover:border-primary/40'
                       )}
                       onClick={() => setServiceType('standard')}
                     >
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'w-10 h-10 rounded-full flex items-center justify-center',
-                              serviceType === 'standard' ? 'bg-primary text-white' : 'bg-muted'
-                            )}>
+                            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', serviceType === 'standard' ? 'bg-primary text-white' : 'bg-muted')}>
                               <Sparkles className="w-5 h-5" />
                             </div>
                             <div>
-                              <h4 className="font-semibold">Standard Clean</h4>
-                              <p className="text-sm text-muted-foreground">
-                                Regular maintenance cleaning
-                              </p>
+                              <h4 className="font-semibold text-sm">Standard Clean</h4>
+                              <p className="text-xs text-muted-foreground">Regular maintenance cleaning</p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <Badge className="bg-success text-white">Included</Badge>
-                            <p className="text-xs text-muted-foreground mt-1">with credit</p>
-                          </div>
+                          <Badge className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs">Included</Badge>
                         </div>
                       </CardContent>
                     </Card>
 
-                    {/* Deep Clean - $65 upsell */}
                     <Card
                       className={cn(
                         'cursor-pointer transition-all hover:shadow-md',
-                        serviceType === 'deep'
-                          ? 'border-2 border-primary bg-primary/5'
-                          : 'border hover:border-primary/50'
+                        serviceType === 'deep' ? 'border-2 border-primary bg-primary/5 shadow-md' : 'border hover:border-primary/40'
                       )}
                       onClick={() => setServiceType('deep')}
                     >
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'w-10 h-10 rounded-full flex items-center justify-center',
-                              serviceType === 'deep' ? 'bg-primary text-white' : 'bg-muted'
-                            )}>
+                            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', serviceType === 'deep' ? 'bg-primary text-white' : 'bg-muted')}>
                               <Star className="w-5 h-5" />
                             </div>
                             <div>
-                              <h4 className="font-semibold">Deep Clean</h4>
-                              <p className="text-sm text-muted-foreground">
-                                Thorough top-to-bottom cleaning
-                              </p>
-                              <ul className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                <li>• Inside appliances & cabinets</li>
-                                <li>• Baseboards & door frames</li>
-                                <li>• Detailed bathroom scrub</li>
-                              </ul>
+                              <h4 className="font-semibold text-sm">Deep Clean</h4>
+                              <p className="text-xs text-muted-foreground">Thorough top-to-bottom cleaning</p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                                <span>Inside appliances</span>
+                                <span>Baseboards</span>
+                                <span>Detailed scrub</span>
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
+                          <div className="text-right flex-shrink-0">
                             <p className="text-lg font-bold text-primary">+$65</p>
-                            <p className="text-xs text-muted-foreground">upsell</p>
                           </div>
                         </div>
                       </CardContent>
@@ -864,44 +639,32 @@ export default function MemberBooking() {
             </Card>
           )}
 
-          {/* Step 1: Schedule Selection */}
+          {/* Step 1: Schedule */}
           {currentStep === 1 && (
-            <SchedulePicker
-              selectedDate={selectedDate}
-              selectedTime={selectedTimeSlot}
-              onDateSelect={(date) => {
-                setSelectedDate(date);
-                setSelectedTimeSlot('');
-              }}
-              onTimeSelect={(date, timeSlot, start, end) => {
-                setSelectedDate(date);
-                setSelectedTimeSlot(timeSlot);
-                setStartTime(start);
-                setEndTime(end);
-              }}
-              showContinue={false}
-            />
+            <div className="animate-fade-in">
+              <SchedulePicker
+                selectedDate={selectedDate}
+                selectedTime={selectedTimeSlot}
+                onDateSelect={(date) => { setSelectedDate(date); setSelectedTimeSlot(''); }}
+                onTimeSelect={(date, timeSlot, start, end) => { setSelectedDate(date); setSelectedTimeSlot(timeSlot); setStartTime(start); setEndTime(end); }}
+                showContinue={false}
+              />
+            </div>
           )}
 
-          {/* Step 2: Cleaner Selection */}
+          {/* Step 2: Cleaner */}
           {currentStep === 2 && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-fade-in">
               <CleanerSelector
                 zipCode={getAddressZip()}
                 customerEmail={user?.email || undefined}
                 selectedCleanerId={selectedCleanerId}
-                onSelectCleaner={(cleanerId, cleanerName) => {
-                  setSelectedCleanerId(cleanerId);
-                  setSelectedCleanerName(cleanerName || '');
-                }}
+                onSelectCleaner={(cleanerId, cleanerName) => { setSelectedCleanerId(cleanerId); setSelectedCleanerName(cleanerName || ''); }}
               />
-
-              <Card>
+              <Card className="shadow-md">
                 <CardHeader>
                   <CardTitle className="text-base">Special Instructions</CardTitle>
-                  <CardDescription>
-                    Any notes for your cleaner (access codes, pets, areas to focus on)
-                  </CardDescription>
+                  <CardDescription>Access codes, pets, areas to focus on</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Textarea
@@ -909,89 +672,86 @@ export default function MemberBooking() {
                     value={specialInstructions}
                     onChange={(e) => setSpecialInstructions(e.target.value)}
                     rows={3}
+                    className="rounded-lg"
                   />
                 </CardContent>
               </Card>
             </div>
           )}
 
-          {/* Step 3: Confirmation */}
+          {/* Step 3: Confirm */}
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+            <div className="space-y-6 animate-fade-in">
+              <Card className="shadow-lg border-0 overflow-hidden">
+                <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-primary" />
                     Booking Summary
                   </CardTitle>
-                  <CardDescription>Review your booking details before confirming</CardDescription>
+                  <CardDescription>Review your booking details</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Service Type Summary */}
+                <CardContent className="space-y-5">
+                  {/* Service */}
                   <div className="flex items-start gap-3">
-                    <Star className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Star className="w-4 h-4 text-primary" />
+                    </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <p className="font-medium">
-                          {serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean'}
-                        </p>
-                        {serviceType === 'deep' && (
-                          <Badge variant="secondary">+$65 upsell</Badge>
-                        )}
+                        <p className="font-medium text-sm">{serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean'}</p>
+                        {serviceType === 'deep' && <Badge variant="secondary" className="text-xs">+$65</Badge>}
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {serviceType === 'deep' 
-                          ? 'Thorough top-to-bottom cleaning with detailed attention'
-                          : 'Regular maintenance cleaning'}
+                      <p className="text-xs text-muted-foreground">
+                        {serviceType === 'deep' ? 'Thorough top-to-bottom cleaning' : 'Regular maintenance cleaning'}
                       </p>
                     </div>
                   </div>
-
                   <Separator />
 
-                  {/* Address Summary */}
+                  {/* Address */}
                   <div className="flex items-start gap-3">
-                    <MapPin className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-4 h-4 text-primary" />
+                    </div>
                     <div>
-                      <p className="font-medium">
+                      <p className="font-medium text-sm">
                         {isNewAddress
                           ? `${addressForm.street}${addressForm.unit ? ` ${addressForm.unit}` : ''}`
                           : `${selectedAddress?.street}${selectedAddress?.unit ? ` ${selectedAddress?.unit}` : ''}`}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {isNewAddress
                           ? `${addressForm.city}, ${addressForm.state} ${addressForm.zip}`
                           : `${selectedAddress?.city}, ${selectedAddress?.state} ${selectedAddress?.zip}`}
                       </p>
                     </div>
                   </div>
-
                   <Separator />
 
-                  {/* Schedule Summary */}
+                  {/* Schedule */}
                   <div className="flex items-start gap-3">
-                    <Calendar className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-4 h-4 text-primary" />
+                    </div>
                     <div>
-                      <p className="font-medium">
-                        {selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{selectedTimeSlot}</p>
+                      <p className="font-medium text-sm">{selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
+                      <p className="text-xs text-muted-foreground">{selectedTimeSlot}</p>
                     </div>
                   </div>
-
                   <Separator />
 
-                  {/* Cleaner Summary */}
+                  {/* Cleaner */}
                   <div className="flex items-start gap-3">
-                    <User className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-primary" />
+                    </div>
                     <div>
-                      <p className="font-medium">
+                      <p className="font-medium text-sm">
                         {selectedCleanerId ? `Requested: ${selectedCleanerName}` : 'No Preference'}
                       </p>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedCleanerId
-                          ? "We'll do our best to assign your requested cleaner"
-                          : "We'll assign our best available cleaner"}
+                      <p className="text-xs text-muted-foreground">
+                        {selectedCleanerId ? "We'll do our best to assign your requested cleaner" : "We'll assign our best available cleaner"}
                       </p>
                     </div>
                   </div>
@@ -999,10 +759,8 @@ export default function MemberBooking() {
                   {specialInstructions && (
                     <>
                       <Separator />
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground mb-1">
-                          Special Instructions
-                        </p>
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Special Instructions</p>
                         <p className="text-sm">{specialInstructions}</p>
                       </div>
                     </>
@@ -1010,33 +768,34 @@ export default function MemberBooking() {
 
                   <Separator />
 
-                  {/* Credit Usage & Pricing */}
+                  {/* Credit Usage */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between bg-success/10 rounded-lg p-4">
+                    <div className="flex items-center justify-between rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 p-4">
                       <div className="flex items-center gap-3">
-                        <CreditCard className="w-5 h-5 text-success" />
+                        <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                          <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        </div>
                         <div>
-                          <p className="font-medium text-success">Using 1 Membership Credit</p>
-                          <p className="text-sm text-muted-foreground">
-                            {credits?.credits_remaining! - 1} credit
-                            {credits?.credits_remaining! - 1 !== 1 ? 's' : ''} remaining after booking
+                          <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-400">Using 1 Membership Credit</p>
+                          <p className="text-xs text-muted-foreground">
+                            {credits?.credits_remaining! - 1} credit{credits?.credits_remaining! - 1 !== 1 ? 's' : ''} remaining
                           </p>
                         </div>
                       </div>
-                      <p className="text-xl font-bold text-success">
-                        {serviceType === 'standard' ? '$0' : 'Credit Applied'}
+                      <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                        {serviceType === 'standard' ? '$0' : 'Applied'}
                       </p>
                     </div>
 
                     {serviceType === 'deep' && (
-                      <div className="flex items-center justify-between bg-primary/10 rounded-lg p-4">
+                      <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 p-4">
                         <div className="flex items-center gap-3">
-                          <Star className="w-5 h-5 text-primary" />
+                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Star className="w-4 h-4 text-primary" />
+                          </div>
                           <div>
-                            <p className="font-medium text-primary">Deep Clean Upgrade</p>
-                            <p className="text-sm text-muted-foreground">
-                              Due now to confirm booking
-                            </p>
+                            <p className="font-semibold text-sm text-primary">Deep Clean Upgrade</p>
+                            <p className="text-xs text-muted-foreground">Due now to confirm</p>
                           </div>
                         </div>
                         <p className="text-2xl font-bold text-primary">$65</p>
@@ -1048,43 +807,32 @@ export default function MemberBooking() {
             </div>
           )}
 
-          {/* Navigation Buttons */}
+          {/* Navigation */}
           <div className="flex justify-between pt-4">
-            <Button variant="outline" onClick={handleBack}>
+            <Button variant="outline" onClick={handleBack} className="rounded-xl">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {currentStep === 0 ? 'Cancel' : 'Back'}
             </Button>
 
             {currentStep < STEPS.length - 1 ? (
-              <Button
-                onClick={handleNext}
-                disabled={!canProceed()}
-                className="bg-gradient-primary"
-              >
-                Continue
-                <ArrowRight className="w-4 h-4 ml-2" />
+              <Button onClick={handleNext} disabled={!canProceed()} className="bg-gradient-primary rounded-xl shadow-md">
+                Continue <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             ) : (
               <Button
                 onClick={handleSubmitBooking}
                 disabled={isSubmitting}
-                className={serviceType === 'deep' ? 'bg-gradient-primary' : 'bg-success hover:bg-success/90'}
+                className={cn(
+                  "rounded-xl shadow-md",
+                  serviceType === 'deep' ? 'bg-gradient-primary' : 'bg-emerald-600 hover:bg-emerald-700'
+                )}
               >
                 {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {serviceType === 'deep' ? 'Processing...' : 'Booking...'}
-                  </>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {serviceType === 'deep' ? 'Processing...' : 'Booking...'}</>
                 ) : serviceType === 'deep' ? (
-                  <>
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Continue to Payment ($65)
-                  </>
+                  <><CreditCard className="w-4 h-4 mr-2" /> Continue to Payment ($65)</>
                 ) : (
-                  <>
-                    <Check className="w-4 h-4 mr-2" />
-                    Confirm Booking
-                  </>
+                  <><Check className="w-4 h-4 mr-2" /> Confirm Booking</>
                 )}
               </Button>
             )}

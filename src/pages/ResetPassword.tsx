@@ -29,7 +29,6 @@ export default function ResetPassword() {
     }
     
     setIsLoading(true);
-    
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/update-password`,
     });
@@ -40,15 +39,15 @@ export default function ResetPassword() {
       setEmailSent(true);
       toast.success("Password reset link sent! Check your email.");
     }
-    
     setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-6">
-      <Card className="max-w-sm w-full shadow-xl border-primary/20">
-        <CardHeader className="text-center space-y-1 pb-3 pt-5">
-          <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6">
+      <Card className="max-w-sm w-full shadow-xl border-0 overflow-hidden animate-scale-in">
+        <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+        <CardHeader className="text-center space-y-1 pb-3 pt-6">
+          <CardTitle className="text-xl font-bold tracking-tight">Reset Password</CardTitle>
           <CardDescription className="text-sm">
             {emailSent 
               ? "Check your email for the reset link"
@@ -57,27 +56,27 @@ export default function ResetPassword() {
           </CardDescription>
         </CardHeader>
         
-        <CardContent className="px-5 pb-5">
+        <CardContent className="px-6 pb-6">
           {emailSent ? (
             <div className="space-y-4 text-center">
-              <div className="mx-auto w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
-                <CheckCircle2 className="w-6 h-6 text-white" />
+              <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'var(--gradient-primary)' }}>
+                <CheckCircle2 className="w-7 h-7 text-white" />
               </div>
               <div className="space-y-1">
-                <p className="font-medium text-sm">Email sent!</p>
+                <p className="font-semibold text-sm">Email sent!</p>
                 <p className="text-xs text-muted-foreground">
                   Reset link sent to <strong>{email}</strong>
                 </p>
               </div>
               <Link to="/auth">
-                <Button variant="outline" className="w-full" size="sm">
-                  <ArrowLeft className="mr-1 w-4 h-4" />
+                <Button variant="outline" className="w-full rounded-xl" size="sm">
+                  <ArrowLeft className="mr-1.5 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>
             </div>
           ) : (
-            <form onSubmit={handleResetPassword} className="space-y-3">
+            <form onSubmit={handleResetPassword} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-sm">Email</Label>
                 <div className="relative">
@@ -88,7 +87,7 @@ export default function ResetPassword() {
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-9 h-10"
+                    className="pl-10 h-11 rounded-xl"
                     disabled={isLoading}
                     required
                   />
@@ -97,23 +96,19 @@ export default function ResetPassword() {
 
               <Button
                 type="submit"
-                className="w-full"
-                size="lg"
+                className="w-full h-11 rounded-xl bg-gradient-primary shadow-md"
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-                    Sending...
-                  </>
+                  <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Sending...</>
                 ) : (
                   "Send Reset Link"
                 )}
               </Button>
 
               <Link to="/auth">
-                <Button variant="ghost" className="w-full" size="sm">
-                  <ArrowLeft className="mr-1 w-4 h-4" />
+                <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" size="sm">
+                  <ArrowLeft className="mr-1.5 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>

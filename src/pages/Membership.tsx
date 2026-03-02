@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight, PauseCircle, PlayCircle, AlertCircle } from "lucide-react";
+import { CheckCircle2, Sparkles, Calendar, Gift, Zap, Crown, ArrowRight, ArrowLeft, PauseCircle, PlayCircle, AlertCircle, Shield, Star, Clock } from "lucide-react";
 import { PauseResumeDialog } from "@/components/membership/PauseResumeDialog";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
+import { cn } from "@/lib/utils";
 
 const MEMBERSHIP_TIERS = [
   {
@@ -17,7 +18,6 @@ const MEMBERSHIP_TIERS = [
     credits: 1,
     discount: '20%',
     icon: Calendar,
-    color: 'from-primary to-accent',
     features: [
       '1 cleaning credit per month (up to 2 hrs)',
       '48-hour reclean guarantee',
@@ -33,7 +33,6 @@ const MEMBERSHIP_TIERS = [
     credits: 2,
     discount: '25%',
     icon: Gift,
-    color: 'from-primary to-accent',
     features: [
       '2 cleaning credits per month (up to 3 hrs each)',
       'Dedicated cleaner match',
@@ -50,7 +49,6 @@ const MEMBERSHIP_TIERS = [
     credits: 4,
     discount: '30%',
     icon: Crown,
-    color: 'from-primary to-accent',
     features: [
       '4 cleaning credits per month (up to 3 hrs each)',
       'Dedicated cleaner & preferred time slot',
@@ -67,83 +65,103 @@ export default function Membership() {
   const { subscription, checkSubscription } = useAuth();
   const [pauseResumeDialogOpen, setPauseResumeDialogOpen] = useState(false);
 
-  const currentPlanId = subscription?.subscribed
-    ? (['monthly', 'biweekly', 'weekly'].find(id => {
-        // Match by product_id if available, otherwise no current plan shown
-        return false; // Will be matched once Stripe products are created dynamically
-      }))
-    : null;
-
   return (
-    <div className="min-h-screen bg-gradient-hero">
-      {/* Hero Section */}
-      <div className="container max-w-7xl mx-auto px-4 py-12 md:py-16">
-        <div className="text-center space-y-4 mb-12">
-          <Badge className="bg-gradient-primary text-primary-foreground border-0 shadow-lg">
-            <Sparkles className="w-4 h-4 mr-1" />
-            Membership Plans
-          </Badge>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold font-jakarta">
-            Choose Your Perfect Plan
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-            Subscribe today and enjoy consistent, professional cleaning at a fraction of one-time pricing.
-            All plans include a complimentary deep clean on your first visit.
-          </p>
-          <p className="text-sm text-muted-foreground/80 max-w-2xl mx-auto mt-2">
-            Prices vary by home size. Click a plan to see your exact monthly cost.
-          </p>
+    <div className="min-h-screen bg-background">
+      {/* Navigation */}
+      <div className="border-b border-border/50">
+        <div className="container max-w-7xl mx-auto px-4 py-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/account")} className="text-muted-foreground -ml-2">
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Account
+          </Button>
         </div>
+      </div>
 
-        {/* Current Subscription Banner */}
+      {/* Hero */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0" style={{ background: 'var(--gradient-hero)' }} />
+        <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'var(--gradient-primary)' }} />
+        <div className="relative container max-w-7xl mx-auto px-4 py-12 md:py-20">
+          <div className="text-center space-y-4 max-w-2xl mx-auto animate-fade-in-up">
+            <Badge className="bg-primary/10 text-primary border-primary/20 shadow-none px-4 py-1.5">
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              Membership Plans
+            </Badge>
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold font-jakarta tracking-tight">
+              Choose Your <span className="gradient-text">Perfect Plan</span>
+            </h1>
+            <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
+              Subscribe today and enjoy consistent, professional cleaning at a fraction of one-time pricing.
+              All plans include a complimentary deep clean on your first visit.
+            </p>
+            <p className="text-xs text-muted-foreground/70">
+              Prices vary by home size. Click a plan to see your exact monthly cost.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="container max-w-7xl mx-auto px-4 -mt-4 pb-16">
+        {/* Active Subscription Banner */}
         {subscription?.subscribed && (
-          <Card className={`mb-8 ${subscription?.is_paused ? 'border-warning/50 bg-warning/5' : 'border-primary/50 bg-primary/5'}`}>
+          <Card className={cn(
+            "mb-8 shadow-md animate-fade-in-up",
+            subscription?.is_paused
+              ? 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20'
+              : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/20'
+          )}>
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <CardTitle className="flex items-center gap-2">
-                    {subscription?.is_paused ? (
-                      <PauseCircle className="w-5 h-5 text-warning" />
-                    ) : (
-                      <CheckCircle2 className="w-5 h-5 text-primary" />
-                    )}
-                    {subscription?.is_paused ? 'Membership Paused' : 'Active Membership'}
-                  </CardTitle>
-                  <CardDescription className="mt-2">
-                    {subscription?.is_paused ? (
-                      <>
-                        Your subscription is paused
-                        {subscription.resumes_at && (
-                          <span className="block mt-1">
-                            Scheduled to resume on {new Date(subscription.resumes_at).toLocaleDateString()}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      'You have an active Novara Membership'
-                    )}
-                  </CardDescription>
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    subscription?.is_paused ? "bg-amber-100 dark:bg-amber-900/40" : "bg-emerald-100 dark:bg-emerald-900/40"
+                  )}>
+                    {subscription?.is_paused
+                      ? <PauseCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      : <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    }
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">
+                      {subscription?.is_paused ? 'Membership Paused' : 'Active Membership'}
+                    </CardTitle>
+                    <CardDescription className="mt-0.5">
+                      {subscription?.is_paused ? (
+                        <>
+                          Your subscription is paused
+                          {subscription.resumes_at && (
+                            <span className="block mt-0.5 font-medium text-foreground">
+                              Resumes on {new Date(subscription.resumes_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        'You have an active Novara Membership'
+                      )}
+                    </CardDescription>
+                  </div>
                 </div>
                 <Button
                   variant={subscription?.is_paused ? "default" : "outline"}
                   size="sm"
+                  className="rounded-lg"
                   onClick={() => setPauseResumeDialogOpen(true)}
                 >
                   {subscription?.is_paused ? (
-                    <><PlayCircle className="w-4 h-4 mr-2" /> Resume</>
+                    <><PlayCircle className="w-4 h-4 mr-1.5" /> Resume</>
                   ) : (
-                    <><PauseCircle className="w-4 h-4 mr-2" /> Pause</>
+                    <><PauseCircle className="w-4 h-4 mr-1.5" /> Pause</>
                   )}
                 </Button>
               </div>
               
               {subscription?.is_paused && (
-                <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/20">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-warning mt-0.5" />
+                <div className="mt-4 p-3 rounded-xl bg-amber-100/50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-muted-foreground">
                       <p className="font-medium text-foreground">Your membership is on hold</p>
-                      <p className="mt-1">While paused, you won't be charged and credits won't be issued. Resume anytime.</p>
+                      <p className="mt-0.5">While paused, you won't be charged and credits won't be issued. Resume anytime.</p>
                     </div>
                   </div>
                 </div>
@@ -152,68 +170,81 @@ export default function Membership() {
           </Card>
         )}
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-          {MEMBERSHIP_TIERS.map((tier) => {
+        {/* Plan Cards */}
+        <div className="grid md:grid-cols-3 gap-5 lg:gap-6 mb-16">
+          {MEMBERSHIP_TIERS.map((tier, index) => {
             const Icon = tier.icon;
             
             return (
               <Card
                 key={tier.id}
-                className={`relative overflow-hidden transition-all hover:shadow-xl cursor-pointer ${
-                  tier.popular ? 'border-primary/50 shadow-lg scale-105' : ''
-                }`}
+                className={cn(
+                  "relative overflow-hidden transition-all duration-300 hover:shadow-xl cursor-pointer group animate-fade-in-up",
+                  tier.popular
+                    ? 'border-primary shadow-lg md:scale-[1.03] z-10'
+                    : 'hover:border-primary/40',
+                  index === 0 && 'stagger-1',
+                  index === 1 && 'stagger-2',
+                  index === 2 && 'stagger-3',
+                )}
                 onClick={() => navigate(`/membership/${tier.id}`)}
               >
                 {tier.popular && (
-                  <div className="absolute top-0 right-0">
-                    <Badge className="bg-gradient-primary text-primary-foreground border-0 rounded-none rounded-bl-lg">
+                  <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'var(--gradient-primary)' }} />
+                )}
+
+                {tier.popular && (
+                  <div className="absolute top-3 right-3">
+                    <Badge className="bg-gradient-primary text-white border-0 shadow-md text-[10px] font-bold uppercase tracking-wider px-2.5 py-1">
                       Most Popular
                     </Badge>
                   </div>
                 )}
 
-                <CardHeader className="text-center space-y-4 pb-8">
-                  <div className={`mx-auto w-16 h-16 rounded-full bg-gradient-to-br ${tier.color} flex items-center justify-center shadow-lg`}>
-                    <Icon className="w-8 h-8 text-primary-foreground" />
+                <CardHeader className="text-center space-y-4 pb-6 pt-8">
+                  <div className={cn(
+                    "mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110",
+                  )} style={{ background: 'var(--gradient-primary)' }}>
+                    <Icon className="w-7 h-7 text-white" />
                   </div>
                   
                   <div>
-                    <CardTitle className="text-2xl mb-2">{tier.name}</CardTitle>
+                    <CardTitle className="text-xl mb-1.5">{tier.name}</CardTitle>
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-sm text-muted-foreground">Starting at</span>
+                      <span className="text-3xl font-bold">${tier.startingPrice}</span>
+                      <span className="text-muted-foreground text-sm">/month</span>
                     </div>
-                    <div className="flex items-baseline justify-center gap-1 mt-1">
-                      <span className="text-4xl font-bold">${tier.startingPrice}</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">starting price</p>
                   </div>
 
-                  <Badge variant="secondary" className="text-sm">
+                  <Badge variant="secondary" className="text-xs px-3 py-1 rounded-lg">
                     <Zap className="w-3 h-3 mr-1" />
-                    {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month
+                    {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month &middot; Save {tier.discount}
                   </Badge>
                 </CardHeader>
 
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-5 pb-8">
                   <Separator />
                   
                   <ul className="space-y-3">
-                    {tier.features.map((feature, index) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
+                    {tier.features.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-muted-foreground">{feature}</span>
                       </li>
                     ))}
                   </ul>
 
-                  <Button className="w-full h-12 bg-gradient-primary shadow-lg">
+                  <Button className={cn(
+                    "w-full h-11 rounded-xl shadow-md transition-all",
+                    tier.popular ? "bg-gradient-primary" : "bg-primary hover:bg-primary/90"
+                  )}>
                     View Plan Details
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
 
-                  <p className="text-xs text-center text-muted-foreground">
-                    +$75 first-month deep clean • Cancel anytime
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    +$75 first-month deep clean &middot; Cancel anytime
                   </p>
                 </CardContent>
               </Card>
@@ -221,52 +252,39 @@ export default function Membership() {
           })}
         </div>
 
-        {/* Benefits Section */}
-        <Card className="mt-12 bg-primary/5 border-primary/20">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl md:text-3xl">Why Choose Novara Membership?</CardTitle>
-            <CardDescription className="text-base">
+        {/* Why Choose Section */}
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+          <CardHeader className="text-center pt-10">
+            <CardTitle className="text-2xl md:text-3xl font-jakarta tracking-tight">Why Choose Novara Membership?</CardTitle>
+            <CardDescription className="text-base mt-2">
               Join thousands of satisfied members enjoying hassle-free cleaning
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Gift className="w-6 h-6 text-primary" />
+          <CardContent className="pb-10">
+            <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+              {[
+                { icon: Gift, title: "Monthly Credits", desc: "Use your credits for professional cleaning services, anytime you need them" },
+                { icon: Zap, title: "Exclusive Discounts", desc: "Save up to 30% on all add-ons, upgrades, and extra cleaning hours" },
+                { icon: Calendar, title: "Flexible Scheduling", desc: "Priority booking windows and easy rescheduling with no fees" },
+              ].map((item, i) => (
+                <div key={i} className="text-center space-y-3">
+                  <div className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-lavender)' }}>
+                    <item.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold">{item.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
                 </div>
-                <h3 className="font-semibold">Monthly Credits</h3>
-                <p className="text-sm text-muted-foreground">
-                  Use your credits for professional cleaning services, anytime
-                </p>
-              </div>
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-primary" />
-                </div>
-                <h3 className="font-semibold">Exclusive Discounts</h3>
-                <p className="text-sm text-muted-foreground">
-                  Save up to 30% on all add-ons and upgrades
-                </p>
-              </div>
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-primary" />
-                </div>
-                <h3 className="font-semibold">Flexible Scheduling</h3>
-                <p className="text-sm text-muted-foreground">
-                  Priority booking and easy rescheduling options
-                </p>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* CTA Section */}
-        <div className="text-center mt-12 space-y-4">
-          <p className="text-muted-foreground">
+        {/* CTA */}
+        <div className="text-center mt-10 space-y-3">
+          <p className="text-muted-foreground text-sm">
             Not ready for a membership?{' '}
-            <Button variant="link" onClick={() => navigate('/book/home')} className="p-0 h-auto">
+            <Button variant="link" onClick={() => navigate('/book/zip')} className="p-0 h-auto text-primary">
               Book a one-time cleaning
             </Button>
           </p>

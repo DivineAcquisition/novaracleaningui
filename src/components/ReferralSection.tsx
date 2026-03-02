@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Share2, Copy, UserPlus, Check } from "lucide-react";
+import { Share2, Copy, UserPlus, Check, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -14,7 +13,7 @@ interface ReferralSectionProps {
 export function ReferralSection({ email }: ReferralSectionProps) {
   const [referralCode, setReferralCode] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchReferralCode = async () => {
@@ -46,12 +45,12 @@ export function ReferralSection({ email }: ReferralSectionProps) {
 
   const referralLink = `${window.location.origin}/book/zip?ref=${referralCode}`;
 
-  const copyToClipboard = async (text: string, label: string) => {
+  const copyToClipboard = async (text: string, field: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      toast.success(`${label} copied to clipboard!`);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedField(field);
+      toast.success("Copied to clipboard!");
+      setTimeout(() => setCopiedField(null), 2000);
     } catch (error) {
       toast.error('Failed to copy');
     }
@@ -67,9 +66,8 @@ export function ReferralSection({ email }: ReferralSectionProps) {
     try {
       if (navigator.share) {
         await navigator.share(shareData);
-        toast.success('Shared successfully!');
       } else {
-        copyToClipboard(referralLink, 'Referral link');
+        copyToClipboard(referralLink, 'link');
       }
     } catch (error) {
       console.error('Error sharing:', error);
@@ -77,65 +75,56 @@ export function ReferralSection({ email }: ReferralSectionProps) {
   };
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-      <CardHeader className="pb-3 md:pb-4">
-        <CardTitle className="text-base md:text-xl flex items-center gap-2">
-          <UserPlus className="w-5 h-5 text-primary" />
-          Share & Earn $50 Credit
-        </CardTitle>
-        <CardDescription className="text-xs md:text-sm">
-          Refer friends and get $50 off your next cleaning when they book!
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="text-xs md:text-sm">Your Referral Code</Label>
-          <div className="flex gap-2 mt-1.5">
-            <Input 
-              value={referralCode} 
-              readOnly 
-              className="font-mono text-sm md:text-base"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copyToClipboard(referralCode, 'Referral code')}
-              className="shrink-0"
+    <Card className="overflow-hidden shadow-md border-0">
+      <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+      <CardContent className="p-5 md:p-6">
+        <div className="flex flex-col sm:flex-row gap-5">
+          {/* Left: Info */}
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-primary)' }}>
+                <Gift className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base">Give $50, Get $50</h3>
+                <p className="text-xs text-muted-foreground">Share with friends and you both save</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Your friends get <span className="font-semibold text-foreground">$50 off</span> their first booking, and you earn <span className="font-semibold text-foreground">$50 credit</span> when they complete it.
+            </p>
+          </div>
+
+          {/* Right: Code + Actions */}
+          <div className="sm:w-[260px] space-y-3">
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Your Code</label>
+              <div className="flex gap-2">
+                <Input 
+                  value={referralCode} 
+                  readOnly 
+                  className="font-mono font-semibold text-sm h-10 rounded-lg bg-muted/50"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 rounded-lg flex-shrink-0"
+                  onClick={() => copyToClipboard(referralCode, 'code')}
+                >
+                  {copiedField === 'code' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <Button 
+              onClick={handleShare} 
+              className="w-full h-10 rounded-lg bg-gradient-primary shadow-sm"
             >
-              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              <Share2 className="mr-2 h-4 w-4" />
+              Share & Earn
             </Button>
           </div>
-        </div>
-
-        <div>
-          <Label className="text-xs md:text-sm">Referral Link</Label>
-          <div className="flex gap-2 mt-1.5">
-            <Input 
-              value={referralLink} 
-              readOnly 
-              className="text-xs md:text-sm"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copyToClipboard(referralLink, 'Referral link')}
-              className="shrink-0"
-            >
-              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-
-        <Button 
-          onClick={handleShare} 
-          className="w-full h-10 md:h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
-        >
-          <Share2 className="mr-2 h-4 w-4" />
-          Share Referral
-        </Button>
-
-        <div className="text-xs text-muted-foreground text-center pt-2">
-          Your friends get $50 off their first booking, and you earn $50 credit when they complete it!
         </div>
       </CardContent>
     </Card>
