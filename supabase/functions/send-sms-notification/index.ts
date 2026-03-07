@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const messageBirdAccessKey = Deno.env.get("MESSAGEBIRD_ACCESS_KEY");
-const messageBirdOriginator = Deno.env.get("MESSAGEBIRD_ORIGINATOR");
+const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
+const telnyxPhoneNumber = Deno.env.get("TELNYX_PHONE_NUMBER") || "+18337002611";
 
 interface SMSRequest {
   toPhone: string;
@@ -17,20 +17,16 @@ interface SMSRequest {
 }
 
 function normalizePhone(phone: string): string {
-  // Remove all non-digits
   const digits = phone.replace(/\D/g, '');
-  
-  // If it's 10 digits, add +1 for US
+
   if (digits.length === 10) {
     return `+1${digits}`;
   }
-  
-  // If it already has country code, ensure it starts with +
+
   if (digits.length === 11 && digits.startsWith('1')) {
     return `+${digits}`;
   }
-  
-  // Return as-is with + prefix if not already there
+
   return digits.startsWith('+') ? digits : `+${digits}`;
 }
 
@@ -52,7 +48,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Create log entry
     const { data: logEntry, error: logError } = await supabase
       .from("sms_logs")
       .insert({
@@ -72,49 +67,49 @@ serve(async (req) => {
       console.error("Failed to create SMS log:", logError);
     }
 
-    // Send SMS via MessageBird
-    const messageBirdUrl = "https://rest.messagebird.com/messages";
+    const telnyxUrl = "https://api.telnyx.com/v2/messages";
     const recipient = normalizePhone(toPhone);
     const requestBody = {
-      originator: messageBirdOriginator,
-      recipients: [recipient],
-      body: message,
+      from: telnyxPhoneNumber,
+      to: recipient,
+      text: message,
     };
 
-    const messageBirdResponse = await fetch(messageBirdUrl, {
+    const telnyxResponse = await fetch(telnyxUrl, {
       method: "POST",
       headers: {
-        "Authorization": `AccessKey ${messageBirdAccessKey}`,
+        "Authorization": `Bearer ${telnyxApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(requestBody),
     });
 
-    const messageBirdData = await messageBirdResponse.json();
+    const telnyxData = await telnyxResponse.json();
 
-    if (!messageBirdResponse.ok) {
-      throw new Error(`MessageBird error: ${messageBirdData.errors?.[0]?.description || "Unknown error"}`);
+    if (!telnyxResponse.ok) {
+      const errorDetail = telnyxData.errors?.[0]?.detail || telnyxData.errors?.[0]?.title || "Unknown error";
+      throw new Error(`Telnyx error: ${errorDetail}`);
     }
 
-    console.log(`[SMS] Sent successfully. ID: ${messageBirdData.id}`);
+    const messageId = telnyxData.data?.id;
+    console.log(`[SMS] Sent successfully. ID: ${messageId}`);
 
-    // Update log with success
     if (logEntry) {
       await supabase
         .from("sms_logs")
         .update({
           status: "sent",
-          provider_message_id: messageBirdData.id,
-          cost: messageBirdData.price?.amount || 0
+          provider_message_id: messageId,
+          cost: telnyxData.data?.cost?.amount || 0
         })
         .eq("id", logEntry.id);
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        messageId: messageBirdData.id,
-        status: messageBirdData.recipients?.items?.[0]?.status || "sent"
+      JSON.stringify({
+        success: true,
+        messageId,
+        status: telnyxData.data?.to?.[0]?.status || "sent"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -122,32 +117,30 @@ serve(async (req) => {
   } catch (error: any) {
     console.error("[SMS] Error:", error);
 
-    // Try to update log with error
     try {
-      const { toPhone, jobAssignmentId } = await req.json();
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-      );
+      if (logEntryId) {
+        const supabase = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+        );
 
-      await supabase
-        .from("sms_logs")
-        .update({
-          status: "failed",
-          error_message: error.message
-        })
-        .eq("to_phone", toPhone)
-        .eq("job_assignment_id", jobAssignmentId)
-        .eq("status", "pending");
+        await supabase
+          .from("sms_logs")
+          .update({
+            status: "failed",
+            error_message: error.message
+          })
+          .eq("id", logEntryId);
+      }
     } catch (logError) {
       console.error("[SMS] Failed to update error log:", logError);
     }
 
     return new Response(
       JSON.stringify({ error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       }
     );
   }
