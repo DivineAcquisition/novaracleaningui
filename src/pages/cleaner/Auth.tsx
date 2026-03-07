@@ -1,3 +1,10 @@
+import {
+  RiBriefcaseLine,
+  RiLoader4Line,
+  RiLockLine,
+  RiMailLine,
+  RiSparklingLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, Sparkles, Briefcase } from "lucide-react";
+
 import logo from "@/assets/logo.png";
 import { z } from "zod";
 import { SEO } from "@/components/SEO";
@@ -176,7 +183,7 @@ export default function CleanerAuth() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <RiLoader4Line className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground text-sm">Checking session...</p>
         </div>
       </div>
@@ -190,7 +197,7 @@ export default function CleanerAuth() {
         {/* Logo & Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-primary shadow-lg mb-4">
-            <Briefcase className="w-8 h-8 text-white" />
+            <RiBriefcaseLine className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Cleaner Portal</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -247,7 +254,7 @@ export default function CleanerAuth() {
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="signin-email"
                         type="email"
@@ -274,7 +281,7 @@ export default function CleanerAuth() {
                       </Link>
                     </div>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="signin-password"
                         type="password"
@@ -295,7 +302,7 @@ export default function CleanerAuth() {
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                        <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />
                         Signing in...
                       </>
                     ) : (
@@ -312,7 +319,7 @@ export default function CleanerAuth() {
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="signup-email"
                         type="email"
@@ -331,7 +338,7 @@ export default function CleanerAuth() {
                       Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="signup-password"
                         type="password"
@@ -355,12 +362,12 @@ export default function CleanerAuth() {
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                        <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />
                         Creating account...
                       </>
                     ) : (
                       <>
-                        <Sparkles className="mr-2 w-4 h-4" />
+                        <RiSparklingLine className="mr-2 w-4 h-4" />
                         Join Our Team
                       </>
                     )}

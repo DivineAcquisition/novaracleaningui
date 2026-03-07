@@ -1,9 +1,14 @@
+import {
+  RiCheckboxCircleLine,
+  RiErrorWarningLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
-import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { format, addDays, isWeekend, isBefore, startOfDay } from "date-fns";
 import { useAvailability } from "@/hooks/use-availability";
@@ -106,7 +111,7 @@ export function AvailabilityCalendar({
         </Card>
 
         <p className="text-xs text-muted-foreground flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <RiErrorWarningLine className="w-4 h-4 flex-shrink-0" />
           <span>We're closed on weekends. Book at least 3 days in advance.</span>
         </p>
       </div>
@@ -115,7 +120,7 @@ export function AvailabilityCalendar({
       {selectedDate && (
         <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
           <p className="text-sm font-medium text-primary flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" />
+            <RiCheckboxCircleLine className="w-4 h-4" />
             {format(selectedDate, 'EEEE, MMMM d, yyyy')}
           </p>
         </div>
@@ -156,7 +161,7 @@ export function AvailabilityCalendar({
                         )}
                       >
                         <div className="flex items-center gap-3">
-                          <Clock className={cn("w-5 h-5", isSelected ? "text-primary-foreground" : "text-muted-foreground")} />
+                          <RiTimeLine className={cn("w-5 h-5", isSelected ? "text-primary-foreground" : "text-muted-foreground")} />
                           <div>
                             <p className={cn("font-semibold text-sm md:text-base", isSelected && "text-primary-foreground")}>
                               {slot.time_slot}
@@ -171,7 +176,7 @@ export function AvailabilityCalendar({
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           {isSelected && (
-                            <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
+                            <RiCheckboxCircleLine className="w-5 h-5 text-primary-foreground" />
                           )}
                           {!slot.is_available && (
                             <Badge variant="destructive" className="text-xs">Sold Out</Badge>
@@ -188,14 +193,14 @@ export function AvailabilityCalendar({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                  <AlertCircle className="w-10 h-10 mb-3 opacity-50" />
+                  <RiErrorWarningLine className="w-10 h-10 mb-3 opacity-50" />
                   <p className="text-sm text-center">No time slots available for this date</p>
                   <p className="text-xs text-center mt-1">Please select a different date</p>
                 </div>
               )
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <Clock className="w-10 h-10 mb-3 opacity-50" />
+                <RiTimeLine className="w-10 h-10 mb-3 opacity-50" />
                 <p className="text-sm text-center">Select a date above to view available times</p>
               </div>
             )}

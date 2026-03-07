@@ -1,4 +1,7 @@
-import { DollarSign } from "lucide-react";
+
+import {
+  RiMoneyDollarCircleLine
+} from "@remixicon/react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
@@ -29,7 +32,7 @@ export const SavingsVisualizer = ({
   return (
     <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-4 border border-primary/20">
       <div className="flex items-center gap-2 mb-3">
-        <DollarSign className="w-5 h-5 text-green-600" />
+        <RiMoneyDollarCircleLine className="w-5 h-5 text-green-600" />
         <h3 className="font-semibold">Your Savings</h3>
       </div>
 

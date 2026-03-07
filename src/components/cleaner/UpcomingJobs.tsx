@@ -1,6 +1,12 @@
+import {
+  RiExternalLinkLine,
+  RiMapPinLine,
+  RiMoneyDollarCircleLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, Clock, DollarSign, ExternalLink } from "lucide-react";
+
 import { format } from "date-fns";
 
 interface UpcomingJobsProps {
@@ -11,7 +17,7 @@ export function UpcomingJobs({ jobs }: UpcomingJobsProps) {
   if (jobs.length === 0) {
     return (
       <div className="text-center py-8">
-        <Clock className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+        <RiTimeLine className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
         <p className="text-sm text-muted-foreground">No upcoming jobs scheduled</p>
       </div>
     );
@@ -41,17 +47,17 @@ export function UpcomingJobs({ jobs }: UpcomingJobsProps) {
 
           <div className="space-y-1.5 mb-3">
             <div className="flex items-center gap-2 text-xs">
-              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              <RiTimeLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>
                 {format(new Date(job.start_datetime), "EEEE, MMMM d 'at' h:mm a")}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+              <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>{job.address}, {job.city}, {job.state}</span>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
+              <RiMoneyDollarCircleLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>{job.duration_est_hours} hours estimated</span>
             </div>
           </div>
@@ -63,7 +69,7 @@ export function UpcomingJobs({ jobs }: UpcomingJobsProps) {
               className="flex-1"
               onClick={() => window.open(getGoogleMapsUrl(job.address, job.city, job.state, job.zip), '_blank')}
             >
-              <MapPin className="mr-2 w-3.5 h-3.5" />
+              <RiMapPinLine className="mr-2 w-3.5 h-3.5" />
               Get Directions
             </Button>
             {/* Check-in functionality can be added based on time window */}

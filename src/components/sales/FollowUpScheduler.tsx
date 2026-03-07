@@ -1,3 +1,9 @@
+import {
+  RiCalendarScheduleLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiSendPlaneLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CalendarClock, Send, Loader2, CheckCircle } from "lucide-react";
 
 const CHANNELS = ["Phone Call", "Text/SMS", "Email", "Instagram DM", "Facebook DM"];
 
@@ -79,7 +84,7 @@ export function FollowUpScheduler({ leadId, leadName, activeChannel }: FollowUpS
   if (saved) {
     return (
       <div className="text-center py-6">
-        <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+        <RiCheckboxCircleLine className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
         <p className="text-sm text-gray-900 font-medium">Follow-up scheduled</p>
         <p className="text-xs text-gray-500">{date} via {channel}</p>
         <Button
@@ -97,7 +102,7 @@ export function FollowUpScheduler({ leadId, leadName, activeChannel }: FollowUpS
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <CalendarClock className="w-5 h-5 text-emerald-600" />
+        <RiCalendarScheduleLine className="w-5 h-5 text-emerald-600" />
         <h3 className="font-semibold text-gray-900">Schedule Follow-Up</h3>
       </div>
 
@@ -151,9 +156,9 @@ export function FollowUpScheduler({ leadId, leadName, activeChannel }: FollowUpS
         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-9 text-sm"
       >
         {saving ? (
-          <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Saving...</>
+          <><RiLoader4Line className="w-3 h-3 mr-1 animate-spin" /> Saving...</>
         ) : (
-          <><Send className="w-3 h-3 mr-1" /> Schedule Follow-Up</>
+          <><RiSendPlaneLine className="w-3 h-3 mr-1" /> Schedule Follow-Up</>
         )}
       </Button>
     </div>

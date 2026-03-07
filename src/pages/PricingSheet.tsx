@@ -1,3 +1,19 @@
+import {
+  RiArrowRightLine,
+  RiCheckLine,
+  RiCheckboxCircleLine,
+  RiFlashlightLine,
+  RiGroupLine,
+  RiHomeLine,
+  RiMapPinLine,
+  RiPhoneLine,
+  RiShieldLine,
+  RiSparklingLine,
+  RiStarLine,
+  RiTimeLine,
+  RiTrophyLine,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -5,10 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  ArrowRight, Check, CheckCircle2, Crown, Shield, Sparkles, Star,
-  Clock, Phone, Zap, Home, Award, MapPin, Users,
-} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
 import {
@@ -114,10 +127,10 @@ export default function PricingSheet() {
           </div>
           <div className="flex items-center gap-3">
             <a href="tel:+18447352070" className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Phone className="w-4 h-4" />(844) 735-2070
+              <RiPhoneLine className="w-4 h-4" />(844) 735-2070
             </a>
             <Button onClick={handleBookNow} className="h-10 px-6 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white">
-              Book Now <ArrowRight className="w-4 h-4 ml-2" />
+              Book Now <RiArrowRightLine className="w-4 h-4 ml-2" />
             </Button>
           </div>
         </div>
@@ -130,7 +143,7 @@ export default function PricingSheet() {
         <div className="relative container mx-auto px-4 pt-16 pb-10 md:pt-24 md:pb-14">
           <div className="max-w-3xl mx-auto text-center space-y-6">
             <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-[#5C0FFE]/20 hover:bg-[#5C0FFE]/10 px-4 py-1.5">
-              <Shield className="w-3.5 h-3.5 mr-1.5" />Maryland Service Areas
+              <RiShieldLine className="w-3.5 h-3.5 mr-1.5" />Maryland Service Areas
             </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-jakarta leading-[1.1]">
               Simple, <span className="bg-gradient-to-r from-[#5C0FFE] to-[#8F7BFD] bg-clip-text text-transparent">Transparent</span> Pricing
@@ -160,11 +173,11 @@ export default function PricingSheet() {
               >
                 {zone === id && (
                   <div className="absolute -top-2 -right-2 w-6 h-6 bg-[#5C0FFE] rounded-full flex items-center justify-center">
-                    <Check className="w-3.5 h-3.5 text-white" />
+                    <RiCheckLine className="w-3.5 h-3.5 text-white" />
                   </div>
                 )}
                 <div className="flex items-center gap-2 mb-1">
-                  <MapPin className="w-4 h-4 text-[#5C0FFE]" />
+                  <RiMapPinLine className="w-4 h-4 text-[#5C0FFE]" />
                   <span className="font-bold text-sm">{z.label}</span>
                   {id === 'A' && <Badge className="bg-amber-500/10 text-amber-600 border-0 text-[10px]">+15%</Badge>}
                   {id === 'B' && <Badge variant="secondary" className="text-[10px]">Base</Badge>}
@@ -277,15 +290,15 @@ export default function PricingSheet() {
         {/* CTA Strip */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
           <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#5C0FFE]/10 border border-[#5C0FFE]/20">
-            <Zap className="w-4 h-4 text-[#5C0FFE]" />
+            <RiFlashlightLine className="w-4 h-4 text-[#5C0FFE]" />
             <span className="text-sm font-semibold text-[#5C0FFE]">${DEPOSIT_AMOUNT} deposit to book</span>
           </div>
           <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-green-500/10 border border-green-500/20">
-            <Award className="w-4 h-4 text-green-600" />
+            <RiTrophyLine className="w-4 h-4 text-green-600" />
             <span className="text-sm font-semibold text-green-700">New customers save ${NEW_CUSTOMER_DISCOUNT}</span>
           </div>
           <Button onClick={handleBookNow} className="h-11 px-8 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">
-            Book Your Clean <ArrowRight className="w-4 h-4 ml-2" />
+            Book Your Clean <RiArrowRightLine className="w-4 h-4 ml-2" />
           </Button>
         </div>
 
@@ -309,7 +322,7 @@ export default function PricingSheet() {
         {/* ─── Novara Glow Membership (Recurring Services) ── */}
         <div className="mb-8 text-center">
           <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-[#5C0FFE]/20 hover:bg-[#5C0FFE]/10 px-4 py-1.5 mb-4">
-            <Crown className="w-3.5 h-3.5 mr-1.5" />Save Up to 42%
+            <RiVipCrownLine className="w-3.5 h-3.5 mr-1.5" />Save Up to 42%
           </Badge>
           <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Novara Glow Membership</h2>
           <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
@@ -327,7 +340,7 @@ export default function PricingSheet() {
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#5C0FFE]/10 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-[#5C0FFE]" />
+                  <RiSparklingLine className="w-5 h-5 text-[#5C0FFE]" />
                 </div>
                 <div>
                   <h3 className="font-bold font-jakarta">Monthly</h3>
@@ -344,11 +357,11 @@ export default function PricingSheet() {
               <Separator />
               <ul className="space-y-2">
                 {['1 standard clean per month', 'Priority scheduling', 'Cancel anytime', 'No long-term contract'].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs"><CheckCircle2 className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
+                  <li key={i} className="flex items-center gap-2 text-xs"><RiCheckboxCircleLine className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
                 ))}
               </ul>
               <Button onClick={handleBookNow} variant="outline" className="w-full h-10 font-semibold border-[#5C0FFE]/30 text-[#5C0FFE] hover:bg-[#5C0FFE]/5">
-                Get Started <ArrowRight className="w-4 h-4 ml-1" />
+                Get Started <RiArrowRightLine className="w-4 h-4 ml-1" />
               </Button>
             </CardContent>
           </Card>
@@ -361,7 +374,7 @@ export default function PricingSheet() {
             <CardContent className="p-6 pt-12 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#5C0FFE]/10 flex items-center justify-center">
-                  <Star className="w-5 h-5 text-[#5C0FFE]" />
+                  <RiStarLine className="w-5 h-5 text-[#5C0FFE]" />
                 </div>
                 <div>
                   <h3 className="font-bold font-jakarta">Bi-Weekly</h3>
@@ -378,11 +391,11 @@ export default function PricingSheet() {
               <Separator />
               <ul className="space-y-2">
                 {['2 standard cleans per month', 'Same trusted team every visit', 'Priority scheduling', 'Free add-ons included', 'Cancel or pause anytime'].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs"><CheckCircle2 className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
+                  <li key={i} className="flex items-center gap-2 text-xs"><RiCheckboxCircleLine className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
                 ))}
               </ul>
               <Button onClick={handleBookNow} className="w-full h-11 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-md">
-                Get Started <ArrowRight className="w-4 h-4 ml-1" />
+                Get Started <RiArrowRightLine className="w-4 h-4 ml-1" />
               </Button>
             </CardContent>
           </Card>
@@ -392,7 +405,7 @@ export default function PricingSheet() {
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#5C0FFE]/10 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-[#5C0FFE]" />
+                  <RiVipCrownLine className="w-5 h-5 text-[#5C0FFE]" />
                 </div>
                 <div>
                   <h3 className="font-bold font-jakarta">Weekly</h3>
@@ -409,11 +422,11 @@ export default function PricingSheet() {
               <Separator />
               <ul className="space-y-2">
                 {['4 standard cleans per month', 'Dedicated cleaning team', 'VIP scheduling', 'Free add-ons included', 'Best for families & pets'].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs"><CheckCircle2 className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
+                  <li key={i} className="flex items-center gap-2 text-xs"><RiCheckboxCircleLine className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
                 ))}
               </ul>
               <Button onClick={handleBookNow} variant="outline" className="w-full h-10 font-semibold border-[#5C0FFE]/30 text-[#5C0FFE] hover:bg-[#5C0FFE]/5">
-                Get Started <ArrowRight className="w-4 h-4 ml-1" />
+                Get Started <RiArrowRightLine className="w-4 h-4 ml-1" />
               </Button>
             </CardContent>
           </Card>
@@ -433,7 +446,7 @@ export default function PricingSheet() {
                   <th className="text-center py-3 px-4 font-semibold">One-Time</th>
                   <th className="text-center py-3 px-4 font-semibold">Monthly (1x)</th>
                   <th className="text-center py-3 px-4 font-semibold">
-                    <span className="flex items-center justify-center gap-1">Bi-Weekly (2x) <Star className="w-3 h-3" /></span>
+                    <span className="flex items-center justify-center gap-1">Bi-Weekly (2x) <RiStarLine className="w-3 h-3" /></span>
                   </th>
                   <th className="text-center py-3 px-4 font-semibold">Weekly (4x)</th>
                 </tr>
@@ -470,13 +483,13 @@ export default function PricingSheet() {
         {/* ─── Guarantees ────────────────────────────────── */}
         <div className="rounded-2xl bg-gradient-to-br from-[#5C0FFE]/[0.04] to-[#8F7BFD]/[0.04] border border-[#5C0FFE]/10 p-8 md:p-12 mb-16">
           <div className="max-w-2xl mx-auto text-center space-y-6">
-            <Shield className="w-12 h-12 text-[#5C0FFE] mx-auto" />
+            <RiShieldLine className="w-12 h-12 text-[#5C0FFE] mx-auto" />
             <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Our Guarantee</h2>
             <div className="grid sm:grid-cols-3 gap-6">
               {[
-                { icon: CheckCircle2, title: "48-Hour Re-Clean", desc: "Not happy? We come back free within 48 hours." },
-                { icon: Shield, title: "Fully Insured", desc: "Background-checked, bonded & insured teams." },
-                { icon: Clock, title: "Always On Time", desc: "99% on-time rate or your next clean is on us." },
+                { icon: RiCheckboxCircleLine, title: "48-Hour Re-Clean", desc: "Not happy? We come back free within 48 hours." },
+                { icon: RiShieldLine, title: "Fully Insured", desc: "Background-checked, bonded & insured teams." },
+                { icon: RiTimeLine, title: "Always On Time", desc: "99% on-time rate or your next clean is on us." },
               ].map((g) => (
                 <div key={g.title} className="space-y-2">
                   <g.icon className="w-8 h-8 text-[#5C0FFE] mx-auto" />
@@ -496,11 +509,11 @@ export default function PricingSheet() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button onClick={handleBookNow} size="lg" className="h-14 px-10 text-base font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">
-              Book Your Clean Now <ArrowRight className="w-5 h-5 ml-2" />
+              Book Your Clean Now <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
             <a href="tel:+18447352070">
               <Button variant="outline" size="lg" className="h-14 px-10 text-base font-semibold border-[#5C0FFE]/30 text-[#5C0FFE]">
-                <Phone className="w-4 h-4 mr-2" />Call (844) 735-2070
+                <RiPhoneLine className="w-4 h-4 mr-2" />Call (844) 735-2070
               </Button>
             </a>
           </div>

@@ -1,3 +1,13 @@
+import {
+  RiArrowLeftLine,
+  RiArrowRightSLine,
+  RiCheckLine,
+  RiFlashlightLine,
+  RiPhoneLine,
+  RiSparklingLine,
+  RiStarLine,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { useState, useEffect, useMemo } from "react";
 import { trackViewContent } from "@/lib/meta-pixel";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Check, ArrowLeft, Phone, ChevronRight, Star, Crown, Sparkles, Zap } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PromoBanner } from "@/components/booking/PromoBanner";
@@ -101,7 +111,6 @@ export default function BookingOffer() {
     }, 100);
   };
 
-
   const handleSelectMembership = () => {
     setSelectedService('membership');
     updateBookingData({
@@ -144,19 +153,19 @@ export default function BookingOffer() {
                 </p>
                 
                 <div className="flex items-center justify-center gap-2 text-lg font-semibold text-primary">
-                  <Phone className="w-5 h-5" />
+                  <RiPhoneLine className="w-5 h-5" />
                   <a href="tel:+18447352070">(844) 735-2070</a>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button asChild size="lg" className="bg-gradient-primary">
                     <a href="tel:+18447352070">
-                      <Phone className="w-4 h-4 mr-2" />
+                      <RiPhoneLine className="w-4 h-4 mr-2" />
                       Call Now
                     </a>
                   </Button>
                   <Button variant="ghost" size="lg" onClick={handleBack}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    <RiArrowLeftLine className="w-4 h-4 mr-2" />
                     Back
                   </Button>
                 </div>
@@ -199,7 +208,7 @@ export default function BookingOffer() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Badge className="bg-amber-500 text-white font-bold px-3 py-1">
-                          <Zap className="w-3 h-3 mr-1" />
+                          <RiFlashlightLine className="w-3 h-3 mr-1" />
                           Limited Offer
                         </Badge>
                       </div>
@@ -221,7 +230,7 @@ export default function BookingOffer() {
                         onClick={handleSelectPromo}
                       >
                         Claim Offer
-                        <ChevronRight className="w-4 h-4 ml-1" />
+                        <RiArrowRightSLine className="w-4 h-4 ml-1" />
                       </Button>
                     </div>
                   </div>
@@ -276,7 +285,7 @@ export default function BookingOffer() {
                   {MEMBERSHIP_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-sm">
                       <div className="w-5 h-5 rounded-full bg-success/15 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-success" />
+                        <RiCheckLine className="w-3 h-3 text-success" />
                       </div>
                       <span>{feature}</span>
                     </li>
@@ -290,7 +299,7 @@ export default function BookingOffer() {
                     onClick={handleSelectMembership}
                   >
                     Get Started — ${DEPOSIT_AMOUNT} Today
-                    <ChevronRight className="w-4 h-4 ml-1" />
+                    <RiArrowRightSLine className="w-4 h-4 ml-1" />
                   </Button>
                   <Button 
                     variant="ghost" 
@@ -342,7 +351,7 @@ export default function BookingOffer() {
           {/* Back Navigation */}
           <div className="flex justify-center">
             <Button variant="ghost" onClick={handleBack} className="text-muted-foreground">
-              <ArrowLeft className="w-4 h-4 mr-2" />
+              <RiArrowLeftLine className="w-4 h-4 mr-2" />
               Back to Home Size
             </Button>
           </div>
@@ -363,7 +372,7 @@ export default function BookingOffer() {
                 <div className="p-3 rounded-lg border bg-success/5 border-success/20">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Star className="w-4 h-4 text-success" />
+                      <RiStarLine className="w-4 h-4 text-success" />
                       <span className="font-semibold text-sm">Bi-Weekly (2x/month)</span>
                       <Badge className="bg-success/10 text-success border-0 text-[10px]">Best Value</Badge>
                     </div>
@@ -373,7 +382,7 @@ export default function BookingOffer() {
                 <div className="p-3 rounded-lg border">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-primary" />
+                      <RiSparklingLine className="w-4 h-4 text-primary" />
                       <span className="font-semibold text-sm">Monthly (1x/month)</span>
                     </div>
                     <span className="font-bold">${prices.membership.monthly}/mo</span>
@@ -382,7 +391,7 @@ export default function BookingOffer() {
                 <div className="p-3 rounded-lg border">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Crown className="w-4 h-4 text-primary" />
+                      <RiVipCrownLine className="w-4 h-4 text-primary" />
                       <span className="font-semibold text-sm">Weekly (4x/month)</span>
                     </div>
                     <span className="font-bold">${prices.membership.weekly}/mo</span>
@@ -402,7 +411,7 @@ export default function BookingOffer() {
                   "No long-term contracts",
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-success flex-shrink-0" />
+                    <RiCheckLine className="w-4 h-4 text-success flex-shrink-0" />
                     <span className="text-sm">{item}</span>
                   </div>
                 ))}

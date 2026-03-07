@@ -1,3 +1,11 @@
+import {
+  RiArrowLeftLine,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiFileCopyLine,
+  RiLoader4Line,
+  RiSendPlaneLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Send, Copy, CheckCircle, XCircle, Loader2, ArrowLeft } from "lucide-react";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "react-router-dom";
 import { SEO } from "@/components/SEO";
@@ -77,7 +85,7 @@ const WebhookTester = () => {
         <div className="flex items-center gap-4">
           <Link to="/admin/webhooks">
             <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
+              <RiArrowLeftLine className="h-4 w-4 mr-2" />
               Back to Monitor
             </Button>
           </Link>
@@ -112,9 +120,9 @@ const WebhookTester = () => {
             </div>
             <Button onClick={handleTestWebhook} disabled={loading}>
               {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <RiLoader4Line className="h-4 w-4 animate-spin mr-2" />
               ) : (
-                <Send className="h-4 w-4 mr-2" />
+                <RiSendPlaneLine className="h-4 w-4 mr-2" />
               )}
               Send Webhook
             </Button>
@@ -151,9 +159,9 @@ const WebhookTester = () => {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           {response.success ? (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
+                            <RiCheckboxCircleLine className="h-5 w-5 text-green-500" />
                           ) : (
-                            <XCircle className="h-5 w-5 text-red-500" />
+                            <RiCloseCircleLine className="h-5 w-5 text-red-500" />
                           )}
                           <Badge variant={response.success ? "default" : "destructive"}>
                             {response.success ? "Success" : "Failed"}
@@ -168,7 +176,7 @@ const WebhookTester = () => {
                           size="sm"
                           className="gap-1"
                         >
-                          <Copy className="h-4 w-4" />
+                          <RiFileCopyLine className="h-4 w-4" />
                           Copy
                         </Button>
                       </div>

@@ -1,5 +1,11 @@
+import {
+  RiCalendarLine,
+  RiMapPinLine,
+  RiMoneyDollarCircleLine,
+  RiStarLine
+} from "@remixicon/react";
 import { Card } from "@/components/ui/card";
-import { MapPin, Calendar, DollarSign, Star } from "lucide-react";
+
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
@@ -11,7 +17,7 @@ export function CompletedJobs({ jobs }: CompletedJobsProps) {
   if (jobs.length === 0) {
     return (
       <div className="text-center py-8">
-        <DollarSign className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+        <RiMoneyDollarCircleLine className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
         <p className="text-sm text-muted-foreground">No completed jobs yet</p>
         <p className="text-xs text-muted-foreground mt-1">
           Your completed jobs will appear here
@@ -41,18 +47,18 @@ export function CompletedJobs({ jobs }: CompletedJobsProps) {
 
           <div className="space-y-1.5 mb-3">
             <div className="flex items-center gap-2 text-xs">
-              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+              <RiCalendarLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>
                 {format(new Date(booking.service_date), "MMMM d, yyyy")}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+              <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>{booking.address}, {booking.city}</span>
             </div>
             {booking.estimated_duration_hours && (
               <div className="flex items-center gap-2 text-xs">
-                <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
+                <RiMoneyDollarCircleLine className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>{booking.estimated_duration_hours} hours × ${booking.cleaner_hourly_rate_cents / 100}/hr</span>
               </div>
             )}
@@ -64,7 +70,7 @@ export function CompletedJobs({ jobs }: CompletedJobsProps) {
             </Badge>
             {booking.rating_submitted && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                <RiStarLine className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                 <span>Rated by customer</span>
               </div>
             )}

@@ -1,3 +1,9 @@
+import {
+  RiCalendarLine as CalendarIcon,
+  RiLoader4Line,
+  RiPauseCircleLine,
+  RiPlayCircleLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, PauseCircle, PlayCircle, Calendar as CalendarIcon } from "lucide-react";
+
 import { format, addDays, addMonths } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -80,12 +86,12 @@ export function PauseResumeDialog({
           <DialogTitle className="flex items-center gap-2">
             {isPaused ? (
               <>
-                <PlayCircle className="w-5 h-5 text-success" />
+                <RiPlayCircleLine className="w-5 h-5 text-success" />
                 Resume Your Subscription
               </>
             ) : (
               <>
-                <PauseCircle className="w-5 h-5 text-warning" />
+                <RiPauseCircleLine className="w-5 h-5 text-warning" />
                 Pause Your Subscription
               </>
             )}
@@ -215,12 +221,12 @@ export function PauseResumeDialog({
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
                   Resuming...
                 </>
               ) : (
                 <>
-                  <PlayCircle className="mr-2 h-4 w-4" />
+                  <RiPlayCircleLine className="mr-2 h-4 w-4" />
                   Resume Subscription
                 </>
               )}
@@ -234,12 +240,12 @@ export function PauseResumeDialog({
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
                   Pausing...
                 </>
               ) : (
                 <>
-                  <PauseCircle className="mr-2 h-4 w-4" />
+                  <RiPauseCircleLine className="mr-2 h-4 w-4" />
                   Pause Subscription
                 </>
               )}

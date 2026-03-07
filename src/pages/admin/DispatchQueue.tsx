@@ -1,3 +1,10 @@
+import {
+  RiAlertLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiRefreshLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -5,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+
 import { format } from "date-fns";
 import { SEO } from "@/components/SEO";
 
@@ -149,7 +156,7 @@ export default function DispatchQueue() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <RiLoader4Line className="h-8 w-8 animate-spin" />
       </div>
     );
   }
@@ -166,7 +173,7 @@ export default function DispatchQueue() {
             </p>
           </div>
           <Button onClick={fetchJobs} variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RiRefreshLine className="h-4 w-4 mr-2" />
             Refresh
           </Button>
         </div>
@@ -231,7 +238,7 @@ export default function DispatchQueue() {
           <CardContent>
             {jobs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <RiCheckboxCircleLine className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>No jobs in dispatch queue</p>
               </div>
             ) : (
@@ -257,7 +264,7 @@ export default function DispatchQueue() {
                       <TableRow key={job.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            <RiTimeLine className="h-4 w-4 text-muted-foreground" />
                             <div>
                               <div className="font-medium">
                                 {format(new Date(job.start_datetime), "MMM d")}
@@ -326,7 +333,7 @@ export default function DispatchQueue() {
                           {getStatusBadge(job)}
                           {job.dispatch_alert_reason && (
                             <div className="flex items-center gap-1 mt-1 text-xs text-destructive">
-                              <AlertTriangle className="h-3 w-3" />
+                              <RiAlertLine className="h-3 w-3" />
                               {job.dispatch_alert_reason}
                             </div>
                           )}
@@ -339,7 +346,7 @@ export default function DispatchQueue() {
                           >
                             {dispatchingJobId === job.id ? (
                               <>
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                <RiLoader4Line className="h-3 w-3 mr-1 animate-spin" />
                                 Dispatching...
                               </>
                             ) : (

@@ -1,3 +1,9 @@
+import {
+  RiChat3Line,
+  RiNotification3Line,
+  RiShieldLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
-import { MessageSquare, Shield, Bell, Clock } from "lucide-react";
+
 import { SEO } from "@/components/SEO";
 
 const SmsConsent = () => {
@@ -66,7 +72,7 @@ const SmsConsent = () => {
       <SEO title="SMS Consent" description="Opt in to receive SMS updates about your Novara Cleaning bookings." noindex />
       <div className="container max-w-2xl py-12 px-4">
         <div className="mb-8 text-center">
-          <MessageSquare className="mx-auto h-16 w-16 text-primary mb-4" />
+          <RiChat3Line className="mx-auto h-16 w-16 text-primary mb-4" />
           <h1 className="text-4xl font-bold text-foreground mb-2">SMS Notifications</h1>
           <p className="text-muted-foreground text-lg">
             Stay connected with instant updates about your jobs
@@ -76,7 +82,7 @@ const SmsConsent = () => {
         <Card className="card-outlined-hover mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" />
+              <RiNotification3Line className="h-5 w-5 text-primary" />
               What You'll Receive
             </CardTitle>
             <CardDescription>
@@ -197,13 +203,13 @@ const SmsConsent = () => {
         <Card className="card-outlined bg-muted/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Shield className="h-5 w-5 text-primary" />
+              <RiShieldLine className="h-5 w-5 text-primary" />
               Your Privacy & Rights
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p className="flex items-start gap-2">
-              <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+              <RiTimeLine className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
               <span>
                 <strong>Opt-out anytime:</strong> Reply STOP to any message to unsubscribe
                 immediately

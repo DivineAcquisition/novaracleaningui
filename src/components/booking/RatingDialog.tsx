@@ -1,8 +1,11 @@
+import {
+  RiStarLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Star } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -83,7 +86,7 @@ export const RatingDialog = ({
                   onMouseLeave={() => setHoveredRating(0)}
                   onClick={() => setRating(star)}
                 >
-                  <Star
+                  <RiStarLine
                     className={`h-8 w-8 ${
                       star <= (hoveredRating || rating)
                         ? "fill-yellow-400 text-yellow-400"

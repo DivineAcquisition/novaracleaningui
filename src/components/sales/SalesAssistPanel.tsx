@@ -1,8 +1,15 @@
+import {
+  RiChat3Line,
+  RiErrorWarningLine,
+  RiFileCopyLine,
+  RiFlashlightLine,
+  RiLightbulbLine
+} from "@remixicon/react";
 import { useSalesScripts } from "@/hooks/use-sales-data";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, MessageSquare, Zap, Lightbulb, AlertCircle } from "lucide-react";
+
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +43,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
       {activeChannelTip && (
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
           <div className="flex items-center gap-2 text-blue-600 text-xs font-semibold mb-1">
-            <MessageSquare className="w-3 h-3" />
+            <RiChat3Line className="w-3 h-3" />
             {activeChannel} Tips
           </div>
           <p className="text-sm text-gray-600">{activeChannelTip.script_text}</p>
@@ -48,7 +55,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 text-emerald-600 text-xs font-semibold">
-              <Lightbulb className="w-3 h-3" />
+              <RiLightbulbLine className="w-3 h-3" />
               Say This Now
             </div>
             <Button
@@ -57,7 +64,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
               className="h-6 w-6 p-0 text-gray-500 hover:text-gray-900"
               onClick={() => copyScript(activeTalkingPoint.script_text)}
             >
-              <Copy className="w-3 h-3" />
+              <RiFileCopyLine className="w-3 h-3" />
             </Button>
           </div>
           <p className="text-sm text-gray-600 italic">"{activeTalkingPoint.script_text}"</p>
@@ -67,7 +74,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
       {/* Closing Techniques */}
       <div>
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-          <Zap className="w-3 h-3" /> Closing Techniques
+          <RiFlashlightLine className="w-3 h-3" /> Closing Techniques
         </h4>
         <div className="space-y-1.5">
           {closingScripts?.map((script) => (
@@ -80,7 +87,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
                 <div className="text-xs font-medium text-gray-900">{script.title}</div>
                 <div className="text-xs text-gray-500 truncate">{script.script_text}</div>
               </div>
-              <Copy className="w-3 h-3 text-gray-400 group-hover:text-gray-500 shrink-0 mt-0.5" />
+              <RiFileCopyLine className="w-3 h-3 text-gray-400 group-hover:text-gray-500 shrink-0 mt-0.5" />
             </div>
           ))}
         </div>
@@ -89,7 +96,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
       {/* Objection Handling */}
       <div>
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" /> Objection Handling
+          <RiErrorWarningLine className="w-3 h-3" /> Objection Handling
         </h4>
         <Accordion type="single" collapsible className="space-y-1">
           {objections?.map((script) => (
@@ -109,7 +116,7 @@ export function SalesAssistPanel({ activeChannel, currentStep }: SalesAssistPane
                   className="h-7 text-xs text-gray-500 hover:text-gray-900"
                   onClick={() => copyScript(script.script_text)}
                 >
-                  <Copy className="w-3 h-3 mr-1" /> Copy Script
+                  <RiFileCopyLine className="w-3 h-3 mr-1" /> Copy Script
                 </Button>
               </AccordionContent>
             </AccordionItem>

@@ -1,3 +1,11 @@
+import {
+  RiArrowRightUpLine,
+  RiCalendarLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiSearchLine,
+  RiStarLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Search, Star, MapPin, Calendar, TrendingUp } from "lucide-react";
+
 import { SEO } from "@/components/SEO";
 
 interface Cleaner {
@@ -100,7 +108,7 @@ export default function CleanerDirectory() {
     
     return (
       <div className="flex items-center gap-1">
-        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+        <RiStarLine className="h-4 w-4 fill-yellow-400 text-yellow-400" />
         <span className="font-medium">{rating?.toFixed(1) || '0.0'}</span>
         <span className="text-sm text-muted-foreground">({count})</span>
       </div>
@@ -112,7 +120,7 @@ export default function CleanerDirectory() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <RiLoader4Line className="h-8 w-8 animate-spin" />
       </div>
     );
   }
@@ -167,7 +175,7 @@ export default function CleanerDirectory() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                <RiStarLine className="h-5 w-5 fill-yellow-400 text-yellow-400" />
                 <div className="text-2xl font-bold">
                   {(cleaners.reduce((sum, c) => sum + (c.average_rating || 0), 0) / cleaners.filter(c => c.total_ratings > 0).length || 0).toFixed(1)}
                 </div>
@@ -184,7 +192,7 @@ export default function CleanerDirectory() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <RiSearchLine className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by name or email..."
                   value={searchQuery}
@@ -257,7 +265,7 @@ export default function CleanerDirectory() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <RiMapPinLine className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <div>{cleaner.state}</div>
                           <div className="text-sm text-muted-foreground">
@@ -302,13 +310,13 @@ export default function CleanerDirectory() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <RiCalendarLine className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">{cleaner.jobs_assigned_last_7d}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <RiArrowRightUpLine className="h-4 w-4 text-muted-foreground" />
                         <span>{cleaner.workload_score.toFixed(1)}</span>
                       </div>
                     </TableCell>

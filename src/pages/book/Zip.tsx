@@ -1,10 +1,18 @@
+import {
+  RiArrowRightLine,
+  RiCheckboxCircleLine,
+  RiGiftLine,
+  RiMapPinLine,
+  RiTimeLine,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
-import { ArrowRight, Crown, CheckCircle, Clock, MapPin, Gift } from "lucide-react";
+
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { supabase } from "@/integrations/supabase/client";
@@ -240,7 +248,7 @@ export default function BookingZip() {
           {referralCode && (
             <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/30 rounded-xl animate-fade-in">
               <div className="flex-shrink-0 w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
-                <Gift className="w-5 h-5 text-primary" />
+                <RiGiftLine className="w-5 h-5 text-primary" />
               </div>
               <div className="text-left">
                 <p className="font-semibold text-foreground text-sm">You were referred! 🎉</p>
@@ -300,7 +308,7 @@ export default function BookingZip() {
                     className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
                   >
                     {isValidating ? "Checking..." : "Continue"}
-                    <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
+                    <RiArrowRightLine className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                   </Button>
                 </form>
               )}
@@ -310,7 +318,7 @@ export default function BookingZip() {
                 <form onSubmit={handleContactSubmit} className="space-y-5 animate-fade-in">
                   {/* Success Message */}
                   <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
-                    <CheckCircle className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
+                    <RiCheckboxCircleLine className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
                     <div className="text-left">
                       <p className="font-semibold text-foreground">
                         Great news! We service {cityState}
@@ -411,7 +419,7 @@ export default function BookingZip() {
                 <form onSubmit={handleWaitlistSubmit} className="space-y-5 animate-fade-in">
                   {/* Info Message */}
                   <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <MapPin className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <RiMapPinLine className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
                     <div className="text-left">
                       <p className="font-semibold text-amber-800">
                         We're not in {zipCode} yet
@@ -427,15 +435,15 @@ export default function BookingZip() {
                     <p className="text-sm font-medium text-foreground">Waitlist perks:</p>
                     <ul className="text-sm text-muted-foreground space-y-1">
                       <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-primary" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
                         First to know when we launch in your area
                       </li>
                       <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-primary" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
                         Exclusive early-bird pricing
                       </li>
                       <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-primary" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
                         Special founding member perks
                       </li>
                     </ul>
@@ -513,7 +521,7 @@ export default function BookingZip() {
                     className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
                   >
                     {isSubmitting ? "Adding to Waitlist..." : "Join the Waitlist"}
-                    <Clock className="w-4 h-4 md:w-5 md:h-5 ml-2" />
+                    <RiTimeLine className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                   </Button>
 
                   {/* Change ZIP Link */}
@@ -531,7 +539,7 @@ export default function BookingZip() {
               {formMode === 'waitlist-success' && (
                 <div className="space-y-6 animate-fade-in text-center py-4">
                   <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle className="w-10 h-10 text-primary" />
+                    <RiCheckboxCircleLine className="w-10 h-10 text-primary" />
                   </div>
                   
                   <div className="space-y-2">
@@ -568,7 +576,7 @@ export default function BookingZip() {
                 <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
                   <div className="flex-shrink-0">
                     <div className="w-12 h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
-                      <Crown className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                      <RiVipCrownLine className="w-6 h-6 md:w-8 md:h-8 text-white" />
                     </div>
                   </div>
                   <div className="flex-1 text-center md:text-left space-y-2">
@@ -580,7 +588,7 @@ export default function BookingZip() {
                   </div>
                   <Button onClick={() => navigate("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
                     Learn More
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <RiArrowRightLine className="w-4 h-4 ml-2" />
                   </Button>
                 </div>
               </CardContent>

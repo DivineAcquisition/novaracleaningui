@@ -1,3 +1,9 @@
+import {
+  RiCloseLine,
+  RiDeleteBinLine,
+  RiMapPinLine,
+  RiSearchLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -5,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, MapPin, Search, Trash2 } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -126,7 +132,7 @@ export function CleanerMultiSelect({
                   </Badge>
                   {cleaner.distance > 0 && (
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
+                      <RiMapPinLine className="w-3 h-3" />
                       {cleaner.distance} mi
                     </span>
                   )}
@@ -167,7 +173,7 @@ export function CleanerMultiSelect({
                 onClick={() => handleRemoveCleaner(cleaner.id)}
                 className="h-8 w-8"
               >
-                <X className="w-4 h-4" />
+                <RiCloseLine className="w-4 h-4" />
               </Button>
             </div>
           ))}
@@ -176,7 +182,7 @@ export function CleanerMultiSelect({
 
       {/* Search Filter */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Search cleaners by name..."
           value={searchFilter}
@@ -222,7 +228,7 @@ export function CleanerMultiSelect({
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                     {cleaner.distance !== undefined && cleaner.distance > 0 && (
                       <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
+                        <RiMapPinLine className="w-3 h-3" />
                         {cleaner.distance} mi away
                       </span>
                     )}
@@ -237,7 +243,7 @@ export function CleanerMultiSelect({
                   disabled={deletingId === cleaner.id}
                   title="Deactivate cleaner"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <RiDeleteBinLine className="w-3.5 h-3.5" />
                 </Button>
               </div>
             );

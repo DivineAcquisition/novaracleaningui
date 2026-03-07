@@ -1,3 +1,8 @@
+import {
+  RiArrowDownSLine,
+  RiArrowUpSLine,
+  RiSearchLine
+} from "@remixicon/react";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/admin/AdminLayout";
@@ -5,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
+
 import { SEO } from "@/components/SEO";
 
 interface Customer {
@@ -133,7 +138,7 @@ export default function AdminCustomers() {
         <h1 className="text-2xl font-bold text-white">Customers</h1>
 
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+          <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
           <Input
             placeholder="Search name, email, phone, ZIP…"
             value={search}
@@ -187,9 +192,9 @@ export default function AdminCustomers() {
                             <td className="py-3 px-4 text-slate-400 hidden lg:table-cell">{c.referral_code || "—"}</td>
                             <td className="py-3 px-4">
                               {expandedId === c.id ? (
-                                <ChevronUp className="h-4 w-4 text-slate-500" />
+                                <RiArrowUpSLine className="h-4 w-4 text-slate-500" />
                               ) : (
-                                <ChevronDown className="h-4 w-4 text-slate-500" />
+                                <RiArrowDownSLine className="h-4 w-4 text-slate-500" />
                               )}
                             </td>
                           </tr>

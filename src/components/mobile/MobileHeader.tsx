@@ -1,4 +1,8 @@
-import { Bell, Menu } from "lucide-react";
+
+import {
+  RiMenuLine,
+  RiNotification3Line
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";
 
@@ -32,7 +36,7 @@ export function MobileHeader({ title, showNotifications = true, onMenuClick }: M
               onClick={handleMenuClick}
               className="h-10 w-10"
             >
-              <Menu className="h-5 w-5" />
+              <RiMenuLine className="h-5 w-5" />
             </Button>
           )}
           <h1 className="text-lg font-semibold truncate">{title}</h1>
@@ -45,7 +49,7 @@ export function MobileHeader({ title, showNotifications = true, onMenuClick }: M
             onClick={handleNotificationClick}
             className="h-10 w-10 relative"
           >
-            <Bell className="h-5 w-5" />
+            <RiNotification3Line className="h-5 w-5" />
             <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full" />
           </Button>
         )}

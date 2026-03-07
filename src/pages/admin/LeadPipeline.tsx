@@ -1,3 +1,16 @@
+import {
+  RiArrowRightUpLine,
+  RiBarChartBoxLine,
+  RiCalendarScheduleLine,
+  RiChat3Line,
+  RiExternalLinkLine,
+  RiFilterLine,
+  RiGroupLine,
+  RiMailLine,
+  RiMoneyDollarCircleLine,
+  RiPhoneLine,
+  RiSearchLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -8,10 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Users, TrendingUp, DollarSign, CalendarClock, Phone, Mail,
-  MessageSquare, Search, Filter, BarChart3, ExternalLink,
-} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 import { formatCents } from "@/lib/sales-pricing";
@@ -149,7 +159,7 @@ export default function LeadPipeline() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <BarChart3 className="w-6 h-6 text-amber-400" />
+              <RiBarChartBoxLine className="w-6 h-6 text-amber-400" />
               Lead Pipeline
             </h1>
             <p className="text-sm text-slate-400 mt-1">Track and manage your sales pipeline</p>
@@ -167,7 +177,7 @@ export default function LeadPipeline() {
           <Card className="bg-slate-900 border-slate-800 p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-400" />
+                <RiGroupLine className="w-5 h-5 text-blue-400" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">{totalLeads}</div>
@@ -178,7 +188,7 @@ export default function LeadPipeline() {
           <Card className="bg-slate-900 border-slate-800 p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-emerald-400" />
+                <RiArrowRightUpLine className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">{conversionRate}%</div>
@@ -189,7 +199,7 @@ export default function LeadPipeline() {
           <Card className="bg-slate-900 border-slate-800 p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-amber-400" />
+                <RiMoneyDollarCircleLine className="w-5 h-5 text-amber-400" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">{totalRevenueCents > 0 ? formatCents(totalRevenueCents) : "$0"}</div>
@@ -200,7 +210,7 @@ export default function LeadPipeline() {
           <Card className="bg-slate-900 border-slate-800 p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-violet-400" />
+                <RiMoneyDollarCircleLine className="w-5 h-5 text-violet-400" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">{avgDealCents > 0 ? formatCents(avgDealCents) : "$0"}</div>
@@ -211,7 +221,7 @@ export default function LeadPipeline() {
           <Card className="bg-slate-900 border-slate-800 p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                <CalendarClock className="w-5 h-5 text-red-400" />
+                <RiCalendarScheduleLine className="w-5 h-5 text-red-400" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">{followUpsDueToday}</div>
@@ -224,7 +234,7 @@ export default function LeadPipeline() {
         {/* Filters */}
         <div className="flex items-center gap-3 mb-6">
           <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -234,7 +244,7 @@ export default function LeadPipeline() {
           </div>
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
             <SelectTrigger className="w-48 bg-slate-800 border-slate-700 text-white">
-              <Filter className="w-4 h-4 mr-2 text-slate-400" />
+              <RiFilterLine className="w-4 h-4 mr-2 text-slate-400" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -271,7 +281,7 @@ export default function LeadPipeline() {
                         <div className="font-medium text-white text-sm truncate">
                           {lead.first_name} {lead.last_name}
                         </div>
-                        <ExternalLink className="w-3 h-3 text-slate-600 group-hover:text-amber-400 shrink-0 transition-colors" />
+                        <RiExternalLinkLine className="w-3 h-3 text-slate-600 group-hover:text-amber-400 shrink-0 transition-colors" />
                       </div>
                       {lead.service_type && (
                         <div className="text-xs text-slate-400 mb-1 capitalize">{lead.service_type}</div>

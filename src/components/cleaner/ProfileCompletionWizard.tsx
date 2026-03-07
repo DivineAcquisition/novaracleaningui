@@ -1,3 +1,10 @@
+import {
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiUploadLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Calendar, MapPin, Upload, CheckCircle2, Loader2 } from "lucide-react";
+
 import { processAvatarImage } from "@/lib/image-compression";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -224,7 +231,7 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
             <div className="space-y-6">
               <div className="flex items-center gap-3 pb-4 border-b">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-primary" />
+                  <RiCalendarLine className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-semibold">Set Your Availability</h3>
@@ -273,7 +280,7 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
                           {day.label}
                         </Label>
                         {preferredDays.includes(day.value) && (
-                          <CheckCircle2 className="w-4 h-4 text-primary" />
+                          <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
                         )}
                       </div>
                     ))}
@@ -288,7 +295,7 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
             <div className="space-y-6">
               <div className="flex items-center gap-3 pb-4 border-b">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-primary" />
+                  <RiMapPinLine className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-semibold">Service Areas</h3>
@@ -334,7 +341,7 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
             <div className="space-y-6">
               <div className="flex items-center gap-3 pb-4 border-b">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Upload className="w-5 h-5 text-primary" />
+                  <RiUploadLine className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-semibold">Profile Photo</h3>
@@ -358,7 +365,7 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
                       htmlFor="avatar-upload"
                       className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-background hover:bg-accent transition-colors"
                     >
-                      <Upload className="w-4 h-4" />
+                      <RiUploadLine className="w-4 h-4" />
                       {avatarPreview ? "Change Photo" : "Upload Photo"}
                     </Label>
                     <Input
@@ -418,12 +425,12 @@ export function ProfileCompletionWizard({ open, cleaner, onComplete }: ProfileCo
           >
             {isSaving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                 {isUploading ? "Uploading..." : "Saving..."}
               </>
             ) : step === totalSteps ? (
               <>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
+                <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
                 Complete Setup
               </>
             ) : (

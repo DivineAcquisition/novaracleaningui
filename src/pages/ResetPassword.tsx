@@ -1,3 +1,9 @@
+import {
+  RiArrowLeftLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMailLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -5,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
+
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { SEO } from "@/components/SEO";
@@ -62,7 +68,7 @@ export default function ResetPassword() {
           {emailSent ? (
             <div className="space-y-4 text-center">
               <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'var(--gradient-primary)' }}>
-                <CheckCircle2 className="w-7 h-7 text-white" />
+                <RiCheckboxCircleLine className="w-7 h-7 text-white" />
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-sm">Email sent!</p>
@@ -72,7 +78,7 @@ export default function ResetPassword() {
               </div>
               <Link to="/auth">
                 <Button variant="outline" className="w-full rounded-xl" size="sm">
-                  <ArrowLeft className="mr-1.5 w-4 h-4" />
+                  <RiArrowLeftLine className="mr-1.5 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>
@@ -82,7 +88,7 @@ export default function ResetPassword() {
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-sm">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
@@ -102,7 +108,7 @@ export default function ResetPassword() {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Sending...</>
+                  <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" /> Sending...</>
                 ) : (
                   "Send Reset Link"
                 )}
@@ -110,7 +116,7 @@ export default function ResetPassword() {
 
               <Link to="/auth">
                 <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" size="sm">
-                  <ArrowLeft className="mr-1.5 w-4 h-4" />
+                  <RiArrowLeftLine className="mr-1.5 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>

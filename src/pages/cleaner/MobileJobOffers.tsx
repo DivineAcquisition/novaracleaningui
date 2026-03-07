@@ -1,10 +1,16 @@
+import {
+  RiBriefcaseLine,
+  RiMapPinLine,
+  RiMoneyDollarCircleLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MapPin, DollarSign, Briefcase } from "lucide-react";
+
 import { MobileHeader } from "@/components/mobile/MobileHeader";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { PullToRefresh } from "@/components/mobile/PullToRefresh";
@@ -166,7 +172,7 @@ export default function MobileJobOffers() {
         <div className="p-4 space-y-4">
           {offers.length === 0 ? (
             <Card className="p-8 text-center">
-              <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <RiBriefcaseLine className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-semibold mb-2">No job offers</h3>
               <p className="text-sm text-muted-foreground">
                 Check back soon for new opportunities
@@ -197,7 +203,7 @@ export default function MobileJobOffers() {
 
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
+                      <RiMapPinLine className="h-4 w-4" />
                       <span className="flex-1">
                         {offer.jobs.address}, {offer.jobs.city}
                       </span>
@@ -207,14 +213,14 @@ export default function MobileJobOffers() {
                     </div>
 
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Clock className="h-4 w-4" />
+                      <RiTimeLine className="h-4 w-4" />
                       <span>
                         {new Date(offer.jobs.start_datetime).toLocaleString()}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                      <DollarSign className="h-4 w-4" />
+                      <RiMoneyDollarCircleLine className="h-4 w-4" />
                       <span>
                         Estimated: ${(offer.estimated_pay_cents / 100).toFixed(2)}
                       </span>

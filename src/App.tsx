@@ -1,3 +1,6 @@
+import {
+  RiLoader4Line
+} from "@remixicon/react";
 import { lazy, Suspense } from "react";
 import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,7 +13,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DomainRestricted } from "./components/auth/DomainRestricted";
 import { DomainRouter } from "./components/auth/DomainRouter";
-import { Loader2 } from "lucide-react";
 
 // Eagerly loaded - core customer pages
 import Index from "./pages/Index";
@@ -66,7 +68,7 @@ const SmsConsent = lazy(() => import("./pages/SmsConsent"));
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
     </div>
   );
 }
@@ -86,7 +88,6 @@ function RedirectWithParams({ to }: { to: string }) {
 }
 
 const queryClient = new QueryClient();
-
 
 const App = () => (
   <HelmetProvider>

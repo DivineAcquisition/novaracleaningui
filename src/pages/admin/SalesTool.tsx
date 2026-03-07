@@ -1,3 +1,20 @@
+import {
+  RiAlertLine,
+  RiArrowGoBackLine,
+  RiBarChartBoxLine,
+  RiCheckboxCircleLine,
+  RiGroupLine,
+  RiLoader4Line,
+  RiLockLine,
+  RiMoneyDollarCircleLine,
+  RiPencilLine,
+  RiPriceTag3Line,
+  RiRefreshLine,
+  RiSaveLine,
+  RiSearchLine,
+  RiTimeLine,
+  RiWebhookLine
+} from "@remixicon/react";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { FIRST_CLEAN_PROMO } from "@/config/brand-config";
@@ -16,10 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { toast as toastHook } from "@/hooks/use-toast";
 import { SEO } from "@/components/SEO";
-import {
-  Save, CheckCircle, BarChart3, RotateCcw, Pencil, Lock,
-  Clock, DollarSign, RefreshCw, Users, AlertTriangle, Tag, Loader2,
-} from "lucide-react";
+
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, calculatePrice, DEPOSIT_AMOUNT, applyPromoCode } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
 import { calculateServiceDuration } from "@/lib/time-slots";
@@ -29,7 +43,7 @@ import { calculateDistance } from "@/lib/distance-calculator";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { useCustomerSearch, CustomerSearchResult } from "@/hooks/use-sales-data";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { calculateProfit } from "@/lib/profit-calculator";
 
@@ -625,7 +639,7 @@ export default function SalesTool() {
           <div className="flex flex-col items-center space-y-6">
             <img src="/novara-logo.png" alt="Novara Cleaning" className="h-12 object-contain" />
             <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: `${BRAND_GREEN}20` }}>
-              <Lock className="w-8 h-8" style={{ color: BRAND_GREEN }} />
+              <RiLockLine className="w-8 h-8" style={{ color: BRAND_GREEN }} />
             </div>
             <div className="text-center">
               <h1 className="text-2xl font-semibold text-gray-900 mb-2">Enter Access Code</h1>
@@ -672,21 +686,21 @@ export default function SalesTool() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/pipeline")} className="border-gray-300 text-gray-600">
-              <BarChart3 className="w-4 h-4 mr-1" /> Pipeline
+              <RiBarChartBoxLine className="w-4 h-4 mr-1" /> Pipeline
             </Button>
             <Button variant="outline" size="sm" onClick={resetForm} className="border-gray-300 text-gray-600">
               New
             </Button>
             <Button size="sm" onClick={handleSaveLead} disabled={saving || !firstName}
               className="text-white font-semibold" style={{ backgroundColor: BRAND_GREEN }}>
-              {saving ? <><Save className="w-4 h-4 mr-1 animate-spin" /> Saving...</>
-                : isEditing ? <><Pencil className="w-4 h-4 mr-1" /> Update</>
-                : savedLeadId ? <><CheckCircle className="w-4 h-4 mr-1" /> Saved</>
-                : <><Save className="w-4 h-4 mr-1" /> Save Lead</>}
+              {saving ? <><RiSaveLine className="w-4 h-4 mr-1 animate-spin" /> Saving...</>
+                : isEditing ? <><RiPencilLine className="w-4 h-4 mr-1" /> Update</>
+                : savedLeadId ? <><RiCheckboxCircleLine className="w-4 h-4 mr-1" /> Saved</>
+                : <><RiSaveLine className="w-4 h-4 mr-1" /> Save Lead</>}
             </Button>
             <Button size="sm" onClick={handleCreateBooking} disabled={loading}
               className="text-white font-semibold" style={{ backgroundColor: BRAND_GREEN }}>
-              <Save className="w-4 h-4 mr-1" /> {loading ? "Creating..." : "Create Booking"}
+              <RiSaveLine className="w-4 h-4 mr-1" /> {loading ? "Creating..." : "Create Booking"}
             </Button>
           </div>
         </div>
@@ -697,7 +711,7 @@ export default function SalesTool() {
         {showRestorePrompt && (
           <div className="mb-4 border rounded-lg p-4 flex items-center justify-between" style={{ backgroundColor: `${BRAND_GREEN}10`, borderColor: `${BRAND_GREEN}40` }}>
             <div className="flex items-center gap-2" style={{ color: BRAND_GREEN }}>
-              <RotateCcw className="w-4 h-4" />
+              <RiArrowGoBackLine className="w-4 h-4" />
               <span className="text-sm">Unsaved form data from a previous session.</span>
             </div>
             <div className="flex gap-2">
@@ -712,7 +726,7 @@ export default function SalesTool() {
           <Popover open={searchOpen && searchQuery.length >= 2} onOpenChange={setSearchOpen}>
             <PopoverTrigger asChild>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
                   placeholder="Search customers, bookings, abandoned carts..."
                   value={searchQuery}
@@ -797,7 +811,7 @@ export default function SalesTool() {
                 </div>
                 {checkingCustomer && (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Checking customer status...
+                    <RiRefreshLine className="w-4 h-4 animate-spin" /> Checking customer status...
                   </div>
                 )}
                 <CustomerRecognitionCard status={customerStatus} />
@@ -955,7 +969,7 @@ export default function SalesTool() {
 
             {/* Scheduling */}
             <Card className="bg-white border-gray-200">
-              <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><Clock className="w-5 h-5" /> Scheduling</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><RiTimeLine className="w-5 h-5" /> Scheduling</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label className="text-gray-600">Service Date *</Label>
@@ -985,7 +999,7 @@ export default function SalesTool() {
 
             {/* Booking Configuration */}
             <Card className="bg-white border-gray-200">
-              <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><DollarSign className="w-5 h-5" /> Booking Configuration</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-gray-900 flex items-center gap-2"><RiMoneyDollarCircleLine className="w-5 h-5" /> Booking Configuration</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="space-y-2"><Label className="text-gray-600">Booking Channel</Label>
@@ -1047,7 +1061,7 @@ export default function SalesTool() {
                         </Button>
                       ) : (
                         <Button variant="outline" size="sm" onClick={handleApplyPromo} disabled={applyingPromo || !promoCode.trim()} className="shrink-0 border-gray-300 text-gray-600">
-                          {applyingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                          {applyingPromo ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <RiPriceTag3Line className="w-4 h-4" />}
                         </Button>
                       )}
                     </div>
@@ -1084,7 +1098,7 @@ export default function SalesTool() {
 
                 {profitWarning && (
                   <Alert variant="destructive" className="border-red-300 bg-red-50">
-                    <AlertTriangle className="h-4 w-4" />
+                    <RiAlertLine className="h-4 w-4" />
                     <AlertDescription className="text-sm">
                       ⚠️ Profit margin is {(profitWarning.margin * 100).toFixed(0)}% — below the 20% minimum. Reduce the discount or increase the price.
                     </AlertDescription>
@@ -1116,7 +1130,7 @@ export default function SalesTool() {
             <Card className="bg-white border-gray-200">
               <CardHeader>
                 <CardTitle className="text-gray-900 flex items-center gap-2">
-                  <Users className="w-5 h-5" /> Cleaner Team Assignment
+                  <RiGroupLine className="w-5 h-5" /> Cleaner Team Assignment
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">

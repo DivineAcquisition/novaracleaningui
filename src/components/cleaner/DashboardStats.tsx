@@ -1,5 +1,10 @@
+import {
+  RiArrowRightUpLine,
+  RiBriefcaseLine,
+  RiMoneyDollarCircleLine,
+  RiStarLine
+} from "@remixicon/react";
 import { Card } from "@/components/ui/card";
-import { DollarSign, Briefcase, Star, TrendingUp } from "lucide-react";
 
 interface DashboardStatsProps {
   stats: {
@@ -23,7 +28,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     {
       title: "Total Earnings",
       value: formatCurrency(stats.totalEarnings),
-      icon: DollarSign,
+      icon: RiMoneyDollarCircleLine,
       color: "text-green-500",
       bgColor: "bg-green-500/10",
     },
@@ -31,7 +36,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       title: "Jobs Completed",
       value: stats.jobsCompleted.toString(),
       subtitle: "jobs",
-      icon: Briefcase,
+      icon: RiBriefcaseLine,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
     },
@@ -39,14 +44,14 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       title: "Average Rating",
       value: stats.averageRating > 0 ? stats.averageRating.toFixed(1) : "—",
       subtitle: stats.totalRatings > 0 ? `${stats.totalRatings} reviews` : "No ratings yet",
-      icon: Star,
+      icon: RiStarLine,
       color: "text-yellow-500",
       bgColor: "bg-yellow-500/10",
     },
     {
       title: "Acceptance Rate",
       value: `${Math.round(stats.acceptanceRate)}%`,
-      icon: TrendingUp,
+      icon: RiArrowRightUpLine,
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
     },

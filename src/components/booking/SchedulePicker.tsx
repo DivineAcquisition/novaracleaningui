@@ -1,9 +1,19 @@
+import {
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+  RiCalendarLine as CalendarIcon,
+  RiLoader4Line,
+  RiMoonLine,
+  RiSunFoggyLine,
+  RiSunLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar as CalendarIcon, Clock, ChevronRight, ChevronLeft, Loader2, Sun, Sunset, Moon } from "lucide-react";
+
 import { format, addDays, isWeekend, isBefore, startOfDay, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAvailability } from "@/hooks/use-availability";
@@ -37,9 +47,9 @@ const TIME_SLOTS = [
 ];
 
 const PERIOD_CONFIG = {
-  morning: { label: "Morning", icon: Sun, color: "text-amber-500" },
-  afternoon: { label: "Afternoon", icon: Sunset, color: "text-orange-500" },
-  evening: { label: "Evening", icon: Moon, color: "text-indigo-500" },
+  morning: { label: "Morning", icon: RiSunLine, color: "text-amber-500" },
+  afternoon: { label: "Afternoon", icon: RiSunFoggyLine, color: "text-orange-500" },
+  evening: { label: "Evening", icon: RiMoonLine, color: "text-indigo-500" },
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -155,7 +165,7 @@ export function SchedulePicker({
                 onClick={goToPreviousMonth}
                 disabled={isBefore(endOfMonth(addMonths(currentMonth, -1)), minDate)}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <RiArrowLeftSLine className="h-4 w-4" />
               </Button>
               <span className="text-sm font-medium min-w-[120px] text-center">
                 {format(currentMonth, "MMMM yyyy")}
@@ -167,7 +177,7 @@ export function SchedulePicker({
                 onClick={goToNextMonth}
                 disabled={!isBefore(startOfMonth(addMonths(currentMonth, 1)), endDate)}
               >
-                <ChevronRight className="h-4 w-4" />
+                <RiArrowRightSLine className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -230,7 +240,7 @@ export function SchedulePicker({
           
           {!selectedDate ? (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Clock className="w-10 h-10 mb-3 opacity-30" />
+              <RiTimeLine className="w-10 h-10 mb-3 opacity-30" />
               <p className="text-sm">Select a date first to see available times</p>
             </div>
           ) : isLoading ? (
@@ -310,7 +320,7 @@ export function SchedulePicker({
                       {format(selectedDate!, "EEE, MMM d, yyyy")}
                     </Badge>
                     <Badge className="bg-primary/15 text-primary border-0 py-1.5 px-3">
-                      <Clock className="w-3.5 h-3.5 mr-1.5" />
+                      <RiTimeLine className="w-3.5 h-3.5 mr-1.5" />
                       {selectedTime}
                     </Badge>
                   </div>
@@ -331,13 +341,13 @@ export function SchedulePicker({
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                     Processing...
                   </>
                 ) : (
                   <>
                     Continue to Checkout
-                    <ChevronRight className="w-4 h-4 ml-1" />
+                    <RiArrowRightSLine className="w-4 h-4 ml-1" />
                   </>
                 )}
               </Button>

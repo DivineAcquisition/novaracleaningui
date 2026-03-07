@@ -1,5 +1,8 @@
+import {
+  RiCloseLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 interface PromoBannerProps {
@@ -75,7 +78,7 @@ export function PromoBanner({
           
           {/* Dismiss button */}
           <button onClick={() => setIsDismissed(true)} className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full transition-colors" aria-label="Dismiss banner">
-            <X className="w-4 h-4 text-white/70 hover:text-white" />
+            <RiCloseLine className="w-4 h-4 text-white/70 hover:text-white" />
           </button>
         </div>
         

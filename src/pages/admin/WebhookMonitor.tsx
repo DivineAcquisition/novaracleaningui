@@ -1,3 +1,10 @@
+import {
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiRefreshLine,
+  RiTestTubeLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -5,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { RefreshCw, CheckCircle, XCircle, Clock, TestTube2 } from "lucide-react";
+
 import { format } from "date-fns";
 import { WebhookTestButton } from "@/components/admin/WebhookTestButton";
 import ZapierDirectTest from "@/components/admin/ZapierDirectTest";
@@ -94,7 +101,7 @@ const WebhookMonitor = () => {
     return (
       <div className="container mx-auto py-8">
         <div className="flex items-center justify-center">
-          <RefreshCw className="animate-spin h-8 w-8" />
+          <RiRefreshLine className="animate-spin h-8 w-8" />
         </div>
       </div>
     );
@@ -116,13 +123,13 @@ const WebhookMonitor = () => {
           <div className="flex gap-2">
             <Link to="/admin/webhook-tester">
               <Button variant="default">
-                <TestTube2 className="mr-2 h-4 w-4" />
+                <RiTestTubeLine className="mr-2 h-4 w-4" />
                 Payload Tester
               </Button>
             </Link>
             <WebhookTestButton />
             <Button onClick={fetchFailures} variant="outline">
-              <RefreshCw className="mr-2 h-4 w-4" />
+              <RiRefreshLine className="mr-2 h-4 w-4" />
               Refresh
             </Button>
           </div>
@@ -177,7 +184,7 @@ const WebhookMonitor = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Failures</CardTitle>
-            <XCircle className="h-4 w-4 text-muted-foreground" />
+            <RiCloseCircleLine className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{failures.length}</div>
@@ -187,7 +194,7 @@ const WebhookMonitor = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Unresolved</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <RiTimeLine className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{unresolvedCount}</div>
@@ -197,7 +204,7 @@ const WebhookMonitor = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Resolved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <RiCheckboxCircleLine className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{failures.length - unresolvedCount}</div>
@@ -255,10 +262,10 @@ const WebhookMonitor = () => {
                       disabled={retrying === failure.id}
                     >
                       {retrying === failure.id ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <RiRefreshLine className="h-4 w-4 animate-spin" />
                       ) : (
                         <>
-                          <RefreshCw className="h-4 w-4 mr-1" />
+                          <RiRefreshLine className="h-4 w-4 mr-1" />
                           Retry
                         </>
                       )}
@@ -269,7 +276,7 @@ const WebhookMonitor = () => {
                         variant="ghost"
                         onClick={() => handleMarkResolved(failure.id)}
                       >
-                        <CheckCircle className="h-4 w-4 mr-1" />
+                        <RiCheckboxCircleLine className="h-4 w-4 mr-1" />
                         Mark Resolved
                       </Button>
                     )}

@@ -1,8 +1,14 @@
+import {
+  RiBankCardLine,
+  RiErrorWarningLine,
+  RiLoader4Line,
+  RiRefreshLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, AlertCircle, RefreshCw, CreditCard } from "lucide-react";
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -208,7 +214,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
       {/* Error Alert */}
       {paymentError && (
         <Alert variant="destructive" className="animate-in slide-in-from-top">
-          <AlertCircle className="h-4 w-4" />
+          <RiErrorWarningLine className="h-4 w-4" />
           <AlertTitle>Payment Failed</AlertTitle>
           <AlertDescription className="mt-2 space-y-3">
             <p>{paymentError}</p>
@@ -229,7 +235,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
                 onClick={handleRetry}
                 className="mt-2"
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
+                <RiRefreshLine className="w-4 h-4 mr-2" />
                 Retry Payment
               </Button>
             ) : null}
@@ -242,7 +248,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
         <Card>
           <CardContent className="pt-6">
             <h4 className="font-semibold mb-4 flex items-center gap-2">
-              <CreditCard className="w-5 h-5" />
+              <RiBankCardLine className="w-5 h-5" />
               Select Payment Method
             </h4>
             <RadioGroup value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
@@ -308,7 +314,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
       >
         {isProcessing ? (
           <>
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            <RiLoader4Line className="mr-2 h-5 w-5 animate-spin" />
             Processing Payment...
           </>
         ) : (

@@ -1,3 +1,18 @@
+import {
+  RiAddLine,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiEyeLine,
+  RiMailLine,
+  RiMapPinLine,
+  RiMoneyDollarCircleLine,
+  RiPencilLine,
+  RiPhoneLine,
+  RiSearchLine,
+  RiStarLine,
+  RiUserFollowLine,
+  RiUserUnfollowLine
+} from "@remixicon/react";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Plus, UserCheck, UserX, DollarSign, MapPin, Mail, Phone, Search, Pencil, Star, CheckCircle, XCircle, Eye } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { US_STATES } from "@/lib/us-states";
 import { SEO } from "@/components/SEO";
@@ -224,7 +239,7 @@ export default function AdminCleaners() {
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Cleaner</Button>
+            <Button><RiAddLine className="mr-2 h-4 w-4" /> Add Cleaner</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -260,14 +275,14 @@ export default function AdminCleaners() {
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.total}</div></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Active</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{stats.active}</div></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Pending Approval</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-yellow-600">{stats.pending}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg Rating</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold flex items-center gap-1"><Star className="w-4 h-4 text-yellow-500" />{stats.avgRating}</div></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg Rating</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold flex items-center gap-1"><RiStarLine className="w-4 h-4 text-yellow-500" />{stats.avgRating}</div></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Payouts</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">${stats.totalPayouts.toFixed(0)}</div></CardContent></Card>
       </div>
 
       {/* Search & Filter */}
       <div className="flex gap-4 mb-6">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -305,8 +320,8 @@ export default function AdminCleaners() {
                   <TableCell className="font-medium">{cleaner.first_name} {cleaner.last_name}</TableCell>
                   <TableCell>
                     <div className="space-y-1 text-xs">
-                      <div className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground" />{cleaner.email}</div>
-                      <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" />{cleaner.phone}</div>
+                      <div className="flex items-center gap-1"><RiMailLine className="h-3 w-3 text-muted-foreground" />{cleaner.email}</div>
+                      <div className="flex items-center gap-1"><RiPhoneLine className="h-3 w-3 text-muted-foreground" />{cleaner.phone}</div>
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(cleaner)}</TableCell>
@@ -320,7 +335,7 @@ export default function AdminCleaners() {
                   <TableCell>
                     {cleaner.average_rating ? (
                       <div className="flex items-center gap-1 text-sm">
-                        <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                        <RiStarLine className="w-3 h-3 text-yellow-500 fill-yellow-500" />
                         {Number(cleaner.average_rating).toFixed(1)}
                         <span className="text-xs text-muted-foreground">({cleaner.total_ratings || 0})</span>
                       </div>
@@ -345,9 +360,9 @@ export default function AdminCleaners() {
                       )}
                       {cleaner.approved && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => openEditDialog(cleaner)}><Pencil className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditDialog(cleaner)}><RiPencilLine className="w-3 h-3" /></Button>
                           <Button size="sm" variant={cleaner.status === "active" ? "destructive" : "default"} onClick={() => handleToggleStatus(cleaner)}>
-                            {cleaner.status === "active" ? <XCircle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                            {cleaner.status === "active" ? <RiCloseCircleLine className="w-3 h-3" /> : <RiCheckboxCircleLine className="w-3 h-3" />}
                           </Button>
                           {cleaner.user_id && !cleaner.onboarding_complete && (
                             <Button size="sm" variant="outline" onClick={() => handleOnboardCleaner(cleaner.id)}>Stripe</Button>
@@ -355,7 +370,7 @@ export default function AdminCleaners() {
                           {cleaner.stripe_account_id && !cleaner.payouts_enabled && (
                             <Button size="sm" variant="outline" onClick={() => handleCheckStatus(cleaner.id)}>Check</Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => navigate(`/admin/directory?cleaner=${cleaner.id}`)}><Eye className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => navigate(`/admin/directory?cleaner=${cleaner.id}`)}><RiEyeLine className="w-3 h-3" /></Button>
                         </>
                       )}
                     </div>

@@ -1,7 +1,14 @@
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiSparklingLine,
+  RiTimeLine,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Clock, Sparkles, Crown, X } from "lucide-react";
+
 import { MEMBERSHIP_PLANS } from "@/lib/pricing-system";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +37,7 @@ export function MembershipDetailsDialog({
         <DialogHeader className="p-4 md:p-6 pb-3 md:pb-4 border-b sticky top-0 bg-background z-10">
           <DialogTitle className="text-xl md:text-2xl font-bold flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
-              <Crown className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+              <RiVipCrownLine className="w-5 h-5 md:w-6 md:h-6 text-primary" />
               Choose Your Plan
             </span>
           </DialogTitle>
@@ -55,7 +62,7 @@ export function MembershipDetailsDialog({
                   <h3 className="text-base md:text-lg font-bold">Pay Per Clean</h3>
                   {selectedMembership === 'none' && (
                     <div className="flex-shrink-0 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                      <Check className="w-3 h-3 text-primary-foreground" />
+                      <RiCheckLine className="w-3 h-3 text-primary-foreground" />
                     </div>
                   )}
                 </div>
@@ -65,15 +72,15 @@ export function MembershipDetailsDialog({
                 </div>
                 <ul className="space-y-1.5">
                   <li className="flex items-start gap-2 text-xs md:text-sm">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <RiCheckLine className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                     <span>Pay only for services you book</span>
                   </li>
                   <li className="flex items-start gap-2 text-xs md:text-sm">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <RiCheckLine className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                     <span>No monthly fees or obligations</span>
                   </li>
                   <li className="flex items-start gap-2 text-xs md:text-sm">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <RiCheckLine className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                     <span>Cancel anytime, no hassle</span>
                   </li>
                 </ul>
@@ -114,7 +121,7 @@ export function MembershipDetailsDialog({
                         <h3 className="text-base md:text-lg font-bold leading-tight">{plan.label}</h3>
                         {isSelected && (
                           <div className="flex-shrink-0 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-primary-foreground" />
+                            <RiCheckLine className="w-3 h-3 text-primary-foreground" />
                           </div>
                         )}
                       </div>
@@ -128,21 +135,21 @@ export function MembershipDetailsDialog({
 
                       <div className="space-y-2 pt-2 border-t">
                         <div className="flex items-center gap-2 bg-accent/30 rounded-lg p-2">
-                          <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                          <RiSparklingLine className="w-4 h-4 text-primary flex-shrink-0" />
                           <div className="text-xs md:text-sm">
                             <span className="font-semibold">{plan.cleansPerMonth}</span> {plan.cleansPerMonth === 1 ? 'clean' : 'cleans'}/mo
                           </div>
                         </div>
                         
                         <div className="flex items-center gap-2 bg-accent/30 rounded-lg p-2">
-                          <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+                          <RiTimeLine className="w-4 h-4 text-primary flex-shrink-0" />
                           <div className="text-xs md:text-sm">
                             <span className="font-semibold">{plan.includedHours}</span> hrs included
                           </div>
                         </div>
                         
                         <div className="flex items-center gap-2 bg-accent/30 rounded-lg p-2">
-                          <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                          <RiCheckLine className="w-4 h-4 text-primary flex-shrink-0" />
                           <div className="text-xs md:text-sm">
                             <span className="font-semibold">{Math.round(plan.overtimeDiscount * 100)}%</span> off overtime
                           </div>

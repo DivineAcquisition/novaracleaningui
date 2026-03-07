@@ -1,3 +1,19 @@
+import {
+  RiArrowLeftLine,
+  RiBankCardLine,
+  RiCameraLine,
+  RiChat3Line,
+  RiCheckboxCircleLine,
+  RiCloseLine,
+  RiErrorWarningLine,
+  RiExternalLinkLine,
+  RiLoader4Line,
+  RiMailLine,
+  RiNotification3Line,
+  RiPhoneLine,
+  RiSaveLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,7 +27,7 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Camera, ArrowLeft, Save, Mail, Phone, User, AlertCircle, X, MessageSquare, Bell, CreditCard, ExternalLink, CheckCircle2 } from "lucide-react";
+
 import { processAvatarImage } from "@/lib/image-compression";
 
 interface CleanerProfile {
@@ -194,7 +210,7 @@ export default function CleanerProfile() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <RiLoader4Line className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -241,7 +257,7 @@ export default function CleanerProfile() {
           onClick={() => navigate("/cleaner/dashboard")}
           className="mb-3"
         >
-          <ArrowLeft className="mr-1 h-4 w-4" />
+          <RiArrowLeftLine className="mr-1 h-4 w-4" />
           Dashboard
         </Button>
 
@@ -256,7 +272,7 @@ export default function CleanerProfile() {
             {/* Professional Photo Warning */}
             {!profile.avatar_url && (
               <Alert variant="destructive" className="py-2">
-                <AlertCircle className="h-4 w-4" />
+                <RiErrorWarningLine className="h-4 w-4" />
                 <AlertDescription className="text-xs">
                   <strong>Photo required</strong> to receive job assignments.
                 </AlertDescription>
@@ -279,7 +295,7 @@ export default function CleanerProfile() {
                     className="absolute -top-1 -right-1 h-5 w-5 rounded-full"
                     onClick={handleCancelUpload}
                   >
-                    <X className="h-3 w-3" />
+                    <RiCloseLine className="h-3 w-3" />
                   </Button>
                 )}
               </div>
@@ -300,7 +316,7 @@ export default function CleanerProfile() {
                     onClick={() => document.getElementById('avatar-upload')?.click()}
                     disabled={uploading}
                   >
-                    <Camera className="mr-1 h-3 w-3" />
+                    <RiCameraLine className="mr-1 h-3 w-3" />
                     {avatarPreview ? "Change" : "Photo"}
                   </Button>
                   
@@ -311,7 +327,7 @@ export default function CleanerProfile() {
                       disabled={uploading}
                     >
                       {uploading ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <RiLoader4Line className="h-3 w-3 animate-spin" />
                       ) : (
                         "Upload"
                       )}
@@ -328,12 +344,12 @@ export default function CleanerProfile() {
             <div className="p-3 border rounded-lg space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-primary" />
+                  <RiBankCardLine className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">Payout Account</span>
                 </div>
                 {stripeConnected ? (
                   <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    <RiCheckboxCircleLine className="mr-1 h-3 w-3" />
                     Connected
                   </Badge>
                 ) : (
@@ -349,9 +365,9 @@ export default function CleanerProfile() {
                   disabled={isInitiatingStripe}
                 >
                   {isInitiatingStripe ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <ExternalLink className="mr-2 h-4 w-4" />
+                    <RiExternalLinkLine className="mr-2 h-4 w-4" />
                   )}
                   Setup Stripe Payouts
                 </Button>
@@ -451,7 +467,7 @@ export default function CleanerProfile() {
             <div className="p-3 border rounded-lg space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-primary" />
+                  <RiChat3Line className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">SMS Notifications</span>
                 </div>
                 {profile.sms_notifications_enabled ? (
@@ -462,7 +478,7 @@ export default function CleanerProfile() {
               </div>
               <Link to="/sms-consent">
                 <Button variant="ghost" size="sm" className="w-full h-8 text-xs">
-                  <Bell className="mr-1 h-3 w-3" />
+                  <RiNotification3Line className="mr-1 h-3 w-3" />
                   Manage SMS Preferences
                 </Button>
               </Link>
@@ -477,12 +493,12 @@ export default function CleanerProfile() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <Save className="mr-2 h-4 w-4" />
+                  <RiSaveLine className="mr-2 h-4 w-4" />
                   Save Changes
                 </>
               )}

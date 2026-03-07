@@ -1,3 +1,19 @@
+import {
+  RiBankCardLine,
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiDownloadLine,
+  RiErrorWarningLine,
+  RiExternalLinkLine,
+  RiHomeLine,
+  RiLoader4Line,
+  RiMailLine,
+  RiMapPinLine,
+  RiSettings3Line,
+  RiShareLine,
+  RiTimeLine,
+  RiUserAddLine
+} from "@remixicon/react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
@@ -5,7 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Calendar, Mail, Home, Share2, Download, Clock, MapPin, CreditCard, Settings, ExternalLink, UserPlus, Loader2, AlertCircle } from "lucide-react";
+
 import { format, parse, addHours } from "date-fns";
 import { toast } from "sonner";
 import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/lib/calendar";
@@ -327,7 +343,7 @@ export default function BookingSuccess() {
       <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
         <Card variant="outlined" className="max-w-md w-full shadow-card">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
-            <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
+            <RiLoader4Line className="w-12 h-12 text-primary animate-spin mx-auto" />
             <h2 className="text-xl font-bold">
               {isValidating ? 'Validating Booking...' : 'Verifying Payment...'}
             </h2>
@@ -355,7 +371,7 @@ export default function BookingSuccess() {
         {verificationError && (
           <Card className="mb-6 border-destructive/50 bg-destructive/5">
             <CardContent className="pt-6 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0" />
+              <RiErrorWarningLine className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0" />
               <div>
                 <h3 className="font-semibold text-destructive mb-1">Payment Verification Issue</h3>
                 <p className="text-sm text-muted-foreground">{verificationError}</p>
@@ -370,7 +386,7 @@ export default function BookingSuccess() {
         <Card className="shadow-xl border-success/20 animate-fade-in">
           <CardHeader className="text-center space-y-3 md:space-y-4 pb-4 md:pb-8">
             <div className="mx-auto w-14 h-14 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-2 md:mb-4 animate-in zoom-in duration-500">
-              <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 text-success" />
+              <RiCheckboxCircleLine className="w-8 h-8 md:w-12 md:h-12 text-success" />
             </div>
             <CardTitle className="text-lg md:text-3xl font-bold">
               {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
@@ -391,14 +407,14 @@ export default function BookingSuccess() {
             <Card className="bg-primary/5 border-primary/20">
               <CardHeader className="pb-3 md:pb-4">
                 <CardTitle className="text-base md:text-xl font-semibold flex items-center gap-2">
-                  <Calendar className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                  <RiCalendarLine className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                   Your Booking Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 md:space-y-4">
                 <div className="grid gap-2 md:gap-4">
                   <div className="flex items-start gap-3">
-                    <Calendar className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <RiCalendarLine className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-xs md:text-sm text-muted-foreground">Date</p>
                       <p className="font-semibold text-sm md:text-base">
@@ -408,7 +424,7 @@ export default function BookingSuccess() {
                   </div>
 
                   <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <RiTimeLine className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-xs md:text-sm text-muted-foreground">Time Window</p>
                       <p className="font-semibold text-sm md:text-base">{getTimeSlotLabel(bookingData.timeSlot)}</p>
@@ -416,7 +432,7 @@ export default function BookingSuccess() {
                   </div>
 
                   <div className="flex items-start gap-3">
-                    <Home className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <RiHomeLine className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-xs md:text-sm text-muted-foreground">Service</p>
                       <p className="font-semibold text-sm md:text-base">{serviceTier?.label} • {homeSize?.label}</p>
@@ -424,7 +440,7 @@ export default function BookingSuccess() {
                   </div>
 
                   <div className="flex items-start gap-3">
-                    <MapPin className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <RiMapPinLine className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-xs md:text-sm text-muted-foreground">Location</p>
                       <p className="font-semibold text-sm md:text-base">
@@ -435,7 +451,7 @@ export default function BookingSuccess() {
 
                   {(sessionId || paymentIntent) && (
                     <div className="flex items-start gap-3">
-                      <CreditCard className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <RiBankCardLine className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
                         <p className="text-xs md:text-sm text-muted-foreground">
                           {bookingData.paymentOption === 'full' ? 'Paid in Full' : 'Deposit Paid'}
@@ -458,7 +474,7 @@ export default function BookingSuccess() {
                 {/* Email Sent Confirmation */}
                 {emailSent && (
                   <div className="flex items-center gap-2 text-xs md:text-sm text-success bg-success/10 p-2 md:p-3 rounded-lg border border-success/20">
-                    <Mail className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+                    <RiMailLine className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
                     <span>✉️ Confirmation email sent to {bookingData.email}</span>
                   </div>
                 )}
@@ -468,22 +484,22 @@ export default function BookingSuccess() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" className="w-full h-10 md:h-12 text-xs md:text-base">
-                        <Calendar className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                        <RiCalendarLine className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                         Add to Calendar
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-56">
                       <DropdownMenuItem onClick={() => handleAddToCalendar('google')}>
-                        <Calendar className="w-4 h-4 mr-2" />
+                        <RiCalendarLine className="w-4 h-4 mr-2" />
                         Google Calendar
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleAddToCalendar('outlook')}>
-                        <Calendar className="w-4 h-4 mr-2" />
+                        <RiCalendarLine className="w-4 h-4 mr-2" />
                         Outlook Calendar
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleAddToCalendar('ical')}>
-                        <Download className="w-4 h-4 mr-2" />
+                        <RiDownloadLine className="w-4 h-4 mr-2" />
                         Download .ics file
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -494,7 +510,7 @@ export default function BookingSuccess() {
                     className="w-full h-10 md:h-12 text-xs md:text-base"
                     onClick={handleShare}
                   >
-                    <Share2 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                    <RiShareLine className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                     Share
                   </Button>
                 </div>
@@ -510,12 +526,12 @@ export default function BookingSuccess() {
                 <CardTitle className="text-base md:text-xl flex items-center gap-2">
                   {user ? (
                     <>
-                      <Settings className="w-5 h-5 text-primary" />
+                      <RiSettings3Line className="w-5 h-5 text-primary" />
                       Manage Your Account
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-5 h-5 text-primary" />
+                      <RiUserAddLine className="w-5 h-5 text-primary" />
                       Want to Manage Your Bookings?
                     </>
                   )}
@@ -535,27 +551,27 @@ export default function BookingSuccess() {
                     disabled={isOpeningPortal}
                     className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
                   >
-                    <Settings className="w-4 h-4 mr-2" />
+                    <RiSettings3Line className="w-4 h-4 mr-2" />
                     {isOpeningPortal ? 'Opening...' : 'Open Customer Portal'}
-                    <ExternalLink className="w-4 h-4 ml-2" />
+                    <RiExternalLinkLine className="w-4 h-4 ml-2" />
                   </Button>
                 ) : (
                   <div className="space-y-4">
                     <div className="grid gap-2 text-xs md:text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-success flex-shrink-0" />
                         <span>Track all your bookings in one place</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-success flex-shrink-0" />
                         <span>Manage payment methods securely</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-success flex-shrink-0" />
                         <span>View billing history and receipts</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        <RiCheckboxCircleLine className="w-4 h-4 text-success flex-shrink-0" />
                         <span>Update future appointments</span>
                       </div>
                     </div>
@@ -563,7 +579,7 @@ export default function BookingSuccess() {
                       onClick={() => navigate('/auth')}
                       className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
                     >
-                      <UserPlus className="w-4 h-4 mr-2" />
+                      <RiUserAddLine className="w-4 h-4 mr-2" />
                       Create Account
                     </Button>
                   </div>
@@ -578,7 +594,7 @@ export default function BookingSuccess() {
               <div className="space-y-4">
                 <div className="flex items-start gap-3 md:gap-4">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Mail className="w-5 h-5 text-primary" />
+                    <RiMailLine className="w-5 h-5 text-primary" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold mb-1 text-sm md:text-base">Confirmation Email</h4>
@@ -590,7 +606,7 @@ export default function BookingSuccess() {
 
                 <div className="flex items-start gap-3 md:gap-4">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-5 h-5 text-primary" />
+                    <RiCalendarLine className="w-5 h-5 text-primary" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold mb-1 text-sm md:text-base">Reminder</h4>
@@ -602,7 +618,7 @@ export default function BookingSuccess() {
 
                 <div className="flex items-start gap-3 md:gap-4">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Home className="w-5 h-5 text-primary" />
+                    <RiHomeLine className="w-5 h-5 text-primary" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold mb-1 text-sm md:text-base">Cleaning Day</h4>
@@ -625,7 +641,7 @@ export default function BookingSuccess() {
                 className="hidden md:flex mx-auto h-14 px-8 text-base font-semibold bg-gradient-primary shadow-neon"
                 onClick={handleReturnHome}
               >
-                <Home className="mr-2 w-5 h-5" />
+                <RiHomeLine className="mr-2 w-5 h-5" />
                 Return to Home
               </Button>
             </div>
@@ -640,7 +656,7 @@ export default function BookingSuccess() {
           className="w-full h-14 text-base font-semibold bg-gradient-primary shadow-neon"
           onClick={handleReturnHome}
         >
-          <Home className="mr-2 w-5 h-5" />
+          <RiHomeLine className="mr-2 w-5 h-5" />
           Return to Home
         </Button>
       </div>

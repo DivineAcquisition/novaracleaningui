@@ -1,4 +1,8 @@
-import { Globe, Phone } from "lucide-react";
+
+import {
+  RiGlobalLine,
+  RiPhoneLine
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +37,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
               className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
               onClick={() => window.open('/', '_blank')}
             >
-              <Globe className="w-3 h-3 sm:w-4 sm:h-4" />
+              <RiGlobalLine className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden xs:inline">Website</span>
             </Button>
             <Button 
@@ -43,7 +47,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
               asChild
             >
               <a href="tel:+18447352070">
-                <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
+                <RiPhoneLine className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="hidden xs:inline">Call</span>
               </a>
             </Button>

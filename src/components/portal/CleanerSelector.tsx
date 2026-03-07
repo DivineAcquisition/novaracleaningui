@@ -1,10 +1,17 @@
+import {
+  RiCheckLine,
+  RiSparklingLine,
+  RiStarLine,
+  RiTrophyLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Star, Check, Sparkles, User, Award } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 import { useAvailableCleaners, AvailableCleaner } from '@/hooks/use-available-cleaners';
 
@@ -37,7 +44,7 @@ export function CleanerSelector({
     if (!count || count === 0) return null;
     return (
       <div className="flex items-center gap-1 text-sm">
-        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+        <RiStarLine className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
         <span className="font-medium">{rating?.toFixed(1)}</span>
         <span className="text-muted-foreground">({count})</span>
       </div>
@@ -69,14 +76,14 @@ export function CleanerSelector({
       >
         {isSelected && (
           <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-md">
-            <Check className="w-4 h-4 text-white" />
+            <RiCheckLine className="w-4 h-4 text-white" />
           </div>
         )}
 
         {isPreviousCleaner && !isSelected && (
           <div className="absolute -top-2 left-3">
             <Badge className="bg-success text-white text-xs shadow-sm">
-              <Sparkles className="w-3 h-3 mr-1" />
+              <RiSparklingLine className="w-3 h-3 mr-1" />
               Your Previous Cleaner
             </Badge>
           </div>
@@ -104,7 +111,7 @@ export function CleanerSelector({
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {cleaner.completed_bookings && cleaner.completed_bookings > 10 && (
                   <Badge variant="outline" className="text-xs bg-background">
-                    <Award className="w-3 h-3 mr-1" />
+                    <RiTrophyLine className="w-3 h-3 mr-1" />
                     {cleaner.completed_bookings}+ cleans
                   </Badge>
                 )}
@@ -159,7 +166,7 @@ export function CleanerSelector({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-lg flex items-center gap-2">
-          <User className="w-5 h-5 text-primary" />
+          <RiUserLine className="w-5 h-5 text-primary" />
           Request a Specific Cleaner
         </h3>
         <span className="text-sm text-muted-foreground">(Optional)</span>
@@ -178,7 +185,7 @@ export function CleanerSelector({
         <CardContent className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-muted-foreground" />
+              <RiSparklingLine className="w-6 h-6 text-muted-foreground" />
             </div>
             <div>
               <h4 className="font-semibold">No Preference</h4>
@@ -188,7 +195,7 @@ export function CleanerSelector({
             </div>
             {selectedCleanerId === null && (
               <div className="ml-auto w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                <Check className="w-4 h-4 text-white" />
+                <RiCheckLine className="w-4 h-4 text-white" />
               </div>
             )}
           </div>
@@ -239,7 +246,7 @@ export function CleanerSelector({
       {cleaners.length === 0 && previousCleaners.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center">
-            <User className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+            <RiUserLine className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">
               No cleaners available for your area at this time.
             </p>

@@ -1,3 +1,18 @@
+import {
+  RiArrowLeftLine,
+  RiArrowRightLine,
+  RiBriefcaseLine,
+  RiCalendarLine,
+  RiCameraLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMailLine,
+  RiMapPinLine,
+  RiMoneyDollarCircleLine,
+  RiPhoneLine,
+  RiSparklingLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,21 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
-import { 
-  Loader2, 
-  MapPin, 
-  CheckCircle2, 
-  ArrowLeft, 
-  ArrowRight,
-  User,
-  Phone,
-  Mail,
-  Camera,
-  Calendar,
-  Briefcase,
-  DollarSign,
-  Sparkles
-} from "lucide-react";
+
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
 import { cn } from "@/lib/utils";
@@ -56,10 +57,10 @@ const SKILLSET_OPTIONS = [
 ];
 
 const STEPS = [
-  { id: 1, title: "Personal Info", icon: User },
-  { id: 2, title: "Location", icon: MapPin },
-  { id: 3, title: "Availability", icon: Calendar },
-  { id: 4, title: "Review", icon: CheckCircle2 },
+  { id: 1, title: "Personal Info", icon: RiUserLine },
+  { id: 2, title: "Location", icon: RiMapPinLine },
+  { id: 3, title: "Availability", icon: RiCalendarLine },
+  { id: 4, title: "Review", icon: RiCheckboxCircleLine },
 ];
 
 export default function CleanerOnboarding() {
@@ -309,7 +310,7 @@ export default function CleanerOnboarding() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+          <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground">Verifying session...</p>
         </div>
       </div>
@@ -325,7 +326,7 @@ export default function CleanerOnboarding() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-primary shadow-lg mb-4">
-            <Briefcase className="w-7 h-7 text-white" />
+            <RiBriefcaseLine className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold">Join Our Team</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -349,7 +350,7 @@ export default function CleanerOnboarding() {
                     isComplete && "bg-green-500 text-white",
                     !isActive && !isComplete && "bg-muted text-muted-foreground"
                   )}>
-                    {isComplete ? <CheckCircle2 className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
+                    {isComplete ? <RiCheckboxCircleLine className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
                   </div>
                   <span className={cn(
                     "text-xs mt-2 font-medium",
@@ -388,7 +389,7 @@ export default function CleanerOnboarding() {
                         {avatarPreview ? (
                           <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
-                          <Camera className="w-8 h-8 text-muted-foreground/50" />
+                          <RiCameraLine className="w-8 h-8 text-muted-foreground/50" />
                         )}
                       </div>
                       <input
@@ -398,7 +399,7 @@ export default function CleanerOnboarding() {
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
                       <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
-                        <Camera className="w-4 h-4 text-white" />
+                        <RiCameraLine className="w-4 h-4 text-white" />
                       </div>
                     </div>
                   </div>
@@ -410,7 +411,7 @@ export default function CleanerOnboarding() {
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">First Name</Label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiUserLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           value={formData.firstName}
                           onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
@@ -422,7 +423,7 @@ export default function CleanerOnboarding() {
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Last Name</Label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiUserLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           value={formData.lastName}
                           onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
@@ -436,7 +437,7 @@ export default function CleanerOnboarding() {
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Email</Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         value={userEmail}
                         disabled
@@ -444,7 +445,7 @@ export default function CleanerOnboarding() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                      <RiCheckboxCircleLine className="w-3 h-3 text-green-500" />
                       Verified
                     </p>
                   </div>
@@ -452,7 +453,7 @@ export default function CleanerOnboarding() {
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Phone Number</Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <RiPhoneLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         type="tel"
                         value={formData.phone}
@@ -490,7 +491,7 @@ export default function CleanerOnboarding() {
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">ZIP Code</Label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <RiMapPinLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           value={formData.homeZip}
                           onChange={(e) => setFormData(prev => ({ ...prev, homeZip: e.target.value }))}
@@ -524,7 +525,7 @@ export default function CleanerOnboarding() {
                   <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl p-4 border border-green-500/20">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                        <DollarSign className="w-5 h-5 text-green-600" />
+                        <RiMoneyDollarCircleLine className="w-5 h-5 text-green-600" />
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Your Pay Rate</p>
@@ -593,7 +594,7 @@ export default function CleanerOnboarding() {
                 <div className="space-y-5">
                   <div className="text-center mb-6">
                     <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                      <Sparkles className="w-8 h-8 text-green-500" />
+                      <RiSparklingLine className="w-8 h-8 text-green-500" />
                     </div>
                     <h2 className="text-lg font-semibold">Review Your Profile</h2>
                     <p className="text-sm text-muted-foreground">Make sure everything looks good</p>
@@ -605,7 +606,7 @@ export default function CleanerOnboarding() {
                         <img src={avatarPreview} className="w-12 h-12 rounded-full object-cover" />
                       ) : (
                         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                          <User className="w-6 h-6 text-muted-foreground" />
+                          <RiUserLine className="w-6 h-6 text-muted-foreground" />
                         </div>
                       )}
                       <div>
@@ -672,7 +673,7 @@ export default function CleanerOnboarding() {
                     className="flex-1 h-11"
                     disabled={isLoading}
                   >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    <RiArrowLeftLine className="w-4 h-4 mr-2" />
                     Back
                   </Button>
                 )}
@@ -685,7 +686,7 @@ export default function CleanerOnboarding() {
                     disabled={isLoading}
                   >
                     Continue
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <RiArrowRightLine className="w-4 h-4 ml-2" />
                   </Button>
                 ) : (
                   <Button
@@ -695,12 +696,12 @@ export default function CleanerOnboarding() {
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                         Creating Profile...
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
                         Complete & Setup Payments
                       </>
                     )}

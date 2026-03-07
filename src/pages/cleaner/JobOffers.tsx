@@ -1,3 +1,11 @@
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiHomeLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -5,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Check, X, MapPin, Clock, Home } from "lucide-react";
+
 import { format } from "date-fns";
 
 interface JobOffer {
@@ -166,7 +174,7 @@ export default function JobOffers() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <RiLoader4Line className="h-8 w-8 animate-spin" />
       </div>
     );
   }
@@ -184,7 +192,7 @@ export default function JobOffers() {
         {offers.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <RiTimeLine className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-lg font-medium">No job offers at the moment</p>
               <p className="text-sm text-muted-foreground">
                 Check back soon for new opportunities!
@@ -216,7 +224,7 @@ export default function JobOffers() {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <RiMapPinLine className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">{offer.jobs.city}, {offer.jobs.state}</p>
                         <p className="text-xs text-muted-foreground">
@@ -226,7 +234,7 @@ export default function JobOffers() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <Home className="h-4 w-4 text-muted-foreground" />
+                      <RiHomeLine className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">{offer.jobs.sq_ft} sq ft</p>
                         <p className="text-xs text-muted-foreground">Property size</p>
@@ -234,7 +242,7 @@ export default function JobOffers() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <RiTimeLine className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">{offer.jobs.duration_est_hours} hours</p>
                         <p className="text-xs text-muted-foreground">Estimated duration</p>
@@ -259,10 +267,10 @@ export default function JobOffers() {
                       className="flex-1"
                     >
                       {respondingTo === offer.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <RiLoader4Line className="h-4 w-4 animate-spin" />
                       ) : (
                         <>
-                          <Check className="h-4 w-4 mr-2" />
+                          <RiCheckLine className="h-4 w-4 mr-2" />
                           Accept Job
                         </>
                       )}
@@ -274,7 +282,7 @@ export default function JobOffers() {
                       disabled={respondingTo === offer.id}
                       className="flex-1"
                     >
-                      <X className="h-4 w-4 mr-2" />
+                      <RiCloseLine className="h-4 w-4 mr-2" />
                       Decline
                     </Button>
                   </div>

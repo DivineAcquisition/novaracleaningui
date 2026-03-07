@@ -1,3 +1,9 @@
+import {
+  RiArrowLeftLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMailLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -5,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
+
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { SEO } from "@/components/SEO";
@@ -63,7 +69,7 @@ export default function CleanerResetPassword() {
           {emailSent ? (
             <div className="space-y-4 text-center">
               <div className="mx-auto w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lavender">
-                <CheckCircle2 className="w-6 h-6 text-white" />
+                <RiCheckboxCircleLine className="w-6 h-6 text-white" />
               </div>
               <div className="space-y-1">
                 <p className="font-medium text-sm">Email sent!</p>
@@ -73,7 +79,7 @@ export default function CleanerResetPassword() {
               </div>
               <Link to="/cleaner/auth">
                 <Button variant="outline" className="w-full" size="sm">
-                  <ArrowLeft className="mr-1 w-4 h-4" />
+                  <RiArrowLeftLine className="mr-1 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>
@@ -83,7 +89,7 @@ export default function CleanerResetPassword() {
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-sm">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
@@ -105,7 +111,7 @@ export default function CleanerResetPassword() {
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                    <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />
                     Sending...
                   </>
                 ) : (
@@ -115,7 +121,7 @@ export default function CleanerResetPassword() {
 
               <Link to="/cleaner/auth">
                 <Button variant="ghost" className="w-full" size="sm">
-                  <ArrowLeft className="mr-1 w-4 h-4" />
+                  <RiArrowLeftLine className="mr-1 w-4 h-4" />
                   Back to Sign In
                 </Button>
               </Link>

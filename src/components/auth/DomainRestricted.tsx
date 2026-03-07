@@ -1,8 +1,11 @@
+import {
+  RiErrorWarningLine,
+  RiExternalLinkLine
+} from "@remixicon/react";
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, ExternalLink } from 'lucide-react';
 
 interface DomainRestrictedProps {
   children: ReactNode;
@@ -57,7 +60,7 @@ export function DomainRestricted({
       <Card className="max-w-md w-full shadow-xl border-destructive/20">
         <CardHeader className="text-center">
           <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-destructive" />
+            <RiErrorWarningLine className="w-8 h-8 text-destructive" />
           </div>
           <CardTitle className="text-2xl">Access Restricted</CardTitle>
           <CardDescription className="text-base">
@@ -72,7 +75,7 @@ export function DomainRestricted({
             onClick={() => window.location.href = 'https://try.novaracleaning.com/book/zip'}
             className="w-full"
           >
-            <ExternalLink className="w-4 h-4 mr-2" />
+            <RiExternalLinkLine className="w-4 h-4 mr-2" />
             Go to Booking Site
           </Button>
         </CardContent>

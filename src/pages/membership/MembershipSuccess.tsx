@@ -1,7 +1,15 @@
+import {
+  RiArrowRightLine,
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiGiftLine,
+  RiSparklingLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, Calendar, User, ArrowRight, Sparkles, Gift } from "lucide-react";
+
 import { SEO } from "@/components/SEO";
 
 const PLAN_NAMES: Record<string, string> = {
@@ -24,7 +32,7 @@ export default function MembershipSuccess() {
         <CardContent className="pt-10 pb-8 space-y-6 text-center">
           <div className="relative">
             <div className="mx-auto w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: 'var(--gradient-primary)' }}>
-              <CheckCircle2 className="w-10 h-10 text-white" />
+              <RiCheckboxCircleLine className="w-10 h-10 text-white" />
             </div>
             <div className="absolute -top-1 -right-1 left-0 right-0 mx-auto w-24 h-24 rounded-2xl animate-ping opacity-20" style={{ background: 'var(--gradient-primary)' }} />
           </div>
@@ -39,7 +47,7 @@ export default function MembershipSuccess() {
 
           <div className="rounded-xl bg-muted/50 p-4 space-y-2">
             <div className="flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
+              <RiSparklingLine className="w-4 h-4 text-primary" />
               <p className="font-medium text-sm">What's next?</p>
             </div>
             <p className="text-sm text-muted-foreground">Schedule your first cleaning and we'll handle the rest.</p>
@@ -50,9 +58,9 @@ export default function MembershipSuccess() {
               onClick={() => navigate("/portal/book")}
               className="w-full h-12 bg-gradient-primary shadow-lg rounded-xl"
             >
-              <Calendar className="w-5 h-5 mr-2" />
+              <RiCalendarLine className="w-5 h-5 mr-2" />
               Schedule Your First Cleaning
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <RiArrowRightLine className="w-4 h-4 ml-2" />
             </Button>
 
             <Button
@@ -60,7 +68,7 @@ export default function MembershipSuccess() {
               onClick={() => navigate("/account")}
               className="w-full rounded-xl"
             >
-              <User className="w-4 h-4 mr-2" />
+              <RiUserLine className="w-4 h-4 mr-2" />
               Go to My Account
             </Button>
           </div>

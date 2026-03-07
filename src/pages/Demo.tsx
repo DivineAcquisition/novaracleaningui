@@ -1,7 +1,12 @@
+import {
+  RiArrowRightLine,
+  RiPriceTag3Line,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Tag, Crown } from "lucide-react";
+
 import selestialLogo from "@/assets/selestial-logo.png";
 import { SEO } from "@/components/SEO";
 
@@ -27,7 +32,7 @@ export default function Demo() {
       <div className="bg-gradient-primary py-3">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 text-white">
-            <Tag className="w-4 h-4" />
+            <RiPriceTag3Line className="w-4 h-4" />
             <p className="text-sm md:text-base font-medium">
               Custom Booking Interfaces Built for Your Cleaning Business
             </p>
@@ -75,7 +80,7 @@ export default function Demo() {
                   className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
                 >
                   Continue
-                  <ArrowRight className="w-4 h-4 md:w-5 md:h-5 ml-2" />
+                  <RiArrowRightLine className="w-4 h-4 md:w-5 md:h-5 ml-2" />
                 </Button>
               </div>
             </CardContent>
@@ -87,7 +92,7 @@ export default function Demo() {
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
             <div className="flex-shrink-0">
               <div className="w-12 h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
-                <Crown className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                <RiVipCrownLine className="w-6 h-6 md:w-8 md:h-8 text-white" />
               </div>
             </div>
             <div className="flex-1 text-center md:text-left space-y-2">
@@ -103,7 +108,7 @@ export default function Demo() {
               className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12"
             >
               Learn More
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <RiArrowRightLine className="w-4 h-4 ml-2" />
             </Button>
           </div>
         </CardContent>

@@ -1,3 +1,10 @@
+import {
+  RiBox3Line,
+  RiErrorWarningLine,
+  RiFlashlightLine,
+  RiLoader4Line,
+  RiSparklingLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Sparkles, Zap, Package, AlertCircle } from "lucide-react";
+
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { calculatePrice, SERVICE_TIER_PRICING, ADD_ONS, HOME_SIZE_RANGES } from "@/lib/pricing-system";
@@ -37,9 +44,9 @@ interface ModifyBookingDialogProps {
 }
 
 const SERVICES = [
-  { id: 'standard', icon: Sparkles, name: 'Standard', description: 'Base hourly cleaning service' },
-  { id: 'deep', icon: Zap, name: 'Deep Clean', description: '+$50 on Standard' },
-  { id: 'moveInOut', icon: Package, name: 'Move-In/Out', description: '+$120 (includes fridge & oven)' },
+  { id: 'standard', icon: RiSparklingLine, name: 'Standard', description: 'Base hourly cleaning service' },
+  { id: 'deep', icon: RiFlashlightLine, name: 'Deep Clean', description: '+$50 on Standard' },
+  { id: 'moveInOut', icon: RiBox3Line, name: 'Move-In/Out', description: '+$120 (includes fridge & oven)' },
 ];
 
 const DWELLING_TYPES = [
@@ -306,7 +313,7 @@ export function ModifyBookingDialog({ booking, open, onOpenChange, onSuccess }: 
 
           {priceDifference > 0 && (
             <Alert>
-              <AlertCircle className="h-4 w-4" />
+              <RiErrorWarningLine className="h-4 w-4" />
               <AlertDescription>
                 Additional payment of ${priceDifference.toFixed(2)} will be required to complete this modification.
               </AlertDescription>
@@ -325,7 +332,7 @@ export function ModifyBookingDialog({ booking, open, onOpenChange, onSuccess }: 
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                 Updating...
               </>
             ) : (

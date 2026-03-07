@@ -1,3 +1,6 @@
+import {
+  RiCloseCircleLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +22,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { XCircle } from "lucide-react";
 
 interface CancelBookingDialogProps {
   bookingId: string;
@@ -80,7 +82,7 @@ export const CancelBookingDialog = ({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <XCircle className="h-5 w-5 text-destructive" />
+            <RiCloseCircleLine className="h-5 w-5 text-destructive" />
             Cancel Booking #{String(bookingNumber).padStart(5, "0")}
           </DialogTitle>
           <DialogDescription>

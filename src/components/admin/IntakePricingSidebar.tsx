@@ -1,8 +1,12 @@
+import {
+  RiArrowRightDownLine,
+  RiMoneyDollarCircleLine,
+  RiUserLine
+} from "@remixicon/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
-import { DollarSign, TrendingDown, User } from "lucide-react";
 
 interface SelectedCleaner {
   id: string;
@@ -64,7 +68,7 @@ export function IntakePricingSidebar({
     <Card className="sticky top-4">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <DollarSign className="w-5 h-5" />
+          <RiMoneyDollarCircleLine className="w-5 h-5" />
           Live Pricing Calculator
           {firstCleanPromo && (
             <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 text-xs font-bold ml-2">
@@ -113,7 +117,7 @@ export function IntakePricingSidebar({
           <div className="space-y-2">
             <Separator />
             <div className="flex items-center gap-2 text-sm font-medium text-primary">
-              <TrendingDown className="w-4 h-4" />
+              <RiArrowRightDownLine className="w-4 h-4" />
               <span>Savings</span>
             </div>
 
@@ -157,7 +161,7 @@ export function IntakePricingSidebar({
         {/* Cleaner Payout Breakdown */}
         <div className="bg-primary/5 p-3 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
-            <User className="w-4 h-4 text-primary" />
+            <RiUserLine className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium">Cleaner Payout Breakdown</span>
           </div>
           

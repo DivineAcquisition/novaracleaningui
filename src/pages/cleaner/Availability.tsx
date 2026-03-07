@@ -1,3 +1,9 @@
+import {
+  RiArrowLeftLine,
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Calendar, CheckCircle2, ArrowLeft } from "lucide-react";
+
 import { Checkbox } from "@/components/ui/checkbox";
 
 const DAYS_OF_WEEK = [
@@ -113,7 +119,7 @@ export default function CleanerAvailability() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -128,7 +134,7 @@ export default function CleanerAvailability() {
             size="icon"
             onClick={() => navigate("/cleaner/dashboard")}
           >
-            <ArrowLeft className="w-5 h-5" />
+            <RiArrowLeftLine className="w-5 h-5" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-foreground">Manage Your Availability</h1>
@@ -140,7 +146,7 @@ export default function CleanerAvailability() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
+              <RiCalendarLine className="w-5 h-5" />
               Today's Status
             </CardTitle>
             <CardDescription>
@@ -201,7 +207,7 @@ export default function CleanerAvailability() {
                     {day.label}
                   </Label>
                   {preferredDays.includes(day.value) && (
-                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
                   )}
                 </div>
               ))}
@@ -247,12 +253,12 @@ export default function CleanerAvailability() {
           <Button onClick={handleSave} disabled={isSaving} className="flex-1">
             {isSaving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                 Saving...
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
+                <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
                 Save Changes
               </>
             )}

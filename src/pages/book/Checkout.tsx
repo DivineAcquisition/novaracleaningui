@@ -1,3 +1,18 @@
+import {
+  RiArrowDownSLine,
+  RiArrowLeftLine,
+  RiBankCardLine,
+  RiCalendarLine,
+  RiErrorWarningLine,
+  RiGiftLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiPriceTag3Line,
+  RiRefreshLine,
+  RiShieldLine,
+  RiSparklingLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
@@ -8,7 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Sparkles, Loader2, CreditCard, AlertCircle, RefreshCw, Gift, Calendar, Clock, MapPin, Shield, Tag, ChevronDown } from "lucide-react";
+
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
@@ -473,7 +488,7 @@ export default function BookingCheckout() {
 
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
-              <Shield className="w-8 h-8 text-white" />
+              <RiShieldLine className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl md:text-3xl font-bold">Secure Checkout</h1>
             <p className="text-muted-foreground mt-1">Review your order and complete payment</p>
@@ -485,7 +500,7 @@ export default function BookingCheckout() {
             <Card className="border-primary/10">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
+                  <RiSparklingLine className="w-4 h-4 text-primary" />
                   Service Details
                 </CardTitle>
               </CardHeader>
@@ -521,7 +536,7 @@ export default function BookingCheckout() {
             <Card className="border-primary/10">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-primary" />
+                  <RiCalendarLine className="w-4 h-4 text-primary" />
                   Schedule
                 </CardTitle>
               </CardHeader>
@@ -529,7 +544,7 @@ export default function BookingCheckout() {
                 {bookingData.serviceDate && bookingData.timeSlot ? <>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
+                        <RiCalendarLine className="w-3.5 h-3.5" />
                         Date
                       </span>
                       <span className="font-medium">
@@ -538,7 +553,7 @@ export default function BookingCheckout() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
+                        <RiTimeLine className="w-3.5 h-3.5" />
                         Time
                       </span>
                       <span className="font-medium">
@@ -547,7 +562,7 @@ export default function BookingCheckout() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5" />
+                        <RiMapPinLine className="w-3.5 h-3.5" />
                         Location
                       </span>
                       <span className="font-medium">ZIP {bookingData.zipCode}</span>
@@ -555,7 +570,7 @@ export default function BookingCheckout() {
                   </> : <div className="text-center py-4 space-y-3">
                     <p className="text-muted-foreground">No schedule selected</p>
                     <Button variant="outline" size="sm" onClick={() => navigate('/book/offer')}>
-                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      <RiArrowLeftLine className="w-4 h-4 mr-2" />
                       Go Back to Select Date & Time
                     </Button>
                   </div>}
@@ -566,7 +581,7 @@ export default function BookingCheckout() {
           {/* Gate: Show skeleton/message if schedule not selected */}
           {!isScheduleSelected && <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
               <CardContent className="py-8 text-center space-y-4">
-                <Calendar className="w-12 h-12 text-amber-500 mx-auto" />
+                <RiCalendarLine className="w-12 h-12 text-amber-500 mx-auto" />
                 <div>
                   <h3 className="font-semibold text-lg">Schedule Required</h3>
                   <p className="text-muted-foreground text-sm mt-1">
@@ -574,7 +589,7 @@ export default function BookingCheckout() {
                   </p>
                 </div>
                 <Button onClick={() => navigate('/book/offer')} className="bg-gradient-primary">
-                  <Calendar className="w-4 h-4 mr-2" />
+                  <RiCalendarLine className="w-4 h-4 mr-2" />
                   Select Your Appointment
                 </Button>
               </CardContent>
@@ -608,13 +623,13 @@ export default function BookingCheckout() {
                 <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-primary" />
+                      <RiPriceTag3Line className="w-4 h-4 text-primary" />
                       Have a Promo or Referral Code?
                       {(appliedPromoCode || appliedReferralCode) && <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
                           Applied
                         </Badge>}
                     </CardTitle>
-                    <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", discountSectionOpen && "rotate-180")} />
+                    <RiArrowDownSLine className={cn("w-4 h-4 text-muted-foreground transition-transform", discountSectionOpen && "rotate-180")} />
                   </div>
                 </CardHeader>
               </CollapsibleTrigger>
@@ -623,12 +638,12 @@ export default function BookingCheckout() {
                   {/* Referral Code */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium flex items-center gap-2">
-                      <Gift className="w-4 h-4 text-primary" />
+                      <RiGiftLine className="w-4 h-4 text-primary" />
                       Referral Code
                     </p>
                     {appliedReferralCode ? <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <Gift className="w-4 h-4 text-green-600" />
+                          <RiGiftLine className="w-4 h-4 text-green-600" />
                           <span className="font-medium text-green-700 dark:text-green-400">{appliedReferralCode}</span>
                           <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
                             -${referralDiscount.toFixed(2)}
@@ -640,7 +655,7 @@ export default function BookingCheckout() {
                       </div> : <div className="flex gap-2">
                         <Input placeholder="Enter referral code" value={referralInput} onChange={e => setReferralInput(e.target.value.toUpperCase())} className="font-mono" maxLength={10} />
                         <Button onClick={handleApplyReferral} disabled={!referralInput || isValidatingReferral} variant="outline">
-                          {isValidatingReferral ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                          {isValidatingReferral ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : 'Apply'}
                         </Button>
                       </div>}
                   </div>
@@ -650,12 +665,12 @@ export default function BookingCheckout() {
                   {/* Promo Code */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-primary" />
+                      <RiSparklingLine className="w-4 h-4 text-primary" />
                       Promo Code
                     </p>
                     {appliedPromoCode ? <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-green-600" />
+                          <RiSparklingLine className="w-4 h-4 text-green-600" />
                           <span className="font-medium text-green-700 dark:text-green-400">{appliedPromoCode}</span>
                           {autoAppliedPromo && <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400 text-xs">Auto-applied</Badge>}
                           <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
@@ -669,12 +684,12 @@ export default function BookingCheckout() {
                         <div className="flex gap-2">
                           <Input placeholder="Enter promo code" value={promoInput} onChange={e => setPromoInput(e.target.value.toUpperCase())} className="font-mono" maxLength={15} />
                           <Button onClick={handleApplyPromo} disabled={!promoInput || isValidatingPromo} variant="outline">
-                            {isValidatingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                            {isValidatingPromo ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : 'Apply'}
                           </Button>
                         </div>
                         
                         {isAutoApplying && <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <RiLoader4Line className="w-4 h-4 animate-spin" />
                             Finding best available promo...
                           </div>}
                         
@@ -704,7 +719,7 @@ export default function BookingCheckout() {
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
+                <RiBankCardLine className="w-5 h-5 text-primary" />
                 Payment Details
               </CardTitle>
               <CardDescription>
@@ -726,14 +741,14 @@ export default function BookingCheckout() {
                   </div>
                   
                   <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isProcessing}>
-                    {isProcessing ? <><Loader2 className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
+                    {isProcessing ? <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
                   </Button>
                 </div>}
 
               {/* Member Using Credit */}
               {isMemberUsingCredit && <div className="text-center space-y-4">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-                    <Sparkles className="w-10 h-10 text-green-600 mx-auto mb-3" />
+                    <RiSparklingLine className="w-10 h-10 text-green-600 mx-auto mb-3" />
                     <p className="text-3xl font-bold text-green-700">$0.00</p>
                     <p className="text-green-600 mt-1">Covered by your membership credit!</p>
                   </div>
@@ -746,17 +761,17 @@ export default function BookingCheckout() {
               {!isNewMembershipSignup && !isMemberUsingCredit && <>
                   {/* Error State */}
                   {initError && !isProcessing && <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
-                      <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
+                      <RiErrorWarningLine className="w-8 h-8 text-destructive mx-auto mb-2" />
                       <p className="text-sm text-destructive font-medium mb-3">{initError}</p>
                       <Button variant="outline" size="sm" onClick={handleRetryPayment}>
-                        <RefreshCw className="w-4 h-4 mr-2" />
+                        <RiRefreshLine className="w-4 h-4 mr-2" />
                         Try Again
                       </Button>
                     </div>}
 
                   {/* Loading State */}
                   {isProcessing && <div className="text-center py-8">
-                      <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
+                      <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
                       <p className="text-sm text-muted-foreground">Setting up secure payment...</p>
                     </div>}
 
@@ -771,7 +786,7 @@ export default function BookingCheckout() {
               {/* Trust Badges */}
               <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-4 border-t">
                 <span className="flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5" />
+                  <RiShieldLine className="w-3.5 h-3.5" />
                   Secure
                 </span>
                 <span>•</span>
@@ -786,7 +801,7 @@ export default function BookingCheckout() {
           {/* Desktop Back Button */}
           <div className="hidden md:block">
             <Button variant="outline" onClick={handleBack} disabled={isProcessing}>
-              <ArrowLeft className="mr-2 w-4 h-4" />
+              <RiArrowLeftLine className="mr-2 w-4 h-4" />
               Back to Service Selection
             </Button>
           </div>

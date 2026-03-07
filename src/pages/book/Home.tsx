@@ -1,8 +1,14 @@
+import {
+  RiArrowRightLine,
+  RiCheckboxCircleLine,
+  RiHomeLine as HomeIcon,
+  RiPhoneLine
+} from "@remixicon/react";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Home as HomeIcon, ArrowRight, CheckCircle, Phone } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PromoBanner } from "@/components/booking/PromoBanner";
@@ -74,7 +80,7 @@ export default function BookingHome() {
             
             {/* Google Guaranteed Badge */}
             <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border-2 border-green-500 rounded-full bg-green-50 dark:bg-green-950/30">
-              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <RiCheckboxCircleLine className="w-4 h-4 text-green-600 dark:text-green-400" />
               <span className="text-sm font-medium text-green-700 dark:text-green-300">Google Guaranteed</span>
             </div>
           </div>
@@ -94,7 +100,7 @@ export default function BookingHome() {
                 >
                   {isSelected && (
                     <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-primary-foreground" />
+                      <RiCheckboxCircleLine className="w-4 h-4 text-primary-foreground" />
                     </div>
                   )}
                   <CardContent className="p-6 md:p-8 text-center">
@@ -122,7 +128,7 @@ export default function BookingHome() {
                 className="bg-foreground text-background hover:bg-foreground/90 border-foreground"
               >
                 Call for Custom Quote
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <RiArrowRightLine className="w-4 h-4 ml-2" />
               </Button>
             </CardContent>
           </Card>

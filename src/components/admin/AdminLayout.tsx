@@ -1,3 +1,15 @@
+import {
+  RiBarChartBoxLine,
+  RiCalendarCheckLine,
+  RiDashboardLine,
+  RiGroupLine,
+  RiLogoutBoxRLine,
+  RiMapPinLine,
+  RiShieldLine,
+  RiToolsLine,
+  RiTruckLine,
+  RiWebhookLine
+} from "@remixicon/react";
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,32 +27,19 @@ import {
   SidebarTrigger,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import {
-  LayoutDashboard,
-  CalendarCheck,
-  Users,
-  HardHat,
-  MapPin,
-  Truck,
-  ClipboardPlus,
-  Webhook,
-  LogOut,
-  Shield,
-  Headset,
-  BarChart3,
-} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
 const navItems = [
-  { title: "Dashboard", url: "/admin/dashboard", icon: LayoutDashboard },
-  { title: "Bookings", url: "/admin/bookings", icon: CalendarCheck },
-  { title: "Customers", url: "/admin/customers", icon: Users },
-  { title: "Cleaners", url: "/admin/cleaners", icon: HardHat },
-  { title: "Directory", url: "/admin/directory", icon: MapPin },
-  { title: "Dispatch", url: "/admin/dispatch", icon: Truck },
-  { title: "Pipeline", url: "/admin/pipeline", icon: BarChart3 },
-  { title: "Webhooks", url: "/admin/webhooks", icon: Webhook },
+  { title: "Dashboard", url: "/admin/dashboard", icon: RiDashboardLine },
+  { title: "Bookings", url: "/admin/bookings", icon: RiCalendarCheckLine },
+  { title: "Customers", url: "/admin/customers", icon: RiGroupLine },
+  { title: "Cleaners", url: "/admin/cleaners", icon: RiToolsLine },
+  { title: "Directory", url: "/admin/directory", icon: RiMapPinLine },
+  { title: "Dispatch", url: "/admin/dispatch", icon: RiTruckLine },
+  { title: "Pipeline", url: "/admin/pipeline", icon: RiBarChartBoxLine },
+  { title: "Webhooks", url: "/admin/webhooks", icon: RiWebhookLine },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -58,7 +57,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <Sidebar className="border-r border-white/10 bg-slate-900">
           <div className="p-4 flex items-center gap-2 border-b border-white/10">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-              <Shield className="w-4 h-4 text-white" />
+              <RiShieldLine className="w-4 h-4 text-white" />
             </div>
             <span className="text-sm font-semibold text-white">Novara Admin</span>
           </div>
@@ -99,7 +98,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               className="w-full justify-start text-slate-400 hover:text-white hover:bg-white/5"
               onClick={handleSignOut}
             >
-              <LogOut className="h-4 w-4 mr-2" />
+              <RiLogoutBoxRLine className="h-4 w-4 mr-2" />
               Sign Out
             </Button>
           </SidebarFooter>

@@ -1,4 +1,7 @@
-import { Check } from "lucide-react";
+
+import {
+  RiCheckLine
+} from "@remixicon/react";
 import { cn } from "@/lib/utils";
 
 interface ProgressBarProps {
@@ -34,7 +37,7 @@ export function ProgressBar({ currentStep, totalSteps, steps }: ProgressBarProps
                 )}
               >
                 {currentStep > step.number ? (
-                  <Check className="w-5 h-5" />
+                  <RiCheckLine className="w-5 h-5" />
                 ) : (
                   step.number
                 )}

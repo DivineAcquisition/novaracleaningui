@@ -1,4 +1,10 @@
-import { Home, Briefcase, DollarSign, User } from "lucide-react";
+
+import {
+  RiBriefcaseLine,
+  RiHomeLine,
+  RiMoneyDollarCircleLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";
@@ -9,10 +15,10 @@ export function MobileBottomNav() {
   const { impact } = useNativeHaptics();
 
   const navItems = [
-    { icon: Home, label: "Dashboard", path: "/cleaner/dashboard" },
-    { icon: Briefcase, label: "Jobs", path: "/cleaner/job-offers" },
-    { icon: DollarSign, label: "Earnings", path: "/cleaner/dashboard" },
-    { icon: User, label: "Profile", path: "/cleaner/profile" },
+    { icon: RiHomeLine, label: "Dashboard", path: "/cleaner/dashboard" },
+    { icon: RiBriefcaseLine, label: "Jobs", path: "/cleaner/job-offers" },
+    { icon: RiMoneyDollarCircleLine, label: "Earnings", path: "/cleaner/dashboard" },
+    { icon: RiUserLine, label: "Profile", path: "/cleaner/profile" },
   ];
 
   const handleNavigation = (path: string) => {

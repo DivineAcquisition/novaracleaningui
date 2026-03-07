@@ -1,3 +1,9 @@
+import {
+  RiArrowLeftLine,
+  RiCheckboxCircleLine,
+  RiHomeLine,
+  RiLoader4Line
+} from "@remixicon/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -5,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Home, Loader2, CheckCircle2 } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
@@ -83,7 +89,7 @@ export default function CustomQuote() {
         <Card className="max-w-2xl w-full shadow-xl border-success/20">
           <CardHeader className="text-center space-y-4 pb-8">
             <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
-              <CheckCircle2 className="w-12 h-12 text-success" />
+              <RiCheckboxCircleLine className="w-12 h-12 text-success" />
             </div>
             <CardTitle className="text-2xl md:text-4xl font-bold">Request Received!</CardTitle>
             <CardDescription className="text-sm md:text-base">
@@ -118,7 +124,7 @@ export default function CustomQuote() {
         <Card className="shadow-xl">
           <CardHeader className="text-center space-y-2 pb-8">
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Home className="w-8 h-8 text-primary" />
+              <RiHomeLine className="w-8 h-8 text-primary" />
             </div>
             <CardTitle className="text-xl md:text-3xl font-bold">Request a Custom Quote</CardTitle>
             <CardDescription className="text-sm">
@@ -215,7 +221,7 @@ export default function CustomQuote() {
                   disabled={isSubmitting}
                   className="h-14"
                 >
-                  <ArrowLeft className="mr-2 w-5 h-5" />
+                  <RiArrowLeftLine className="mr-2 w-5 h-5" />
                   Back
                 </Button>
                 <Button
@@ -226,7 +232,7 @@ export default function CustomQuote() {
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                      <RiLoader4Line className="mr-2 w-5 h-5 animate-spin" />
                       Submitting...
                     </>
                   ) : (

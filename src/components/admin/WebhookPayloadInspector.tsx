@@ -1,8 +1,14 @@
+import {
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiDeleteBinLine,
+  RiFileCopyLine
+} from "@remixicon/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWebhookHistory } from "@/contexts/WebhookHistoryContext";
-import { Copy, Trash2, CheckCircle, XCircle } from "lucide-react";
+
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -54,7 +60,7 @@ export const WebhookPayloadInspector = () => {
           size="sm"
           className="gap-2"
         >
-          <Trash2 className="h-4 w-4" />
+          <RiDeleteBinLine className="h-4 w-4" />
           Clear History
         </Button>
       </CardHeader>
@@ -75,9 +81,9 @@ export const WebhookPayloadInspector = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       {entry.response.status >= 200 && entry.response.status < 300 ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <RiCheckboxCircleLine className="h-4 w-4 text-green-500" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
+                        <RiCloseCircleLine className="h-4 w-4 text-red-500" />
                       )}
                       <Badge variant={entry.response.status >= 200 && entry.response.status < 300 ? "default" : "destructive"}>
                         {entry.response.status}
@@ -98,7 +104,7 @@ export const WebhookPayloadInspector = () => {
                         size="sm"
                         className="h-7 gap-1"
                       >
-                        <Copy className="h-3 w-3" />
+                        <RiFileCopyLine className="h-3 w-3" />
                         Copy
                       </Button>
                     </div>

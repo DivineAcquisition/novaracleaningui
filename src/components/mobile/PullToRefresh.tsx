@@ -1,5 +1,8 @@
+import {
+  RiLoader4Line
+} from "@remixicon/react";
 import { useState, useRef, ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+
 import { useNativeHaptics } from "@/hooks/use-native-haptics";
 
 interface PullToRefreshProps {
@@ -65,7 +68,7 @@ export function PullToRefresh({ onRefresh, children }: PullToRefreshProps) {
             opacity: pullDistance / 80 
           }}
         >
-          <Loader2 
+          <RiLoader4Line 
             className={`h-6 w-6 text-primary ${isRefreshing ? 'animate-spin' : ''}`}
             style={{ transform: `rotate(${pullDistance * 4}deg)` }}
           />

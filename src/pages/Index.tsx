@@ -1,3 +1,18 @@
+import {
+  RiArrowRightLine,
+  RiCalendarCheckLine,
+  RiCheckboxCircleLine,
+  RiFlashlightLine,
+  RiGroupLine,
+  RiMapPinLine,
+  RiPhoneLine,
+  RiRepeatLine,
+  RiShieldLine,
+  RiSparklingLine,
+  RiStarLine,
+  RiTimeLine,
+  RiTrophyLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
@@ -8,29 +23,16 @@ import { Separator } from "@/components/ui/separator";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
-import {
-  ArrowRight,
-  CheckCircle,
-  Shield,
-  Clock,
-  Sparkles,
-  Star,
-  Phone,
-  MapPin,
-  Award,
-  Users,
-  CalendarCheck,
-  Zap,
-} from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import logo from "@/assets/logo.png";
 
 const TRUST_STATS = [
-  { label: "Homes Cleaned", value: "1,200+", icon: CheckCircle },
-  { label: "5-Star Reviews", value: "500+", icon: Star },
-  { label: "Repeat Customers", value: "92%", icon: Users },
-  { label: "On-Time Rate", value: "99%", icon: Clock },
+  { label: "Homes Cleaned", value: "1,200+", icon: RiCheckboxCircleLine },
+  { label: "5-Star Reviews", value: "500+", icon: RiStarLine },
+  { label: "Repeat Customers", value: "92%", icon: RiGroupLine },
+  { label: "On-Time Rate", value: "99%", icon: RiTimeLine },
 ];
 
 const HOW_IT_WORKS = [
@@ -38,19 +40,19 @@ const HOW_IT_WORKS = [
     step: "1",
     title: "Enter Your ZIP",
     description: "Check if we service your area and see instant pricing.",
-    icon: MapPin,
+    icon: RiMapPinLine,
   },
   {
     step: "2",
     title: "Choose Your Service",
     description: "Select from deep clean, standard, or recurring plans.",
-    icon: CalendarCheck,
+    icon: RiCalendarCheckLine,
   },
   {
     step: "3",
     title: "We Show Up",
     description: "Our vetted, insured team arrives on time. Every time.",
-    icon: Zap,
+    icon: RiFlashlightLine,
   },
 ];
 
@@ -193,7 +195,7 @@ const Index = () => {
               href="tel:+18447352070"
               className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Phone className="w-4 h-4" />
+              <RiPhoneLine className="w-4 h-4" />
               (844) 735-2070
             </a>
             <Button
@@ -218,7 +220,7 @@ const Index = () => {
           <div className="max-w-3xl mx-auto text-center space-y-8">
             {/* Trust badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/[0.04] backdrop-blur-sm">
-              <Shield className="w-4 h-4 text-primary" />
+              <RiShieldLine className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-primary">
                 Google Guaranteed & Fully Insured
               </span>
@@ -283,7 +285,7 @@ const Index = () => {
                       className="w-full h-13 text-base font-semibold bg-gradient-primary hover:opacity-90 transition-opacity"
                     >
                       {isValidating ? "Checking..." : "Get My Price"}
-                      <ArrowRight className="w-5 h-5 ml-2" />
+                      <RiArrowRightLine className="w-5 h-5 ml-2" />
                     </Button>
                   </form>
                 </div>
@@ -302,7 +304,7 @@ const Index = () => {
                   >
                     {/* Success Message */}
                     <div className="flex items-start gap-3 p-3 bg-primary/[0.06] rounded-xl border border-primary/10">
-                      <CheckCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <RiCheckboxCircleLine className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                       <div className="text-left">
                         <p className="font-semibold text-sm text-foreground">
                           We service {cityState}!
@@ -399,7 +401,7 @@ const Index = () => {
                       className="w-full h-13 text-base font-semibold bg-gradient-primary hover:opacity-90 transition-opacity"
                     >
                       {isSubmitting ? "Processing..." : "See My Quote"}
-                      <ArrowRight className="w-5 h-5 ml-2" />
+                      <RiArrowRightLine className="w-5 h-5 ml-2" />
                     </Button>
 
                     <button
@@ -507,37 +509,37 @@ const Index = () => {
             <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
               {[
                 {
-                  icon: Shield,
+                  icon: RiShieldLine,
                   title: "Fully Insured & Bonded",
                   description:
                     "Every team is background-checked, insured, and bonded for your peace of mind.",
                 },
                 {
-                  icon: Clock,
+                  icon: RiTimeLine,
                   title: "Always On Time",
                   description:
                     "99% on-time arrival rate. If we're late, your next clean is on us.",
                 },
                 {
-                  icon: Sparkles,
+                  icon: RiSparklingLine,
                   title: "48-Hour Re-Clean Guarantee",
                   description:
                     "Not satisfied? We'll come back within 48 hours and re-clean for free.",
                 },
                 {
-                  icon: Award,
+                  icon: RiTrophyLine,
                   title: "Google Guaranteed",
                   description:
                     "Backed by Google's $2,000 guarantee. Your home is in trusted hands.",
                 },
                 {
-                  icon: Users,
+                  icon: RiGroupLine,
                   title: "Same Team Every Time",
                   description:
                     "Members get the same trusted cleaning team for every visit.",
                 },
                 {
-                  icon: CalendarCheck,
+                  icon: RiCalendarCheckLine,
                   title: "Flexible Scheduling",
                   description:
                     "Book, reschedule, or cancel anytime. No long-term contracts.",
@@ -591,7 +593,7 @@ const Index = () => {
                 <CardContent className="p-5 space-y-4">
                   <div className="flex gap-0.5">
                     {Array.from({ length: testimonial.rating }).map((_, i) => (
-                      <Star
+                      <RiStarLine
                         key={i}
                         className="w-4 h-4 fill-amber-400 text-amber-400"
                       />
@@ -633,7 +635,7 @@ const Index = () => {
               }}
             >
               Book Your Clean
-              <ArrowRight className="w-5 h-5 ml-2" />
+              <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
             <p className="text-xs text-muted-foreground">
               Starting at just $39 deposit. No hidden fees.

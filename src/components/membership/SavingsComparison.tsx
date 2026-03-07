@@ -1,5 +1,7 @@
+import {
+  RiArrowRightDownLine
+} from "@remixicon/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingDown } from "lucide-react";
 
 interface SavingsComparisonProps {
   monthlyPrice: number;
@@ -33,7 +35,7 @@ export function SavingsComparison({ monthlyPrice, regularCleanPrice, creditsPerM
     <Card className="border-2 border-primary/20">
       <CardHeader className="text-center pb-4">
         <div className="mx-auto w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center mb-2">
-          <TrendingDown className="w-6 h-6 text-white" />
+          <RiArrowRightDownLine className="w-6 h-6 text-white" />
         </div>
         <CardTitle className="text-2xl font-jakarta">Membership Savings Calculator</CardTitle>
         <p className="text-sm text-muted-foreground mt-2">

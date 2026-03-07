@@ -1,10 +1,17 @@
+import {
+  RiArrowRightDownLine,
+  RiCalculatorLine,
+  RiFileCopyLine,
+  RiLoader4Line,
+  RiMailLine
+} from "@remixicon/react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SERVICE_TIERS, ADD_ONS } from "@/config/brand-config";
 import { calculateQuote, formatCents } from "@/lib/sales-pricing";
-import { Copy, Mail, Calculator, TrendingDown, Loader2 } from "lucide-react";
+
 import { formatQuoteText } from "@/lib/sales-pricing";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -146,7 +153,7 @@ export function LiveQuotePanel({
   if (!homeSizeId) {
     return (
       <div className="p-6 text-center text-gray-400">
-        <Calculator className="w-10 h-10 mx-auto mb-3 opacity-50" />
+        <RiCalculatorLine className="w-10 h-10 mx-auto mb-3 opacity-50" />
         <p className="text-sm">Select a home size to see pricing</p>
       </div>
     );
@@ -156,7 +163,7 @@ export function LiveQuotePanel({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-          <Calculator className="w-4 h-4 text-emerald-600" />
+          <RiCalculatorLine className="w-4 h-4 text-emerald-600" />
           Live Quote
         </h3>
         <div className="flex gap-1">
@@ -167,7 +174,7 @@ export function LiveQuotePanel({
           )}
           {quote.discountPct > 0 && (
             <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-              <TrendingDown className="w-3 h-3 mr-1" />
+              <RiArrowRightDownLine className="w-3 h-3 mr-1" />
               {quote.discountPct}% off
             </Badge>
           )}
@@ -266,7 +273,7 @@ export function LiveQuotePanel({
           className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
           onClick={handleCopy}
         >
-          <Copy className="w-3 h-3 mr-1" /> Copy Quote
+          <RiFileCopyLine className="w-3 h-3 mr-1" /> Copy Quote
         </Button>
         <Button
           variant="outline"
@@ -276,9 +283,9 @@ export function LiveQuotePanel({
           onClick={handleEmailQuote}
         >
           {sendingEmail ? (
-            <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Sending...</>
+            <><RiLoader4Line className="w-3 h-3 mr-1 animate-spin" /> Sending...</>
           ) : (
-            <><Mail className="w-3 h-3 mr-1" /> Email Quote</>
+            <><RiMailLine className="w-3 h-3 mr-1" /> Email Quote</>
           )}
         </Button>
       </div>

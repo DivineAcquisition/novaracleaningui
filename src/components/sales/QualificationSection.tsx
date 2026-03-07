@@ -1,3 +1,11 @@
+import {
+  RiAlertLine,
+  RiBearSmileLine,
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiMapPinLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -8,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { HOME_SIZES, SERVICE_TIERS, ADD_ONS } from "@/config/brand-config";
 import { getFrequencyOptions } from "@/lib/sales-pricing";
 import { useServiceCoverage } from "@/hooks/use-sales-data";
-import { CheckCircle2, AlertTriangle, MapPin, Calendar, Clock, PawPrint } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 const PROPERTY_TYPES = ["House", "Apartment", "Condo", "Townhome", "Commercial/Office"];
@@ -70,7 +78,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          <RiCheckboxCircleLine className="w-5 h-5 text-emerald-600" />
           Qualification
         </h2>
         <div className="flex items-center gap-3 text-sm">
@@ -183,7 +191,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label className="text-gray-600 flex items-center gap-2">
-            <MapPin className="w-4 h-4" /> ZIP Code
+            <RiMapPinLine className="w-4 h-4" /> ZIP Code
           </Label>
           <Input
             value={data.zipCode}
@@ -195,12 +203,12 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
           {data.zipCode.length >= 5 && !checkingZip && (
             coverage ? (
               <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                <CheckCircle2 className="w-4 h-4" />
+                <RiCheckboxCircleLine className="w-4 h-4" />
                 Service area confirmed: {coverage.city}, {coverage.state} ({coverage.tier_label})
               </div>
             ) : (
               <div className="flex items-center gap-2 text-red-400 text-sm">
-                <AlertTriangle className="w-4 h-4" />
+                <RiAlertLine className="w-4 h-4" />
                 Outside service area — inform lead politely & capture info for future expansion
               </div>
             )
@@ -255,7 +263,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label className="text-gray-600 flex items-center gap-2">
-            <Calendar className="w-4 h-4" /> Preferred Date
+            <RiCalendarLine className="w-4 h-4" /> Preferred Date
           </Label>
           <Input
             type="date"
@@ -266,7 +274,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
         </div>
         <div className="space-y-2">
           <Label className="text-gray-600 flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Preferred Time
+            <RiTimeLine className="w-4 h-4" /> Preferred Time
           </Label>
           <Select value={data.preferredTime} onValueChange={(v) => update("preferredTime", v)}>
             <SelectTrigger className="bg-white border-gray-300 text-gray-900">
@@ -311,7 +319,7 @@ export function QualificationSection({ data, onChange }: QualificationSectionPro
       {/* Special Requests */}
       <div className="space-y-2">
         <Label className="text-gray-600 flex items-center gap-2">
-          <PawPrint className="w-4 h-4" /> Special Requests
+          <RiBearSmileLine className="w-4 h-4" /> Special Requests
         </Label>
         <Textarea
           value={data.specialRequests}

@@ -1,6 +1,11 @@
+import {
+  RiCheckLine,
+  RiFlashlightLine,
+  RiGiftLine
+} from "@remixicon/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Gift, Zap, Check } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 interface PaymentComparisonProps {
@@ -48,7 +53,7 @@ export function PaymentComparison({
             </div>
             {selectedOption === 'deposit' && (
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                <Check className="w-4 h-4 text-white" />
+                <RiCheckLine className="w-4 h-4 text-white" />
               </div>
             )}
           </div>
@@ -72,7 +77,7 @@ export function PaymentComparison({
               {depositPricing.newCustomerDiscount > 0 && (
                 <div className="flex items-center justify-between text-green-600 font-medium">
                   <span className="flex items-center gap-1.5">
-                    <Gift className="w-3.5 h-3.5" />
+                    <RiGiftLine className="w-3.5 h-3.5" />
                     New customer $60 off:
                   </span>
                   <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
@@ -125,7 +130,7 @@ export function PaymentComparison({
             </div>
             {selectedOption === 'full' && (
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                <Check className="w-4 h-4 text-white" />
+                <RiCheckLine className="w-4 h-4 text-white" />
               </div>
             )}
           </div>
@@ -149,7 +154,7 @@ export function PaymentComparison({
               {fullPaymentPricing.newCustomerDiscount > 0 && (
                 <div className="flex items-center justify-between text-green-600 font-medium">
                   <span className="flex items-center gap-1.5">
-                    <Gift className="w-3.5 h-3.5" />
+                    <RiGiftLine className="w-3.5 h-3.5" />
                     New customer $60 off:
                   </span>
                   <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
@@ -165,7 +170,7 @@ export function PaymentComparison({
               
               <div className="flex items-center justify-between font-bold text-success pt-1">
                 <span className="flex items-center gap-1.5">
-                  <Zap className="w-4 h-4" />
+                  <RiFlashlightLine className="w-4 h-4" />
                   Total savings:
                 </span>
                 <span className="text-lg">${fullPaymentPricing.savings.toFixed(2)}</span>

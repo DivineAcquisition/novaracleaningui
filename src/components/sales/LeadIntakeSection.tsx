@@ -1,3 +1,11 @@
+import {
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMailLine,
+  RiPhoneLine,
+  RiSearchLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,7 +14,6 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCustomerSearch, CustomerSearchResult } from "@/hooks/use-sales-data";
-import { User, Phone, Mail, Search, CheckCircle2, Loader2 } from "lucide-react";
 
 const LEAD_SOURCES = [
   "Google Ads", "Facebook", "Instagram DM", "Referral", "Website", "Cold Outreach", "Other"
@@ -74,7 +81,7 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-2">
-        <User className="w-5 h-5 text-emerald-600" />
+        <RiUserLine className="w-5 h-5 text-emerald-600" />
         <h2 className="text-lg font-semibold text-gray-900">Lead Intake</h2>
       </div>
 
@@ -82,7 +89,7 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
       <div ref={searchRef} className="relative">
         <Label className="text-gray-600 mb-2 block">Search Customers</Label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); }}
@@ -90,7 +97,7 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
             placeholder="Search by name, email, or phone..."
             className="bg-white border-gray-300 text-gray-900 pl-9"
           />
-          {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 animate-spin" />}
+          {searching && <RiLoader4Line className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 animate-spin" />}
         </div>
 
         {showResults && searchQuery.length >= 2 && (
@@ -193,7 +200,7 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
         <div className="space-y-2">
           <Label className="text-gray-600">Phone</Label>
           <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <RiPhoneLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               value={data.phone}
               onChange={(e) => update("phone", e.target.value)}
@@ -205,7 +212,7 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
         <div className="space-y-2">
           <Label className="text-gray-600">Email</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               value={data.email}
               onChange={(e) => update("email", e.target.value)}
@@ -226,7 +233,7 @@ export function LeadIntakeSection({ data, onChange }: LeadIntakeSectionProps) {
         </div>
         {data.isExistingCustomer && (
           <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-            <CheckCircle2 className="w-3 h-3 mr-1" /> Marked as existing
+            <RiCheckboxCircleLine className="w-3 h-3 mr-1" /> Marked as existing
           </Badge>
         )}
       </div>

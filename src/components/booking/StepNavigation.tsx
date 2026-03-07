@@ -1,4 +1,7 @@
-import { Check } from "lucide-react";
+
+import {
+  RiCheckLine
+} from "@remixicon/react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +79,7 @@ export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
                   )}
                 >
                   {isCompleted ? (
-                    <Check className="w-5 h-5" />
+                    <RiCheckLine className="w-5 h-5" />
                   ) : (
                     step.number
                   )}

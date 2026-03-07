@@ -1,3 +1,9 @@
+import {
+  RiCheckboxCircleLine,
+  RiKeyLine,
+  RiMailLine,
+  RiSparklingLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Sparkles, CheckCircle2, KeyRound } from "lucide-react";
 
 export default function OnboardingLanding() {
   const navigate = useNavigate();
@@ -150,9 +155,9 @@ export default function OnboardingLanding() {
         <CardHeader className="text-center space-y-2 pb-4 pt-5">
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
             {step === 'code' ? (
-              <KeyRound className="w-6 h-6 text-primary" />
+              <RiKeyLine className="w-6 h-6 text-primary" />
             ) : (
-              <Sparkles className="w-6 h-6 text-primary" />
+              <RiSparklingLine className="w-6 h-6 text-primary" />
             )}
           </div>
           <CardTitle className="text-2xl font-bold">
@@ -224,7 +229,7 @@ export default function OnboardingLanding() {
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-sm">Email Address</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"

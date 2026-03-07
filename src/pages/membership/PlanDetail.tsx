@@ -1,3 +1,19 @@
+import {
+  RiArrowDownSLine,
+  RiArrowLeftLine,
+  RiArrowRightLine,
+  RiCalendarCheckLine,
+  RiCheckLine,
+  RiCheckboxCircleLine,
+  RiGroupLine,
+  RiLoader4Line,
+  RiRepeatLine,
+  RiShieldLine,
+  RiSparklingLine,
+  RiStarLine,
+  RiTimeLine,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,10 +27,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { toast } from "sonner";
 import { HOME_SIZES } from "@/config/brand-config";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
-import {
-  Sparkles, CheckCircle2, ArrowRight, ArrowLeft, ChevronDown, Shield,
-  Clock, CalendarCheck, Star, Users, Repeat, Crown, Loader2, Check,
-} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 
@@ -22,41 +35,41 @@ const PLAN_META = {
   monthly: {
     name: "Glow Monthly",
     tagline: "One professional clean every month — your home stays fresh effortlessly.",
-    icon: CalendarCheck,
+    icon: RiCalendarCheckLine,
     credits: 1,
     includedHours: "up to 2 hrs",
     benefits: [
-      { icon: Star, text: "1 cleaning credit per month (up to 2 hrs)" },
-      { icon: Shield, text: "48-hour reclean guarantee" },
-      { icon: Users, text: "Priority customer support" },
-      { icon: Sparkles, text: "20% off extra hours & add-ons" },
+      { icon: RiStarLine, text: "1 cleaning credit per month (up to 2 hrs)" },
+      { icon: RiShieldLine, text: "48-hour reclean guarantee" },
+      { icon: RiGroupLine, text: "Priority customer support" },
+      { icon: RiSparklingLine, text: "20% off extra hours & add-ons" },
     ],
   },
   biweekly: {
     name: "Glow Bi-Weekly",
     tagline: "Two cleans a month — the sweet spot for a consistently clean home.",
-    icon: Repeat,
+    icon: RiRepeatLine,
     credits: 2,
     includedHours: "up to 3 hrs each",
     popular: true,
     benefits: [
-      { icon: Star, text: "2 cleaning credits per month (up to 3 hrs each)" },
-      { icon: Users, text: "Dedicated cleaner match" },
-      { icon: Sparkles, text: "25% off deep cleans & add-ons" },
-      { icon: Shield, text: "Satisfaction guarantee" },
+      { icon: RiStarLine, text: "2 cleaning credits per month (up to 3 hrs each)" },
+      { icon: RiGroupLine, text: "Dedicated cleaner match" },
+      { icon: RiSparklingLine, text: "25% off deep cleans & add-ons" },
+      { icon: RiShieldLine, text: "Satisfaction guarantee" },
     ],
   },
   weekly: {
     name: "Glow Weekly",
     tagline: "Four cleans a month — premium care for busy households.",
-    icon: Crown,
+    icon: RiVipCrownLine,
     credits: 4,
     includedHours: "up to 3 hrs each",
     benefits: [
-      { icon: Star, text: "4 cleaning credits per month (up to 3 hrs each)" },
-      { icon: Users, text: "Dedicated cleaner & preferred time slot" },
-      { icon: Sparkles, text: "Free deep clean every 6 months" },
-      { icon: Shield, text: "30% off extra hours & add-ons" },
+      { icon: RiStarLine, text: "4 cleaning credits per month (up to 3 hrs each)" },
+      { icon: RiGroupLine, text: "Dedicated cleaner & preferred time slot" },
+      { icon: RiSparklingLine, text: "Free deep clean every 6 months" },
+      { icon: RiShieldLine, text: "30% off extra hours & add-ons" },
     ],
   },
 } as const;
@@ -123,7 +136,7 @@ export default function PlanDetail() {
       <div className="border-b border-border/50">
         <div className="container max-w-4xl mx-auto px-4 py-3">
           <Button variant="ghost" size="sm" onClick={() => navigate("/membership")} className="-ml-2 text-muted-foreground">
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> All Plans
+            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> All Plans
           </Button>
         </div>
       </div>
@@ -184,7 +197,7 @@ export default function PlanDetail() {
                       <span className="text-[10px] text-muted-foreground">/mo</span>
                       {isSelected && (
                         <div className="w-5 h-5 bg-primary rounded-md flex items-center justify-center ml-1">
-                          <Check className="w-3 h-3 text-white" />
+                          <RiCheckLine className="w-3 h-3 text-white" />
                         </div>
                       )}
                     </div>
@@ -257,7 +270,7 @@ export default function PlanDetail() {
           <CollapsibleTrigger asChild>
             <button className="w-full flex items-center justify-between p-4 rounded-xl border border-border hover:bg-muted/50 transition-colors">
               <span className="font-semibold text-sm">Terms & Disclaimer</span>
-              <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", termsOpen && "rotate-180")} />
+              <RiArrowDownSLine className={cn("w-4 h-4 transition-transform duration-200", termsOpen && "rotate-180")} />
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -304,11 +317,11 @@ export default function PlanDetail() {
               className="w-full h-13 text-base bg-gradient-primary shadow-lg rounded-xl"
             >
               {loading ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
+                <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
               ) : (
                 <>
                   Subscribe — ${selectedPrice}/mo
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <RiArrowRightLine className="w-5 h-5 ml-2" />
                 </>
               )}
             </Button>
@@ -322,7 +335,7 @@ export default function PlanDetail() {
         {/* Back */}
         <div className="text-center pb-4">
           <Button variant="ghost" onClick={() => navigate("/membership")} className="text-muted-foreground">
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to all plans
+            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Back to all plans
           </Button>
         </div>
       </div>

@@ -1,3 +1,9 @@
+import {
+  RiLoader4Line,
+  RiLockLine,
+  RiMailLine,
+  RiShieldLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, Shield } from "lucide-react";
+
 import { z } from "zod";
 import { SEO } from "@/components/SEO";
 
@@ -93,7 +99,7 @@ export default function AdminAuth() {
         {/* Logo & Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg mb-4">
-            <Shield className="w-8 h-8 text-white" />
+            <RiShieldLine className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
           <p className="text-sm text-slate-400 mt-1">
@@ -138,7 +144,7 @@ export default function AdminAuth() {
                   Email
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <Input
                     id="admin-email"
                     type="email"
@@ -157,7 +163,7 @@ export default function AdminAuth() {
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <Input
                     id="admin-password"
                     type="password"
@@ -178,12 +184,12 @@ export default function AdminAuth() {
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                    <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />
                     Verifying...
                   </>
                 ) : (
                   <>
-                    <Shield className="mr-2 w-4 h-4" />
+                    <RiShieldLine className="mr-2 w-4 h-4" />
                     Sign In
                   </>
                 )}

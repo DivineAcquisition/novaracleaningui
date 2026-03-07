@@ -1,3 +1,12 @@
+import {
+  RiAlertLine,
+  RiBankCardLine,
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { calculateQuote, formatCents } from "@/lib/sales-pricing";
 import { SERVICE_TIERS } from "@/config/brand-config";
 import { toast } from "sonner";
-import { CheckCircle, Calendar, MapPin, CreditCard, Clock, AlertTriangle, Loader2 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 interface BookingConfirmationProps {
@@ -229,7 +238,7 @@ export function BookingConfirmationSection({
   if (confirmed) {
     return (
       <div className="text-center py-8">
-        <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
+        <RiCheckboxCircleLine className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
         <h3 className="text-lg font-semibold text-gray-900">
           {status === "booked" ? "Booking Confirmed!" : "Lead Updated"}
         </h3>
@@ -245,7 +254,7 @@ export function BookingConfirmationSection({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <CheckCircle className="w-5 h-5 text-emerald-600" />
+        <RiCheckboxCircleLine className="w-5 h-5 text-emerald-600" />
         <h2 className="text-lg font-semibold text-gray-900">Close & Confirm</h2>
       </div>
 
@@ -277,7 +286,7 @@ export function BookingConfirmationSection({
           {/* Address */}
           <div className="space-y-4">
             <Label className="text-gray-600 flex items-center gap-2">
-              <MapPin className="w-4 h-4" /> Service Address
+              <RiMapPinLine className="w-4 h-4" /> Service Address
             </Label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-3">
@@ -312,7 +321,7 @@ export function BookingConfirmationSection({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-gray-600 flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Confirmed Date
+                <RiCalendarLine className="w-4 h-4" /> Confirmed Date
               </Label>
               <Input
                 type="date"
@@ -323,7 +332,7 @@ export function BookingConfirmationSection({
             </div>
             <div className="space-y-2">
               <Label className="text-gray-600 flex items-center gap-2">
-                <Clock className="w-4 h-4" /> Time Window
+                <RiTimeLine className="w-4 h-4" /> Time Window
               </Label>
               <Input
                 value={qualification.preferredTime || "TBD"}
@@ -337,7 +346,7 @@ export function BookingConfirmationSection({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-gray-600 flex items-center gap-2">
-                <CreditCard className="w-4 h-4" /> Payment Method
+                <RiBankCardLine className="w-4 h-4" /> Payment Method
               </Label>
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                 <SelectTrigger className="bg-white border-gray-300 text-gray-900">
@@ -358,7 +367,7 @@ export function BookingConfirmationSection({
 
           {!depositCollected && (
             <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <RiAlertLine className="w-4 h-4 shrink-0" />
               Booking will be saved as "Pending Payment" until deposit is collected.
             </div>
           )}
@@ -399,11 +408,11 @@ export function BookingConfirmationSection({
         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-12"
       >
         {confirming ? (
-          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+          <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
         ) : status === "booked" ? (
-          <><CheckCircle className="w-4 h-4 mr-2" /> Confirm Booking</>
+          <><RiCheckboxCircleLine className="w-4 h-4 mr-2" /> Confirm Booking</>
         ) : (
-          <><CheckCircle className="w-4 h-4 mr-2" /> Update Status</>
+          <><RiCheckboxCircleLine className="w-4 h-4 mr-2" /> Update Status</>
         )}
       </Button>
     </div>

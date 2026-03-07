@@ -1,3 +1,14 @@
+import {
+  RiBankCardLine,
+  RiCheckboxCircleLine,
+  RiErrorWarningLine,
+  RiExternalLinkLine,
+  RiLoader4Line,
+  RiLogoutBoxRLine,
+  RiMoneyDollarCircleLine,
+  RiSettings3Line,
+  RiUserLine
+} from "@remixicon/react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,17 +17,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
-import { 
-  Loader2, 
-  LogOut, 
-  ExternalLink, 
-  CheckCircle2, 
-  AlertCircle,
-  DollarSign,
-  User,
-  CreditCard,
-  Settings
-} from "lucide-react";
 
 interface CleanerProfile {
   id: string;
@@ -128,7 +128,7 @@ export default function CleanerDashboard() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+          <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground">Loading your dashboard...</p>
         </div>
       </div>
@@ -160,7 +160,7 @@ export default function CleanerDashboard() {
               />
             ) : (
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="w-5 h-5 text-primary" />
+                <RiUserLine className="w-5 h-5 text-primary" />
               </div>
             )}
             <div>
@@ -174,7 +174,7 @@ export default function CleanerDashboard() {
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={handleSignOut}>
-            <LogOut className="w-5 h-5" />
+            <RiLogoutBoxRLine className="w-5 h-5" />
           </Button>
         </div>
       </header>
@@ -196,18 +196,18 @@ export default function CleanerDashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
+                <RiBankCardLine className="w-5 h-5 text-primary" />
                 Payments & Earnings
               </CardTitle>
               {stripeStatus === "active" && (
                 <Badge className="bg-green-500/10 text-green-600 border-0">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  <RiCheckboxCircleLine className="w-3 h-3 mr-1" />
                   Connected
                 </Badge>
               )}
               {stripeStatus === "pending" && (
                 <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-0">
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                  <RiErrorWarningLine className="w-3 h-3 mr-1" />
                   Pending
                 </Badge>
               )}
@@ -230,18 +230,18 @@ export default function CleanerDashboard() {
             >
               {stripeLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                   Loading...
                 </>
               ) : stripeStatus === "active" ? (
                 <>
-                  <DollarSign className="w-4 h-4 mr-2" />
+                  <RiMoneyDollarCircleLine className="w-4 h-4 mr-2" />
                   Open Stripe Dashboard
-                  <ExternalLink className="w-4 h-4 ml-2" />
+                  <RiExternalLinkLine className="w-4 h-4 ml-2" />
                 </>
               ) : (
                 <>
-                  <Settings className="w-4 h-4 mr-2" />
+                  <RiSettings3Line className="w-4 h-4 mr-2" />
                   {stripeStatus === "pending" ? "Complete Setup" : "Set Up Payments"}
                 </>
               )}
@@ -260,7 +260,7 @@ export default function CleanerDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 className="w-5 h-5 text-primary" />
+                <RiCheckboxCircleLine className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
                 <p className="font-medium text-sm">Onboarding Portal</p>
@@ -274,7 +274,7 @@ export default function CleanerDashboard() {
                 onClick={() => navigate("/cleaner/ob-portal")}
               >
                 Open
-                <ExternalLink className="w-3 h-3 ml-1" />
+                <RiExternalLinkLine className="w-3 h-3 ml-1" />
               </Button>
             </div>
           </CardContent>
@@ -285,7 +285,7 @@ export default function CleanerDashboard() {
           <CardContent className="p-4">
             <div className="flex gap-3">
               <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                <DollarSign className="w-5 h-5 text-blue-600" />
+                <RiMoneyDollarCircleLine className="w-5 h-5 text-blue-600" />
               </div>
               <div>
                 <p className="font-medium text-sm">Your Pay Rate</p>
@@ -302,7 +302,7 @@ export default function CleanerDashboard() {
         <Card className="border-0 shadow-lg">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
+              <RiUserLine className="w-5 h-5 text-primary" />
               Profile Summary
             </CardTitle>
           </CardHeader>

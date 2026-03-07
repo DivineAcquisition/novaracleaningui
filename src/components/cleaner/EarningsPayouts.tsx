@@ -1,3 +1,7 @@
+import {
+  RiExternalLinkLine,
+  RiMoneyDollarCircleLine
+} from "@remixicon/react";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -9,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import { ExternalLink, DollarSign } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 interface EarningsPayoutsProps {
@@ -20,7 +24,7 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
   if (payouts.length === 0) {
     return (
       <div className="text-center py-8">
-        <DollarSign className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+        <RiMoneyDollarCircleLine className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
         <p className="text-sm text-muted-foreground">No payouts yet</p>
         <p className="text-xs text-muted-foreground mt-1">
           Complete jobs to start earning
@@ -110,7 +114,7 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
                         )
                       }
                     >
-                      <ExternalLink className="w-4 h-4" />
+                      <RiExternalLinkLine className="w-4 h-4" />
                     </Button>
                   )}
                 </TableCell>

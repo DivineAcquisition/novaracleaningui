@@ -1,7 +1,13 @@
+import {
+  RiCheckboxCircleLine,
+  RiErrorWarningLine,
+  RiMapPinLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Clock, AlertCircle, CheckCircle } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -144,7 +150,7 @@ export function AddressAutocomplete({
                 size="sm"
                 className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
               >
-                <Clock className="w-3 h-3 mr-1" />
+                <RiTimeLine className="w-3 h-3 mr-1" />
                 Recent
               </Button>
             </PopoverTrigger>
@@ -160,7 +166,7 @@ export function AddressAutocomplete({
                     className="w-full text-left px-2 py-2 text-sm rounded-md hover:bg-accent transition-colors"
                   >
                     <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <RiMapPinLine className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                       <span className="flex-1">{getHistoryItemDisplay(item)}</span>
                     </div>
                   </button>
@@ -186,19 +192,19 @@ export function AddressAutocomplete({
             setValidationError(null);
           }}
         />
-        <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <RiMapPinLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
       </div>
       
       {validationError && (
         <div className="flex items-start gap-2 text-xs text-destructive">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <RiErrorWarningLine className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{validationError}</span>
         </div>
       )}
       
       {geocodedLocation && !validationError && (
         <div className="flex items-start gap-2 text-xs text-muted-foreground">
-          <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-green-600" />
+          <RiCheckboxCircleLine className="w-4 h-4 shrink-0 mt-0.5 text-green-600" />
           <span>Confirmed: {geocodedLocation}</span>
         </div>
       )}

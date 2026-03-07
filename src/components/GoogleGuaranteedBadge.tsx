@@ -1,4 +1,9 @@
-import { CheckCircle, Shield, ShieldCheck } from "lucide-react";
+
+import {
+  RiCheckboxCircleLine,
+  RiShieldCheckLine,
+  RiShieldLine
+} from "@remixicon/react";
 import { cn } from "@/lib/utils";
 
 interface GoogleGuaranteedBadgeProps {
@@ -21,7 +26,7 @@ export function GoogleGuaranteedBadge({
         )}
         aria-label="Google Guaranteed business"
       >
-        <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <RiShieldCheckLine className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
         <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
           Google Guaranteed
         </span>
@@ -42,8 +47,8 @@ export function GoogleGuaranteedBadge({
       >
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Shield className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
-            <CheckCircle className="w-4 h-4 text-white bg-emerald-600 rounded-full absolute -bottom-0.5 -right-0.5" />
+            <RiShieldLine className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+            <RiCheckboxCircleLine className="w-4 h-4 text-white bg-emerald-600 rounded-full absolute -bottom-0.5 -right-0.5" />
           </div>
           <span className="text-base font-bold text-emerald-700 dark:text-emerald-300">
             Google Guaranteed
@@ -68,8 +73,8 @@ export function GoogleGuaranteedBadge({
       aria-label="Google Guaranteed business"
     >
       <div className="relative">
-        <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-        <CheckCircle className="w-2.5 h-2.5 text-white bg-emerald-600 rounded-full absolute -bottom-0.5 -right-0.5" />
+        <RiShieldLine className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+        <RiCheckboxCircleLine className="w-2.5 h-2.5 text-white bg-emerald-600 rounded-full absolute -bottom-0.5 -right-0.5" />
       </div>
       <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
         Google Guaranteed

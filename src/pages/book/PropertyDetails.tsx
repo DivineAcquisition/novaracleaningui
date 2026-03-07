@@ -1,3 +1,8 @@
+import {
+  RiArrowRightLine,
+  RiCheckboxCircleLine,
+  RiMapPinLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, ArrowRight, MapPin } from "lucide-react";
+
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
@@ -119,7 +124,7 @@ export default function PropertyDetails() {
       <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in">
         <CardHeader className="text-center space-y-4 pb-6">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            <CheckCircle2 className="w-10 h-10 text-primary" />
+            <RiCheckboxCircleLine className="w-10 h-10 text-primary" />
           </div>
           <CardTitle className="text-lg md:text-xl font-semibold">Property & Address Details</CardTitle>
           <CardDescription className="text-sm">
@@ -138,7 +143,7 @@ export default function PropertyDetails() {
                   Street Address <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <RiMapPinLine className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="address"
                     value={address}
@@ -317,7 +322,7 @@ export default function PropertyDetails() {
               className="w-full h-12 md:h-14 text-base font-semibold"
             >
               {isSubmitting ? "Saving..." : "Complete Booking"}
-              <ArrowRight className="ml-2 w-5 h-5" />
+              <RiArrowRightLine className="ml-2 w-5 h-5" />
             </Button>
           </form>
         </CardContent>

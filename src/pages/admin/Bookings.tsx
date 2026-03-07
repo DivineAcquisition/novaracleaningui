@@ -1,3 +1,9 @@
+import {
+  RiCloseLine,
+  RiExternalLinkLine,
+  RiSaveLine,
+  RiSearchLine
+} from "@remixicon/react";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/admin/AdminLayout";
@@ -11,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { Search, X, ExternalLink, Save } from "lucide-react";
+
 import { CancelBookingDialog } from "@/components/admin/CancelBookingDialog";
 import { SEO } from "@/components/SEO";
 
@@ -174,7 +180,7 @@ export default function AdminBookings() {
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <Input
               placeholder="Search name, email, phone, address…"
               value={search}
@@ -339,7 +345,7 @@ export default function AdminBookings() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 mt-2 text-xs text-amber-400 hover:underline"
                       >
-                        <ExternalLink className="h-3 w-3" /> View Invoice
+                        <RiExternalLinkLine className="h-3 w-3" /> View Invoice
                       </a>
                     )}
                   </section>
@@ -394,7 +400,7 @@ export default function AdminBookings() {
                       disabled={saving}
                       className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
                     >
-                      <Save className="h-4 w-4 mr-2" />
+                      <RiSaveLine className="h-4 w-4 mr-2" />
                       {saving ? "Saving…" : "Save Changes"}
                     </Button>
                     {selected.status !== "cancelled" && (

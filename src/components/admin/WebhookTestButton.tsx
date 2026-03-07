@@ -1,8 +1,12 @@
+import {
+  RiGroupLine,
+  RiSendPlaneLine
+} from "@remixicon/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Send, Users } from "lucide-react";
+
 import { useWebhookHistory } from "@/contexts/WebhookHistoryContext";
 
 export const WebhookTestButton = () => {
@@ -53,7 +57,7 @@ export const WebhookTestButton = () => {
         disabled={bookingLoading || dispatchLoading} 
         variant="outline"
       >
-        <Send className="mr-2 h-4 w-4" />
+        <RiSendPlaneLine className="mr-2 h-4 w-4" />
         {bookingLoading ? "Sending..." : "Test Booking Webhook"}
       </Button>
       
@@ -62,7 +66,7 @@ export const WebhookTestButton = () => {
         disabled={bookingLoading || dispatchLoading} 
         variant="outline"
       >
-        <Users className="mr-2 h-4 w-4" />
+        <RiGroupLine className="mr-2 h-4 w-4" />
         {dispatchLoading ? "Sending..." : "Test Dispatch Webhook"}
       </Button>
     </div>

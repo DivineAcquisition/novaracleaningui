@@ -1,3 +1,11 @@
+import {
+  RiAlertLine,
+  RiCalendarCheckLine,
+  RiGroupLine,
+  RiMoneyDollarCircleLine,
+  RiTimeLine,
+  RiToolsLine
+} from "@remixicon/react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -5,14 +13,7 @@ import AdminLayout from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  CalendarCheck,
-  Users,
-  HardHat,
-  DollarSign,
-  AlertTriangle,
-  Clock,
-} from "lucide-react";
+
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 
@@ -91,12 +92,12 @@ export default function AdminDashboard() {
 
   const statCards = stats
     ? [
-        { label: "Today's Bookings", value: stats.todayBookings, icon: CalendarCheck, color: "text-amber-400" },
-        { label: "Upcoming", value: stats.upcomingBookings, icon: Clock, color: "text-blue-400" },
-        { label: "Revenue (Month)", value: `$${(stats.revenueThisMonth / 100).toLocaleString()}`, icon: DollarSign, color: "text-emerald-400" },
-        { label: "Total Customers", value: stats.totalCustomers, icon: Users, color: "text-purple-400" },
-        { label: "Active Cleaners", value: stats.activeCleaners, icon: HardHat, color: "text-cyan-400" },
-        { label: "Pending Payment", value: stats.pendingJobs, icon: AlertTriangle, color: "text-orange-400" },
+        { label: "Today's Bookings", value: stats.todayBookings, icon: RiCalendarCheckLine, color: "text-amber-400" },
+        { label: "Upcoming", value: stats.upcomingBookings, icon: RiTimeLine, color: "text-blue-400" },
+        { label: "Revenue (Month)", value: `$${(stats.revenueThisMonth / 100).toLocaleString()}`, icon: RiMoneyDollarCircleLine, color: "text-emerald-400" },
+        { label: "Total Customers", value: stats.totalCustomers, icon: RiGroupLine, color: "text-purple-400" },
+        { label: "Active Cleaners", value: stats.activeCleaners, icon: RiToolsLine, color: "text-cyan-400" },
+        { label: "Pending Payment", value: stats.pendingJobs, icon: RiAlertLine, color: "text-orange-400" },
       ]
     : [];
 
@@ -149,7 +150,7 @@ export default function AdminDashboard() {
                 onClick={() => navigate("/admin/bookings")}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm hover:bg-amber-500/20 transition-colors"
               >
-                <AlertTriangle className="h-4 w-4" />
+                <RiAlertLine className="h-4 w-4" />
                 {stats.unassignedBookings} unassigned booking{stats.unassignedBookings > 1 ? "s" : ""}
               </button>
             )}
@@ -158,7 +159,7 @@ export default function AdminDashboard() {
                 onClick={() => navigate("/admin/cleaners")}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-sm hover:bg-purple-500/20 transition-colors"
               >
-                <HardHat className="h-4 w-4" />
+                <RiToolsLine className="h-4 w-4" />
                 {stats.pendingCleanerApprovals} pending cleaner approval{stats.pendingCleanerApprovals > 1 ? "s" : ""}
               </button>
             )}

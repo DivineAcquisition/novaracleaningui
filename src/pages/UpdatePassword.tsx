@@ -1,3 +1,10 @@
+import {
+  RiCheckboxCircleLine,
+  RiEyeLine,
+  RiEyeOffLine,
+  RiLoader4Line,
+  RiLockLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -5,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Lock, CheckCircle2, Eye, EyeOff } from "lucide-react";
+
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -78,13 +85,13 @@ export default function UpdatePassword() {
           <CardContent className="pt-8 pb-8">
             <div className="space-y-4 text-center">
               <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'var(--gradient-primary)' }}>
-                <CheckCircle2 className="w-7 h-7 text-white" />
+                <RiCheckboxCircleLine className="w-7 h-7 text-white" />
               </div>
               <div className="space-y-1">
                 <h2 className="text-xl font-bold tracking-tight">Password Updated!</h2>
                 <p className="text-sm text-muted-foreground">Redirecting to your account...</p>
               </div>
-              <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" />
+              <RiLoader4Line className="w-5 h-5 animate-spin mx-auto text-primary" />
             </div>
           </CardContent>
         </Card>
@@ -107,7 +114,7 @@ export default function UpdatePassword() {
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm">New Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+                <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -123,7 +130,7 @@ export default function UpdatePassword() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <RiEyeOffLine className="w-4 h-4" /> : <RiEyeLine className="w-4 h-4" />}
                 </button>
               </div>
               {password && (
@@ -151,7 +158,7 @@ export default function UpdatePassword() {
             <div className="space-y-1.5">
               <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="confirm-password"
                   type={showPassword ? "text" : "password"}
@@ -174,7 +181,7 @@ export default function UpdatePassword() {
               disabled={isLoading || password !== confirmPassword}
             >
               {isLoading ? (
-                <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Updating...</>
+                <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" /> Updating...</>
               ) : (
                 "Update Password"
               )}

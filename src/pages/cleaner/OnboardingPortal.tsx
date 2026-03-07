@@ -1,3 +1,21 @@
+import {
+  RiAlertLine,
+  RiArrowRightLine,
+  RiArrowRightSLine,
+  RiBankCardLine,
+  RiChat1Line,
+  RiCheckboxCircleLine,
+  RiCircleLine,
+  RiClipboardLine,
+  RiExternalLinkLine,
+  RiFileTextLine,
+  RiGraduationCapLine,
+  RiLoader4Line,
+  RiLockLine,
+  RiLogoutBoxRLine,
+  RiShieldLine,
+  RiSparklingLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,24 +34,7 @@ import { Input } from "@/components/ui/input";
 import { SEO } from "@/components/SEO";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import {
-  Loader2,
-  Shield,
-  FileSignature,
-  MessageCircle,
-  ClipboardList,
-  CreditCard,
-  GraduationCap,
-  CheckCircle2,
-  Lock,
-  ExternalLink,
-  AlertTriangle,
-  LogOut,
-  ChevronRight,
-  Sparkles,
-  ArrowRight,
-  Circle,
-} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
 
@@ -124,7 +125,7 @@ function BlockedScreen({ status }: { status: string }) {
       <Card className="max-w-md w-full border-destructive/20 shadow-xl">
         <CardContent className="pt-8 pb-8 text-center space-y-4">
           <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
-            <Lock className="w-8 h-8 text-destructive" />
+            <RiLockLine className="w-8 h-8 text-destructive" />
           </div>
           <h1 className="text-2xl font-bold">Access Denied</h1>
           <p className="text-muted-foreground">
@@ -356,7 +357,7 @@ export default function OnboardingPortal() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+          <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground text-sm">
             Verifying access...
           </p>
@@ -378,7 +379,7 @@ export default function OnboardingPortal() {
       id: 0,
       title: "Sign Contractor Agreement",
       description: "Review and sign the independent contractor agreement",
-      icon: FileSignature,
+      icon: RiFileTextLine,
       completed: profile.ob_agreement_signed,
       completedAt: profile.ob_agreement_signed_at,
     },
@@ -386,7 +387,7 @@ export default function OnboardingPortal() {
       id: 1,
       title: "Join Team Discord",
       description: "Download Discord and join our team server",
-      icon: MessageCircle,
+      icon: RiChat1Line,
       completed: profile.ob_google_chat_joined,
       completedAt: profile.ob_google_chat_joined_at,
     },
@@ -394,7 +395,7 @@ export default function OnboardingPortal() {
       id: 2,
       title: "Review Supplies Checklist",
       description: "See what you need to get started",
-      icon: ClipboardList,
+      icon: RiClipboardLine,
       completed: profile.ob_supplies_checklist_viewed,
       completedAt: profile.ob_supplies_checklist_viewed_at,
     },
@@ -402,7 +403,7 @@ export default function OnboardingPortal() {
       id: 3,
       title: "Setup Payouts",
       description: "Connect your bank account via Stripe",
-      icon: CreditCard,
+      icon: RiBankCardLine,
       completed: profile.ob_payouts_setup,
       completedAt: profile.ob_payouts_setup_at,
     },
@@ -410,7 +411,7 @@ export default function OnboardingPortal() {
       id: 4,
       title: "Access Training Portal",
       description: "Complete your required training modules",
-      icon: GraduationCap,
+      icon: RiGraduationCapLine,
       completed: profile.ob_training_accessed,
       completedAt: profile.ob_training_accessed_at,
     },
@@ -436,7 +437,7 @@ export default function OnboardingPortal() {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs hidden sm:flex">
-              <Shield className="w-3 h-3 mr-1" />
+              <RiShieldLine className="w-3 h-3 mr-1" />
               {profile.first_name} {profile.last_name}
             </Badge>
             <Button
@@ -445,7 +446,7 @@ export default function OnboardingPortal() {
               className="h-8 w-8"
               onClick={handleSignOut}
             >
-              <LogOut className="w-4 h-4" />
+              <RiLogoutBoxRLine className="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -458,7 +459,7 @@ export default function OnboardingPortal() {
             {allComplete ? (
               <>
                 <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto">
-                  <Sparkles className="w-8 h-8 text-green-500" />
+                  <RiSparklingLine className="w-8 h-8 text-green-500" />
                 </div>
                 <h1 className="text-2xl font-bold font-jakarta">
                   You're All Set!
@@ -533,9 +534,9 @@ export default function OnboardingPortal() {
                         )}
                       >
                         {step.completed ? (
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                          <RiCheckboxCircleLine className="w-5 h-5 text-green-600" />
                         ) : isLocked ? (
-                          <Lock className="w-5 h-5 text-muted-foreground" />
+                          <RiLockLine className="w-5 h-5 text-muted-foreground" />
                         ) : (
                           <Icon
                             className={cn(
@@ -575,7 +576,7 @@ export default function OnboardingPortal() {
 
                       {/* Arrow */}
                       {!step.completed && !isLocked && (
-                        <ChevronRight
+                        <RiArrowRightSLine
                           className={cn(
                             "w-5 h-5 text-muted-foreground transition-transform",
                             isActive && "rotate-90"
@@ -594,7 +595,7 @@ export default function OnboardingPortal() {
                       {step.id === 0 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
-                            <FileSignature className="w-5 h-5 text-primary" />
+                            <RiFileTextLine className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">
                               Independent Contractor Agreement
                             </h3>
@@ -628,7 +629,7 @@ export default function OnboardingPortal() {
 
                           <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
                             <p className="text-xs text-amber-700 font-medium flex items-start gap-2">
-                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                              <RiAlertLine className="w-4 h-4 flex-shrink-0 mt-0.5" />
                               You MUST complete and sign the agreement before continuing. Do not just open it — fill in all fields and submit your signature.
                             </p>
                           </div>
@@ -640,7 +641,7 @@ export default function OnboardingPortal() {
                               window.open(AGREEMENT_URL, "_blank")
                             }
                           >
-                            <ExternalLink className="w-4 h-4 mr-2" />
+                            <RiExternalLinkLine className="w-4 h-4 mr-2" />
                             Open & Sign Agreement Document
                           </Button>
 
@@ -692,12 +693,12 @@ export default function OnboardingPortal() {
                             >
                               {signingAgreement ? (
                                 <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                                   Confirming...
                                 </>
                               ) : (
                                 <>
-                                  <FileSignature className="w-4 h-4 mr-2" />
+                                  <RiFileTextLine className="w-4 h-4 mr-2" />
                                   Confirm Agreement Signed
                                 </>
                               )}
@@ -710,7 +711,7 @@ export default function OnboardingPortal() {
                       {step.id === 1 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
-                            <MessageCircle className="w-5 h-5 text-primary" />
+                            <RiChat1Line className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">
                               Join Team Discord
                             </h3>
@@ -732,7 +733,7 @@ export default function OnboardingPortal() {
                                   key={idx}
                                   className="flex items-center gap-2 text-sm"
                                 >
-                                  <Circle className="w-1.5 h-1.5 fill-primary text-primary flex-shrink-0" />
+                                  <RiCircleLine className="w-1.5 h-1.5 fill-primary text-primary flex-shrink-0" />
                                   {item}
                                 </li>
                               ))}
@@ -766,7 +767,7 @@ export default function OnboardingPortal() {
 
                           <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
                             <p className="text-xs text-amber-700 font-medium flex items-start gap-2">
-                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                              <RiAlertLine className="w-4 h-4 flex-shrink-0 mt-0.5" />
                               You must download the Discord app and create an account. This is how all team communication happens — do not skip this step.
                             </p>
                           </div>
@@ -779,7 +780,7 @@ export default function OnboardingPortal() {
                                 window.open(DISCORD_INVITE_LINK, "_blank")
                               }
                             >
-                              <ExternalLink className="w-4 h-4 mr-2" />
+                              <RiExternalLinkLine className="w-4 h-4 mr-2" />
                               Join Novara Discord Server
                             </Button>
                             <Button
@@ -793,9 +794,9 @@ export default function OnboardingPortal() {
                               disabled={savingStep}
                             >
                               {savingStep ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                               ) : (
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                                <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
                               )}
                               I've Downloaded Discord & Joined the Server
                             </Button>
@@ -807,7 +808,7 @@ export default function OnboardingPortal() {
                       {step.id === 2 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
-                            <ClipboardList className="w-5 h-5 text-primary" />
+                            <RiClipboardLine className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">
                               Supply Checklist
                             </h3>
@@ -821,7 +822,7 @@ export default function OnboardingPortal() {
                           {/* No reimbursement notice */}
                           <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
                             <p className="text-xs text-amber-700 font-medium flex items-start gap-2">
-                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                              <RiAlertLine className="w-4 h-4 flex-shrink-0 mt-0.5" />
                               There are no reimbursements for supplies. All supply costs are your responsibility as an independent contractor.
                             </p>
                           </div>
@@ -896,7 +897,7 @@ export default function OnboardingPortal() {
                                 toast.success("Checklist downloaded!");
                               }}
                             >
-                              <ClipboardList className="w-3 h-3 mr-1" />
+                              <RiClipboardLine className="w-3 h-3 mr-1" />
                               Download Checklist
                             </Button>
                             <Button
@@ -907,7 +908,7 @@ export default function OnboardingPortal() {
                                 toast.info("Take a screenshot of this page for your records!");
                               }}
                             >
-                              <ExternalLink className="w-3 h-3 mr-1" />
+                              <RiExternalLinkLine className="w-3 h-3 mr-1" />
                               Screenshot This Page
                             </Button>
                           </div>
@@ -975,7 +976,7 @@ export default function OnboardingPortal() {
                           {/* Warning about natural stone */}
                           <div className="bg-destructive/5 rounded-lg p-3 border border-destructive/20">
                             <div className="flex items-start gap-2">
-                              <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                              <RiAlertLine className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
                               <div>
                                 <p className="text-xs font-bold text-destructive">
                                   NEVER USE ON NATURAL STONE
@@ -1013,9 +1014,9 @@ export default function OnboardingPortal() {
                             disabled={savingStep}
                           >
                             {savingStep ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                             ) : (
-                              <CheckCircle2 className="w-4 h-4 mr-2" />
+                              <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
                             )}
                             I've Reviewed the Checklist
                           </Button>
@@ -1026,7 +1027,7 @@ export default function OnboardingPortal() {
                       {step.id === 3 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
-                            <CreditCard className="w-5 h-5 text-primary" />
+                            <RiBankCardLine className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">Setup Payouts</h3>
                           </div>
 
@@ -1076,14 +1077,14 @@ export default function OnboardingPortal() {
                           >
                             {stripeLoading ? (
                               <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                                 Redirecting to Stripe...
                               </>
                             ) : (
                               <>
-                                <CreditCard className="w-4 h-4 mr-2" />
+                                <RiBankCardLine className="w-4 h-4 mr-2" />
                                 Start Stripe Connect Onboarding
-                                <ArrowRight className="w-4 h-4 ml-2" />
+                                <RiArrowRightLine className="w-4 h-4 ml-2" />
                               </>
                             )}
                           </Button>
@@ -1099,7 +1100,7 @@ export default function OnboardingPortal() {
                       {step.id === 4 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-2">
-                            <GraduationCap className="w-5 h-5 text-primary" />
+                            <RiGraduationCapLine className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">Training Portal</h3>
                           </div>
 
@@ -1120,7 +1121,7 @@ export default function OnboardingPortal() {
                                   key={idx}
                                   className="flex items-center gap-2 text-sm"
                                 >
-                                  <GraduationCap className="w-3 h-3 text-primary flex-shrink-0" />
+                                  <RiGraduationCapLine className="w-3 h-3 text-primary flex-shrink-0" />
                                   {item}
                                 </li>
                               ))}
@@ -1133,12 +1134,12 @@ export default function OnboardingPortal() {
                             disabled={savingStep}
                           >
                             {savingStep ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
                             ) : (
                               <>
-                                <GraduationCap className="w-4 h-4 mr-2" />
+                                <RiGraduationCapLine className="w-4 h-4 mr-2" />
                                 Open Training Portal
-                                <ExternalLink className="w-4 h-4 ml-2" />
+                                <RiExternalLinkLine className="w-4 h-4 ml-2" />
                               </>
                             )}
                           </Button>
@@ -1156,7 +1157,7 @@ export default function OnboardingPortal() {
         {allComplete && (
           <Card className="border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/5 shadow-lg">
             <CardContent className="p-6 text-center space-y-4">
-              <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto" />
+              <RiCheckboxCircleLine className="w-12 h-12 text-green-500 mx-auto" />
               <div>
                 <h3 className="font-bold text-lg">Onboarding Complete!</h3>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -1169,7 +1170,7 @@ export default function OnboardingPortal() {
                 onClick={() => navigate("/cleaner/dashboard")}
               >
                 Go to Dashboard
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <RiArrowRightLine className="w-4 h-4 ml-2" />
               </Button>
             </CardContent>
           </Card>

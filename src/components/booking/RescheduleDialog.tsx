@@ -1,3 +1,10 @@
+import {
+  RiArrowRightLine,
+  RiCalendarLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiTimeLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -5,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
-import { Clock, CalendarIcon, Loader2, MapPin, ArrowRight } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { generateTimeSlots } from "@/lib/time-slots";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,7 +107,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
           <CardContent className="p-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-3">
-                <CalendarIcon className="w-5 h-5 text-primary" />
+                <RiCalendarLine className="w-5 h-5 text-primary" />
                 <div>
                   <p className="text-sm text-muted-foreground">Current Appointment</p>
                   <p className="font-semibold">
@@ -109,7 +116,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="w-4 h-4" />
+                <RiMapPinLine className="w-4 h-4" />
                 {booking.city}, {booking.state}
               </div>
             </div>
@@ -120,7 +127,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
           {/* Date Selection - Calendar Grid */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4" />
+              <RiCalendarLine className="w-4 h-4" />
               Select New Date
             </h3>
             <div className="border rounded-lg p-1">
@@ -137,7 +144,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
           {/* Time Slot Selection - Vertical List */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              <Clock className="w-4 h-4" />
+              <RiTimeLine className="w-4 h-4" />
               Select New Time
             </h3>
             {selectedDate ? (
@@ -187,7 +194,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
                   <p className="font-medium">{format(new Date(booking.service_date), 'MMM d')}</p>
                   <p className="text-xs text-muted-foreground">{booking.time_slot}</p>
                 </div>
-                <ArrowRight className="w-5 h-5 text-primary" />
+                <RiArrowRightLine className="w-5 h-5 text-primary" />
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs">To</p>
                   <p className="font-semibold text-primary">{format(selectedDate, 'MMM d')}</p>
@@ -206,7 +213,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
             onClick={handleReschedule}
             disabled={!selectedDate || !selectedTime || isRescheduling}
           >
-            {isRescheduling && <Loader2 className="mr-2 w-4 h-4 animate-spin" />}
+            {isRescheduling && <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />}
             Confirm Reschedule
           </Button>
         </div>

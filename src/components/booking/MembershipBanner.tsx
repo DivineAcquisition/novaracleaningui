@@ -1,6 +1,11 @@
+import {
+  RiGiftLine,
+  RiSparklingLine,
+  RiVipCrownLine
+} from "@remixicon/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Crown, Sparkles, Gift } from "lucide-react";
+
 import { useMembershipCredits } from "@/hooks/use-membership-credits";
 
 export function MembershipBanner() {
@@ -26,21 +31,21 @@ export function MembershipBanner() {
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className="bg-gradient-primary text-white border-0">
-                <Crown className="w-3 h-3 mr-1" />
+                <RiVipCrownLine className="w-3 h-3 mr-1" />
                 {planName} Member
               </Badge>
             </div>
             
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <Gift className="w-4 h-4 text-primary" />
+                <RiGiftLine className="w-4 h-4 text-primary" />
                 <span className="font-semibold">
                   {credits.credits_remaining} {credits.credits_remaining === 1 ? 'Credit' : 'Credits'} Available
                 </span>
               </div>
               
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Sparkles className="w-3 h-3" />
+                <RiSparklingLine className="w-3 h-3" />
                 <span>{discountPercent}% off all add-ons</span>
               </div>
             </div>

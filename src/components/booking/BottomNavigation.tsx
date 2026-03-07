@@ -1,5 +1,9 @@
+import {
+  RiArrowLeftLine,
+  RiArrowRightLine
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 interface BottomNavigationProps {
@@ -38,7 +42,7 @@ export function BottomNavigation({
             className="flex-shrink-0 h-12 w-12 p-0"
             aria-label="Go back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <RiArrowLeftLine className="w-5 h-5" />
           </Button>
         )}
         {onContinue && (
@@ -49,7 +53,7 @@ export function BottomNavigation({
             className="flex-1 h-12 text-base font-semibold"
           >
             {continueText}
-            <ArrowRight className="ml-2 w-4 h-4" />
+            <RiArrowRightLine className="ml-2 w-4 h-4" />
           </Button>
         )}
       </div>

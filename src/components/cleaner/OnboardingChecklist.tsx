@@ -1,5 +1,13 @@
+import {
+  RiBankCardLine,
+  RiCalendarLine,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiExternalLinkLine,
+  RiPhoneLine
+} from "@remixicon/react";
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, ExternalLink, Phone, CreditCard, Calendar } from "lucide-react";
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -77,7 +85,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
       id: "stripe",
       label: "Complete Stripe Connect",
       completed: cleaner?.stripe_account_id && cleaner?.payouts_enabled,
-      icon: CreditCard,
+      icon: RiBankCardLine,
       actionLabel: "Setup Payouts",
       onAction: handleStripeConnect,
     },
@@ -85,7 +93,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
       id: "phone",
       label: "Verify Phone Number",
       completed: cleaner?.phone_verified,
-      icon: Phone,
+      icon: RiPhoneLine,
       actionLabel: "Verify Now",
       onAction: () => setShowPhoneDialog(true),
     },
@@ -93,7 +101,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
       id: "availability",
       label: "Set Availability",
       completed: cleaner?.available_for_bookings && cleaner?.preferred_work_days?.length > 0,
-      icon: Calendar,
+      icon: RiCalendarLine,
       actionLabel: "Set Schedule",
       onAction: () => window.location.href = "/cleaner/profile",
     },
@@ -139,9 +147,9 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
               >
                 <div className="flex items-center gap-2">
                   {item.completed ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <RiCheckboxCircleLine className="w-4 h-4 text-green-500" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-muted-foreground" />
+                    <RiCloseCircleLine className="w-4 h-4 text-muted-foreground" />
                   )}
                   <Icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className={`text-sm ${item.completed ? "text-muted-foreground" : ""}`}>
@@ -156,7 +164,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
                     disabled={item.id === "stripe" && isInitiatingStripe}
                   >
                     {item.actionLabel}
-                    {item.id === "stripe" && <ExternalLink className="ml-2 w-3.5 h-3.5" />}
+                    {item.id === "stripe" && <RiExternalLinkLine className="ml-2 w-3.5 h-3.5" />}
                   </Button>
                 )}
               </div>

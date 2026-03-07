@@ -1,3 +1,19 @@
+import {
+  RiArrowLeftLine,
+  RiArrowRightLine,
+  RiBankCardLine,
+  RiCalendarLine,
+  RiCheckLine,
+  RiErrorWarningLine,
+  RiHomeLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiSparklingLine,
+  RiStarLine,
+  RiTicketLine,
+  RiTimeLine,
+  RiUserLine
+} from "@remixicon/react";
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,10 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, Clock,
-  CreditCard, Home, Loader2, MapPin, Sparkles, Star, User, Ticket,
-} from 'lucide-react';
+
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -24,10 +37,10 @@ import { HOME_SIZE_RANGES } from '@/lib/pricing-system';
 import { SEO } from "@/components/SEO";
 
 const STEPS = [
-  { id: 'address', label: 'Address', icon: MapPin },
-  { id: 'schedule', label: 'Schedule', icon: Calendar },
-  { id: 'cleaner', label: 'Cleaner', icon: User },
-  { id: 'confirm', label: 'Confirm', icon: Check },
+  { id: 'address', label: 'Address', icon: RiMapPinLine },
+  { id: 'schedule', label: 'Schedule', icon: RiCalendarLine },
+  { id: 'cleaner', label: 'Cleaner', icon: RiUserLine },
+  { id: 'confirm', label: 'Confirm', icon: RiCheckLine },
 ];
 
 interface SavedAddress {
@@ -342,7 +355,7 @@ export default function MemberBooking() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center animate-fade-in">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <RiLoader4Line className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
           <p className="text-sm text-muted-foreground">
             {!user ? 'Checking authentication...' : 'Loading your membership...'}
           </p>
@@ -358,7 +371,7 @@ export default function MemberBooking() {
           <Card className="border-amber-200 dark:border-amber-800 shadow-lg animate-scale-in">
             <CardContent className="py-12 text-center space-y-4">
               <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                <RiErrorWarningLine className="w-8 h-8 text-amber-600 dark:text-amber-400" />
               </div>
               <h2 className="text-2xl font-bold">No Credits Available</h2>
               <p className="text-muted-foreground max-w-md mx-auto text-sm">
@@ -371,7 +384,7 @@ export default function MemberBooking() {
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
                 <Button onClick={() => navigate('/account')} variant="outline" className="rounded-xl">
-                  <ArrowLeft className="w-4 h-4 mr-2" /> Back to Account
+                  <RiArrowLeftLine className="w-4 h-4 mr-2" /> Back to Account
                 </Button>
                 <Button onClick={() => navigate('/book/zip')} className="bg-gradient-primary rounded-xl shadow-md">
                   Book Without Credit
@@ -394,11 +407,11 @@ export default function MemberBooking() {
         <div className="container max-w-4xl mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             <Button variant="ghost" size="sm" onClick={handleBack} className="-ml-2">
-              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              <RiArrowLeftLine className="w-4 h-4 mr-1.5" />
               {currentStep === 0 ? 'Account' : 'Back'}
             </Button>
             <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg px-3 py-1">
-              <Ticket className="w-3.5 h-3.5 mr-1.5" />
+              <RiTicketLine className="w-3.5 h-3.5 mr-1.5" />
               <span className="font-semibold text-xs">{credits?.credits_remaining} Credit{credits?.credits_remaining !== 1 ? 's' : ''}</span>
             </Badge>
           </div>
@@ -428,7 +441,7 @@ export default function MemberBooking() {
                   isComplete && 'bg-emerald-500 text-white',
                   !isActive && !isComplete && 'bg-muted text-muted-foreground'
                 )}>
-                  {isComplete ? <Check className="w-5 h-5" /> : <StepIcon className="w-5 h-5" />}
+                  {isComplete ? <RiCheckLine className="w-5 h-5" /> : <StepIcon className="w-5 h-5" />}
                 </div>
                 <span className={cn(
                   'text-[11px] font-medium hidden sm:block transition-colors',
@@ -457,7 +470,7 @@ export default function MemberBooking() {
             <Card className="shadow-md border-border/60">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <MapPin className="w-5 h-5 text-primary" />
+                  <RiMapPinLine className="w-5 h-5 text-primary" />
                   Select Your Address
                 </CardTitle>
                 <CardDescription>
@@ -482,7 +495,7 @@ export default function MemberBooking() {
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-3">
                               <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5 flex-shrink-0">
-                                <Home className="w-4 h-4 text-primary" />
+                                <RiHomeLine className="w-4 h-4 text-primary" />
                               </div>
                               <div>
                                 <p className="font-medium text-sm">
@@ -506,7 +519,7 @@ export default function MemberBooking() {
                             </div>
                             {selectedAddressId === address.id && (
                               <div className="w-6 h-6 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
-                                <Check className="w-4 h-4 text-white" />
+                                <RiCheckLine className="w-4 h-4 text-white" />
                               </div>
                             )}
                           </div>
@@ -523,7 +536,7 @@ export default function MemberBooking() {
                   <div className="space-y-4">
                     {savedAddresses.length > 0 && (
                       <Button variant="ghost" size="sm" onClick={() => { setIsNewAddress(false); setSelectedAddressId(savedAddresses[0]?.id || null); }}>
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Use Saved Address
+                        <RiArrowLeftLine className="w-4 h-4 mr-2" /> Use Saved Address
                       </Button>
                     )}
                     <div className="grid gap-4">
@@ -619,7 +632,7 @@ export default function MemberBooking() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', serviceType === 'standard' ? 'bg-primary text-white' : 'bg-muted')}>
-                              <Sparkles className="w-5 h-5" />
+                              <RiSparklingLine className="w-5 h-5" />
                             </div>
                             <div>
                               <h4 className="font-semibold text-sm">Standard Clean</h4>
@@ -642,7 +655,7 @@ export default function MemberBooking() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', serviceType === 'deep' ? 'bg-primary text-white' : 'bg-muted')}>
-                              <Star className="w-5 h-5" />
+                              <RiStarLine className="w-5 h-5" />
                             </div>
                             <div>
                               <h4 className="font-semibold text-sm">Deep Clean</h4>
@@ -713,7 +726,7 @@ export default function MemberBooking() {
                 <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-primary" />
+                    <RiSparklingLine className="w-5 h-5 text-primary" />
                     Booking Summary
                   </CardTitle>
                   <CardDescription>Review your booking details</CardDescription>
@@ -722,7 +735,7 @@ export default function MemberBooking() {
                   {/* Service */}
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Star className="w-4 h-4 text-primary" />
+                      <RiStarLine className="w-4 h-4 text-primary" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
@@ -739,7 +752,7 @@ export default function MemberBooking() {
                   {/* Address */}
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-4 h-4 text-primary" />
+                      <RiMapPinLine className="w-4 h-4 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium text-sm">
@@ -759,7 +772,7 @@ export default function MemberBooking() {
                   {/* Schedule */}
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Calendar className="w-4 h-4 text-primary" />
+                      <RiCalendarLine className="w-4 h-4 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium text-sm">{selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
@@ -771,7 +784,7 @@ export default function MemberBooking() {
                   {/* Cleaner */}
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-primary" />
+                      <RiUserLine className="w-4 h-4 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium text-sm">
@@ -800,7 +813,7 @@ export default function MemberBooking() {
                     <div className="flex items-center justify-between rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                          <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          <RiBankCardLine className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         </div>
                         <div>
                           <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-400">Using 1 Membership Credit</p>
@@ -818,7 +831,7 @@ export default function MemberBooking() {
                       <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 p-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Star className="w-4 h-4 text-primary" />
+                            <RiStarLine className="w-4 h-4 text-primary" />
                           </div>
                           <div>
                             <p className="font-semibold text-sm text-primary">Deep Clean Upgrade</p>
@@ -837,13 +850,13 @@ export default function MemberBooking() {
           {/* Navigation */}
           <div className="flex justify-between pt-4">
             <Button variant="outline" onClick={handleBack} className="rounded-xl">
-              <ArrowLeft className="w-4 h-4 mr-2" />
+              <RiArrowLeftLine className="w-4 h-4 mr-2" />
               {currentStep === 0 ? 'Cancel' : 'Back'}
             </Button>
 
             {currentStep < STEPS.length - 1 ? (
               <Button onClick={handleNext} disabled={!canProceed()} className="bg-gradient-primary rounded-xl shadow-md">
-                Continue <ArrowRight className="w-4 h-4 ml-2" />
+                Continue <RiArrowRightLine className="w-4 h-4 ml-2" />
               </Button>
             ) : (
               <Button
@@ -855,11 +868,11 @@ export default function MemberBooking() {
                 )}
               >
                 {isSubmitting ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {serviceType === 'deep' ? 'Processing...' : 'Booking...'}</>
+                  <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> {serviceType === 'deep' ? 'Processing...' : 'Booking...'}</>
                 ) : serviceType === 'deep' ? (
-                  <><CreditCard className="w-4 h-4 mr-2" /> Continue to Payment ($65)</>
+                  <><RiBankCardLine className="w-4 h-4 mr-2" /> Continue to Payment ($65)</>
                 ) : (
-                  <><Check className="w-4 h-4 mr-2" /> Confirm Booking</>
+                  <><RiCheckLine className="w-4 h-4 mr-2" /> Confirm Booking</>
                 )}
               </Button>
             )}
