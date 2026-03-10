@@ -1,8 +1,9 @@
+"use client";
 
 import {
   RiCheckLine
 } from "@remixicon/react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Step {
@@ -26,14 +27,14 @@ const STEP_ROUTES: Record<number, string> = {
 };
 
 export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const handleStepClick = (stepNumber: number) => {
     // Only allow navigation to completed steps (steps before current)
     if (stepNumber < currentStep) {
       const route = STEP_ROUTES[stepNumber];
       if (route) {
-        navigate(route);
+        router.push(route);
       }
     }
   };

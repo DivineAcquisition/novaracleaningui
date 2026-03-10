@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export interface BookingData {
@@ -60,8 +62,13 @@ const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [bookingData, setBookingData] = useState<BookingData>(() => {
-    const saved = localStorage.getItem('bookingData');
-    return saved ? JSON.parse(saved) : initialBookingData;
+    if (typeof window === 'undefined') return initialBookingData;
+    try {
+      const saved = localStorage.getItem('bookingData');
+      return saved ? JSON.parse(saved) : initialBookingData;
+    } catch {
+      return initialBookingData;
+    }
   });
   
   const [currentStep, setCurrentStep] = useState(1);

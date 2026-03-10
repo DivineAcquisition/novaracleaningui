@@ -1,4 +1,6 @@
-import { Helmet } from "react-helmet-async";
+"use client";
+
+import { useEffect } from "react";
 
 interface SEOProps {
   title?: string;
@@ -14,16 +16,40 @@ export function SEO({ title, description, canonical, noindex }: SEOProps) {
   const fullTitle = title ? `${title} | ${BRAND}` : `${BRAND} | Professional Home Cleaning in Maryland & DMV`;
   const desc = description || DEFAULT_DESCRIPTION;
 
-  return (
-    <Helmet>
-      <title>{fullTitle}</title>
-      <meta name="description" content={desc} />
-      {canonical && <link rel="canonical" href={canonical} />}
-      {noindex && <meta name="robots" content="noindex, nofollow" />}
-      <meta property="og:title" content={fullTitle} />
-      <meta property="og:description" content={desc} />
-      <meta name="twitter:title" content={fullTitle} />
-      <meta name="twitter:description" content={desc} />
-    </Helmet>
-  );
+  useEffect(() => {
+    document.title = fullTitle;
+
+    const setMeta = (name: string, content: string, isProperty = false) => {
+      const attr = isProperty ? "property" : "name";
+      let el = document.querySelector(`meta[${attr}="${name}"]`);
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute(attr, name);
+        document.head.appendChild(el);
+      }
+      el.setAttribute("content", content);
+    };
+
+    setMeta("description", desc);
+    setMeta("og:title", fullTitle, true);
+    setMeta("og:description", desc, true);
+    setMeta("twitter:title", fullTitle);
+    setMeta("twitter:description", desc);
+
+    if (noindex) {
+      setMeta("robots", "noindex, nofollow");
+    }
+
+    if (canonical) {
+      let link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "canonical";
+        document.head.appendChild(link);
+      }
+      link.href = canonical;
+    }
+  }, [fullTitle, desc, canonical, noindex]);
+
+  return null;
 }

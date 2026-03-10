@@ -1,3 +1,5 @@
+"use client";
+
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
 

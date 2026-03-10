@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiCircleLine
 } from "@remixicon/react";

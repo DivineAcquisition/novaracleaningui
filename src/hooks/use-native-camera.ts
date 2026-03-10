@@ -1,3 +1,5 @@
+"use client";
+
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import { toast } from '@/hooks/use-toast';

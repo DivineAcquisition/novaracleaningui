@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';

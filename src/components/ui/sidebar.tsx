@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiSideBarLine
 } from "@remixicon/react";

@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiBarChartBoxLine,
   RiCalendarCheckLine,
@@ -11,7 +13,7 @@ import {
   RiWebhookLine
 } from "@remixicon/react";
 import { ReactNode } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -43,12 +45,12 @@ const navItems = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { user } = useAuth();
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    navigate("/admin/auth");
+    router.replace("/admin/auth");
   };
 
   return (
@@ -73,7 +75,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
                         <NavLink
-                          to={item.url}
+                          href={item.url}
                           className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
                           activeClassName="bg-amber-500/10 text-amber-400 font-medium"
                         >

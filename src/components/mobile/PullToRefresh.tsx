@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiLoader4Line
 } from "@remixicon/react";

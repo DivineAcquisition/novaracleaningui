@@ -1,9 +1,11 @@
+"use client";
+
 import {
   RiErrorWarningLine,
   RiExternalLinkLine
 } from "@remixicon/react";
-import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { ReactNode, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -24,7 +26,9 @@ export function DomainRestricted({
   redirectTo,
   fallbackMessage = "This page is not available on this domain."
 }: DomainRestrictedProps) {
-  const currentHostname = window.location.hostname;
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  const currentHostname = mounted && typeof window !== 'undefined' ? window.location.hostname : '';
   
   // Allow localhost for development
   const isDevelopment = currentHostname === 'localhost' || 
@@ -40,18 +44,33 @@ export function DomainRestricted({
                       currentHostname.endsWith(`.${domain}`)
                     );
   
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isAllowed && redirectTo) {
+      // For external redirects to different domains
+      if (redirectTo.startsWith('http')) {
+        window.location.href = redirectTo;
+      } else {
+        router.replace(redirectTo);
+      }
+    }
+  }, [mounted, isAllowed, redirectTo, router]);
+
+  if (!mounted) {
+    return null;
+  }
+
   if (isAllowed) {
     return <>{children}</>;
   }
 
-  // If redirectTo is specified, redirect
+  // If redirectTo is specified, show nothing while redirecting
   if (redirectTo) {
-    // For external redirects to different domains
-    if (redirectTo.startsWith('http')) {
-      window.location.href = redirectTo;
-      return null;
-    }
-    return <Navigate to={redirectTo} replace />;
+    return null;
   }
 
   // Show fallback message

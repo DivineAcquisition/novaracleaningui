@@ -1,5 +1,7 @@
+"use client";
+
 import { ReactNode, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 
 interface DomainRouterProps {
   children: ReactNode;
@@ -13,31 +15,32 @@ interface DomainRouterProps {
  * - try.novaracleaning.com → Booking flow (no redirect)
  */
 export function DomainRouter({ children }: DomainRouterProps) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const hostname = window.location.hostname;
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     // Only redirect on the root path
-    if (location.pathname !== '/') return;
+    if (pathname !== '/') return;
 
+    const currentHostname = window.location.hostname;
     // Check subdomain
-    const isAppDomain = hostname === 'app.novaracleaning.com';
-    const isAdminDomain = hostname === 'admin.novaracleaning.com';
-    const isContractorDomain = hostname === 'contractor.novaracleaning.com';
+    const isAppDomain = currentHostname === 'app.novaracleaning.com';
+    const isAdminDomain = currentHostname === 'admin.novaracleaning.com';
+    const isContractorDomain = currentHostname === 'contractor.novaracleaning.com';
 
     if (isAppDomain) {
       // Customer portal - redirect to auth/account
-      navigate('/auth', { replace: true });
+      router.replace('/auth');
     } else if (isAdminDomain) {
       // Admin portal - redirect to admin auth
-      navigate('/admin/auth', { replace: true });
+      router.replace('/admin/auth');
     } else if (isContractorDomain) {
       // Contractor/cleaner portal - redirect to cleaner auth
-      navigate('/cleaner/auth', { replace: true });
+      router.replace('/cleaner/auth');
     }
     // For other domains (try.novaracleaning.com, localhost), show normal home page
-  }, [hostname, location.pathname, navigate]);
+  }, [pathname, router]);
 
   return <>{children}</>;
 }
@@ -46,7 +49,7 @@ export function DomainRouter({ children }: DomainRouterProps) {
  * Hook to get current domain context
  */
 export function useDomainContext() {
-  const hostname = window.location.hostname;
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   
   const isLocalhost = hostname === 'localhost' || 
                       hostname === '127.0.0.1' ||

@@ -1,3 +1,5 @@
+"use client";
+
 import { Geolocation } from '@capacitor/geolocation';
 import { Capacitor } from '@capacitor/core';
 import { toast } from '@/hooks/use-toast';

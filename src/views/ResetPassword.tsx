@@ -1,0 +1,131 @@
+"use client";
+
+import {
+  RiArrowLeftLine,
+  RiCheckboxCircleLine,
+  RiLoader4Line,
+  RiMailLine
+} from "@remixicon/react";
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+
+import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
+import { SEO } from "@/components/SEO";
+
+const emailSchema = z.string().email("Please enter a valid email address");
+
+export default function ResetPassword() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      emailSchema.parse(email);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+        return;
+      }
+    }
+    
+    setIsLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+    
+    if (error) {
+      toast.error(error.message || "Failed to send reset email");
+    } else {
+      setEmailSent(true);
+      toast.success("Password reset link sent! Check your email.");
+    }
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6">
+      <SEO title="Reset Password" description="Reset your Novara Cleaning account password." noindex />
+      <Card className="max-w-sm w-full shadow-xl border-0 overflow-hidden animate-scale-in">
+        <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+        <CardHeader className="text-center space-y-1 pb-3 pt-6">
+          <CardTitle className="text-xl font-bold tracking-tight">Reset Password</CardTitle>
+          <CardDescription className="text-sm">
+            {emailSent 
+              ? "Check your email for the reset link"
+              : "We'll send you a reset link"
+            }
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="px-6 pb-6">
+          {emailSent ? (
+            <div className="space-y-4 text-center">
+              <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'var(--gradient-primary)' }}>
+                <RiCheckboxCircleLine className="w-7 h-7 text-white" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-sm">Email sent!</p>
+                <p className="text-xs text-muted-foreground">
+                  Reset link sent to <strong>{email}</strong>
+                </p>
+              </div>
+              <Link href="/auth">
+                <Button variant="outline" className="w-full rounded-xl" size="sm">
+                  <RiArrowLeftLine className="mr-1.5 w-4 h-4" />
+                  Back to Sign In
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm">Email</Label>
+                <div className="relative">
+                  <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10 h-11 rounded-xl"
+                    disabled={isLoading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-11 rounded-xl bg-gradient-primary shadow-md"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" /> Sending...</>
+                ) : (
+                  "Send Reset Link"
+                )}
+              </Button>
+
+              <Link href="/auth">
+                <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" size="sm">
+                  <RiArrowLeftLine className="mr-1.5 w-4 h-4" />
+                  Back to Sign In
+                </Button>
+              </Link>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

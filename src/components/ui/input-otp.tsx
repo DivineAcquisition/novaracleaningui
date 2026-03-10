@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiRadioButtonLine
 } from "@remixicon/react";

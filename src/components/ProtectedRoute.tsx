@@ -1,8 +1,10 @@
+"use client";
+
 import {
   RiLoader4Line
 } from "@remixicon/react";
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 
 import { toast } from "sonner";
@@ -13,13 +15,13 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRouteProps) => {
+  const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkAuthorization = async () => {
       try {
-        // Check if user is authenticated
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session) {
@@ -28,10 +30,9 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
           return;
         }
 
-        // Check if user has the required role using the has_role function
-        const { data, error } = await supabase.rpc('has_role', {
+        const { data, error } = await (supabase.rpc as any)('has_role', {
           _user_id: session.user.id,
-          _role: requiredRole as any
+          _role: requiredRole,
         });
 
         if (error) {
@@ -56,6 +57,12 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
     checkAuthorization();
   }, [requiredRole]);
 
+  useEffect(() => {
+    if (!isLoading && !isAuthorized) {
+      router.replace('/admin/auth');
+    }
+  }, [isLoading, isAuthorized, router]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
@@ -68,7 +75,7 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
   }
 
   if (!isAuthorized) {
-    return <Navigate to="/admin/auth" replace />;
+    return null;
   }
 
   return <>{children}</>;

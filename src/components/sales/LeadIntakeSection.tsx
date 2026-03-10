@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiCheckboxCircleLine,
   RiLoader4Line,

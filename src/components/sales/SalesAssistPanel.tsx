@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiChat3Line,
   RiErrorWarningLine,

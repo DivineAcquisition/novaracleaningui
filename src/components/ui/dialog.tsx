@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiCloseLine
 } from "@remixicon/react";

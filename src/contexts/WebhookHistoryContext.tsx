@@ -1,3 +1,5 @@
+"use client";
+
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 export interface WebhookHistoryEntry {
@@ -25,6 +27,7 @@ const MAX_ENTRIES = 20;
 
 export const WebhookHistoryProvider = ({ children }: { children: ReactNode }) => {
   const [history, setHistory] = useState<WebhookHistoryEntry[]>(() => {
+    if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       return stored ? JSON.parse(stored) : [];
