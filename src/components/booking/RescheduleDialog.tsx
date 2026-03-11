@@ -63,7 +63,7 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
 
     setIsRescheduling(true);
     try {
-      const { data, error } = await supabase.functions.invoke('reschedule-booking', {
+      const response = await supabase.functions.invoke('reschedule-booking', {
         body: {
           bookingId: booking.id,
           newDate: format(selectedDate, 'yyyy-MM-dd'),
@@ -73,7 +73,17 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
         }
       });
 
-      if (error) throw error;
+      if (response.error) {
+        const errMsg = typeof response.error === 'object' && 'message' in response.error
+          ? (response.error as any).message
+          : String(response.error);
+        throw new Error(errMsg || "Reschedule request failed");
+      }
+
+      const { data } = response;
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       if (!data.success) {
         toast.error(data.message || "Failed to reschedule");

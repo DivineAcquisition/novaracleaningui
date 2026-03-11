@@ -98,7 +98,7 @@ export function CancelBookingDialog({
     try {
       const cancelReason = `${CANCEL_REASONS.find((r) => r.value === reason)?.label || reason}${additionalNotes ? `: ${additionalNotes}` : ""}`;
 
-      const { data, error } = await supabase.functions.invoke(
+      const response = await supabase.functions.invoke(
         "cancel-booking",
         {
           body: {
@@ -109,7 +109,17 @@ export function CancelBookingDialog({
         }
       );
 
-      if (error) throw error;
+      if (response.error) {
+        const errMsg = typeof response.error === 'object' && 'message' in response.error
+          ? (response.error as any).message
+          : String(response.error);
+        throw new Error(errMsg || "Cancel request failed");
+      }
+
+      const data = response.data;
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       setRefundInfo(data?.refundAmount || "None");
       setStep("done");
