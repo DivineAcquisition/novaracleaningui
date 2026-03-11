@@ -47,8 +47,8 @@ interface ModifyBookingDialogProps {
 
 const SERVICES = [
   { id: 'standard', icon: RiSparklingLine, name: 'Standard', description: 'Base hourly cleaning service' },
-  { id: 'deep', icon: RiFlashlightLine, name: 'Deep Clean', description: '+$50 on Standard' },
-  { id: 'moveInOut', icon: RiBox3Line, name: 'Move-In/Out', description: '+$120 (includes fridge & oven)' },
+  { id: 'deep', icon: RiFlashlightLine, name: 'Deep Clean', description: '50% more than Standard' },
+  { id: 'moveInOut', icon: RiBox3Line, name: 'Move-In/Out', description: '2x Standard (includes fridge & oven)' },
 ];
 
 const DWELLING_TYPES = [

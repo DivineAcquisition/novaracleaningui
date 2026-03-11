@@ -321,8 +321,43 @@ serve(async (req) => {
             });
 
             logStep("Confirmation emails sent successfully");
+
+              // Mark confirmation email as sent to prevent duplicates on webhook retries
+              await supabase
+                .from('bookings')
+                .update({ confirmation_email_sent: true })
+                .eq('id', confirmedBooking.id);
+
+              logStep("Set confirmation_email_sent flag", { bookingId: confirmedBooking.id });
           } catch (emailError) {
             logStep("Error sending emails (non-blocking)", { error: emailError });
+
+            // Queue for retry on failure
+            try {
+              await supabase
+                .from('email_retry_queue')
+                .insert({
+                  booking_id: confirmedBooking.id,
+                  email_type: 'confirmation',
+                  email_address: confirmedBooking.email,
+                  email_data: {
+                    firstName: confirmedBooking.first_name,
+                    lastName: confirmedBooking.last_name,
+                    bookingId: confirmedBooking.id,
+                    serviceDate: confirmedBooking.service_date,
+                    timeSlot: confirmedBooking.time_slot,
+                    serviceType: confirmedBooking.service_type,
+                    address: `${confirmedBooking.address}, ${confirmedBooking.city}, ${confirmedBooking.state} ${confirmedBooking.zip_code}`,
+                    totalAmount: confirmedBooking.total_estimate_cents,
+                  },
+                  status: 'pending',
+                  retry_count: 0,
+                  next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+                });
+              logStep("Queued confirmation email for retry");
+            } catch (queueError) {
+              logStep("Failed to queue email for retry", { error: queueError });
+            }
           }
           } else {
             logStep("Confirmation email already sent - skipping", { bookingId: confirmedBooking.id });

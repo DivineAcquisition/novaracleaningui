@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { PaymentReceipt } from '../_shared/email-templates/PaymentReceipt.tsx';
@@ -7,6 +8,11 @@ import { BookingModification } from '../_shared/email-templates/BookingModificat
 import { generateICalFile } from '../_shared/calendar-utils.ts';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+
+const supabaseAdmin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -285,6 +291,28 @@ serve(async (req: Request) => {
     });
   } catch (error: any) {
     logStep("ERROR sending email", { message: error.message });
+
+    // Queue failed email for retry
+    try {
+      const body = await req.clone().json().catch(() => null);
+      if (body?.email && body?.type) {
+        await supabaseAdmin
+          .from('email_retry_queue')
+          .insert({
+            booking_id: body.data?.bookingId || body.bookingData?.bookingId || null,
+            email_type: body.type,
+            email_address: body.email,
+            email_data: body.data || body.bookingData || {},
+            status: 'pending',
+            retry_count: 0,
+            next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+          });
+        logStep("Queued failed email for retry", { type: body.type, email: body.email });
+      }
+    } catch (queueError) {
+      logStep("Failed to queue email for retry", { error: queueError });
+    }
+
     return new Response(
       JSON.stringify({ error: error.message }),
       {

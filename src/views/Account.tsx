@@ -219,6 +219,8 @@ export default function Account() {
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const [ratingBooking, setRatingBooking] = useState<Booking | null>(null);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [cleanerNames, setCleanerNames] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -233,6 +235,7 @@ export default function Account() {
   const fetchBookings = async () => {
     if (!user?.email) return;
     setIsLoadingBookings(true);
+    setLoadError(false);
     try {
       const { data, error } = await supabase
         .from("bookings")
@@ -244,6 +247,7 @@ export default function Account() {
     } catch (error: any) {
       console.error("Error fetching bookings:", error);
       toast.error("Failed to load booking history");
+      setLoadError(true);
     } finally {
       setIsLoadingBookings(false);
     }
@@ -263,6 +267,45 @@ export default function Account() {
       console.error("Error fetching membership credits:", error);
     }
   };
+
+  const refreshData = () => {
+    fetchBookings();
+    fetchMembershipCredits();
+  };
+
+  useEffect(() => {
+    if (!user?.email) return;
+    const channel = supabase
+      .channel("portal-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "bookings",
+          filter: `email=eq.${user.email}`,
+        },
+        () => {
+          fetchBookings();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "membership_credits",
+          filter: `email=eq.${user.email}`,
+        },
+        () => {
+          fetchMembershipCredits();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.email]);
 
   const handleManageSubscription = async () => {
     try {
@@ -317,7 +360,24 @@ export default function Account() {
     fetchMembershipCredits();
   };
 
-  const handleRating = (booking: Booking) => {
+  const handleRating = async (booking: Booking) => {
+    if (booking.cleaner_id && !cleanerNames[booking.cleaner_id]) {
+      try {
+        const { data } = await supabase
+          .from("cleaners")
+          .select("first_name, last_name")
+          .eq("id", booking.cleaner_id)
+          .single();
+        if (data) {
+          const fullName = [data.first_name, data.last_name].filter(Boolean).join(" ").trim();
+          if (fullName) {
+            setCleanerNames((prev) => ({ ...prev, [booking.cleaner_id!]: fullName }));
+          }
+        }
+      } catch {
+        // Use fallback "Your Cleaner" on error
+      }
+    }
     setRatingBooking(booking);
     setRatingDialogOpen(true);
   };
@@ -911,7 +971,7 @@ export default function Account() {
                       Save with a Membership
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Get monthly credits and save up to 30%
+                      Get monthly credits and save up to 42%
                     </p>
                   </div>
                   <Button
@@ -996,7 +1056,7 @@ export default function Account() {
         </div>
 
         {/* Loading state */}
-        {isLoadingBookings && bookings.length === 0 && (
+        {isLoadingBookings && bookings.length === 0 && !loadError && (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <RiLoader4Line className="w-6 h-6 animate-spin text-primary mx-auto mb-3" />
@@ -1005,6 +1065,21 @@ export default function Account() {
               </p>
             </div>
           </div>
+        )}
+
+        {/* Error state with retry */}
+        {loadError && bookings.length === 0 && (
+          <Card className="border-destructive/50">
+            <CardContent className="py-8 text-center">
+              <RiCloseCircleLine className="w-10 h-10 text-destructive mx-auto mb-3" />
+              <p className="font-medium mb-1">Failed to load</p>
+              <p className="text-sm text-muted-foreground mb-4">Try again</p>
+              <Button variant="outline" onClick={refreshData}>
+                <RiRefreshLine className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </div>
 
@@ -1030,7 +1105,11 @@ export default function Account() {
           open={ratingDialogOpen}
           onOpenChange={setRatingDialogOpen}
           bookingId={ratingBooking.id}
-          cleanerName="Your Cleaner"
+          cleanerName={
+            ratingBooking.cleaner_id && cleanerNames[ratingBooking.cleaner_id]
+              ? cleanerNames[ratingBooking.cleaner_id]
+              : "Your Cleaner"
+          }
           onRatingSubmitted={handleRatingSubmitted}
         />
       )}

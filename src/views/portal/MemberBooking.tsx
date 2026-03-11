@@ -74,7 +74,9 @@ export default function MemberBooking() {
   const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [serviceType, setServiceType] = useState<'standard' | 'deep'>('standard');
-  const DEEP_CLEAN_UPSELL = 6500;
+  // Approximation: deep clean is 1.5x standard (50% more) and varies by home size.
+  // Edge function also uses this; $65 is a fixed approximation for member credit bookings.
+  const DEEP_CLEAN_UPSELL_CENTS = 6500;
 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
@@ -248,7 +250,7 @@ export default function MemberBooking() {
       const dispatchNotes = selectedCleanerId
         ? `REQUESTED CLEANER: ${selectedCleanerName} (ID: ${selectedCleanerId})`
         : null;
-      const upsellAmount = serviceType === 'deep' ? DEEP_CLEAN_UPSELL : 0;
+      const upsellAmount = serviceType === 'deep' ? DEEP_CLEAN_UPSELL_CENTS : 0;
 
       const bookingData = {
         customer_id: customer.id,
@@ -669,7 +671,7 @@ export default function MemberBooking() {
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <p className="text-lg font-bold text-primary">+$65</p>
+                            <p className="text-lg font-bold text-primary">+${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -741,7 +743,7 @@ export default function MemberBooking() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-sm">{serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean'}</p>
-                        {serviceType === 'deep' && <Badge variant="secondary" className="text-xs">+$65</Badge>}
+                        {serviceType === 'deep' && <Badge variant="secondary" className="text-xs">+${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)}</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {serviceType === 'deep' ? 'Thorough top-to-bottom cleaning' : 'Regular maintenance cleaning'}
@@ -839,7 +841,7 @@ export default function MemberBooking() {
                             <p className="text-xs text-muted-foreground">Due now to confirm</p>
                           </div>
                         </div>
-                        <p className="text-2xl font-bold text-primary">$65</p>
+                        <p className="text-2xl font-bold text-primary">${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)}</p>
                       </div>
                     )}
                   </div>
@@ -871,7 +873,7 @@ export default function MemberBooking() {
                 {isSubmitting ? (
                   <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> {serviceType === 'deep' ? 'Processing...' : 'Booking...'}</>
                 ) : serviceType === 'deep' ? (
-                  <><RiBankCardLine className="w-4 h-4 mr-2" /> Continue to Payment ($65)</>
+                  <><RiBankCardLine className="w-4 h-4 mr-2" /> Continue to Payment (${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)})</>
                 ) : (
                   <><RiCheckLine className="w-4 h-4 mr-2" /> Confirm Booking</>
                 )}

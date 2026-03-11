@@ -73,12 +73,20 @@ serve(async (req) => {
           .eq("id", emailItem.id);
 
         // Attempt to send the email
+        const emailAddress = emailItem.email_address || emailItem.recipient_email;
+        const emailPayload: any = {
+          type: emailItem.email_type,
+          email: emailAddress,
+        };
+
+        if (emailItem.email_type === 'modification' || emailItem.email_type === 'cancellation') {
+          emailPayload.bookingData = emailItem.email_data;
+        } else {
+          emailPayload.data = emailItem.email_data;
+        }
+
         const { error: emailError } = await supabase.functions.invoke('send-booking-email', {
-          body: {
-            type: emailItem.email_type,
-            email: emailItem.recipient_email,
-            data: emailItem.email_data,
-          },
+          body: emailPayload,
         });
 
         if (emailError) {
