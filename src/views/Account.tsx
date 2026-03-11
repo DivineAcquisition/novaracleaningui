@@ -52,6 +52,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { ModifyBookingDialog } from "@/components/booking/ModifyBookingDialog";
 import { RatingDialog } from "@/components/booking/RatingDialog";
+import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 
@@ -219,6 +220,8 @@ export default function Account() {
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const [ratingBooking, setRatingBooking] = useState<Booking | null>(null);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [cancelBookingItem, setCancelBookingItem] = useState<Booking | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cleanerNames, setCleanerNames] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState(false);
 
@@ -389,18 +392,13 @@ export default function Account() {
   };
 
   const handleCancel = (booking: Booking) => {
-    const ghlFormUrl = "https://novaracleaning.com/cancel-booking";
-    const params = new URLSearchParams({
-      booking_id: booking.id,
-      email: user?.email || "",
-      customer_name: user?.email?.split("@")[0] || "",
-      service_date: booking.service_date,
-      time_slot: booking.time_slot,
-      service_type: booking.service_type,
-      address: `${booking.address}, ${booking.city}, ${booking.state}`,
-      total_amount: (booking.total_estimate_cents / 100).toFixed(2),
-    });
-    window.open(`${ghlFormUrl}?${params.toString()}`, "_blank");
+    setCancelBookingItem(booking);
+    setCancelDialogOpen(true);
+  };
+
+  const handleCancelSuccess = () => {
+    fetchBookings();
+    fetchMembershipCredits();
   };
 
   const getCountdown = (dateStr: string) => {
@@ -1111,6 +1109,14 @@ export default function Account() {
               : "Your Cleaner"
           }
           onRatingSubmitted={handleRatingSubmitted}
+        />
+      )}
+      {cancelBookingItem && (
+        <CancelBookingDialog
+          open={cancelDialogOpen}
+          onOpenChange={setCancelDialogOpen}
+          booking={cancelBookingItem}
+          onSuccess={handleCancelSuccess}
         />
       )}
     </PortalLayout>
