@@ -36,7 +36,7 @@
     --focus-ring: 262 99% 53%;
     --focus-ring-offset: 0 0% 100%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
     
     --success: 142 76% 32%;
     --warning: 38 92% 45%;
@@ -228,16 +228,16 @@
 
 @layer components {
   .card-outlined {
-    @apply border-2 border-border/50 shadow-card;
+    @apply border border-border/50 shadow-card rounded-2xl;
   }
   
   .card-outlined-hover {
-    @apply border-2 border-border/50 shadow-card transition-all duration-300;
+    @apply border border-border/50 shadow-card transition-all duration-300 rounded-2xl;
     @apply hover:border-primary/30 hover:shadow-lg;
   }
   
   .card-interactive {
-    @apply border-2 border-border/40 shadow-card transition-all duration-200 cursor-pointer;
+    @apply border border-border/40 shadow-card transition-all duration-200 cursor-pointer rounded-2xl;
     @apply hover:border-primary/50 hover:shadow-lg;
     @apply active:border-primary active:shadow-md;
     -webkit-tap-highlight-color: transparent;

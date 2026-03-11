@@ -32,7 +32,7 @@ export function BottomNavigation({
   steps,
 }: BottomNavigationProps) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-lg z-50 animate-slide-up safe-bottom">
+    <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background/95 backdrop-blur-lg border-t border-border/50 shadow-lg z-50 animate-slide-up safe-bottom">
       
       {/* Navigation Buttons */}
       <div className="flex gap-2 p-3">

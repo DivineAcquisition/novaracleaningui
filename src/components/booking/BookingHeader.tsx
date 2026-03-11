@@ -27,7 +27,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
             <img 
               src="/novara-logo.png" 
               alt="Novara" 
-              className="h-12 w-12 rounded-lg object-contain"
+              className="h-12 w-12 rounded-xl object-contain"
             />
           </div>
 
