@@ -112,30 +112,39 @@ Deno.serve(async (req) => {
 
     logStep("Booking status updated to cancelled");
 
-    // Release availability slot
+    // Release availability slots
     if (booking.service_date && booking.time_slot) {
+      // Release from `availability` table (capacity-based)
       try {
+        const { data: slot } = await supabase
+          .from('availability')
+          .select('capacity')
+          .eq('service_date', booking.service_date)
+          .eq('time_window', booking.time_slot)
+          .maybeSingle();
+
+        if (slot) {
+          await supabase
+            .from('availability')
+            .update({ capacity: slot.capacity + 1 })
+            .eq('service_date', booking.service_date)
+            .eq('time_window', booking.time_slot);
+          logStep("Availability slot released");
+        }
+      } catch (availErr) {
+        logStep("Availability release failed (non-critical)", availErr);
+      }
+
+      // Also release from `availability_slots` table if applicable
+      try {
+        const startTime = booking.time_slot.split(' - ')[0] || booking.time_slot;
         await supabase.rpc('release_time_slot', {
           _date: booking.service_date,
-          _start_time: booking.time_slot.split(' - ')[0] || booking.time_slot,
-          _end_time: booking.time_slot.split(' - ')[1] || booking.time_slot,
+          _start_time: startTime,
         });
-        logStep("Availability slot released via RPC");
-      } catch (rpcError) {
-        // Fallback: decrement current_bookings directly
-        const { error: availError } = await supabase
-          .from('availability_slots')
-          .update({
-            current_bookings: Math.max(0, (booking as any).current_bookings - 1),
-          })
-          .eq('service_date', booking.service_date)
-          .eq('time_slot', booking.time_slot);
-
-        if (availError) {
-          logStep("Failed to release availability (non-critical)", availError);
-        } else {
-          logStep("Availability slot released via direct update");
-        }
+        logStep("Availability_slots released via RPC");
+      } catch (rpcErr) {
+        logStep("release_time_slot RPC failed (non-critical)", rpcErr);
       }
     }
 

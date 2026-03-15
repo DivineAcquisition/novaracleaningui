@@ -35,42 +35,37 @@ serve(async (req) => {
 
     console.log('Reschedule request:', { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot });
 
-    // 1. Check availability for new slot
-    const { data: availability, error: availError } = await supabase
-      .from('availability')
-      .select('capacity')
-      .eq('service_date', newDate)
-      .eq('time_window', newTimeSlot)
-      .maybeSingle();
-
-    if (availError) {
-      console.error('Error checking availability:', availError);
-      throw availError;
-    }
-
-    if (!availability || availability.capacity <= 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Selected time slot is not available' 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 2. Get booking details
+    // 1. Get booking details
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .select('*')
       .eq('id', bookingId)
       .single();
 
-    if (bookingError) {
+    if (bookingError || !booking) {
       console.error('Error fetching booking:', bookingError);
-      throw bookingError;
+      throw new Error('Booking not found');
     }
 
-    // 3. Update booking
+    // 2. Check availability for new slot (soft check - proceed even if no row)
+    const { data: newSlot } = await supabase
+      .from('availability')
+      .select('capacity')
+      .eq('service_date', newDate)
+      .eq('time_window', newTimeSlot)
+      .maybeSingle();
+
+    if (newSlot && newSlot.capacity <= 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Selected time slot is not available' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
+    // 3. Update booking with new date/time
     const { error: updateError } = await supabase
       .from('bookings')
       .update({
@@ -85,26 +80,44 @@ serve(async (req) => {
       throw updateError;
     }
 
-    // 4. Update availability - release old slot
-    const { error: releaseError } = await supabase
-      .from('availability')
-      .update({ capacity: supabase.rpc('increment', { x: 1 }) })
-      .eq('service_date', oldDate)
-      .eq('time_window', oldTimeSlot);
+    // 4. Release old availability slot
+    try {
+      const { data: oldSlot } = await supabase
+        .from('availability')
+        .select('capacity')
+        .eq('service_date', oldDate)
+        .eq('time_window', oldTimeSlot)
+        .maybeSingle();
 
-    if (releaseError) {
-      console.error('Error releasing old slot:', releaseError);
+      if (oldSlot) {
+        await supabase
+          .from('availability')
+          .update({ capacity: oldSlot.capacity + 1 })
+          .eq('service_date', oldDate)
+          .eq('time_window', oldTimeSlot);
+        console.log('Old slot released, new capacity:', oldSlot.capacity + 1);
+      }
+    } catch (e) {
+      console.error('Release old slot failed (non-critical):', e);
     }
 
-    // 5. Reserve new slot
-    const { error: reserveError } = await supabase
-      .from('availability')
-      .update({ capacity: availability.capacity - 1 })
-      .eq('service_date', newDate)
-      .eq('time_window', newTimeSlot);
-
-    if (reserveError) {
-      console.error('Error reserving new slot:', reserveError);
+    // 5. Reserve new availability slot
+    try {
+      if (newSlot) {
+        await supabase
+          .from('availability')
+          .update({ capacity: Math.max(0, newSlot.capacity - 1) })
+          .eq('service_date', newDate)
+          .eq('time_window', newTimeSlot);
+      } else {
+        await supabase.rpc('reserve_availability', {
+          _date: newDate,
+          _time_window: newTimeSlot,
+        });
+      }
+      console.log('New slot reserved');
+    } catch (e) {
+      console.error('Reserve new slot failed (non-critical):', e);
     }
 
     // 6. Send confirmation email
