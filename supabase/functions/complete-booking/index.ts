@@ -86,6 +86,33 @@ serve(async (req) => {
       logStep("Payout trigger failed", { error: payoutResponse.error });
     } else {
       logStep("Payout triggered successfully");
+      
+      // Notify cleaner about payout via SMS
+      if (booking.cleaner_id) {
+        try {
+          const { data: paidCleaner } = await supabase
+            .from("cleaners")
+            .select("phone, first_name, pay_rate_hr")
+            .eq("id", booking.cleaner_id)
+            .single();
+
+          if (paidCleaner?.phone) {
+            const payoutData = typeof payoutResponse.data === 'string' ? JSON.parse(payoutResponse.data) : payoutResponse.data;
+            const payAmount = payoutData?.amount_dollars || ((paidCleaner.pay_rate_hr || 18) * (booking.estimated_duration_hours || 3)).toFixed(2);
+            
+            await supabase.functions.invoke('send-sms-notification', {
+              body: {
+                toPhone: paidCleaner.phone,
+                message: `💰 Payday ${paidCleaner.first_name}! $${payAmount} has been sent to your bank account for the ${booking.service_date} cleaning. Funds typically arrive in 1-2 business days. Great work!`,
+                type: 'confirmation',
+              }
+            });
+            logStep("Payout SMS sent to cleaner");
+          }
+        } catch (payoutSmsErr) {
+          logStep("Payout SMS failed (non-critical)", { error: payoutSmsErr });
+        }
+      }
     }
 
     // Send completion email to cleaner

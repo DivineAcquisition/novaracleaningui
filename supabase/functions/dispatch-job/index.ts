@@ -376,26 +376,36 @@ serve(async (req) => {
       }
 
       const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString('en-US', { 
-        weekday: 'short', 
+        weekday: 'long', 
         month: 'short', 
         day: 'numeric' 
       });
       const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
-      const token = btoa(assignment.id).substring(0, 10);
-      const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
+      const secret = Deno.env.get("OFFER_TOKEN_SECRET") || "novara-offer-2026";
+      const encoder = new TextEncoder();
+      const tokenData = encoder.encode(assignment.id + secret);
+      let hash = 0;
+      for (let i = 0; i < tokenData.length; i++) {
+        hash = ((hash << 5) - hash + tokenData[i]) | 0;
+      }
+      const token = Math.abs(hash).toString(36).padStart(8, '0').substring(0, 10);
+      const baseUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/respond-to-offer`;
       
-      const message = `🧹 New Job Offer!
+      const message = `🧹 New Job Offer for ${assignment.cleaners.first_name}!
 
-Date: ${jobDateFormatted}
-Location: ${job.city}, ${job.zip}
-Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
-Distance: ${assignment.distance_miles.toFixed(1)} miles
+📅 ${jobDateFormatted}
+📍 ${job.city}, ${job.zip}
+💰 $${estimatedPay} (${job.duration_est_hours}hrs @ $${assignment.cleaners.pay_rate_hr}/hr)
+📏 ${assignment.distance_miles.toFixed(1)} miles from you
+🏷️ Role: ${assignment.role}
 
-Respond within 15 min:
-Accept: ${baseUrl}?id=${assignment.id}&action=accept&token=${token}
-Decline: ${baseUrl}?id=${assignment.id}&action=decline&token=${token}
+⏰ Respond within 15 min:
 
-Or open app to view details.`;
+✅ ACCEPT:
+${baseUrl}?id=${assignment.id}&action=accept&token=${token}
+
+❌ DECLINE:
+${baseUrl}?id=${assignment.id}&action=decline&token=${token}`;
 
       try {
         await supabase.functions.invoke("send-sms-notification", {

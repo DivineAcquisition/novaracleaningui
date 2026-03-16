@@ -66,9 +66,11 @@ export default function AdminCleaners() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editCleaner, setEditCleaner] = useState<Cleaner | null>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18", maxTravelMiles: "20" });
+  const DEFAULT_PAY_RATE = "18";
+  const DEFAULT_MAX_TRAVEL = "20";
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: DEFAULT_PAY_RATE, maxTravelMiles: DEFAULT_MAX_TRAVEL });
   const [newCleaner, setNewCleaner] = useState({
-    email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18",
+    email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: DEFAULT_PAY_RATE,
   });
 
   useEffect(() => { fetchCleaners(); }, []);
@@ -123,12 +125,12 @@ export default function AdminCleaners() {
       if (!createData?.success) throw new Error("Failed to create cleaner account");
 
       await supabase.functions.invoke("send-cleaner-email", {
-        body: { type: "invitation", email: newCleaner.email, data: { firstName: newCleaner.firstName, lastName: newCleaner.lastName, email: newCleaner.email, onboardingUrl: "https://book.novaracleaning.com/cleaner/onboarding-landing" } },
+        body: { type: "invitation", email: newCleaner.email, data: { firstName: newCleaner.firstName, lastName: newCleaner.lastName, email: newCleaner.email, onboardingUrl: "https://try.novaracleaning.com/cleaner/onboarding-landing" } },
       }).catch(console.error);
 
       toast({ title: "Cleaner invited", description: `Invitation sent to ${newCleaner.firstName} ${newCleaner.lastName}.` });
       setIsAddDialogOpen(false);
-      setNewCleaner({ email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18" });
+      setNewCleaner({ email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: DEFAULT_PAY_RATE });
       fetchCleaners();
     } catch (error: any) {
       toast({ title: "Error adding cleaner", description: error.message, variant: "destructive" });

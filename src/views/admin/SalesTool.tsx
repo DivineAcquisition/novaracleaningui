@@ -49,7 +49,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { calculateProfit } from "@/lib/profit-calculator";
 
-const ACCESS_PIN = "1234";
+const ACCESS_PIN = process.env.NEXT_PUBLIC_SALES_ACCESS_PIN || "1234";
 const AUTOSAVE_KEY = "sales_tool_autosave";
 const AUTOSAVE_INTERVAL = 30000;
 
@@ -1151,8 +1151,8 @@ export default function SalesTool() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-gray-600">Pay Rate</Label>
-                    <Input value="$18/hr" readOnly className="bg-gray-50 border-gray-300 text-gray-900" />
-                    <p className="text-xs text-gray-400">Fixed rate for all cleaners</p>
+                    <Input value={`$${selectedCleaners[0]?.pay_rate_hr || 18}/hr`} readOnly className="bg-gray-50 border-gray-300 text-gray-900" />
+                    <p className="text-xs text-gray-400">Per-cleaner rate from profile</p>
                   </div>
                 </div>
                 <CleanerMultiSelect
