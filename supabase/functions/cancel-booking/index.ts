@@ -200,6 +200,25 @@ Deno.serve(async (req) => {
       logStep("Failed to send email (non-critical)", emailError);
     }
 
+    // Send cancellation SMS to customer
+    if (booking.phone) {
+      try {
+        const refundText = refundAmount > 0 ? ` Refund of $${(refundAmount / 100).toFixed(2)} is being processed.` : '';
+        const smsMsg = `Novara Cleaning: Your booking for ${booking.service_date} has been cancelled.${refundText} Questions? Reply or call us.`;
+
+        await supabase.functions.invoke('send-sms-notification', {
+          body: {
+            toPhone: booking.phone,
+            message: smsMsg,
+            type: 'confirmation',
+          }
+        });
+        logStep("Cancellation SMS sent", { phone: booking.phone });
+      } catch (smsError) {
+        logStep("SMS cancellation failed (non-critical)", smsError);
+      }
+    }
+
     // Trigger Zapier webhook
     try {
       await supabase.functions.invoke('send-zapier-webhook', {

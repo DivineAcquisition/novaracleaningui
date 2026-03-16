@@ -246,6 +246,25 @@ serve(async (req) => {
         // Don't fail the whole operation if email fails
       }
 
+      // Send modification SMS to customer
+      if (booking.phone) {
+        try {
+          const totalDollars = (newTotal).toFixed(2);
+          const smsMsg = `Novara Cleaning: Your booking has been updated. New service: ${serviceType} cleaning. Updated total: $${totalDollars}. View details: https://novaracleaning.com/account`;
+
+          await supabaseAdmin.functions.invoke('send-sms-notification', {
+            body: {
+              toPhone: booking.phone,
+              message: smsMsg,
+              type: 'confirmation',
+            }
+          });
+          logStep("Modification SMS sent", { phone: booking.phone });
+        } catch (smsError) {
+          logStep("SMS modification failed (non-critical)", { error: smsError });
+        }
+      }
+
       // Trigger Zapier webhook for modified booking
       try {
         await supabaseAdmin.functions.invoke('send-zapier-webhook', {
@@ -253,7 +272,6 @@ serve(async (req) => {
         });
         logStep("Zapier webhook triggered");
       } catch (webhookError) {
-        // Log but don't fail the modification if webhook fails
         logStep("Zapier webhook failed (non-critical)", { error: webhookError });
       }
     }

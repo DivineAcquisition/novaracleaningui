@@ -148,6 +148,27 @@ serve(async (req) => {
       // Don't fail the request if email fails
     }
 
+    // Send reschedule SMS to customer
+    if (booking.phone) {
+      try {
+        const newDateFmt = new Date(newDate).toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric'
+        });
+        const smsMsg = `Novara Cleaning: Your booking has been rescheduled to ${newDateFmt} at ${newTimeSlot}. View details: https://novaracleaning.com/account`;
+
+        await supabase.functions.invoke('send-sms-notification', {
+          body: {
+            toPhone: booking.phone,
+            message: smsMsg,
+            type: 'confirmation',
+          }
+        });
+        console.log('Reschedule SMS sent');
+      } catch (smsError) {
+        console.error('SMS reschedule failed (non-critical):', smsError);
+      }
+    }
+
     // Trigger Zapier webhook for rescheduled booking
     try {
       await supabase.functions.invoke('send-zapier-webhook', {

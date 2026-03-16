@@ -84,6 +84,30 @@ const handler = async (req: Request): Promise<Response> => {
           results.firstReminders.failed++;
           console.error(`Failed to send first reminder for cart ${cart.id}:`, await response.text());
         }
+
+        // Send SMS for first abandoned cart reminder
+        if (cart.phone) {
+          try {
+            const checkoutUrl = "https://novaracleaning.com/book/checkout";
+            const smsMsg = `Hi ${cart.first_name || 'there'}! You're almost done booking your Novara cleaning. Complete your booking & save $30: ${checkoutUrl}`;
+
+            await fetch(`${supabaseUrl}/functions/v1/send-sms-notification`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${supabaseAnonKey}`,
+              },
+              body: JSON.stringify({
+                toPhone: cart.phone,
+                message: smsMsg,
+                type: "reminder",
+              }),
+            });
+            console.log(`First SMS reminder sent for cart ${cart.id}`);
+          } catch (smsErr) {
+            console.error(`SMS first reminder failed for cart ${cart.id}:`, smsErr);
+          }
+        }
       } catch (error) {
         results.firstReminders.failed++;
         console.error(`Error sending first reminder for cart ${cart.id}:`, error);
@@ -112,6 +136,30 @@ const handler = async (req: Request): Promise<Response> => {
         } else {
           results.secondReminders.failed++;
           console.error(`Failed to send second reminder for cart ${cart.id}:`, await response.text());
+        }
+
+        // Send SMS for second (last chance) abandoned cart reminder
+        if (cart.phone) {
+          try {
+            const checkoutUrl = "https://novaracleaning.com/book/checkout";
+            const smsMsg = `⚠️ Last chance ${cart.first_name || ''}! Your Novara cleaning quote expires soon. Finish booking & save $30: ${checkoutUrl}`;
+
+            await fetch(`${supabaseUrl}/functions/v1/send-sms-notification`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${supabaseAnonKey}`,
+              },
+              body: JSON.stringify({
+                toPhone: cart.phone,
+                message: smsMsg,
+                type: "reminder",
+              }),
+            });
+            console.log(`Second SMS reminder sent for cart ${cart.id}`);
+          } catch (smsErr) {
+            console.error(`SMS second reminder failed for cart ${cart.id}:`, smsErr);
+          }
         }
       } catch (error) {
         results.secondReminders.failed++;

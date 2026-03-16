@@ -148,6 +148,24 @@ serve(async (req) => {
       logStep("Customer email failed (non-critical)", { error: emailError });
     }
 
+    // Send completion/thank-you SMS to customer
+    if (booking.phone) {
+      try {
+        const smsMsg = `Novara Cleaning: Thank you ${booking.first_name || ''}! Your cleaning is complete. We'd love your feedback - rate your experience: https://novaracleaning.com/account`;
+
+        await supabase.functions.invoke('send-sms-notification', {
+          body: {
+            toPhone: booking.phone,
+            message: smsMsg,
+            type: 'confirmation',
+          }
+        });
+        logStep("Customer thank-you SMS sent", { phone: booking.phone });
+      } catch (smsError) {
+        logStep("SMS thank-you failed (non-critical)", { error: smsError });
+      }
+    }
+
     // Trigger Zapier webhook for completed booking
     try {
       await supabase.functions.invoke('send-zapier-webhook', {

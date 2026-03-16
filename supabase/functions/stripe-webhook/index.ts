@@ -322,6 +322,28 @@ serve(async (req) => {
 
             logStep("Confirmation emails sent successfully");
 
+              // Send booking confirmation SMS to customer
+              if (confirmedBooking.phone) {
+                try {
+                  const serviceDateFmt = new Date(confirmedBooking.service_date).toLocaleDateString('en-US', {
+                    weekday: 'short', month: 'short', day: 'numeric'
+                  });
+                  const totalDollars = (confirmedBooking.total_estimate_cents / 100).toFixed(2);
+                  const smsMsg = `Novara Cleaning: Booking confirmed! ${confirmedBooking.service_type} cleaning on ${serviceDateFmt} at ${confirmedBooking.time_slot}. Total: $${totalDollars}. View details: https://novaracleaning.com/account`;
+
+                  await supabase.functions.invoke('send-sms-notification', {
+                    body: {
+                      toPhone: confirmedBooking.phone,
+                      message: smsMsg,
+                      type: 'confirmation',
+                    }
+                  });
+                  logStep("Booking confirmation SMS sent", { phone: confirmedBooking.phone });
+                } catch (smsErr) {
+                  logStep("SMS confirmation failed (non-blocking)", { error: smsErr });
+                }
+              }
+
               // Mark confirmation email as sent to prevent duplicates on webhook retries
               await supabase
                 .from('bookings')
