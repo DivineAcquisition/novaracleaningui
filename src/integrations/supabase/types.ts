@@ -29,6 +29,7 @@ export type Database = {
           reminder_count: number | null
           reminder_sent_at: string | null
           service_type: string | null
+          session_id: string | null
           updated_at: string | null
           zip_code: string | null
         }
@@ -46,6 +47,7 @@ export type Database = {
           reminder_count?: number | null
           reminder_sent_at?: string | null
           service_type?: string | null
+          session_id?: string | null
           updated_at?: string | null
           zip_code?: string | null
         }
@@ -63,8 +65,30 @@ export type Database = {
           reminder_count?: number | null
           reminder_sent_at?: string | null
           service_type?: string | null
+          session_id?: string | null
           updated_at?: string | null
           zip_code?: string | null
+        }
+        Relationships: []
+      }
+      app_config: {
+        Row: {
+          key: string
+          value: string
+          description: string | null
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          value: string
+          description?: string | null
+          updated_at?: string
+        }
+        Update: {
+          key?: string
+          value?: string
+          description?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -211,6 +235,131 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_sessions: {
+        Row: {
+          id: string
+          created_at: string | null
+          updated_at: string | null
+          expires_at: string | null
+          status: string
+          current_step: string | null
+          email: string | null
+          phone: string | null
+          first_name: string | null
+          last_name: string | null
+          zip_code: string | null
+          city: string | null
+          state: string | null
+          home_size_id: string | null
+          service_type: string | null
+          add_ons: string[] | null
+          membership_plan: string | null
+          use_credit: boolean | null
+          service_date: string | null
+          time_slot: string | null
+          service_duration: number | null
+          payment_option: string | null
+          address: string | null
+          bedrooms: number | null
+          bathrooms: number | null
+          dwelling_type: string | null
+          referral_code: string | null
+          promo_code: string | null
+          booking_data: Json | null
+          abandoned_cart_id: string | null
+          booking_id: string | null
+          utm_source: string | null
+          utm_medium: string | null
+          utm_campaign: string | null
+          user_agent: string | null
+          ip_address: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string | null
+          updated_at?: string | null
+          expires_at?: string | null
+          status?: string
+          current_step?: string | null
+          email?: string | null
+          phone?: string | null
+          first_name?: string | null
+          last_name?: string | null
+          zip_code?: string | null
+          city?: string | null
+          state?: string | null
+          home_size_id?: string | null
+          service_type?: string | null
+          add_ons?: string[] | null
+          membership_plan?: string | null
+          use_credit?: boolean | null
+          service_date?: string | null
+          time_slot?: string | null
+          service_duration?: number | null
+          payment_option?: string | null
+          address?: string | null
+          bedrooms?: number | null
+          bathrooms?: number | null
+          dwelling_type?: string | null
+          referral_code?: string | null
+          promo_code?: string | null
+          booking_data?: Json | null
+          abandoned_cart_id?: string | null
+          booking_id?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          user_agent?: string | null
+          ip_address?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string | null
+          updated_at?: string | null
+          expires_at?: string | null
+          status?: string
+          current_step?: string | null
+          email?: string | null
+          phone?: string | null
+          first_name?: string | null
+          last_name?: string | null
+          zip_code?: string | null
+          city?: string | null
+          state?: string | null
+          home_size_id?: string | null
+          service_type?: string | null
+          add_ons?: string[] | null
+          membership_plan?: string | null
+          use_credit?: boolean | null
+          service_date?: string | null
+          time_slot?: string | null
+          service_duration?: number | null
+          payment_option?: string | null
+          address?: string | null
+          bedrooms?: number | null
+          bathrooms?: number | null
+          dwelling_type?: string | null
+          referral_code?: string | null
+          promo_code?: string | null
+          booking_data?: Json | null
+          abandoned_cart_id?: string | null
+          booking_id?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          user_agent?: string | null
+          ip_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_sessions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           access_notes: string | null
@@ -273,6 +422,7 @@ export type Database = {
           sdr_rep_name: string | null
           service_date: string
           service_type: string
+          session_id: string | null
           sqft: number | null
           state: string
           status: string | null
@@ -347,6 +497,7 @@ export type Database = {
           sdr_rep_name?: string | null
           service_date: string
           service_type: string
+          session_id?: string | null
           sqft?: number | null
           state: string
           status?: string | null
@@ -421,6 +572,7 @@ export type Database = {
           sdr_rep_name?: string | null
           service_date?: string
           service_type?: string
+          session_id?: string | null
           sqft?: number | null
           state?: string
           status?: string | null
