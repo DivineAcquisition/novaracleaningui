@@ -109,6 +109,19 @@ serve(async (req) => {
           logStep("Booking confirmed via webhook", { bookingId: booking.id });
         }
 
+        // Sync to GHL CRM - payment confirmed
+        try {
+          await supabase.functions.invoke('sync-contact-to-ghl', {
+            body: {
+              event: 'payment_confirmed',
+              contactData: { firstName: booking.first_name, lastName: booking.last_name, email: booking.email, phone: booking.phone, zipCode: booking.zip_code, city: booking.city, state: booking.state, address: booking.address },
+              bookingData: booking,
+              monetaryValue: Math.round((booking.total_estimate_cents || 0) / 100),
+            }
+          });
+          logStep("GHL sync: payment_confirmed");
+        } catch (ghlErr) { logStep("GHL sync failed (non-critical)", { error: ghlErr }); }
+
         // Mark booking session as completed if session_id exists
         if (booking.session_id) {
           try {

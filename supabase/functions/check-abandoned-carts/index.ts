@@ -61,6 +61,22 @@ const handler = async (req: Request): Promise<Response> => {
       secondReminders: { attempted: 0, success: 0, failed: 0 },
     };
 
+    // Sync abandoned carts to GHL as cold leads (second reminder = truly cold)
+    for (const cart of secondReminderCarts || []) {
+      if (cart.email && !cart.email.includes('@placeholder')) {
+        fetch(`${supabaseUrl}/functions/v1/sync-contact-to-ghl`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}` },
+          body: JSON.stringify({
+            event: 'abandoned_cart',
+            contactData: { firstName: cart.first_name, lastName: cart.last_name, email: cart.email, phone: cart.phone, zipCode: cart.zip_code },
+            bookingData: { serviceType: cart.service_type, homeSizeId: cart.home_size, source: 'Website' },
+            notes: `Abandoned cart at step: ${cart.last_step}. Session: ${cart.session_id || 'none'}`,
+          }),
+        }).catch(err => console.error('GHL abandoned cart sync failed:', err));
+      }
+    }
+
     // Send first reminders
     for (const cart of firstReminderCarts || []) {
       results.firstReminders.attempted++;

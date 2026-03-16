@@ -116,6 +116,18 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     console.log(`Created new cart: ${newCart.id}`);
+
+    // Sync to GHL CRM when cart has contact info (non-blocking)
+    if (email && !email.includes('@placeholder')) {
+      supabase.functions.invoke('sync-contact-to-ghl', {
+        body: {
+          event: 'lead_captured',
+          contactData: { firstName, lastName, email, phone, zipCode },
+          bookingData: { serviceType, homeSizeId: homeSize, source: 'Website' },
+        }
+      }).catch((err: any) => console.error('GHL sync error (non-critical):', err));
+    }
+
     return new Response(
       JSON.stringify({ success: true, cartId: newCart.id, created: true }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }

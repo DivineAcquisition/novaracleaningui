@@ -444,6 +444,18 @@ serve(async (req) => {
 
     logStep("Booking created successfully", { bookingId: booking.id });
 
+    // Sync to GHL CRM - checkout started (non-blocking)
+    try {
+      supabaseClient.functions.invoke('sync-contact-to-ghl', {
+        body: {
+          event: 'checkout_started',
+          contactData: { firstName: bookingData.firstName, lastName: bookingData.lastName, email: bookingData.email, phone: bookingData.phone, zipCode: bookingData.zipCode, city: bookingData.city, state: bookingData.state, address: bookingData.address },
+          bookingData: { ...bookingData, total_estimate_cents: totalAmount, deposit_cents: bookingData.paymentOption === 'deposit' ? (bookingData.useCredit ? 100 : 3900) : 0 },
+          monetaryValue: Math.round(totalAmount / 100),
+        }
+      }).catch((err: any) => logStep("GHL sync failed (non-critical)", { error: err.message }));
+    } catch (ghlErr) { logStep("GHL sync error (non-critical)", { error: ghlErr }); }
+
     return new Response(
       JSON.stringify({
         clientSecret,

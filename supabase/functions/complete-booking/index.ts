@@ -148,6 +148,18 @@ serve(async (req) => {
       logStep("Customer email failed (non-critical)", { error: emailError });
     }
 
+    // Sync to GHL CRM - booking completed
+    try {
+      await supabase.functions.invoke('sync-contact-to-ghl', {
+        body: {
+          event: 'booking_completed',
+          contactData: { firstName: booking.first_name, lastName: booking.last_name, email: booking.email, phone: booking.phone, zipCode: booking.zip_code },
+          bookingData: { ...booking, final_charge_cents: booking.total_estimate_cents },
+        }
+      });
+      logStep("GHL sync: booking_completed");
+    } catch (ghlErr) { logStep("GHL sync failed (non-critical)", { error: ghlErr }); }
+
     // Send completion/thank-you SMS to customer
     if (booking.phone) {
       try {

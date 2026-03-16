@@ -219,6 +219,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Sync to GHL CRM - booking cancelled
+    try {
+      await supabase.functions.invoke('sync-contact-to-ghl', {
+        body: {
+          event: 'booking_cancelled',
+          contactData: { firstName: booking.first_name, lastName: booking.last_name, email: booking.email, phone: booking.phone, zipCode: booking.zip_code },
+          bookingData: booking,
+          notes: `Booking cancelled. Reason: ${cancelReason}. Refund: ${refundAmount > 0 ? `$${(refundAmount / 100).toFixed(2)}` : 'None'}`,
+        }
+      });
+      logStep("GHL sync: booking_cancelled");
+    } catch (ghlErr) { logStep("GHL sync failed (non-critical)", ghlErr); }
+
     // Trigger Zapier webhook
     try {
       await supabase.functions.invoke('send-zapier-webhook', {
