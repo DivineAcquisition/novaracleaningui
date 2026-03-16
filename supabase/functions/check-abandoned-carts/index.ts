@@ -88,7 +88,7 @@ const handler = async (req: Request): Promise<Response> => {
         // Send SMS for first abandoned cart reminder
         if (cart.phone) {
           try {
-            const checkoutUrl = "https://novaracleaning.com/book/checkout";
+            const checkoutUrl = "https://try.novaracleaning.com/book/checkout";
             const smsMsg = `Hi ${cart.first_name || 'there'}! You're almost done booking your Novara cleaning. Complete your booking & save $30: ${checkoutUrl}`;
 
             await fetch(`${supabaseUrl}/functions/v1/send-sms-notification`, {
@@ -141,7 +141,7 @@ const handler = async (req: Request): Promise<Response> => {
         // Send SMS for second (last chance) abandoned cart reminder
         if (cart.phone) {
           try {
-            const checkoutUrl = "https://novaracleaning.com/book/checkout";
+            const checkoutUrl = "https://try.novaracleaning.com/book/checkout";
             const smsMsg = `⚠️ Last chance ${cart.first_name || ''}! Your Novara cleaning quote expires soon. Finish booking & save $30: ${checkoutUrl}`;
 
             await fetch(`${supabaseUrl}/functions/v1/send-sms-notification`, {

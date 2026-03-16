@@ -154,7 +154,7 @@ serve(async (req) => {
         const newDateFmt = new Date(newDate).toLocaleDateString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric'
         });
-        const smsMsg = `Novara Cleaning: Your booking has been rescheduled to ${newDateFmt} at ${newTimeSlot}. View details: https://novaracleaning.com/account`;
+        const smsMsg = `Novara Cleaning: Your booking has been rescheduled to ${newDateFmt} at ${newTimeSlot}. View details: https://try.novaracleaning.com/account`;
 
         await supabase.functions.invoke('send-sms-notification', {
           body: {

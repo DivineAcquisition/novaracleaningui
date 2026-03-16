@@ -329,7 +329,7 @@ serve(async (req) => {
                     weekday: 'short', month: 'short', day: 'numeric'
                   });
                   const totalDollars = (confirmedBooking.total_estimate_cents / 100).toFixed(2);
-                  const smsMsg = `Novara Cleaning: Booking confirmed! ${confirmedBooking.service_type} cleaning on ${serviceDateFmt} at ${confirmedBooking.time_slot}. Total: $${totalDollars}. View details: https://novaracleaning.com/account`;
+                  const smsMsg = `Novara Cleaning: Booking confirmed! ${confirmedBooking.service_type} cleaning on ${serviceDateFmt} at ${confirmedBooking.time_slot}. Total: $${totalDollars}. View details: https://try.novaracleaning.com/account`;
 
                   await supabase.functions.invoke('send-sms-notification', {
                     body: {
@@ -722,7 +722,7 @@ serve(async (req) => {
                 .single();
 
               if (customerData?.phone) {
-                const smsMessage = `Novara: ${creditsPerMonth} new cleaning credit${creditsPerMonth > 1 ? 's' : ''} added to your ${planLabels[plan]} membership! Book now: https://novaracleaning.com/book`;
+                const smsMessage = `Novara: ${creditsPerMonth} new cleaning credit${creditsPerMonth > 1 ? 's' : ''} added to your ${planLabels[plan]} membership! Book now: https://try.novaracleaning.com/book`;
 
                 await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms-notification`, {
                   method: 'POST',

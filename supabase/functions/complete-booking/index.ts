@@ -151,7 +151,7 @@ serve(async (req) => {
     // Send completion/thank-you SMS to customer
     if (booking.phone) {
       try {
-        const smsMsg = `Novara Cleaning: Thank you ${booking.first_name || ''}! Your cleaning is complete. We'd love your feedback - rate your experience: https://novaracleaning.com/account`;
+        const smsMsg = `Novara Cleaning: Thank you ${booking.first_name || ''}! Your cleaning is complete. We'd love your feedback - rate your experience: https://try.novaracleaning.com/account`;
 
         await supabase.functions.invoke('send-sms-notification', {
           body: {

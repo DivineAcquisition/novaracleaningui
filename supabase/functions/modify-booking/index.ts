@@ -250,7 +250,7 @@ serve(async (req) => {
       if (booking.phone) {
         try {
           const totalDollars = (newTotal).toFixed(2);
-          const smsMsg = `Novara Cleaning: Your booking has been updated. New service: ${serviceType} cleaning. Updated total: $${totalDollars}. View details: https://novaracleaning.com/account`;
+          const smsMsg = `Novara Cleaning: Your booking has been updated. New service: ${serviceType} cleaning. Updated total: $${totalDollars}. View details: https://try.novaracleaning.com/account`;
 
           await supabaseAdmin.functions.invoke('send-sms-notification', {
             body: {

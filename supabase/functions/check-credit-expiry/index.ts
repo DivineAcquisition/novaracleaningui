@@ -109,7 +109,7 @@ serve(async (req) => {
         // Send SMS notification if phone number available
         if (customer?.phone) {
           try {
-            const smsMessage = `Novara reminder: You have ${credit.credits_remaining} cleaning credit${credit.credits_remaining > 1 ? 's' : ''} expiring on ${expiryDate}. Book now: ${Deno.env.get("SUPABASE_URL")?.replace('https://sxdraeptzuamsgjcvfeg.supabase.co', 'https://novaracleaning.com')}/book`;
+            const smsMessage = `Novara reminder: You have ${credit.credits_remaining} cleaning credit${credit.credits_remaining > 1 ? 's' : ''} expiring on ${expiryDate}. Book now: https://try.novaracleaning.com/book`;
 
             const smsResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms-notification`, {
               method: 'POST',
