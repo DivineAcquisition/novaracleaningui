@@ -26,16 +26,27 @@ type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 export default function BookingZip() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { updateBookingData } = useBooking();
+  const { updateBookingData, createSession, syncSession, resumeSession, sessionId } = useBooking();
   const referralCode = searchParams.get('ref');
   const fbclid = searchParams.get('fbclid');
 
-  // Capture referral code from URL on mount
+  const resumeSessionId = searchParams.get('session');
+  
   useEffect(() => {
     if (referralCode) {
       updateBookingData({ referralCode: referralCode.toUpperCase() });
     }
   }, [referralCode]);
+
+  useEffect(() => {
+    if (resumeSessionId) {
+      resumeSession(resumeSessionId).then((restored) => {
+        if (restored) {
+          router.push('/book/sqft');
+        }
+      });
+    }
+  }, [resumeSessionId]);
   
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);
@@ -65,20 +76,32 @@ export default function BookingZip() {
     
     setIsValidating(false);
 
-    // --- Track ZIP submission in database (fire-and-forget) ---
+    // --- Create booking session & track in database ---
+    const newSessionId = await createSession(zipCode);
     const placeholderEmail = `anonymous-${crypto.randomUUID()}@placeholder`;
 
-    // Insert into abandoned_carts
     Promise.resolve(
       supabase
         .from('abandoned_carts')
-        .insert({ email: placeholderEmail, zip_code: zipCode, last_step: 'zip' })
+        .insert({
+          email: placeholderEmail,
+          zip_code: zipCode,
+          last_step: 'zip',
+          session_id: newSessionId,
+        })
         .select('id')
         .single()
     ).then(({ data }) => {
       if (data?.id) {
         localStorage.setItem('abandoned_cart_id', data.id);
         localStorage.setItem('abandoned_cart_email', placeholderEmail);
+        if (newSessionId) {
+          supabase
+            .from('booking_sessions')
+            .update({ abandoned_cart_id: data.id })
+            .eq('id', newSessionId)
+            .then(() => {});
+        }
       }
     }).catch(err => console.error('Abandoned cart insert error:', err));
 
@@ -120,13 +143,14 @@ export default function BookingZip() {
     
     const formattedPhone = phone.replace(/\D/g, '');
     
-    // Update booking data
     updateBookingData({
       firstName,
       lastName,
       email,
       phone: formattedPhone,
     });
+    
+    syncSession('contact');
     
     // Update existing abandoned_cart row (or create new one)
     const existingCartId = localStorage.getItem('abandoned_cart_id');
@@ -142,6 +166,7 @@ export default function BookingZip() {
           last_name: lastName,
           phone: formattedPhone,
           last_step: 'contact',
+          session_id: sessionId,
         })
         .eq('id', existingCartId)
         .then(({ error }) => { if (error) console.error('Cart update error:', error); });

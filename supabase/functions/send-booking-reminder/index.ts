@@ -127,11 +127,13 @@ serve(async (req) => {
           // Send SMS reminder
           if (booking.phone) {
             try {
-              const checkoutUrl = `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://book.novaracleaning.com'}/book/checkout`;
+              const resumeUrl = booking.session_id
+                ? `https://try.novaracleaning.com/book/zip?session=${booking.session_id}`
+                : `https://try.novaracleaning.com/book/checkout`;
               
               const smsMessage = reminderType === "24_hour"
-                ? `⚠️ Last chance ${booking.first_name}! Your booking expires soon. Complete now & save $30: ${checkoutUrl}`
-                : `Hi ${booking.first_name}, you're almost done! Complete your Novara cleaning booking and save $30. Finish here: ${checkoutUrl}`;
+                ? `⚠️ Last chance ${booking.first_name}! Your booking expires soon. Complete now & save $30: ${resumeUrl}`
+                : `Hi ${booking.first_name}, you're almost done! Complete your Novara cleaning booking and save $30. Finish here: ${resumeUrl}`;
 
               const smsResponse = await supabase.functions.invoke('send-sms-notification', {
                 body: {

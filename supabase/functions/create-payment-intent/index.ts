@@ -432,6 +432,7 @@ serve(async (req) => {
         team_notes: referralCode 
           ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}`
           : (promoCode ? `Promo code: PROMO:${promoCode}` : null),
+        session_id: bookingData.sessionId || null,
       })
       .select()
       .single();

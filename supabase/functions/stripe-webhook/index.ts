@@ -108,6 +108,21 @@ serve(async (req) => {
           }
           logStep("Booking confirmed via webhook", { bookingId: booking.id });
         }
+
+        // Mark booking session as completed if session_id exists
+        if (booking.session_id) {
+          try {
+            await supabase.from('booking_sessions').update({ status: 'completed', booking_id: booking.id, current_step: 'confirmation', updated_at: new Date().toISOString() }).eq('id', booking.session_id);
+            logStep("Booking session marked complete", { sessionId: booking.session_id });
+          } catch (sessErr) { logStep("Session complete failed (non-critical)", { error: sessErr }); }
+        }
+
+        // Mark abandoned cart as converted
+        if (booking.email) {
+          try {
+            await supabase.from('abandoned_carts').update({ converted_at: new Date().toISOString() }).eq('email', booking.email).is('converted_at', null);
+          } catch (cartErr) { logStep("Cart conversion update failed (non-critical)", { error: cartErr }); }
+        }
         
         // Re-fetch booking to get latest state (may have been updated by verify-payment)
         const { data: freshBooking, error: refetchError } = await supabase

@@ -55,7 +55,7 @@ const MEMBERSHIP_FEATURES = [
 
 export default function BookingOffer() {
   const router = useRouter();
-  const { bookingData, updateBookingData, setCurrentStep } = useBooking();
+  const { bookingData, updateBookingData, setCurrentStep, syncSession } = useBooking();
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [selectedService, setSelectedService] = useState<'membership' | 'promo' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
@@ -130,6 +130,7 @@ export default function BookingOffer() {
       return;
     }
     setCurrentStep(4);
+    syncSession('offer');
     router.push("/book/checkout");
   };
 

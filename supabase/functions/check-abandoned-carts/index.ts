@@ -85,11 +85,12 @@ const handler = async (req: Request): Promise<Response> => {
           console.error(`Failed to send first reminder for cart ${cart.id}:`, await response.text());
         }
 
-        // Send SMS for first abandoned cart reminder
         if (cart.phone) {
           try {
-            const checkoutUrl = "https://try.novaracleaning.com/book/checkout";
-            const smsMsg = `Hi ${cart.first_name || 'there'}! You're almost done booking your Novara cleaning. Complete your booking & save $30: ${checkoutUrl}`;
+            const resumeUrl = cart.session_id
+              ? `https://try.novaracleaning.com/book/zip?session=${cart.session_id}`
+              : "https://try.novaracleaning.com/book/checkout";
+            const smsMsg = `Hi ${cart.first_name || 'there'}! You're almost done booking your Novara cleaning. Complete your booking & save $30: ${resumeUrl}`;
 
             await fetch(`${supabaseUrl}/functions/v1/send-sms-notification`, {
               method: "POST",
@@ -138,11 +139,12 @@ const handler = async (req: Request): Promise<Response> => {
           console.error(`Failed to send second reminder for cart ${cart.id}:`, await response.text());
         }
 
-        // Send SMS for second (last chance) abandoned cart reminder
         if (cart.phone) {
           try {
-            const checkoutUrl = "https://try.novaracleaning.com/book/checkout";
-            const smsMsg = `⚠️ Last chance ${cart.first_name || ''}! Your Novara cleaning quote expires soon. Finish booking & save $30: ${checkoutUrl}`;
+            const resumeUrl = cart.session_id
+              ? `https://try.novaracleaning.com/book/zip?session=${cart.session_id}`
+              : "https://try.novaracleaning.com/book/checkout";
+            const smsMsg = `⚠️ Last chance ${cart.first_name || ''}! Your Novara cleaning quote expires soon. Finish booking & save $30: ${resumeUrl}`;
 
             await fetch(`${supabaseUrl}/functions/v1/send-sms-notification`, {
               method: "POST",

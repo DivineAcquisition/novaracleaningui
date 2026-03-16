@@ -52,7 +52,7 @@ const logStep = (step: string, details?: any) => {
 export default function BookingSuccess() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { bookingData, resetBookingData } = useBooking();
+  const { bookingData, resetBookingData, completeSession } = useBooking();
   const { user, openCustomerPortal } = useAuth();
   const sessionId = searchParams.get("session_id");
   const paymentIntent = searchParams.get("payment_intent");
@@ -157,10 +157,11 @@ export default function BookingSuccess() {
           // Let the payment verification effect handle this
         }
 
-        // All validations passed
         logStep("Booking validated successfully");
         setBookingId(bookingId);
         setBookingValidated(true);
+        
+        completeSession(bookingId);
         
       } catch (error) {
         console.error("Error validating booking:", error);

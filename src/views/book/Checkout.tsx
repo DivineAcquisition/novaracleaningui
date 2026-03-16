@@ -79,7 +79,9 @@ export default function BookingCheckout() {
   const {
     bookingData,
     currentStep,
-    updateBookingData
+    updateBookingData,
+    syncSession,
+    sessionId,
   } = useBooking();
   const {
     user
@@ -357,11 +359,13 @@ export default function BookingCheckout() {
     setIsProcessing(true);
     if (attempt === 0) setInitError(null);
 
-    // Build payload with both email fields for compatibility
+    syncSession('checkout');
+
     const payload = {
       ...bookingData,
       email,
-      customerEmail: email // Also send as customerEmail for backward compatibility
+      customerEmail: email,
+      sessionId: sessionId || bookingData.sessionId,
     };
     const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/create-payment-intent`;
     const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';

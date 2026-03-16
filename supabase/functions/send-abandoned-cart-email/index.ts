@@ -122,7 +122,9 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const baseUrl = "https://try.novaracleaning.com";
-    const resumeUrl = `${baseUrl}/book/sqft?resume=${cartId}`;
+    const resumeUrl = cart.session_id
+      ? `${baseUrl}/book/zip?session=${cart.session_id}`
+      : `${baseUrl}/book/sqft?resume=${cartId}`;
 
     logStep(`Sending ${isSecondReminder ? 'second' : 'first'} reminder to ${cart.email}`);
 

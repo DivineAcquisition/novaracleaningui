@@ -31,7 +31,7 @@ const BOOKING_STEPS = [
 
 export default function BookingHome() {
   const router = useRouter();
-  const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
+  const { bookingData, updateBookingData, currentStep, setCurrentStep, syncSession } = useBooking();
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
@@ -51,6 +51,7 @@ export default function BookingHome() {
     
     updateBookingData({ homeSizeId: sizeId });
     setCurrentStep(3);
+    syncSession('sqft');
     router.push("/book/offer");
   };
 
