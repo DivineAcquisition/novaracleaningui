@@ -29,6 +29,7 @@ import { SEO } from "@/components/SEO";
 
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
 
@@ -81,8 +82,12 @@ export default function CleanerOnboarding() {
     firstName: "",
     lastName: "",
     phone: "",
+    homeAddress: "",
+    homeCity: "",
     state: "",
     homeZip: "",
+    homeLat: undefined as number | undefined,
+    homeLng: undefined as number | undefined,
     maxTravelMiles: 20,
     preferredWorkDays: [] as string[],
     skillset: [] as string[],
@@ -279,8 +284,13 @@ export default function CleanerOnboarding() {
         throw insertError;
       }
 
-      // Geocode home ZIP to populate home_lat/home_lng for dispatch eligibility
-      if (formData.homeZip) {
+      // Populate home_lat/home_lng for dispatch eligibility
+      if (formData.homeLat && formData.homeLng) {
+        await supabase
+          .from("cleaners")
+          .update({ home_lat: formData.homeLat, home_lng: formData.homeLng })
+          .eq("user_id", userId);
+      } else if (formData.homeZip) {
         try {
           const { data: geoData } = await supabase.functions.invoke('geocode-address', {
             body: { zip: formData.homeZip }
@@ -511,8 +521,25 @@ export default function CleanerOnboarding() {
                 <div className="space-y-5">
                   <div className="text-center mb-6">
                     <h2 className="text-lg font-semibold">Your Location</h2>
-                    <p className="text-sm text-muted-foreground">Where are you based?</p>
+                    <p className="text-sm text-muted-foreground">Where are you based? We use this to match you with nearby jobs.</p>
                   </div>
+
+                  <AddressAutocomplete
+                    label="Home Address"
+                    placeholder="Start typing your address..."
+                    initialValue={formData.homeAddress}
+                    onAddressSelect={(addr) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        homeAddress: addr.street,
+                        homeCity: addr.city,
+                        state: addr.state,
+                        homeZip: addr.zipCode,
+                        homeLat: addr.lat,
+                        homeLng: addr.lng,
+                      }));
+                    }}
+                  />
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -520,7 +547,7 @@ export default function CleanerOnboarding() {
                       <select
                         value={formData.state}
                         onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
-                        className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm"
+                        className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm"
                       >
                         <option value="">Select</option>
                         {US_STATES.map(state => (
