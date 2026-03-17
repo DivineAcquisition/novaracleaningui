@@ -17,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    const { bookingId } = await req.json();
+    const { bookingId, cleanerId } = await req.json();
     logStep("Marking booking complete", { bookingId });
     
     const supabase = createClient(
@@ -25,29 +25,16 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Verify requester is admin
+    // Get user from auth header (if present)
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Not authenticated");
-    
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData } = await supabase.auth.getUser(token);
-    const userId = userData?.user?.id;
-    
-    if (!userId) throw new Error("Not authenticated");
-    
-    // Check if user is admin
-    const { data: roleCheck } = await supabase
-      .from("user_roles")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    
-    if (!roleCheck) {
-      throw new Error("Unauthorized - Admin only");
+    let userId: string | null = null;
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: userData } = await supabase.auth.getUser(token);
+      userId = userData?.user?.id ?? null;
     }
 
-    // Get booking details
+    // Fetch booking first (needed to verify cleaner assignment)
     const { data: booking, error: fetchError } = await supabase
       .from("bookings")
       .select("*")
@@ -60,6 +47,42 @@ serve(async (req) => {
 
     if (!booking.cleaner_id) {
       throw new Error("No cleaner assigned to this booking");
+    }
+
+    // Auth check: admin OR assigned cleaner
+    let isAuthorized = false;
+
+    if (userId) {
+      // JWT path: check if admin
+      const { data: roleCheck } = await supabase
+        .from("user_roles")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+      
+      if (roleCheck) {
+        isAuthorized = true;
+      } else {
+        // Check if user is the assigned cleaner
+        const { data: cleaner } = await supabase
+          .from("cleaners")
+          .select("user_id")
+          .eq("id", booking.cleaner_id)
+          .single();
+        if (cleaner?.user_id === userId) {
+          isAuthorized = true;
+        }
+      }
+    }
+
+    // No JWT: allow if cleanerId in body matches booking.cleaner_id (public /contractor/jobs page)
+    if (!isAuthorized && cleanerId && cleanerId === booking.cleaner_id) {
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      throw new Error("Unauthorized");
     }
 
     logStep("Booking validated");

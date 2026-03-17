@@ -41,6 +41,8 @@ import { cn } from "@/lib/utils";
 const logo = "/novara-logo.png";
 
 // ─── Types ──────────────────────────────────────────────
+// Note: onboarding_complete is controlled by the main Onboarding.tsx wizard.
+// This portal tracks its own completion via portal_checklist_complete.
 interface CleanerProfile {
   id: string;
   first_name: string;
@@ -50,6 +52,8 @@ interface CleanerProfile {
   stripe_account_id: string | null;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
+  portal_checklist_complete?: boolean;
+  pay_rate_hr?: number;
   ob_agreement_signed: boolean;
   ob_agreement_signed_at: string | null;
   ob_google_chat_joined: boolean;
@@ -262,12 +266,19 @@ export default function OnboardingPortal() {
     if (!profile) return;
     setSavingStep(true);
     try {
+      // This portal does NOT set onboarding_complete — Onboarding.tsx handles that.
+      // We track our own 5-step checklist completion via portal_checklist_complete.
+      const updatePayload: Record<string, unknown> = {
+        [field]: true,
+        [atField]: new Date().toISOString(),
+      };
+      if (completedCount === 4) {
+        updatePayload.portal_checklist_complete = true;
+      }
+
       const { error } = await supabase
         .from("cleaners")
-        .update({
-          [field]: true,
-          [atField]: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("id", profile.id);
 
       if (error) throw error;
@@ -279,6 +290,7 @@ export default function OnboardingPortal() {
               ...prev,
               [field]: true,
               [atField]: new Date().toISOString(),
+              ...(completedCount === 4 ? { portal_checklist_complete: true } : {}),
             }
           : prev
       );
@@ -438,6 +450,12 @@ export default function OnboardingPortal() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {profile.onboarding_complete && (
+              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-700 border-green-500/30">
+                <RiCheckboxCircleLine className="w-3 h-3 mr-1" />
+                Onboarding Complete
+              </Badge>
+            )}
             <Badge variant="secondary" className="text-xs hidden sm:flex">
               <RiShieldLine className="w-3 h-3 mr-1" />
               {profile.first_name} {profile.last_name}
@@ -1068,7 +1086,7 @@ export default function OnboardingPortal() {
                           <div className="bg-green-500/5 rounded-lg p-3 border border-green-500/20">
                             <p className="text-xs text-green-700">
                               Payouts are processed within 2-3 business days
-                              after each completed job. Your rate: <span className="font-bold">$18/hour</span>.
+                              after each completed job. Your rate: <span className="font-bold">${profile?.pay_rate_hr || 18}/hour</span>.
                             </p>
                           </div>
 
