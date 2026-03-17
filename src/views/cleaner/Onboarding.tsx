@@ -30,6 +30,7 @@ import { SEO } from "@/components/SEO";
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
 import { cn } from "@/lib/utils";
+import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -60,9 +61,10 @@ const SKILLSET_OPTIONS = [
 
 const STEPS = [
   { id: 1, title: "Personal Info", icon: RiUserLine },
-  { id: 2, title: "Location", icon: RiMapPinLine },
-  { id: 3, title: "Availability", icon: RiCalendarLine },
-  { id: 4, title: "Review", icon: RiCheckboxCircleLine },
+  { id: 2, title: "Verify Phone", icon: RiPhoneLine },
+  { id: 3, title: "Location", icon: RiMapPinLine },
+  { id: 4, title: "Availability", icon: RiCalendarLine },
+  { id: 5, title: "Review", icon: RiCheckboxCircleLine },
 ];
 
 export default function CleanerOnboarding() {
@@ -72,6 +74,8 @@ export default function CleanerOnboarding() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [showPhoneVerification, setShowPhoneVerification] = useState(false);
   
   const [formData, setFormData] = useState({
     firstName: "",
@@ -175,6 +179,9 @@ export default function CleanerOnboarding() {
         return true;
 
       case 2:
+        return true;
+
+      case 3:
         if (!formData.state) {
           toast.error("Please select your state");
           return false;
@@ -185,7 +192,7 @@ export default function CleanerOnboarding() {
         }
         return true;
 
-      case 3:
+      case 4:
         if (formData.preferredWorkDays.length === 0) {
           toast.error("Please select at least one work day");
           return false;
@@ -202,9 +209,14 @@ export default function CleanerOnboarding() {
   };
 
   const handleNext = () => {
-    if (validateStep()) {
-      setCurrentStep(prev => Math.min(prev + 1, 4));
+    if (!validateStep()) return;
+
+    if (currentStep === 1 && !phoneVerified) {
+      setShowPhoneVerification(true);
+      return;
     }
+
+    setCurrentStep(prev => Math.min(prev + 1, 5));
   };
 
   const handleBack = () => {
@@ -319,7 +331,7 @@ export default function CleanerOnboarding() {
     );
   }
 
-  const progress = (currentStep / 4) * 100;
+  const progress = (currentStep / 5) * 100;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 py-8 px-4">
@@ -459,17 +471,43 @@ export default function CleanerOnboarding() {
                       <Input
                         type="tel"
                         value={formData.phone}
-                        onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, phone: e.target.value }));
+                          setPhoneVerified(false);
+                        }}
                         className="pl-10 h-11"
                         placeholder="(555) 123-4567"
                       />
                     </div>
+                    {phoneVerified ? (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <RiCheckboxCircleLine className="w-3 h-3 text-green-500" />
+                        Verified
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        Verification required
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Step 2: Location */}
+              {/* Step 2: Verify Phone (transition - verified via dialog) */}
               {currentStep === 2 && (
+                <div className="space-y-5">
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                      <RiCheckboxCircleLine className="w-8 h-8 text-green-500" />
+                    </div>
+                    <h2 className="text-lg font-semibold">Phone Verified</h2>
+                    <p className="text-sm text-muted-foreground">Your phone number has been verified. Click Continue to proceed.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Location */}
+              {currentStep === 3 && (
                 <div className="space-y-5">
                   <div className="text-center mb-6">
                     <h2 className="text-lg font-semibold">Your Location</h2>
@@ -538,8 +576,8 @@ export default function CleanerOnboarding() {
                 </div>
               )}
 
-              {/* Step 3: Availability & Skills */}
-              {currentStep === 3 && (
+              {/* Step 4: Availability & Skills */}
+              {currentStep === 4 && (
                 <div className="space-y-5">
                   <div className="text-center mb-6">
                     <h2 className="text-lg font-semibold">Availability & Skills</h2>
@@ -591,8 +629,8 @@ export default function CleanerOnboarding() {
                 </div>
               )}
 
-              {/* Step 4: Review */}
-              {currentStep === 4 && (
+              {/* Step 5: Review */}
+              {currentStep === 5 && (
                 <div className="space-y-5">
                   <div className="text-center mb-6">
                     <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
@@ -680,7 +718,7 @@ export default function CleanerOnboarding() {
                   </Button>
                 )}
 
-                {currentStep < 4 ? (
+                {currentStep < 5 ? (
                   <Button
                     type="button"
                     onClick={handleNext}
@@ -718,6 +756,16 @@ export default function CleanerOnboarding() {
         <p className="text-center text-xs text-muted-foreground mt-6">
           By continuing, you agree to our Terms of Service
         </p>
+
+        <PhoneVerificationDialog
+          open={showPhoneVerification}
+          onOpenChange={setShowPhoneVerification}
+          phone={formData.phone}
+          onSuccess={() => {
+            setPhoneVerified(true);
+            setCurrentStep(2);
+          }}
+        />
       </div>
     </div>
   );
