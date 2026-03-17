@@ -33,7 +33,6 @@ export function PhoneVerificationDialog({
   const [isVerifying, setIsVerifying] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const [storedCode, setStoredCode] = useState<string | null>(null);
 
   const maskPhone = (phone: string) => {
     if (!phone) return "";
@@ -44,13 +43,6 @@ export function PhoneVerificationDialog({
     return phone;
   };
 
-  const normalizePhone = (phone: string): string => {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length === 10) return `+1${digits}`;
-    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-    return digits.startsWith("+") ? digits : `+${digits}`;
-  };
-
   const sendCode = async () => {
     if (!phone || phone.replace(/\D/g, "").length < 10) {
       toast.error("Please enter a valid phone number first");
@@ -59,23 +51,19 @@ export function PhoneVerificationDialog({
 
     setIsSending(true);
     try {
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      setStoredCode(verificationCode);
+      const response = await supabase.functions.invoke("send-phone-verification", {
+        body: { phone },
+      });
 
-      const { error: smsError } = await supabase.functions.invoke(
-        "send-sms-notification",
-        {
-          body: {
-            toPhone: normalizePhone(phone),
-            message: `Your Novara Cleaning verification code is: ${verificationCode}. Valid for 15 minutes.`,
-            type: "verification",
-          },
-        }
-      );
+      if (response.error) {
+        const msg = typeof response.error === "object" && "message" in response.error
+          ? (response.error as any).message
+          : String(response.error);
+        throw new Error(msg);
+      }
 
-      if (smsError) {
-        console.error("SMS error:", smsError);
-        throw new Error("Failed to send SMS. Please check your phone number.");
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
       toast.success("Verification code sent via SMS!");
@@ -92,8 +80,7 @@ export function PhoneVerificationDialog({
         });
       }, 1000);
     } catch (error: any) {
-      const msg = error?.message || "Failed to send code";
-      toast.error(msg);
+      toast.error(error?.message || "Failed to send code. Please try again.");
     } finally {
       setIsSending(false);
     }
@@ -107,16 +94,28 @@ export function PhoneVerificationDialog({
 
     setIsVerifying(true);
     try {
-      if (storedCode && code === storedCode) {
-        toast.success("Phone verified successfully!");
-        onSuccess();
-        onOpenChange(false);
-        setCode("");
-        setCodeSent(false);
-        setStoredCode(null);
-      } else {
-        toast.error("Invalid verification code. Please try again.");
+      const response = await supabase.functions.invoke("verify-phone-code", {
+        body: { code, phone },
+      });
+
+      if (response.error) {
+        const msg = typeof response.error === "object" && "message" in response.error
+          ? (response.error as any).message
+          : String(response.error);
+        throw new Error(msg);
       }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success("Phone verified successfully!");
+      onSuccess();
+      onOpenChange(false);
+      setCode("");
+      setCodeSent(false);
+    } catch (error: any) {
+      toast.error(error?.message || "Invalid code. Please try again.");
     } finally {
       setIsVerifying(false);
     }

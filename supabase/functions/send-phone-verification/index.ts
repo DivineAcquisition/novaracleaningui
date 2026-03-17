@@ -26,75 +26,96 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Authenticate cleaner
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Not authenticated");
-    
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData } = await supabase.auth.getUser(token);
-    const userId = userData?.user?.id;
-    
-    if (!userId) throw new Error("Not authenticated");
+    let phone: string | null = null;
+    let cleanerId: string | null = null;
 
-    // Get cleaner profile
-    const { data: cleaner, error: fetchError } = await supabase
-      .from("cleaners")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-
-    if (fetchError || !cleaner) {
-      throw new Error("Cleaner profile not found");
+    try {
+      const body = await req.json();
+      if (body.phone) {
+        phone = body.phone;
+        logStep("Phone provided directly in request body", { phone });
+      }
+    } catch {
+      // No body - will try auth-based lookup
     }
 
-    // Rate limiting: Check last sent time
-    if (cleaner.phone_verification_sent_at) {
-      const lastSent = new Date(cleaner.phone_verification_sent_at);
-      const now = new Date();
-      const diffMinutes = (now.getTime() - lastSent.getTime()) / 1000 / 60;
-      
-      if (diffMinutes < 1) {
-        throw new Error("Please wait before requesting a new code");
+    if (!phone) {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const token = authHeader.replace("Bearer ", "");
+        const { data: userData } = await supabase.auth.getUser(token);
+        const userId = userData?.user?.id;
+
+        if (userId) {
+          const { data: cleaner } = await supabase
+            .from("cleaners")
+            .select("id, phone")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (cleaner?.phone) {
+            phone = cleaner.phone;
+            cleanerId = cleaner.id;
+            logStep("Phone from cleaner profile", { cleanerId, phone });
+          }
+        }
       }
     }
 
-    // Generate verification code
-    const code = generateVerificationCode();
-    logStep("Generated code", { cleanerId: cleaner.id });
-
-    // Update cleaner with verification code
-    const { error: updateError } = await supabase
-      .from("cleaners")
-      .update({
-        phone_verification_code: code,
-        phone_verification_sent_at: new Date().toISOString(),
-      })
-      .eq("id", cleaner.id);
-
-    if (updateError) {
-      throw new Error(`Failed to save verification code: ${updateError.message}`);
+    if (!phone) {
+      throw new Error("Phone number is required. Pass it in the request body as { phone: '+1...' }");
     }
 
-    // Send SMS via existing send-sms-notification function
+    const digits = phone.replace(/\D/g, '');
+    const normalizedPhone = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phone;
+
+    const code = generateVerificationCode();
+    logStep("Generated code", { phone: normalizedPhone });
+
+    if (cleanerId) {
+      await supabase
+        .from("cleaners")
+        .update({
+          phone_verification_code: code,
+          phone_verification_sent_at: new Date().toISOString(),
+        })
+        .eq("id", cleanerId);
+      logStep("Code stored in cleaner profile");
+    }
+
+    try {
+      await supabase
+        .from("cleaner_verification_codes")
+        .insert({
+          email: normalizedPhone,
+          code,
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          used: false,
+        });
+      logStep("Code stored in verification_codes table");
+    } catch (e) {
+      logStep("Failed to store in verification_codes (non-critical)", { error: e });
+    }
+
     const { error: smsError } = await supabase.functions.invoke("send-sms-notification", {
       body: {
-        toPhone: cleaner.phone,
-        message: `Your verification code is: ${code}. Valid for 15 minutes.`,
+        toPhone: normalizedPhone,
+        message: `Your Novara Cleaning verification code is: ${code}. Valid for 15 minutes.`,
         type: "verification",
       },
     });
 
     if (smsError) {
       logStep("SMS send failed", { error: smsError });
-      throw new Error("Failed to send verification SMS");
+      throw new Error("Failed to send verification SMS. Please check your phone number.");
     }
 
-    logStep("SMS sent successfully", { phone: cleaner.phone });
+    logStep("SMS sent successfully", { phone: normalizedPhone });
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
-        message: "Verification code sent to your phone"
+        message: "Verification code sent to your phone",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
