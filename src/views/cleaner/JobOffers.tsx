@@ -43,6 +43,7 @@ export default function JobOffers() {
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [payRate, setPayRate] = useState(18);
 
   const fetchOffers = async () => {
     if (!user) return;
@@ -51,13 +52,15 @@ export default function JobOffers() {
       // Get cleaner ID
       const { data: cleaner } = await supabase
         .from("cleaners")
-        .select("id")
+        .select("id, pay_rate_hr")
         .eq("user_id", user.id)
         .single();
 
       if (!cleaner) {
         throw new Error("Cleaner profile not found");
       }
+
+      if (cleaner.pay_rate_hr) setPayRate(cleaner.pay_rate_hr);
 
       // Get pending offers
       const { data, error } = await (supabase as any)
@@ -255,10 +258,10 @@ export default function JobOffers() {
                   <div className="p-3 bg-muted rounded-lg">
                     <p className="text-sm font-medium">Estimated Pay</p>
                     <p className="text-2xl font-bold text-primary">
-                      ${(offer.jobs.duration_est_hours * 18).toFixed(2)}
+                      ${(offer.jobs.duration_est_hours * payRate).toFixed(2)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      $18/hour × {offer.jobs.duration_est_hours} hours
+                      ${payRate}/hour × {offer.jobs.duration_est_hours} hours
                     </p>
                   </div>
 

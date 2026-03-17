@@ -596,7 +596,7 @@ export default function CleanerOnboarding() {
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Your Pay Rate</p>
-                        <p className="text-2xl font-bold text-green-600">$18/hour</p>
+                        <p className="text-2xl font-bold text-green-600">Starting at $18/hour</p>
                       </div>
                     </div>
                   </div>
@@ -697,7 +697,7 @@ export default function CleanerOnboarding() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Pay Rate</p>
-                        <p className="font-medium text-green-600">$18/hour</p>
+                        <p className="font-medium text-green-600">Starting at $18/hour</p>
                       </div>
                     </div>
 

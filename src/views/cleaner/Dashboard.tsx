@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
+import { useCapacitor } from "@/hooks/use-capacitor";
 
 interface CleanerProfile {
   id: string;
@@ -40,6 +41,7 @@ interface CleanerProfile {
   completed_bookings?: number | null;
   average_rating?: number | null;
   total_ratings?: number | null;
+  pay_rate_hr?: number | null;
 }
 
 type JobSource = "assignments" | "bookings";
@@ -142,10 +144,17 @@ function getGoogleCalendarUrl(
 
 export default function CleanerDashboard() {
   const router = useRouter();
+  const { isNative } = useCapacitor();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [stripeLoading, setStripeLoading] = useState(false);
   const [upcomingJobs, setUpcomingJobs] = useState<UpcomingJob[]>([]);
+
+  useEffect(() => {
+    if (isNative) {
+      router.replace("/cleaner/mobile-dashboard");
+    }
+  }, [isNative, router]);
   const [completedJobs, setCompletedJobs] = useState<CompletedJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
