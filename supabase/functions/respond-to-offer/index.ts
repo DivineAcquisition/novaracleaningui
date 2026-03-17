@@ -28,13 +28,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Verify token (simple hash of assignment ID for this implementation)
-    const expectedToken = btoa(assignmentId).substring(0, 10);
-    if (token !== expectedToken) {
-      throw new Error("Invalid token");
-    }
-
-    // Get assignment details
+    // Get assignment and verify token against stored response_token
     const { data: assignment, error: fetchError } = await supabase
       .from("job_assignments")
       .select("*, jobs(*), cleaners(*)")
@@ -43,6 +37,12 @@ serve(async (req) => {
 
     if (fetchError || !assignment) {
       throw new Error("Assignment not found");
+    }
+
+    // Verify token against stored response_token (fallback to legacy btoa for pre-migration assignments)
+    const expectedToken = assignment.response_token ?? btoa(assignmentId).substring(0, 10);
+    if (token !== expectedToken) {
+      throw new Error("Invalid token");
     }
 
     // Check if already responded

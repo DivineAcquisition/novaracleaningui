@@ -381,7 +381,10 @@ serve(async (req) => {
         day: 'numeric' 
       });
       const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
-      const token = btoa(assignment.id).substring(0, 10);
+      const tokenBytes = new Uint8Array(16);
+      crypto.getRandomValues(tokenBytes);
+      const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      await supabase.from('job_assignments').update({ response_token: token }).eq('id', assignment.id);
       const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
       
       const message = `🧹 New Job Offer!
