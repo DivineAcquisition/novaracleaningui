@@ -584,6 +584,7 @@ export type Database = {
           on_time_rate: number | null
           onboarding_complete: boolean | null
           pay_rate_hr: number
+          portal_checklist_complete: boolean | null
           payouts_enabled: boolean | null
           phone: string
           phone_verification_code: string | null
@@ -643,6 +644,7 @@ export type Database = {
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
           pay_rate_hr?: number
+          portal_checklist_complete?: boolean | null
           payouts_enabled?: boolean | null
           phone: string
           phone_verification_code?: string | null
@@ -702,6 +704,7 @@ export type Database = {
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
           pay_rate_hr?: number
+          portal_checklist_complete?: boolean | null
           payouts_enabled?: boolean | null
           phone?: string
           phone_verification_code?: string | null

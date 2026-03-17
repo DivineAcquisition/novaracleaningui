@@ -311,6 +311,14 @@ export default function CleanerAuth() {
                       "Sign In"
                     )}
                   </Button>
+
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    Joined via invite link?{" "}
+                    <Link href="/cleaner/reset-password" className="text-primary hover:underline">
+                      Set your password
+                    </Link>{" "}
+                    or use Google sign-in.
+                  </p>
                 </form>
               </TabsContent>
               
