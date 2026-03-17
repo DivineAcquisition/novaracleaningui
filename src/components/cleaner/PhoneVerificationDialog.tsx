@@ -44,8 +44,10 @@ export function PhoneVerificationDialog({
   };
 
   const sendCode = async () => {
-    if (!phone || phone.replace(/\D/g, "").length < 10) {
-      toast.error("Please enter a valid phone number first");
+    let digits = phone.replace(/\D/g, "");
+    if (digits.length === 11 && digits.startsWith("1")) digits = digits.substring(1);
+    if (!phone || digits.length < 10) {
+      toast.error("Please enter a valid 10-digit phone number");
       return;
     }
 

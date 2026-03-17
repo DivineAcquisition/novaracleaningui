@@ -42,10 +42,15 @@ export const validatePhone = (phone: string): ValidationResult => {
   }
   
   // Remove all non-digit characters
-  const digits = phone.replace(/\D/g, '');
+  let digits = phone.replace(/\D/g, '');
+  
+  // Strip leading 1 for US country code
+  if (digits.length === 11 && digits.startsWith('1')) {
+    digits = digits.substring(1);
+  }
   
   if (digits.length !== 10) {
-    return { isValid: false, error: "Phone number must be 10 digits" };
+    return { isValid: false, error: "Phone number must be 10 digits (e.g. 555-123-4567)" };
   }
   
   return { isValid: true };

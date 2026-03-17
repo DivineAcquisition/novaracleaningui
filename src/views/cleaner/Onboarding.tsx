@@ -29,6 +29,7 @@ import { SEO } from "@/components/SEO";
 
 import { validatePhone, validateEmail, validateName } from "@/lib/form-validation";
 import { processAvatarImage } from "@/lib/image-compression";
+import { formatPhoneNumber } from "@/lib/input-formatters";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
@@ -482,7 +483,7 @@ export default function CleanerOnboarding() {
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => {
-                          setFormData(prev => ({ ...prev, phone: e.target.value }));
+                          setFormData(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }));
                           setPhoneVerified(false);
                         }}
                         className="pl-10 h-11"
