@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RiLoader4Line, RiPhoneLine, RiShieldCheckLine } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -32,28 +33,55 @@ export function PhoneVerificationDialog({
   const [isVerifying, setIsVerifying] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [storedCode, setStoredCode] = useState<string | null>(null);
 
   const maskPhone = (phone: string) => {
     if (!phone) return "";
     const cleaned = phone.replace(/\D/g, "");
-    if (cleaned.length === 10) {
+    if (cleaned.length >= 4) {
       return `(***) ***-${cleaned.slice(-4)}`;
     }
     return phone;
   };
 
+  const normalizePhone = (phone: string): string => {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+    return digits.startsWith("+") ? digits : `+${digits}`;
+  };
+
   const sendCode = async () => {
+    if (!phone || phone.replace(/\D/g, "").length < 10) {
+      toast.error("Please enter a valid phone number first");
+      return;
+    }
+
     setIsSending(true);
     try {
-      const { error } = await supabase.functions.invoke("send-phone-verification");
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      setStoredCode(verificationCode);
 
-      if (error) throw error;
+      const { error: smsError } = await supabase.functions.invoke(
+        "send-sms-notification",
+        {
+          body: {
+            toPhone: normalizePhone(phone),
+            message: `Your Novara Cleaning verification code is: ${verificationCode}. Valid for 15 minutes.`,
+            type: "verification",
+          },
+        }
+      );
 
-      toast.success("Verification code sent!");
+      if (smsError) {
+        console.error("SMS error:", smsError);
+        throw new Error("Failed to send SMS. Please check your phone number.");
+      }
+
+      toast.success("Verification code sent via SMS!");
       setCodeSent(true);
       setCountdown(60);
 
-      // Countdown timer
       const interval = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -64,7 +92,8 @@ export function PhoneVerificationDialog({
         });
       }, 1000);
     } catch (error: any) {
-      toast.error(error.message || "Failed to send code");
+      const msg = error?.message || "Failed to send code";
+      toast.error(msg);
     } finally {
       setIsSending(false);
     }
@@ -78,19 +107,16 @@ export function PhoneVerificationDialog({
 
     setIsVerifying(true);
     try {
-      const { error } = await supabase.functions.invoke("verify-phone-code", {
-        body: { code },
-      });
-
-      if (error) throw error;
-
-      toast.success("Phone verified successfully!");
-      onSuccess();
-      onOpenChange(false);
-      setCode("");
-      setCodeSent(false);
-    } catch (error: any) {
-      toast.error(error.message || "Invalid code");
+      if (storedCode && code === storedCode) {
+        toast.success("Phone verified successfully!");
+        onSuccess();
+        onOpenChange(false);
+        setCode("");
+        setCodeSent(false);
+        setStoredCode(null);
+      } else {
+        toast.error("Invalid verification code. Please try again.");
+      }
     } finally {
       setIsVerifying(false);
     }
@@ -98,27 +124,45 @@ export function PhoneVerificationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Verify Phone Number</DialogTitle>
-          <DialogDescription>
-            We'll send a 6-digit code to {maskPhone(phone)}
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-2">
+            {codeSent ? (
+              <RiShieldCheckLine className="w-6 h-6 text-primary" />
+            ) : (
+              <RiPhoneLine className="w-6 h-6 text-primary" />
+            )}
+          </div>
+          <DialogTitle className="text-center">Verify Phone Number</DialogTitle>
+          <DialogDescription className="text-center">
+            {codeSent
+              ? `Enter the 6-digit code sent to ${maskPhone(phone)}`
+              : `We'll send a verification code to ${maskPhone(phone)}`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-2">
           {!codeSent ? (
             <Button
               onClick={sendCode}
               disabled={isSending}
-              className="w-full"
+              className="w-full h-11"
             >
-              {isSending ? "Sending..." : "Send Verification Code"}
+              {isSending ? (
+                <>
+                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                  Sending code...
+                </>
+              ) : (
+                "Send Verification Code"
+              )}
             </Button>
           ) : (
             <>
-              <div>
-                <Label htmlFor="code">Verification Code</Label>
+              <div className="space-y-2">
+                <Label htmlFor="code" className="text-sm font-medium">
+                  Verification Code
+                </Label>
                 <Input
                   id="code"
                   type="text"
@@ -126,24 +170,32 @@ export function PhoneVerificationDialog({
                   maxLength={6}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="Enter 6-digit code"
-                  className="text-center text-2xl tracking-widest"
+                  placeholder="000000"
+                  className="text-center text-2xl tracking-[0.3em] h-12 font-mono"
+                  autoFocus
                 />
               </div>
 
               <Button
                 onClick={verifyCode}
                 disabled={isVerifying || code.length !== 6}
-                className="w-full"
+                className="w-full h-11"
               >
-                {isVerifying ? "Verifying..." : "Verify Code"}
+                {isVerifying ? (
+                  <>
+                    <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify Code"
+                )}
               </Button>
 
               <Button
                 variant="ghost"
                 onClick={sendCode}
                 disabled={countdown > 0 || isSending}
-                className="w-full"
+                className="w-full text-sm"
               >
                 {countdown > 0
                   ? `Resend code in ${countdown}s`
