@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
-import { US_STATES } from "@/lib/us-states";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { SEO } from "@/components/SEO";
 
 const DWELLING_TYPES = [
@@ -55,6 +55,7 @@ export default function PropertyDetails() {
   const [address, setAddress] = useState<string>("");
   const [city, setCity] = useState<string>("");
   const [state, setState] = useState<string>("");
+  const [zipCode, setZipCode] = useState<string>(bookingData.zipCode || "");
   const [bedrooms, setBedrooms] = useState<string>("");
   const [bathrooms, setBathrooms] = useState<string>("");
   const [dwellingType, setDwellingType] = useState<string>("");
@@ -65,9 +66,7 @@ export default function PropertyDetails() {
 
   useEffect(() => {
     if (!bookingId) {
-      // Check if bookingId is in the booking context
       if (bookingData.bookingId) {
-        // Redirect to same page with proper booking_id param
         router.replace(`/book/details?booking_id=${bookingData.bookingId}`);
         return;
       }
@@ -75,6 +74,13 @@ export default function PropertyDetails() {
       router.push("/book/checkout");
     }
   }, [bookingId, bookingData.bookingId, router]);
+
+  const handleAddressSelect = (addr: { street: string; city: string; state: string; zipCode: string; lat?: number; lng?: number }) => {
+    setAddress(addr.street);
+    setCity(addr.city);
+    setState(addr.state);
+    if (addr.zipCode) setZipCode(addr.zipCode);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +104,7 @@ export default function PropertyDetails() {
           address,
           city,
           state,
+          zip_code: zipCode || bookingData.zipCode,
           bedrooms: parseInt(bedrooms),
           bathrooms: parseFloat(bathrooms),
           dwelling_type: dwellingType,
@@ -139,22 +146,12 @@ export default function PropertyDetails() {
             <div className="space-y-4">
               <h3 className="text-base md:text-lg font-semibold">Service Address</h3>
               
-              <div className="space-y-2">
-                <Label htmlFor="address">
-                  Street Address <span className="text-destructive">*</span>
-                </Label>
-                <div className="relative">
-                  <RiMapPinLine className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="pl-10 h-12"
-                    placeholder="123 Main St"
-                    required
-                  />
-                </div>
-              </div>
+              <AddressAutocomplete
+                label="Street Address *"
+                placeholder="Start typing your address..."
+                initialValue={address}
+                onAddressSelect={handleAddressSelect}
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -175,27 +172,24 @@ export default function PropertyDetails() {
                   <Label htmlFor="state">
                     State <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={state} onValueChange={setState}>
-                    <SelectTrigger id="state" className="h-12">
-                      <SelectValue placeholder="Select state" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {US_STATES.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    id="state"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    className="h-12"
+                    placeholder="MD"
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="zip">ZIP Code</Label>
                   <Input
                     id="zip"
-                    value={bookingData.zipCode}
-                    className="h-12 bg-muted"
-                    disabled
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    className="h-12"
+                    placeholder="12345"
                   />
                 </div>
               </div>
