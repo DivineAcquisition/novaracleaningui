@@ -122,7 +122,37 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const baseUrl = "https://try.novaracleaning.com";
-    const resumeUrl = `${baseUrl}/book/sqft?resume=${cartId}`;
+
+    // Route to the customer's last step, not always the beginning
+    const stepRoutes: Record<string, string> = {
+      zip: "/book/zip",
+      sqft: "/book/sqft",
+      home: "/book/sqft",
+      offer: "/book/offer",
+      service: "/book/offer",
+      checkout: "/book/checkout",
+      schedule: "/book/checkout",
+      summary: "/book/checkout",
+      details: "/book/details",
+    };
+
+    let resumePath = "/book/sqft";
+    const lastStep = cart.last_step?.toLowerCase();
+    if (lastStep && stepRoutes[lastStep]) {
+      resumePath = stepRoutes[lastStep];
+    }
+
+    // If booking_data contains a booking ID, link directly to checkout
+    let bookingId: string | null = null;
+    try {
+      const bd = typeof cart.booking_data === "string" ? JSON.parse(cart.booking_data) : cart.booking_data;
+      if (bd?.bookingId) bookingId = bd.bookingId;
+      if (bd?.booking_id) bookingId = bd.booking_id;
+    } catch {}
+
+    const resumeUrl = bookingId
+      ? `${baseUrl}/book/checkout?booking_id=${bookingId}&cart=${cartId}`
+      : `${baseUrl}${resumePath}?resume=${cartId}`;
 
     logStep(`Sending ${isSecondReminder ? 'second' : 'first'} reminder to ${cart.email}`);
 
