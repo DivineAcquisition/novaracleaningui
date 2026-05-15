@@ -165,8 +165,13 @@ serve(async (req) => {
     
     const bookingNumber = (previousBookings?.length || 0) + 1;
     const isNewCustomer = bookingNumber === 1;
-    // 50% off subtotal for new non-member customers.
-    const newCustomerDiscount = (isNewCustomer && membershipPlan === 'none')
+    // 50% off subtotal for new customers — STANDARD and DEEP only.
+    // Memberships have their own plan-level discount; Move-In/Out is
+    // intentionally excluded from the promo.
+    const promoEligible =
+      membershipPlan === 'none' &&
+      (bookingData.serviceType === 'standard' || bookingData.serviceType === 'deep');
+    const newCustomerDiscount = (isNewCustomer && promoEligible)
       ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT)
       : 0;
 
