@@ -285,7 +285,7 @@ export default function BookingOffer() {
                         50% off applied automatically
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Pay 50% deposit today, balance after service — or pay in full.
+                        Pay 50% deposit today — the remaining 50% is auto-charged after your cleaning is complete.
                       </p>
                     </div>
 
@@ -384,7 +384,7 @@ export default function BookingOffer() {
                         50% off applied automatically
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Pay 50% deposit today, balance after service — or pay in full.
+                        Pay 50% deposit today — the remaining 50% is auto-charged after your cleaning is complete.
                       </p>
                     </div>
 
