@@ -345,7 +345,7 @@ export default function BookingZip() {
                         Great news! We service {cityState}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Enter your details to claim your New Year discount
+                        Enter your details to claim 50% off your first cleaning
                       </p>
                     </div>
                   </div>

@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
-import { PromoBanner } from "@/components/booking/PromoBanner";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
@@ -64,7 +63,6 @@ export default function BookingHome() {
       <div className="min-h-screen bg-muted/30 pb-32 md:pb-8" {...swipeHandlers}>
         <SEO title="Select Home Size" description="Choose your home size to see instant pricing for professional deep cleaning." />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Home Size" />
-        <PromoBanner />
       
         <div className="container max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
           {/* Header */}

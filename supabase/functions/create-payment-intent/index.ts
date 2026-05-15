@@ -32,17 +32,19 @@ const ADD_ON_PRICING: Record<string, number> = {
   windows: 4000, // $40
 };
 
-// Zone B base standard clean prices in cents (v3 — raised for margin)
+// Zone B base standard clean prices in cents (v3.1 — aligned to the
+// official Maryland rate card, with a small bump so the displayed
+// standard sits above $150 and deep (×1.5) sits above $225).
 const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 32900,
-  "1000_1500": 41900,
-  "1501_2000": 52900,
-  "2001_2500": 61900,
-  "2501_3000": 74900,
-  "3001_3500": 83900,
-  "3501_4000": 96900,
-  "4001_4500": 107900,
-  "4501_5000": 118900,
+  "0_999": 15900,
+  "1000_1500": 19900,
+  "1501_2000": 24900,
+  "2001_2500": 28900,
+  "2501_3000": 34900,
+  "3001_3500": 38900,
+  "3501_4000": 44900,
+  "4001_4500": 49900,
+  "4501_5000": 54900,
   "5000_plus": 0,
 };
 

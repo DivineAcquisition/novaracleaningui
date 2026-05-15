@@ -28,6 +28,7 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
+import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
 const logo = "/novara-logo.png";
 
 const TRUST_STATS = [
@@ -237,10 +238,23 @@ const Index = () => {
               Cleaning.
             </h1>
 
+            {/* New-customer 50% off sub-headline directly under the hero
+                H1, in our purple brand gradient. */}
+            <p className="text-xl md:text-2xl lg:text-3xl font-bold font-jakarta">
+              <span className="bg-gradient-primary bg-clip-text text-transparent">
+                50% Off
+              </span>{" "}
+              Your First Cleaning
+            </p>
+
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Premium residential cleaning by vetted professionals. We show up
               on time, every time — so you can enjoy your weekends again.
             </p>
+
+            {/* Rotating value-prop carousel: no call required / instant
+                pricing / next-day availability. */}
+            <RotatingSubheadline />
 
             {/* Booking Card */}
             <Card className="max-w-md mx-auto border border-border/60 shadow-xl bg-card/80 backdrop-blur-sm">
