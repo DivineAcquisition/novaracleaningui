@@ -22,7 +22,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
-import { PromoBanner } from "@/components/booking/PromoBanner";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
@@ -184,7 +183,6 @@ export default function BookingOffer() {
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
         <SEO title="Choose Your Service" description="Select your cleaning service type and schedule. Standard, deep clean, or Novara Glow membership." />
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
-        <PromoBanner />
 
         <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8" id="offers-section">
           {/* Header — promo-led layout: badge + "Save 50%" hero +

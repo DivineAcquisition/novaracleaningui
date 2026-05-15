@@ -776,7 +776,7 @@ export default function BookingCheckout() {
                         {showPromoSuggestions && <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
                             <p className="text-muted-foreground">Try these codes:</p>
                             <div className="flex flex-wrap gap-2">
-                              {['HOLIDAY25', 'NEWYEAR15'].map(code => <Badge key={code} variant="outline" className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors" onClick={() => {
+                              {['NEW50'].map(code => <Badge key={code} variant="outline" className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors" onClick={() => {
                             setPromoInput(code);
                             setShowPromoSuggestions(false);
                           }}>
