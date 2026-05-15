@@ -3,112 +3,149 @@
 import {
   RiArrowRightLine,
   RiCheckLine,
-  RiCheckboxCircleLine,
   RiFlashlightLine,
-  RiGroupLine,
+  RiGiftLine,
   RiHomeLine,
-  RiMapPinLine,
+  RiPercentLine,
   RiPhoneLine,
   RiShieldLine,
   RiSparklingLine,
   RiStarLine,
-  RiTimeLine,
-  RiTrophyLine,
-  RiVipCrownLine
+  RiVipCrownLine,
 } from "@remixicon/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-
 import { cn } from "@/lib/utils";
-const logo = "/novara-logo.png";
 import {
-  HOME_SIZE_RANGES, SERVICE_ZONES, ADD_ONS, MEMBERSHIP_PRICES,
-  type ZoneId,
+  HOME_SIZE_RANGES,
+  ADD_ONS,
+  MEMBERSHIP_PRICES,
+  calculatePrice,
+  getServicePrice,
 } from "@/lib/pricing-system";
 import { SEO } from "@/components/SEO";
+import { useBooking } from "@/contexts/BookingContext";
 
-// Derive the displayed zone-price tables from the canonical pricing system so
-// this marketing page automatically tracks any future base-price changes.
-const buildZonePriceRow = (basePrice: number): Record<ZoneId, number> => ({
-  A: Math.round(basePrice * SERVICE_ZONES.A.modifier),
-  B: Math.round(basePrice * SERVICE_ZONES.B.modifier),
-  C: Math.round(basePrice * SERVICE_ZONES.C.modifier),
-});
+const logo = "/novara-logo.png";
 
-const STANDARD_PRICES: Record<string, Record<ZoneId, number>> = Object.fromEntries(
-  HOME_SIZE_RANGES.filter(h => h.standardPrice > 0).map(h => [h.id, buildZonePriceRow(h.standardPrice)]),
-);
+type ServiceTab = "deep" | "standard" | "membership";
+type MemberFreq = "biweekly" | "monthly" | "weekly";
 
-const DEEP_PRICES: Record<string, Record<ZoneId, number>> = Object.fromEntries(
-  HOME_SIZE_RANGES.filter(h => h.standardPrice > 0).map(h => [h.id, buildZonePriceRow(Math.round(h.standardPrice * 1.5))]),
-);
+// Home-size selector: every range with a real price; 5000+ falls
+// through to the custom-quote tile.
+const SIZE_OPTIONS = HOME_SIZE_RANGES.filter((s) => s.standardPrice > 0);
 
-const MOVEINOUT_PRICES: Record<string, Record<ZoneId, number>> = Object.fromEntries(
-  HOME_SIZE_RANGES.filter(h => h.standardPrice > 0).map(h => [h.id, buildZonePriceRow(Math.round(h.standardPrice * 2.0))]),
-);
+const SERVICE_TABS: Array<{ id: ServiceTab; label: string; icon: typeof RiHomeLine; badge?: string }> = [
+  { id: "deep", label: "Deep Clean", icon: RiSparklingLine, badge: "Most Popular" },
+  { id: "standard", label: "Standard Clean", icon: RiHomeLine },
+  { id: "membership", label: "Glow Membership", icon: RiVipCrownLine },
+];
 
-const buildMembershipRow = (basePrice: number, savings: string, perCleanDivisor?: number) => {
-  const row = buildZonePriceRow(basePrice) as Record<ZoneId, number> & {
-    savings: string;
-    perClean?: number;
-  };
-  row.savings = savings;
-  if (perCleanDivisor) row.perClean = Math.round((basePrice / perCleanDivisor) * 100) / 100;
-  return row;
-};
-
-const MEMBERSHIP_ZONE_PRICES = {
-  monthly: Object.fromEntries(
-    HOME_SIZE_RANGES.filter(h => MEMBERSHIP_PRICES[h.id]).map(h => [
-      h.id,
-      buildMembershipRow(MEMBERSHIP_PRICES[h.id].monthly, '15%'),
-    ]),
-  ),
-  biweekly: Object.fromEntries(
-    HOME_SIZE_RANGES.filter(h => MEMBERSHIP_PRICES[h.id]).map(h => [
-      h.id,
-      buildMembershipRow(MEMBERSHIP_PRICES[h.id].biweekly, '34%', 2),
-    ]),
-  ),
-  weekly: Object.fromEntries(
-    HOME_SIZE_RANGES.filter(h => MEMBERSHIP_PRICES[h.id]).map(h => [
-      h.id,
-      buildMembershipRow(MEMBERSHIP_PRICES[h.id].weekly, '42%', 4),
-    ]),
-  ),
-};
-
-const sizes = HOME_SIZE_RANGES.filter(s => s.id !== '5000_plus');
+const MEMBER_FREQUENCIES: Array<{
+  id: MemberFreq;
+  label: string;
+  cleans: string;
+  savingsLabel: string;
+  highlight?: boolean;
+}> = [
+  { id: "biweekly", label: "Bi-Weekly", cleans: "2 cleans/month", savingsLabel: "Save up to 34%", highlight: true },
+  { id: "monthly", label: "Monthly", cleans: "1 clean/month", savingsLabel: "Save up to 18%" },
+  { id: "weekly", label: "Weekly", cleans: "4 cleans/month", savingsLabel: "Save up to 42%" },
+];
 
 export default function PricingSheet() {
   const router = useRouter();
-  const [zone, setZone] = useState<ZoneId>('B');
-  const handleBookNow = () => router.push("/book/zip");
+  const { updateBookingData } = useBooking();
 
-  const Z = (prices: Record<ZoneId, number>) => prices[zone];
+  // Interactive state — defaults to mid-range home + Deep Clean (the
+  // most popular offer) so the page lands with a meaningful number.
+  const [homeSizeId, setHomeSizeId] = useState<string>("1501_2000");
+  const [serviceTab, setServiceTab] = useState<ServiceTab>("deep");
+  const [memberFreq, setMemberFreq] = useState<MemberFreq>("biweekly");
+
+  const selectedSize = useMemo(
+    () => HOME_SIZE_RANGES.find((s) => s.id === homeSizeId) ?? SIZE_OPTIONS[0],
+    [homeSizeId],
+  );
+  const isCustom = !selectedSize || selectedSize.standardPrice === 0;
+
+  // One-time pricing (Standard / Deep) — runs the exact calculatePrice
+  // pipeline the booking funnel uses, so post-50%-off / 50% deposit /
+  // balance line up to the cent with /book/offer and /book/checkout.
+  const oneTimePricing = useMemo(() => {
+    if (isCustom) return null;
+    if (serviceTab === "membership") return null;
+    const listPrice = getServicePrice(homeSizeId, serviceTab, "B");
+    const pricing = calculatePrice(homeSizeId, serviceTab, [], "none", false, true, 0);
+    return { listPrice, ...pricing };
+  }, [homeSizeId, serviceTab, isCustom]);
+
+  // Membership pricing — uses the canonical rate-card numbers (no 50%
+  // promo stacked; members already get the plan-level discount per
+  // clean of 14–42%).
+  const membershipPricing = useMemo(() => {
+    if (isCustom) return null;
+    const p = MEMBERSHIP_PRICES[homeSizeId];
+    if (!p) return null;
+    const standardList = getServicePrice(homeSizeId, "standard", "B");
+    const perCleanRaw = (n: number, monthly: number) => Math.round((monthly / n) * 100) / 100;
+    return {
+      monthly: { monthly: p.monthly, perClean: perCleanRaw(1, p.monthly), savingsPct: Math.round((1 - p.monthly / standardList) * 100) },
+      biweekly: { monthly: p.biweekly, perClean: perCleanRaw(2, p.biweekly), savingsPct: Math.round((1 - perCleanRaw(2, p.biweekly) / standardList) * 100) },
+      weekly: { monthly: p.weekly, perClean: perCleanRaw(4, p.weekly), savingsPct: Math.round((1 - perCleanRaw(4, p.weekly) / standardList) * 100) },
+    };
+  }, [homeSizeId, isCustom]);
+
+  const handleBookNow = () => {
+    // Pre-fill the booking context so the booking funnel lands the
+    // customer mid-flow rather than starting from scratch.
+    if (!isCustom) {
+      if (serviceTab === "membership") {
+        updateBookingData({
+          homeSizeId,
+          serviceType: "standard",
+          membershipPlan: memberFreq,
+        });
+      } else {
+        updateBookingData({
+          homeSizeId,
+          serviceType: serviceTab,
+          membershipPlan: "none",
+        });
+      }
+    }
+    router.push("/book/zip");
+  };
 
   return (
-    <div className="min-h-screen bg-white">
-      <SEO title="Pricing" description="Transparent home cleaning pricing based on your home size. New customers save 50% on their first clean." />
+    <div className="min-h-screen bg-background">
+      <SEO
+        title="Pricing"
+        description="Pick your home size and see instant cleaning prices. New customers save 50% on their first clean. 50% deposit at booking — balance auto-charged after service."
+      />
+
       {/* Nav */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-white/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={logo} alt="Novara" className="w-9 h-9 rounded-xl" />
             <span className="text-lg font-bold tracking-tight font-jakarta">
-              Novara<span className="text-[#5C0FFE]">Cleaning</span>
+              Novara<span className="text-primary">Cleaning</span>
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <a href="tel:+18447352070" className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <RiPhoneLine className="w-4 h-4" />(844) 735-2070
+            <a
+              href="tel:+18447352070"
+              className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RiPhoneLine className="w-4 h-4" />
+              (844) 735-2070
             </a>
-            <Button onClick={handleBookNow} className="h-10 px-6 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white">
+            <Button onClick={handleBookNow} className="h-10 px-6 font-semibold bg-gradient-primary hover:opacity-90 text-white">
               Book Now <RiArrowRightLine className="w-4 h-4 ml-2" />
             </Button>
           </div>
@@ -117,404 +154,376 @@ export default function PricingSheet() {
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#5C0FFE]/[0.03] via-white to-white" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-[#8F7BFD]/[0.06] rounded-full blur-3xl" />
-        <div className="relative container mx-auto px-4 pt-16 pb-10 md:pt-24 md:pb-14">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-[#5C0FFE]/20 hover:bg-[#5C0FFE]/10 px-4 py-1.5">
-              <RiShieldLine className="w-3.5 h-3.5 mr-1.5" />Maryland Service Areas
-            </Badge>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-jakarta leading-[1.1]">
-              Simple, <span className="bg-gradient-to-r from-[#5C0FFE] to-[#8F7BFD] bg-clip-text text-transparent">Transparent</span> Pricing
-            </h1>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Zone-based pricing across Maryland. Pay 50% deposit to book. New customers save 50% on their first clean.
-            </p>
-          </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.04] via-background to-background" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-primary/[0.06] rounded-full blur-3xl" />
+        <div className="relative container mx-auto px-4 pt-16 pb-8 md:pt-20 md:pb-10 max-w-3xl text-center space-y-5">
+          <Badge className="bg-primary/10 text-primary border border-primary/40 px-3 py-1 text-xs font-bold uppercase tracking-wider">
+            <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
+            New Customer Special — 50% Off
+          </Badge>
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight font-jakarta leading-[1.1]">
+            See your{" "}
+            <span className="bg-gradient-primary bg-clip-text text-transparent">
+              exact price
+            </span>{" "}
+            in seconds
+          </h1>
+          <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+            Pick your home size and service — we'll show you the total, the 50% deposit due today, and what gets auto-charged after the cleaning is complete. No call required.
+          </p>
         </div>
       </section>
 
-      <div className="container mx-auto px-4 max-w-5xl">
-        {/* ─── Zone Selector ─────────────────────────────── */}
-        <div className="mb-10">
-          <h2 className="text-xl font-bold font-jakarta text-center mb-4">Select Your Service Zone</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
-            {(Object.entries(SERVICE_ZONES) as [ZoneId, typeof SERVICE_ZONES.A][]).map(([id, z]) => (
-              <button
-                key={id}
-                onClick={() => setZone(id)}
-                className={cn(
-                  "relative p-4 rounded-xl border-2 text-left transition-all",
-                  zone === id
-                    ? "border-[#5C0FFE] bg-[#5C0FFE]/[0.04] shadow-md"
-                    : "border-border/50 hover:border-[#5C0FFE]/30"
-                )}
-              >
-                {zone === id && (
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-[#5C0FFE] rounded-full flex items-center justify-center">
-                    <RiCheckLine className="w-3.5 h-3.5 text-white" />
-                  </div>
-                )}
-                <div className="flex items-center gap-2 mb-1">
-                  <RiMapPinLine className="w-4 h-4 text-[#5C0FFE]" />
-                  <span className="font-bold text-sm">{z.label}</span>
-                  {id === 'A' && <Badge className="bg-amber-500/10 text-amber-600 border-0 text-[10px]">+15%</Badge>}
-                  {id === 'B' && <Badge variant="secondary" className="text-[10px]">Base</Badge>}
-                  {id === 'C' && <Badge className="bg-green-500/10 text-green-600 border-0 text-[10px]">-10%</Badge>}
+      {/* ─── Interactive calculator ────────────────────────────── */}
+      <section className="container mx-auto px-4 max-w-4xl pb-12">
+        <Card className="border-2 border-primary/20 shadow-xl overflow-hidden">
+          <CardContent className="p-5 md:p-8 space-y-6">
+
+            {/* Step 1 — Home size */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">1</div>
+                <h2 className="font-jakarta text-lg md:text-xl font-bold">How big is your home?</h2>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {SIZE_OPTIONS.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setHomeSizeId(s.id)}
+                    className={cn(
+                      "rounded-lg border-2 p-3 text-left transition-all hover:border-primary/60",
+                      homeSizeId === s.id
+                        ? "border-primary bg-primary/[0.06] ring-2 ring-primary/20"
+                        : "border-border bg-background",
+                    )}
+                  >
+                    <div className="text-xs font-semibold text-muted-foreground">{s.label.replace(' sq ft', '')} sq ft</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{s.bedroomRange}</div>
+                  </button>
+                ))}
+                {/* 5,000+ → custom quote tile */}
+                <button
+                  type="button"
+                  onClick={() => setHomeSizeId("5000_plus")}
+                  className={cn(
+                    "rounded-lg border-2 border-dashed p-3 text-left transition-all hover:border-primary/60",
+                    homeSizeId === "5000_plus"
+                      ? "border-primary bg-primary/[0.06] ring-2 ring-primary/20"
+                      : "border-border bg-background",
+                  )}
+                >
+                  <div className="text-xs font-semibold text-muted-foreground">5,000+ sq ft</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">Custom quote</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Step 2 — Service type */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">2</div>
+                <h2 className="font-jakarta text-lg md:text-xl font-bold">Which service?</h2>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {SERVICE_TABS.map((t) => {
+                  const Icon = t.icon;
+                  const active = serviceTab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setServiceTab(t.id)}
+                      className={cn(
+                        "relative rounded-lg border-2 px-3 py-3 transition-all hover:border-primary/60 flex flex-col items-center justify-center gap-1",
+                        active
+                          ? "border-primary bg-primary/[0.06] ring-2 ring-primary/20"
+                          : "border-border bg-background",
+                      )}
+                    >
+                      {t.badge && (
+                        <span className="absolute -top-2 right-1.5 bg-gradient-primary text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full">
+                          {t.badge}
+                        </span>
+                      )}
+                      <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground")} />
+                      <span className={cn("text-xs md:text-sm font-semibold", active && "text-primary")}>
+                        {t.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Step 3 — Live price reveal */}
+            <Separator />
+
+            {isCustom ? (
+              // ── Custom quote (5,000+ sq ft) ─────────────────────
+              <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/[0.04] p-5 text-center space-y-3">
+                <Badge className="bg-primary/10 text-primary border-primary/40">Custom Quote Required</Badge>
+                <h3 className="text-xl md:text-2xl font-bold font-jakarta">5,000+ sq ft — let's chat</h3>
+                <p className="text-sm text-muted-foreground">
+                  Estates over 5,000 sq ft get a tailored quote so the price reflects the actual scope. Call us and we'll lock in your number in under 5 minutes.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center pt-1">
+                  <Button asChild size="lg" className="bg-gradient-primary hover:opacity-90 text-white font-semibold">
+                    <a href="tel:+18447352070">
+                      <RiPhoneLine className="w-4 h-4 mr-2" />
+                      Call (844) 735-2070
+                    </a>
+                  </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">{z.areas}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── One-Time Pricing ──────────────────────────── */}
-        <div className="mb-6 text-center">
-          <h2 className="text-2xl md:text-3xl font-bold font-jakarta">One-Time Cleaning</h2>
-          <p className="text-muted-foreground mt-2">No commitment. Book a single clean anytime.</p>
-        </div>
-
-        <Tabs defaultValue="standard" className="mb-12">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-6">
-            <TabsTrigger value="standard">Standard</TabsTrigger>
-            <TabsTrigger value="deep">Deep Clean</TabsTrigger>
-            <TabsTrigger value="moveinout">Move-In/Out</TabsTrigger>
-          </TabsList>
-
-          {/* Standard */}
-          <TabsContent value="standard">
-            <Card className="border border-border/60 shadow-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-[#5C0FFE] text-white">
-                      <th className="text-left py-3 px-4 font-semibold">Home Size</th>
-                      <th className="text-left py-3 px-4 font-semibold hidden sm:table-cell">Bedrooms</th>
-                      <th className="text-center py-3 px-4 font-semibold">Price</th>
-                      <th className="text-center py-3 px-4 font-semibold hidden sm:table-cell">Cleaners</th>
-                      <th className="text-center py-3 px-4 font-semibold hidden sm:table-cell">Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sizes.map((s, idx) => (
-                      <tr key={s.id} className={cn("border-b border-border/40 hover:bg-[#5C0FFE]/[0.02]", idx % 2 === 0 ? "bg-white" : "bg-[#F8F7FF]")}>
-                        <td className="py-3 px-4 font-medium text-xs sm:text-sm">{s.label}</td>
-                        <td className="py-3 px-4 text-muted-foreground text-xs hidden sm:table-cell">{s.bedroomRange}</td>
-                        <td className="py-3 px-4 text-center font-bold text-[#5C0FFE]">${Z(STANDARD_PRICES[s.id])}</td>
-                        <td className="py-3 px-4 text-center text-muted-foreground hidden sm:table-cell">{s.cleaners}</td>
-                        <td className="py-3 px-4 text-center text-muted-foreground hidden sm:table-cell">{s.baseHours}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
-            </Card>
-          </TabsContent>
+            ) : serviceTab !== "membership" && oneTimePricing ? (
+              // ── One-time Standard / Deep Clean ──────────────────
+              <div className="rounded-xl border-2 border-primary/30 bg-primary/[0.04] p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Badge className="bg-primary/10 text-primary border-primary/40 mb-2">
+                      <RiPercentLine className="w-3 h-3 mr-1" />
+                      50% off · auto-applied
+                    </Badge>
+                    <h3 className="text-xl md:text-2xl font-bold font-jakarta">
+                      {serviceTab === "deep" ? "Deep Clean" : "Standard Clean"}
+                      {" — "}
+                      <span className="text-muted-foreground font-normal text-base">
+                        {selectedSize.label}
+                      </span>
+                    </h3>
+                  </div>
+                </div>
 
-          {/* Deep Clean */}
-          <TabsContent value="deep">
-            <div className="text-center mb-4">
-              <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-0">Standard Price × 1.5</Badge>
+                <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                  {/* Total + strikethrough */}
+                  <div className="rounded-lg border border-primary/15 bg-background/60 px-4 py-3">
+                    <div className="text-xs text-muted-foreground line-through">
+                      Regular: ${oneTimePricing.listPrice.toFixed(2)}
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                        ${oneTimePricing.total.toFixed(2)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">total / clean</span>
+                    </div>
+                    <p className="text-[11px] text-primary font-semibold mt-1">
+                      You save ${(oneTimePricing.listPrice - oneTimePricing.total).toFixed(2)}
+                    </p>
+                  </div>
+
+                  {/* Deposit + balance */}
+                  <div className="rounded-lg border border-primary/15 bg-background/60 px-4 py-3 space-y-1.5">
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="text-muted-foreground">Pay today (50% deposit)</span>
+                      <span className="font-bold text-foreground">${oneTimePricing.deposit.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="text-muted-foreground">Auto-charged after service</span>
+                      <span className="font-bold text-foreground">${oneTimePricing.balanceDue.toFixed(2)}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground pt-1">
+                      Card is saved on file at booking — no second checkout step.
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleBookNow}
+                  size="lg"
+                  className="w-full bg-gradient-primary hover:opacity-90 text-white font-semibold"
+                >
+                  Book {serviceTab === "deep" ? "Deep Clean" : "Standard Clean"} — Pay ${oneTimePricing.deposit.toFixed(2)} Today
+                  <RiArrowRightLine className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            ) : membershipPricing ? (
+              // ── Glow Membership ─────────────────────────────────
+              <div className="rounded-xl border-2 border-primary/30 bg-primary/[0.04] p-5 space-y-4">
+                <div>
+                  <Badge className="bg-primary/10 text-primary border-primary/40 mb-2">
+                    <RiStarLine className="w-3 h-3 mr-1" />
+                    Recurring · Up to 42% off per clean
+                  </Badge>
+                  <h3 className="text-xl md:text-2xl font-bold font-jakarta">
+                    Novara Glow Membership
+                    {" — "}
+                    <span className="text-muted-foreground font-normal text-base">
+                      {selectedSize.label}
+                    </span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Same trusted team, every visit. Cancel or pause anytime.
+                  </p>
+                </div>
+
+                {/* Frequency picker */}
+                <div className="grid grid-cols-3 gap-2">
+                  {MEMBER_FREQUENCIES.map((f) => {
+                    const active = memberFreq === f.id;
+                    const row = membershipPricing[f.id];
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setMemberFreq(f.id)}
+                        className={cn(
+                          "relative rounded-lg border-2 p-3 text-left transition-all hover:border-primary/60",
+                          active
+                            ? "border-primary bg-primary/[0.06] ring-2 ring-primary/20"
+                            : "border-border bg-background",
+                        )}
+                      >
+                        {f.highlight && (
+                          <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-gradient-primary text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full">
+                            Best Value
+                          </span>
+                        )}
+                        <div className={cn("text-xs font-bold", active ? "text-primary" : "text-foreground")}>{f.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{f.cleans}</div>
+                        <div className={cn("text-lg font-extrabold mt-1.5", active ? "bg-gradient-primary bg-clip-text text-transparent" : "text-foreground")}>
+                          ${row.monthly}<span className="text-[10px] text-muted-foreground font-normal">/mo</span>
+                        </div>
+                        <div className="text-[10px] text-primary font-semibold mt-0.5">
+                          Save ~{row.savingsPct}%
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected-plan breakdown */}
+                <div className="grid sm:grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-primary/15 bg-background/60 px-3 py-2 text-center">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Per month</div>
+                    <div className="text-base font-bold text-foreground">${membershipPricing[memberFreq].monthly}</div>
+                  </div>
+                  <div className="rounded-lg border border-primary/15 bg-background/60 px-3 py-2 text-center">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Per clean</div>
+                    <div className="text-base font-bold text-foreground">${membershipPricing[memberFreq].perClean.toFixed(2)}</div>
+                  </div>
+                  <div className="rounded-lg border border-primary/15 bg-background/60 px-3 py-2 text-center">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">vs one-time</div>
+                    <div className="text-base font-bold text-primary">~{membershipPricing[memberFreq].savingsPct}% off</div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleBookNow}
+                  size="lg"
+                  className="w-full bg-gradient-primary hover:opacity-90 text-white font-semibold"
+                >
+                  Start {MEMBER_FREQUENCIES.find((f) => f.id === memberFreq)?.label} Membership
+                  <RiArrowRightLine className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            ) : null}
+
+            {/* Trust strip */}
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground pt-1">
+              <span className="flex items-center gap-1.5">
+                <RiShieldLine className="w-3.5 h-3.5 text-primary" /> Google Guaranteed
+              </span>
+              <span className="flex items-center gap-1.5">
+                <RiFlashlightLine className="w-3.5 h-3.5 text-primary" /> 50% deposit · no balance invoice
+              </span>
+              <span className="flex items-center gap-1.5">
+                <RiCheckLine className="w-3.5 h-3.5 text-primary" /> 48-hr re-clean guarantee
+              </span>
             </div>
-            <Card className="border border-border/60 shadow-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-[#5C0FFE] text-white">
-                      <th className="text-left py-3 px-4 font-semibold">Home Size</th>
-                      <th className="text-center py-3 px-4 font-semibold">Deep Clean Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sizes.map((s, idx) => (
-                      <tr key={s.id} className={cn("border-b border-border/40", idx % 2 === 0 ? "bg-white" : "bg-[#F8F7FF]")}>
-                        <td className="py-3 px-4 font-medium text-xs sm:text-sm">{s.label}</td>
-                        <td className="py-3 px-4 text-center font-bold text-[#5C0FFE]">${Z(DEEP_PRICES[s.id])}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </TabsContent>
+          </CardContent>
+        </Card>
+      </section>
 
-          {/* Move-In/Out */}
-          <TabsContent value="moveinout">
-            <div className="text-center mb-4">
-              <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-0">Standard Price × 2.0 — Includes Fridge & Oven</Badge>
-            </div>
-            <Card className="border border-border/60 shadow-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-[#5C0FFE] text-white">
-                      <th className="text-left py-3 px-4 font-semibold">Home Size</th>
-                      <th className="text-center py-3 px-4 font-semibold">Move-In/Out Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sizes.map((s, idx) => (
-                      <tr key={s.id} className={cn("border-b border-border/40", idx % 2 === 0 ? "bg-white" : "bg-[#F8F7FF]")}>
-                        <td className="py-3 px-4 font-medium text-xs sm:text-sm">{s.label}</td>
-                        <td className="py-3 px-4 text-center font-bold text-[#5C0FFE]">${Z(MOVEINOUT_PRICES[s.id]).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* CTA Strip */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
-          <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#5C0FFE]/10 border border-[#5C0FFE]/20">
-            <RiFlashlightLine className="w-4 h-4 text-[#5C0FFE]" />
-            <span className="text-sm font-semibold text-[#5C0FFE]">50% deposit to book</span>
-          </div>
-          <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-green-500/10 border border-green-500/20">
-            <RiTrophyLine className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-semibold text-green-700">New customers save 50%</span>
-          </div>
-          <Button onClick={handleBookNow} className="h-11 px-8 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">
-            Book Your Clean <RiArrowRightLine className="w-4 h-4 ml-2" />
-          </Button>
+      {/* ─── Offers strip ───────────────────────────────────────── */}
+      <section className="container mx-auto px-4 max-w-5xl pb-12">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Available offers</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Everything below applies automatically at checkout — no codes to remember.
+          </p>
         </div>
-
-        {/* ─── Add-Ons ───────────────────────────────────── */}
-        <div className="mb-6 text-center">
-          <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Add-On Services</h2>
-          <p className="text-muted-foreground mt-2">Available with any service type. All zones same price.</p>
+        <div className="grid md:grid-cols-3 gap-4">
+          <Card className="border-2 border-primary/30">
+            <CardContent className="p-5 space-y-2">
+              <Badge className="bg-primary/10 text-primary border-primary/40">
+                <RiGiftLine className="w-3 h-3 mr-1" />
+                New Customer
+              </Badge>
+              <h3 className="font-bold font-jakarta text-lg">50% Off First Clean</h3>
+              <p className="text-sm text-muted-foreground">
+                Auto-applied on Standard and Deep cleans. Stacks with no other promo needed.
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-2 border-primary/30">
+            <CardContent className="p-5 space-y-2">
+              <Badge className="bg-primary/10 text-primary border-primary/40">
+                <RiStarLine className="w-3 h-3 mr-1" />
+                Glow Member
+              </Badge>
+              <h3 className="font-bold font-jakarta text-lg">Up to 42% Off Per Clean</h3>
+              <p className="text-sm text-muted-foreground">
+                Bi-Weekly is the best value (34% off). Weekly hits 42% off. Same team every visit.
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-2 border-primary/30">
+            <CardContent className="p-5 space-y-2">
+              <Badge className="bg-primary/10 text-primary border-primary/40">
+                <RiPercentLine className="w-3 h-3 mr-1" />
+                Referral
+              </Badge>
+              <h3 className="font-bold font-jakarta text-lg">50% Off When You Refer</h3>
+              <p className="text-sm text-muted-foreground">
+                Your friends get 50% off their first clean, you earn a 50%-off credit when they complete it.
+              </p>
+            </CardContent>
+          </Card>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-16">
+      </section>
+
+      {/* ─── Add-ons ─────────────────────────────────────────────── */}
+      <section className="container mx-auto px-4 max-w-5xl pb-16">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Add-ons</h2>
+          <p className="text-sm text-muted-foreground mt-1">Available with any service. Same price everywhere we serve.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {Object.entries(ADD_ONS).map(([key, addon]) => (
-            <Card key={key} className="border border-border/50 hover:border-[#5C0FFE]/30 transition-all">
-              <CardContent className="p-5 text-center space-y-2">
+            <Card key={key} className="border border-border/60 hover:border-primary/30 transition-all">
+              <CardContent className="p-4 text-center space-y-1">
                 <p className="font-semibold">{addon.label}</p>
-                <p className="text-2xl font-bold text-[#5C0FFE]">+${addon.price}</p>
+                <p className="text-2xl font-bold text-primary">+${addon.price}</p>
                 <p className="text-xs text-muted-foreground">{addon.note}</p>
               </CardContent>
             </Card>
           ))}
         </div>
+      </section>
 
-        {/* ─── Novara Glow Membership (Recurring Services) ── */}
-        <div className="mb-8 text-center">
-          <Badge className="bg-[#5C0FFE]/10 text-[#5C0FFE] border-[#5C0FFE]/20 hover:bg-[#5C0FFE]/10 px-4 py-1.5 mb-4">
-            <RiVipCrownLine className="w-3.5 h-3.5 mr-1.5" />Save Up to 42%
-          </Badge>
-          <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Novara Glow Membership</h2>
-          <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
-            Recurring cleaning services at a fraction of the one-time price. Choose your frequency — <span className="font-semibold text-foreground">Monthly</span>, <span className="font-semibold text-foreground">Bi-Weekly</span>, or <span className="font-semibold text-foreground">Weekly</span> — and enjoy consistent, reliable cleaning with the same trusted team. Cancel or pause anytime.
-          </p>
-          <p className="text-xs text-amber-600 font-medium mt-3">
-            * All new members receive a first-clean deep clean at no extra deep-clean charge.
-          </p>
-        </div>
-
-        {/* Frequency Cards */}
-        <div className="grid md:grid-cols-3 gap-5 mb-10">
-          {/* Monthly */}
-          <Card className="border border-border/50 hover:shadow-lg transition-all">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#5C0FFE]/10 flex items-center justify-center">
-                  <RiSparklingLine className="w-5 h-5 text-[#5C0FFE]" />
-                </div>
-                <div>
-                  <h3 className="font-bold font-jakarta">Monthly</h3>
-                  <p className="text-xs text-muted-foreground">1 clean per month</p>
-                </div>
-              </div>
-              <div className="text-center py-2">
-                <span className="text-sm text-muted-foreground">Starting at</span>
-                <p className="text-3xl font-extrabold text-[#5C0FFE]">
-                  ${zone === 'A' ? 148 : zone === 'C' ? 116 : 129}<span className="text-base font-normal text-muted-foreground">/mo</span>
-                </p>
-                <Badge variant="secondary" className="mt-1 text-[10px]">Up to 18% off one-time price</Badge>
-              </div>
-              <Separator />
-              <ul className="space-y-2">
-                {['1 standard clean per month', 'Priority scheduling', 'Cancel anytime', 'No long-term contract'].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs"><RiCheckboxCircleLine className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
-                ))}
-              </ul>
-              <Button onClick={handleBookNow} variant="outline" className="w-full h-10 font-semibold border-[#5C0FFE]/30 text-[#5C0FFE] hover:bg-[#5C0FFE]/5">
-                Get Started <RiArrowRightLine className="w-4 h-4 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Bi-Weekly (Best Value) */}
-          <Card className="relative border-2 border-[#5C0FFE]/40 shadow-xl hover:shadow-2xl transition-all">
-            <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-[#5C0FFE] to-[#8F7BFD] text-white text-center text-xs font-bold py-2 uppercase tracking-wider">
-              Best Value — 34% Off
-            </div>
-            <CardContent className="p-6 pt-12 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#5C0FFE]/10 flex items-center justify-center">
-                  <RiStarLine className="w-5 h-5 text-[#5C0FFE]" />
-                </div>
-                <div>
-                  <h3 className="font-bold font-jakarta">Bi-Weekly</h3>
-                  <p className="text-xs text-muted-foreground">2 cleans per month</p>
-                </div>
-              </div>
-              <div className="text-center py-2">
-                <span className="text-sm text-muted-foreground">Starting at</span>
-                <p className="text-3xl font-extrabold text-[#5C0FFE]">
-                  ${zone === 'A' ? 229 : zone === 'C' ? 179 : 199}<span className="text-base font-normal text-muted-foreground">/mo</span>
-                </p>
-                <Badge className="bg-green-500/10 text-green-600 border-0 mt-1 text-[10px]">Save up to 34% per clean</Badge>
-              </div>
-              <Separator />
-              <ul className="space-y-2">
-                {['2 standard cleans per month', 'Same trusted team every visit', 'Priority scheduling', 'Free add-ons included', 'Cancel or pause anytime'].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs"><RiCheckboxCircleLine className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
-                ))}
-              </ul>
-              <Button onClick={handleBookNow} className="w-full h-11 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-md">
-                Get Started <RiArrowRightLine className="w-4 h-4 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Weekly */}
-          <Card className="border border-border/50 hover:shadow-lg transition-all">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#5C0FFE]/10 flex items-center justify-center">
-                  <RiVipCrownLine className="w-5 h-5 text-[#5C0FFE]" />
-                </div>
-                <div>
-                  <h3 className="font-bold font-jakarta">Weekly</h3>
-                  <p className="text-xs text-muted-foreground">4 cleans per month</p>
-                </div>
-              </div>
-              <div className="text-center py-2">
-                <span className="text-sm text-muted-foreground">Starting at</span>
-                <p className="text-3xl font-extrabold text-[#5C0FFE]">
-                  ${zone === 'A' ? 401 : zone === 'C' ? 314 : 349}<span className="text-base font-normal text-muted-foreground">/mo</span>
-                </p>
-                <Badge className="bg-amber-500/10 text-amber-600 border-0 mt-1 text-[10px]">Up to 42% off per clean</Badge>
-              </div>
-              <Separator />
-              <ul className="space-y-2">
-                {['4 standard cleans per month', 'Dedicated cleaning team', 'VIP scheduling', 'Free add-ons included', 'Best for families & pets'].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs"><RiCheckboxCircleLine className="w-3.5 h-3.5 text-[#5C0FFE]" />{f}</li>
-                ))}
-              </ul>
-              <Button onClick={handleBookNow} variant="outline" className="w-full h-10 font-semibold border-[#5C0FFE]/30 text-[#5C0FFE] hover:bg-[#5C0FFE]/5">
-                Get Started <RiArrowRightLine className="w-4 h-4 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Full Membership Pricing Table */}
-        <div className="mb-6 text-center">
-          <h3 className="text-lg font-bold font-jakarta">Novara Glow Membership — Full Pricing — {SERVICE_ZONES[zone].label}</h3>
-          <p className="text-xs text-muted-foreground mt-1">Compare one-time vs. recurring per-clean savings by home size</p>
-        </div>
-        <Card className="border border-border/60 shadow-lg overflow-hidden mb-16">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#5C0FFE] text-white">
-                  <th className="text-left py-3 px-4 font-semibold">Home Size</th>
-                  <th className="text-center py-3 px-4 font-semibold">One-Time</th>
-                  <th className="text-center py-3 px-4 font-semibold">Monthly (1x)</th>
-                  <th className="text-center py-3 px-4 font-semibold">
-                    <span className="flex items-center justify-center gap-1">Bi-Weekly (2x) <RiStarLine className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-center py-3 px-4 font-semibold">Weekly (4x)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sizes.map((s, idx) => {
-                  const mo = MEMBERSHIP_ZONE_PRICES.monthly[s.id as keyof typeof MEMBERSHIP_ZONE_PRICES.monthly];
-                  const bw = MEMBERSHIP_ZONE_PRICES.biweekly[s.id as keyof typeof MEMBERSHIP_ZONE_PRICES.biweekly];
-                  const wk = MEMBERSHIP_ZONE_PRICES.weekly[s.id as keyof typeof MEMBERSHIP_ZONE_PRICES.weekly];
-                  return (
-                    <tr key={s.id} className={cn("border-b border-border/40", idx % 2 === 0 ? "bg-white" : "bg-[#F8F7FF]")}>
-                      <td className="py-3 px-4 font-medium text-xs">{s.label}</td>
-                      <td className="py-3 px-4 text-center text-muted-foreground">${Z(STANDARD_PRICES[s.id])}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="font-semibold">${mo[zone]}/mo</span>
-                        <span className="text-[10px] text-green-600 block">{mo.savings} off</span>
-                      </td>
-                      <td className="py-3 px-4 text-center bg-[#5C0FFE]/[0.03]">
-                        <span className="font-bold text-[#5C0FFE]">${bw[zone]}/mo</span>
-                        <span className="text-[10px] text-green-600 block">{bw.savings} off</span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="font-semibold">${wk[zone]}/mo</span>
-                        <span className="text-[10px] text-green-600 block">{wk.savings} off</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        {/* ─── Guarantees ────────────────────────────────── */}
-        <div className="rounded-2xl bg-gradient-to-br from-[#5C0FFE]/[0.04] to-[#8F7BFD]/[0.04] border border-[#5C0FFE]/10 p-8 md:p-12 mb-16">
-          <div className="max-w-2xl mx-auto text-center space-y-6">
-            <RiShieldLine className="w-12 h-12 text-[#5C0FFE] mx-auto" />
-            <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Our Guarantee</h2>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {[
-                { icon: RiCheckboxCircleLine, title: "48-Hour Re-Clean", desc: "Not happy? We come back free within 48 hours." },
-                { icon: RiShieldLine, title: "Fully Insured", desc: "Background-checked, bonded & insured teams." },
-                { icon: RiTimeLine, title: "Always On Time", desc: "99% on-time rate or your next clean is on us." },
-              ].map((g) => (
-                <div key={g.title} className="space-y-2">
-                  <g.icon className="w-8 h-8 text-[#5C0FFE] mx-auto" />
-                  <p className="font-semibold text-sm">{g.title}</p>
-                  <p className="text-xs text-muted-foreground">{g.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ─── Final CTA ─────────────────────────────────── */}
-        <div className="text-center space-y-6 pb-12">
-          <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Ready for a Spotless Home?</h2>
-          <p className="text-muted-foreground max-w-lg mx-auto">
-            Book in under 2 minutes. 50% deposit on total. Bi-weekly members save up to 34%.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button onClick={handleBookNow} size="lg" className="h-14 px-10 text-base font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">
-              Book Your Clean Now <RiArrowRightLine className="w-5 h-5 ml-2" />
+      {/* ─── Final CTA ───────────────────────────────────────────── */}
+      <section className="container mx-auto px-4 max-w-3xl pb-20 text-center space-y-5">
+        <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Ready when you are.</h2>
+        <p className="text-muted-foreground">
+          Book in under 2 minutes — 50% deposit today, the rest auto-charged after your cleaning is complete.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Button
+            onClick={handleBookNow}
+            size="lg"
+            className="h-12 px-8 text-base font-semibold bg-gradient-primary hover:opacity-90 text-white shadow-lg"
+          >
+            Book Your Clean Now <RiArrowRightLine className="w-4 h-4 ml-2" />
+          </Button>
+          <a href="tel:+18447352070">
+            <Button variant="outline" size="lg" className="h-12 px-8 text-base font-semibold border-primary/30 text-primary">
+              <RiPhoneLine className="w-4 h-4 mr-2" />
+              Call (844) 735-2070
             </Button>
-            <a href="tel:+18447352070">
-              <Button variant="outline" size="lg" className="h-14 px-10 text-base font-semibold border-[#5C0FFE]/30 text-[#5C0FFE]">
-                <RiPhoneLine className="w-4 h-4 mr-2" />Call (844) 735-2070
-              </Button>
-            </a>
-          </div>
+          </a>
         </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t border-border/40 bg-[#FAFAFE]">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="Novara" className="w-7 h-7 rounded-lg" />
-              <span className="text-sm font-bold font-jakarta">Novara<span className="text-[#5C0FFE]">Cleaning</span></span>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-              <a href="https://novaracleaning.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Privacy</a>
-              <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Terms</a>
-              <span>&copy; {new Date().getFullYear()} Novara Cleaning LLC</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      </section>
     </div>
   );
 }
