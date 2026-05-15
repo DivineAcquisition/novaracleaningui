@@ -43,22 +43,22 @@ export const SERVICE_ZONES = {
 
 export type ZoneId = 'A' | 'B' | 'C';
 
-// ─── Home Size Ranges (Zone B base prices — v3.1) ───────────────────────
-// Aligned to the official Maryland rate card: standard prices are kept
-// just slightly above the listed Zone B numbers ($150, $189, $239, …) so
-// the displayed standard is above $150 and Deep (×1.5) is above $225 at
-// the smallest size. The 50% new-customer promo discounts off these
-// base prices.
+// ─── Home Size Ranges (Zone B base prices — v3.2) ───────────────────────
+// Tuned so the post-50%-off floors land at:
+//   • Standard ≥ $120 at the smallest home size, scaling up
+//   • Deep    ≥ $225 at the smallest home size, scaling up (Deep is 1.5×
+//             Standard, so the binding constraint is Standard ≥ $300 base
+//             which yields a $150 standard / $225 deep at 0–999 sq ft).
 export const HOME_SIZE_RANGES: HomeSizeRange[] = [
-  { id: '0_999',      label: '0 – 999 sq ft',       minSqft: 0,    maxSqft: 999,   bedroomRange: 'Studio – 1 BR',         baseHours: 2.0, standardPrice: 159,   cleaners: '1' },
-  { id: '1000_1500',  label: '1,000 – 1,500 sq ft',  minSqft: 1000, maxSqft: 1500,  bedroomRange: '1–2 BR condos/homes',   baseHours: 2.5, standardPrice: 199,   cleaners: '1' },
-  { id: '1501_2000',  label: '1,501 – 2,000 sq ft',  minSqft: 1501, maxSqft: 2000,  bedroomRange: '2–3 BR apartments',     baseHours: 3.0, standardPrice: 249,   cleaners: '1' },
-  { id: '2001_2500',  label: '2,001 – 2,500 sq ft',  minSqft: 2001, maxSqft: 2500,  bedroomRange: '3–4 BR homes',          baseHours: 3.5, standardPrice: 289,   cleaners: '1' },
-  { id: '2501_3000',  label: '2,501 – 3,000 sq ft',  minSqft: 2501, maxSqft: 3000,  bedroomRange: '4 BR homes',            baseHours: 4.0, standardPrice: 349,   cleaners: '1-2' },
-  { id: '3001_3500',  label: '3,001 – 3,500 sq ft',  minSqft: 3001, maxSqft: 3500,  bedroomRange: '4–5 BR homes',          baseHours: 4.5, standardPrice: 389,   cleaners: '1-2' },
-  { id: '3501_4000',  label: '3,501 – 4,000 sq ft',  minSqft: 3501, maxSqft: 4000,  bedroomRange: '5 BR homes',            baseHours: 5.0, standardPrice: 449,   cleaners: '2' },
-  { id: '4001_4500',  label: '4,001 – 4,500 sq ft',  minSqft: 4001, maxSqft: 4500,  bedroomRange: '5+ BR homes',           baseHours: 5.5, standardPrice: 499,   cleaners: '2' },
-  { id: '4501_5000',  label: '4,501 – 5,000 sq ft',  minSqft: 4501, maxSqft: 5000,  bedroomRange: '5+ BR large homes',     baseHours: 6.0, standardPrice: 549,   cleaners: '2' },
+  { id: '0_999',      label: '0 – 999 sq ft',       minSqft: 0,    maxSqft: 999,   bedroomRange: 'Studio – 1 BR',         baseHours: 2.0, standardPrice: 299,   cleaners: '1' },
+  { id: '1000_1500',  label: '1,000 – 1,500 sq ft',  minSqft: 1000, maxSqft: 1500,  bedroomRange: '1–2 BR condos/homes',   baseHours: 2.5, standardPrice: 379,   cleaners: '1' },
+  { id: '1501_2000',  label: '1,501 – 2,000 sq ft',  minSqft: 1501, maxSqft: 2000,  bedroomRange: '2–3 BR apartments',     baseHours: 3.0, standardPrice: 479,   cleaners: '1' },
+  { id: '2001_2500',  label: '2,001 – 2,500 sq ft',  minSqft: 2001, maxSqft: 2500,  bedroomRange: '3–4 BR homes',          baseHours: 3.5, standardPrice: 559,   cleaners: '1' },
+  { id: '2501_3000',  label: '2,501 – 3,000 sq ft',  minSqft: 2501, maxSqft: 3000,  bedroomRange: '4 BR homes',            baseHours: 4.0, standardPrice: 679,   cleaners: '1-2' },
+  { id: '3001_3500',  label: '3,001 – 3,500 sq ft',  minSqft: 3001, maxSqft: 3500,  bedroomRange: '4–5 BR homes',          baseHours: 4.5, standardPrice: 759,   cleaners: '1-2' },
+  { id: '3501_4000',  label: '3,501 – 4,000 sq ft',  minSqft: 3501, maxSqft: 4000,  bedroomRange: '5 BR homes',            baseHours: 5.0, standardPrice: 879,   cleaners: '2' },
+  { id: '4001_4500',  label: '4,001 – 4,500 sq ft',  minSqft: 4001, maxSqft: 4500,  bedroomRange: '5+ BR homes',           baseHours: 5.5, standardPrice: 979,   cleaners: '2' },
+  { id: '4501_5000',  label: '4,501 – 5,000 sq ft',  minSqft: 4501, maxSqft: 5000,  bedroomRange: '5+ BR large homes',     baseHours: 6.0, standardPrice: 1079,  cleaners: '2' },
   { id: '5000_plus',  label: '5,000+ sq ft',          minSqft: 5000, maxSqft: 999999, bedroomRange: '6+ BR estates',         baseHours: 0,   standardPrice: 0,     cleaners: 'Custom' },
 ];
 

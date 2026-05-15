@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
+import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,7 +100,101 @@ serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    logStep("Booking marked complete, triggering payout");
+    logStep("Booking marked complete, charging remaining balance");
+
+    // ─── Auto-charge remaining balance off-session ──────────────────────
+    // For deposit bookings, charge the remaining 50% to the saved card.
+    // For paid-in-full bookings, this is a no-op. Idempotent: if we've
+    // already charged (balance_payment_intent_id set), skip.
+    let balanceChargeStatus: "skipped_full_payment" | "skipped_no_balance" |
+      "already_charged" | "charged" | "failed" = "skipped_no_balance";
+    let balanceChargeError: string | null = null;
+    try {
+      const remainingCents = Math.max(
+        0,
+        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+      );
+      if (booking.payment_option === "full") {
+        balanceChargeStatus = "skipped_full_payment";
+        logStep("No balance charge needed — paid in full");
+      } else if (remainingCents <= 0) {
+        balanceChargeStatus = "skipped_no_balance";
+        logStep("No balance to charge");
+      } else if (booking.balance_payment_intent_id) {
+        balanceChargeStatus = "already_charged";
+        logStep("Balance already charged on a previous call");
+      } else {
+        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        if (!stripeKey) {
+          throw new Error("STRIPE_SECRET_KEY not configured");
+        }
+        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+        // Resolve the Stripe customer + saved payment method.
+        let customerId: string | null = null;
+        if (booking.customer_id && typeof booking.customer_id === "string" && booking.customer_id.startsWith("cus_")) {
+          customerId = booking.customer_id;
+        } else {
+          const found = await stripe.customers.list({ email: booking.email, limit: 1 });
+          customerId = found.data[0]?.id ?? null;
+        }
+        if (!customerId) {
+          throw new Error(`No Stripe customer found for ${booking.email}`);
+        }
+
+        const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
+        const pmId = pms.data[0]?.id;
+        if (!pmId) {
+          throw new Error("No saved card on file for off-session charge");
+        }
+
+        const charge = await stripe.paymentIntents.create({
+          amount: remainingCents,
+          currency: "usd",
+          customer: customerId,
+          payment_method: pmId,
+          off_session: true,
+          confirm: true,
+          description: `Remaining balance — ${booking.service_type} clean on ${booking.service_date}`,
+          metadata: {
+            bookingId,
+            bookingNumber: String(booking.booking_number ?? ""),
+            chargeType: "balance_auto_charge",
+          },
+        });
+
+        await supabase
+          .from("bookings")
+          .update({
+            balance_payment_intent_id: charge.id,
+            balance_charged_at: new Date().toISOString(),
+            balance_amount_cents: remainingCents,
+            payment_status: "paid",
+          })
+          .eq("id", bookingId);
+
+        balanceChargeStatus = "charged";
+        logStep("Balance charged off-session", {
+          paymentIntentId: charge.id,
+          status: charge.status,
+          amountCents: remainingCents,
+        });
+      }
+    } catch (chargeErr: any) {
+      balanceChargeStatus = "failed";
+      balanceChargeError = chargeErr?.message || String(chargeErr);
+      logStep("Balance charge failed (non-blocking)", { error: balanceChargeError });
+      // Persist the failure so admins can retry from the dashboard.
+      try {
+        await supabase.from("webhook_failures").insert({
+          booking_id: bookingId,
+          webhook_url: "stripe:balance_auto_charge",
+          payload: { bookingId, error: balanceChargeError },
+          error_message: balanceChargeError,
+          retry_count: 0,
+        });
+      } catch (_) { /* ignore logging errors */ }
+    }
 
     // Trigger payout
     const payoutResponse = await supabase.functions.invoke('process-payout', {
@@ -171,6 +267,36 @@ serve(async (req) => {
       logStep("Customer email failed (non-critical)", { error: emailError });
     }
 
+    // Customer SMS — service complete + balance charge confirmation.
+    try {
+      if (booking.phone) {
+        const dateLabel = formatServiceDate(booking.service_date);
+        let smsBody = `Novara Cleaning: Your cleaning${dateLabel ? ` on ${dateLabel}` : ""} is complete — thank you!`;
+        if (balanceChargeStatus === "charged") {
+          const remainingCents = Math.max(
+            0,
+            (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+          );
+          smsBody += ` Your remaining balance of $${(remainingCents / 100).toFixed(2)} has been charged to the card on file.`;
+        } else if (balanceChargeStatus === "skipped_full_payment") {
+          smsBody += ` Paid in full at booking — nothing more to do.`;
+        } else if (balanceChargeStatus === "failed") {
+          smsBody += ` We had trouble charging the balance on your card — our team will reach out shortly.`;
+        }
+        smsBody += ` Reply STOP to opt out.`;
+        await sendSms(supabase, {
+          toPhone: booking.phone,
+          message: smsBody,
+          type: "confirmation",
+        });
+        logStep("Customer completion SMS sent");
+      }
+    } catch (smsErr) {
+      logStep("Customer completion SMS failed (non-blocking)", {
+        error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
+    }
+
     // Trigger Zapier webhook for completed booking
     try {
       await supabase.functions.invoke('send-zapier-webhook', {
@@ -182,9 +308,13 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
-        message: "Booking completed and payout initiated"
+        message: "Booking completed and payout initiated",
+        balanceCharge: {
+          status: balanceChargeStatus,
+          error: balanceChargeError,
+        },
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
