@@ -4,14 +4,18 @@ import {
   RiArrowLeftLine,
   RiBankCardLine,
   RiCalendarLine,
+  RiCheckLine,
+  RiCheckboxCircleLine,
   RiErrorWarningLine,
   RiGiftLine,
   RiLoader4Line,
+  RiLockLine,
   RiMapPinLine,
   RiPriceTag3Line,
   RiRefreshLine,
   RiShieldLine,
   RiSparklingLine,
+  RiStarLine,
   RiTimeLine
 } from "@remixicon/react";
 import { useState, useEffect } from "react";
@@ -44,6 +48,7 @@ import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
+import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -487,97 +492,101 @@ export default function BookingCheckout() {
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           
 
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
-              <RiShieldLine className="w-8 h-8 text-white" />
+          {/* Review & Reserve header — promo-led layout matching the
+              new offer page. Replaces the old "Secure Checkout" badge.
+              Google Guaranteed sits immediately under the subtitle. */}
+          <div className="text-center space-y-3">
+            <h1 className="font-jakarta text-2xl md:text-3xl font-extrabold">
+              Review &amp; Reserve
+            </h1>
+            <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
+              Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining balance is automatically charged after your cleaning. Or pay in full now.
+            </p>
+            <div className="flex justify-center pt-1">
+              <GoogleGuaranteedBadge variant="compact" />
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold">Secure Checkout</h1>
-            <p className="text-muted-foreground mt-1">Review your order and complete payment</p>
           </div>
 
-          {/* Order Summary Grid */}
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Service Details Card */}
-            <Card className="border-primary/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <RiSparklingLine className="w-4 h-4 text-primary" />
-                  Service Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+          {/* Booking Summary card — single card replaces the old
+              two-column Service Details + Schedule grid. */}
+          <Card className="border-primary/20 shadow-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <RiSparklingLine className="w-4 h-4 text-primary" />
+                Booking Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Service</span>
+                <span className="font-semibold">{serviceTier?.label || "Standard"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Home Size</span>
+                <span className="font-semibold">{homeSize?.label || "N/A"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Est. Duration</span>
+                <span className="font-semibold">{getEstimatedHours(bookingData.homeSizeId)} hours</span>
+              </div>
+              {membership && bookingData.membershipPlan !== "none" && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Service Type</span>
-                  <span className="font-medium">{serviceTier?.label || 'Standard'}</span>
+                  <span className="text-muted-foreground">Membership</span>
+                  <Badge className="bg-primary/10 text-primary border-primary/40 text-xs">
+                    {membership.label}
+                  </Badge>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Home Size</span>
-                  <span className="font-medium">{homeSize?.label || 'N/A'}</span>
+              )}
+              {addOnLabels.length > 0 && (
+                <div className="pt-1 border-t">
+                  <span className="text-muted-foreground text-xs">Add-ons</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {addOnLabels.map((label, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">{label}</Badge>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Est. Duration</span>
-                  <span className="font-medium">{getEstimatedHours(bookingData.homeSizeId)} hours</span>
-                </div>
-                {addOnLabels.length > 0 && <div className="pt-2 border-t">
-                    <span className="text-muted-foreground text-xs">Add-ons:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {addOnLabels.map((label, i) => <Badge key={i} variant="secondary" className="text-xs">{label}</Badge>)}
-                    </div>
-                  </div>}
-                {membership && bookingData.membershipPlan !== 'none' && <div className="pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-xs">Membership</span>
-                      <Badge className="bg-primary/10 text-primary text-xs">{membership.label}</Badge>
-                    </div>
-                  </div>}
-              </CardContent>
-            </Card>
+              )}
 
-            {/* Schedule Summary Card */}
-            <Card className="border-primary/10">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <RiCalendarLine className="w-4 h-4 text-primary" />
-                  Schedule
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                {bookingData.serviceDate && bookingData.timeSlot ? <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <RiCalendarLine className="w-3.5 h-3.5" />
-                        Date
-                      </span>
-                      <span className="font-medium">
-                        {format(new Date(bookingData.serviceDate + 'T12:00:00'), "EEEE, MMM d, yyyy")}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <RiTimeLine className="w-3.5 h-3.5" />
-                        Time
-                      </span>
-                      <span className="font-medium">
-                        {bookingData.timeSlot}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <RiMapPinLine className="w-3.5 h-3.5" />
-                        Location
-                      </span>
-                      <span className="font-medium">ZIP {bookingData.zipCode}</span>
-                    </div>
-                  </> : <div className="text-center py-4 space-y-3">
-                    <p className="text-muted-foreground">No schedule selected</p>
-                    <Button variant="outline" size="sm" onClick={() => router.push('/book/offer')}>
-                      <RiArrowLeftLine className="w-4 h-4 mr-2" />
-                      Go Back to Select Date & Time
-                    </Button>
-                  </div>}
-              </CardContent>
-            </Card>
-          </div>
+              <Separator />
+
+              {bookingData.serviceDate && bookingData.timeSlot ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <RiCalendarLine className="w-3.5 h-3.5" />
+                      Date
+                    </span>
+                    <span className="font-semibold">
+                      {format(new Date(bookingData.serviceDate + "T12:00:00"), "EEEE, MMM d, yyyy")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <RiTimeLine className="w-3.5 h-3.5" />
+                      Arrival
+                    </span>
+                    <span className="font-semibold">{bookingData.timeSlot}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <RiMapPinLine className="w-3.5 h-3.5" />
+                      Location
+                    </span>
+                    <span className="font-semibold">ZIP {bookingData.zipCode}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-3 space-y-2">
+                  <p className="text-muted-foreground text-sm">No schedule selected</p>
+                  <Button variant="outline" size="sm" onClick={() => router.push("/book/offer")}>
+                    <RiArrowLeftLine className="w-4 h-4 mr-2" />
+                    Pick a Date &amp; Time
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Gate: Show skeleton/message if schedule not selected */}
           {!isScheduleSelected && <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
@@ -616,6 +625,72 @@ export default function BookingCheckout() {
               newCustomerDiscount: depositPricing.newCustomerDiscount || 0
             }} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
           </div>
+
+          {/* What's Included card — sits between the payment-option
+              toggle and the promo/payment cards. Ported from the
+              AlphaLux layout, recoloured to our primary purple. */}
+          <Card className="border-primary/10">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <RiStarLine className="w-4 h-4 text-primary" />
+                What&apos;s Included
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5 text-sm">
+              <div className="flex items-center gap-2">
+                <RiTimeLine className="h-4 w-4 text-primary" />
+                <span className="font-semibold">
+                  {getEstimatedHours(bookingData.homeSizeId)} hours estimated
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                <h3 className="font-semibold text-sm">Premium features</h3>
+                <div className="grid gap-1.5">
+                  {[
+                    "Insured & bonded 2-person team",
+                    "Eco-friendly products & HEPA vacuums",
+                    "All supplies and equipment included",
+                    "48-hour re-clean guarantee",
+                  ].map((feature) => (
+                    <div key={feature} className="flex items-start gap-2">
+                      <RiCheckboxCircleLine className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                      <span>{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2.5">
+                <h3 className="font-semibold text-sm">Cleaning checklist</h3>
+                <div className="grid gap-1.5">
+                  {(bookingData.serviceType === "deep"
+                    ? [
+                        "Kitchen: deep clean appliances, cabinets, countertops",
+                        "Bathrooms: scrub tiles, sanitize fixtures, polish mirrors",
+                        "Living areas: dust surfaces, vacuum carpets, mop floors",
+                        "Bedrooms: full refresh and detailed dusting",
+                        "Interior windows, sills, and baseboards",
+                      ]
+                    : [
+                        "Kitchen: countertops, sink, stovetop, appliance exteriors",
+                        "Bathrooms: sanitize fixtures, polish mirrors, mop floors",
+                        "Living areas: dust surfaces, vacuum carpets, mop floors",
+                        "Bedrooms: dust furniture, make beds on request",
+                        "Trash removal and general tidying",
+                      ]
+                  ).map((item) => (
+                    <div key={item} className="flex items-start gap-2">
+                      <RiCheckLine className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                      <span className="text-muted-foreground">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Discount Codes Section - Collapsible */}
           <Collapsible open={discountSectionOpen} onOpenChange={setDiscountSectionOpen}>
@@ -797,6 +872,31 @@ export default function BookingCheckout() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Trust Badges row — ported from AlphaLux. Three-column
+              icon grid above the Google Guaranteed badge, using our
+              primary purple. */}
+          <Card className="border-primary/20">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center text-sm mb-4">
+                <div>
+                  <RiShieldLine className="h-6 w-6 mx-auto mb-2 text-primary" />
+                  <p className="font-medium">Secure payment via Stripe</p>
+                </div>
+                <div>
+                  <RiLockLine className="h-6 w-6 mx-auto mb-2 text-primary" />
+                  <p className="font-medium">No contracts</p>
+                </div>
+                <div className="col-span-2 md:col-span-1">
+                  <RiCheckboxCircleLine className="h-6 w-6 mx-auto mb-2 text-primary" />
+                  <p className="font-medium">Insured &amp; bonded</p>
+                </div>
+              </div>
+              <div className="pt-4 border-t flex justify-center">
+                <GoogleGuaranteedBadge variant="compact" />
+              </div>
+            </CardContent>
+          </Card>
             </>}
 
           {/* Desktop Back Button */}
@@ -807,7 +907,7 @@ export default function BookingCheckout() {
             </Button>
           </div>
 
-          
+
         </div>
 
         <BottomNavigation currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} onBack={handleBack} showPrice={true} price={currentAmount} continueDisabled={true} />
