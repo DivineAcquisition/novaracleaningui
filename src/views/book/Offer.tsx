@@ -27,9 +27,8 @@ import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import {
   HOME_SIZE_RANGES,
-  DEPOSIT_PERCENT,
-  NEW_CUSTOMER_DISCOUNT_PERCENT,
   MEMBERSHIP_PRICES,
+  calculatePrice,
   getServicePrice,
 } from "@/lib/pricing-system";
 import { SEO } from "@/components/SEO";
@@ -67,26 +66,42 @@ export default function BookingOffer() {
     return HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   }, [bookingData.homeSizeId]);
 
-  // Calculate v2 prices using the pricing system
+  // Calculate prices via the canonical pricing pipeline so the values
+  // displayed on this page match Checkout.tsx EXACTLY (no rounding
+  // drift between offer card and checkout summary). We assume new
+  // customer for the displayed promo math; the server re-verifies
+  // before issuing the discount.
   const prices = useMemo(() => {
     const homeSizeId = bookingData.homeSizeId || '0_999';
 
-    // One-time prices (Zone B base — backend applies zone modifier)
-    const standardPrice = getServicePrice(homeSizeId, 'standard', 'B');
-    const deepCleanPrice = getServicePrice(homeSizeId, 'deep', 'B');
+    // Pre-discount list prices (Zone B base — backend applies zone modifier)
+    const standardList = getServicePrice(homeSizeId, 'standard', 'B');
+    const deepList = getServicePrice(homeSizeId, 'deep', 'B');
+
+    // Post-50%-off totals + 50% deposit (matches calculatePrice in
+    // Checkout exactly, so Offer card numbers and Checkout summary
+    // numbers are identical to the cent).
+    const stdPricing = calculatePrice(homeSizeId, 'standard', [], 'none', false, /* isNewCustomer */ true, 0);
+    const deepPricing = calculatePrice(homeSizeId, 'deep', [], 'none', false, /* isNewCustomer */ true, 0);
 
     // Membership prices (Zone B base)
     const memberPrices = MEMBERSHIP_PRICES[homeSizeId] || { monthly: 129, biweekly: 199, weekly: 349 };
 
     // Per-clean cost for bi-weekly
     const biweeklyPerClean = Math.round((memberPrices.biweekly / 2) * 100) / 100;
-    const biweeklySavingsPercent = standardPrice > 0
-      ? Math.round((1 - biweeklyPerClean / standardPrice) * 100)
+    const biweeklySavingsPercent = standardList > 0
+      ? Math.round((1 - biweeklyPerClean / standardList) * 100)
       : 34;
 
     return {
-      standard: standardPrice,
-      deepClean: deepCleanPrice,
+      standard: standardList,
+      deepClean: deepList,
+      standardPromoTotal: stdPricing.total,
+      standardPromoDeposit: stdPricing.deposit,
+      standardPromoBalance: stdPricing.balanceDue,
+      deepPromoTotal: deepPricing.total,
+      deepPromoDeposit: deepPricing.deposit,
+      deepPromoBalance: deepPricing.balanceDue,
       membership: {
         monthly: memberPrices.monthly,
         biweekly: memberPrices.biweekly,
@@ -234,9 +249,9 @@ export default function BookingOffer() {
           <div className="grid gap-5 md:gap-6 max-w-xl mx-auto">
             {/* Standard Clean — 50% off card */}
             {selectedHomeSize && prices.standard > 0 && (() => {
-              const standardDiscounted = Math.round(
-                prices.standard * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT),
-              );
+              const standardDiscounted = prices.standardPromoTotal;
+              const standardDepositToday = prices.standardPromoDeposit;
+              const standardBalanceAfter = prices.standardPromoBalance;
               const isSelected = selectedService === "standard";
               return (
                 <Card
@@ -273,20 +288,27 @@ export default function BookingOffer() {
 
                     <div>
                       <div className="text-xs text-muted-foreground line-through mb-1">
-                        Regular: ${prices.standard}
+                        Regular: ${prices.standard.toFixed(2)}
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-                          ${standardDiscounted}
+                          ${standardDiscounted.toFixed(2)}
                         </span>
-                        <span className="text-sm text-muted-foreground">/clean</span>
+                        <span className="text-sm text-muted-foreground">total / clean</span>
                       </div>
                       <p className="text-xs text-primary font-semibold mt-1.5">
                         50% off applied automatically
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Pay 50% deposit today — the remaining 50% is auto-charged after your cleaning is complete.
-                      </p>
+                      <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Pay today (50% deposit)</span>
+                          <span className="font-semibold text-foreground">${standardDepositToday.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Auto-charged after service</span>
+                          <span className="font-semibold text-foreground">${standardBalanceAfter.toFixed(2)}</span>
+                        </div>
+                      </div>
                     </div>
 
                     <ul className="space-y-2">
@@ -322,9 +344,9 @@ export default function BookingOffer() {
 
             {/* Deep Clean — 50% off card (Most Popular) */}
             {selectedHomeSize && prices.deepClean > 0 && (() => {
-              const deepCleanDiscounted = Math.round(
-                prices.deepClean * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT),
-              );
+              const deepCleanDiscounted = prices.deepPromoTotal;
+              const deepDepositToday = prices.deepPromoDeposit;
+              const deepBalanceAfter = prices.deepPromoBalance;
               const isSelected = selectedService === "deep";
               return (
                 <div className="relative pt-4">
@@ -372,20 +394,27 @@ export default function BookingOffer() {
 
                     <div>
                       <div className="text-xs text-muted-foreground line-through mb-1">
-                        Regular: ${prices.deepClean}
+                        Regular: ${prices.deepClean.toFixed(2)}
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-                          ${deepCleanDiscounted}
+                          ${deepCleanDiscounted.toFixed(2)}
                         </span>
-                        <span className="text-sm text-muted-foreground">/clean</span>
+                        <span className="text-sm text-muted-foreground">total / clean</span>
                       </div>
                       <p className="text-xs text-primary font-semibold mt-1.5">
                         50% off applied automatically
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Pay 50% deposit today — the remaining 50% is auto-charged after your cleaning is complete.
-                      </p>
+                      <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Pay today (50% deposit)</span>
+                          <span className="font-semibold text-foreground">${deepDepositToday.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Auto-charged after service</span>
+                          <span className="font-semibold text-foreground">${deepBalanceAfter.toFixed(2)}</span>
+                        </div>
+                      </div>
                     </div>
 
                     <ul className="space-y-2">
