@@ -32,19 +32,19 @@ const ADD_ON_PRICING: Record<string, number> = {
   windows: 4000, // $40
 };
 
-// Zone B base standard clean prices in cents (v3.1 — aligned to the
-// official Maryland rate card, with a small bump so the displayed
-// standard sits above $150 and deep (×1.5) sits above $225).
+// Zone B base standard clean prices in cents (v3.2 — tuned so the
+// post-50%-off displayed price lands at the floors $120 standard and
+// $225 deep at the smallest home size, scaling up from there).
 const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 15900,
-  "1000_1500": 19900,
-  "1501_2000": 24900,
-  "2001_2500": 28900,
-  "2501_3000": 34900,
-  "3001_3500": 38900,
-  "3501_4000": 44900,
-  "4001_4500": 49900,
-  "4501_5000": 54900,
+  "0_999": 29900,
+  "1000_1500": 37900,
+  "1501_2000": 47900,
+  "2001_2500": 55900,
+  "2501_3000": 67900,
+  "3001_3500": 75900,
+  "3501_4000": 87900,
+  "4001_4500": 97900,
+  "4501_5000": 107900,
   "5000_plus": 0,
 };
 
@@ -347,7 +347,12 @@ serve(async (req) => {
       logStep("Created new customer", { customerId });
     }
 
-    // CRITICAL: Always create PaymentIntent - no bookings without payment verification
+    // CRITICAL: Always create PaymentIntent — no bookings without payment verification.
+    // `setup_future_usage: 'off_session'` attaches the PaymentMethod to the
+    // Stripe Customer so the remaining balance can be auto-charged after the
+    // cleaner marks the service complete (see complete-booking). The card is
+    // saved for one-time bookings *and* deposit bookings — that way the
+    // post-service auto-charge works regardless of payment option.
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountToCharge,
       currency: "usd",
@@ -355,6 +360,7 @@ serve(async (req) => {
       automatic_payment_methods: {
         enabled: true,
       },
+      setup_future_usage: "off_session",
       metadata: {
         serviceType: bookingData.serviceType,
         homeSizeId: bookingData.homeSizeId,

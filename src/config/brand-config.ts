@@ -115,15 +115,15 @@ export interface HomeSizeConfig {
 }
 
 export const HOME_SIZES: HomeSizeConfig[] = [
-  { id: "0_999",      label: "XS",   sqftRange: "0-999",       bedrooms: "Studio-1",  baseHours: 2,    basePrice: 159 },
-  { id: "1000_1500",  label: "S",    sqftRange: "1,000-1,500", bedrooms: "1-2",       baseHours: 2.5,  basePrice: 199 },
-  { id: "1501_2000",  label: "M",    sqftRange: "1,501-2,000", bedrooms: "2-3",       baseHours: 3,    basePrice: 249 },
-  { id: "2001_2500",  label: "L",    sqftRange: "2,001-2,500", bedrooms: "3-4",       baseHours: 3.5,  basePrice: 289 },
-  { id: "2501_3000",  label: "XL",   sqftRange: "2,501-3,000", bedrooms: "4-5",       baseHours: 4,    basePrice: 349 },
-  { id: "3001_3500",  label: "2XL",  sqftRange: "3,001-3,500", bedrooms: "5+",        baseHours: 4.5,  basePrice: 389 },
-  { id: "3501_4000",  label: "3XL",  sqftRange: "3,501-4,000", bedrooms: "5+",        baseHours: 5,    basePrice: 449 },
-  { id: "4001_4500",  label: "4XL",  sqftRange: "4,001-4,500", bedrooms: "6+",        baseHours: 5.5,  basePrice: 499 },
-  { id: "4501_5000",  label: "5XL",  sqftRange: "4,501-5,000", bedrooms: "6+",        baseHours: 6,    basePrice: 549 },
+  { id: "0_999",      label: "XS",   sqftRange: "0-999",       bedrooms: "Studio-1",  baseHours: 2,    basePrice: 299 },
+  { id: "1000_1500",  label: "S",    sqftRange: "1,000-1,500", bedrooms: "1-2",       baseHours: 2.5,  basePrice: 379 },
+  { id: "1501_2000",  label: "M",    sqftRange: "1,501-2,000", bedrooms: "2-3",       baseHours: 3,    basePrice: 479 },
+  { id: "2001_2500",  label: "L",    sqftRange: "2,001-2,500", bedrooms: "3-4",       baseHours: 3.5,  basePrice: 559 },
+  { id: "2501_3000",  label: "XL",   sqftRange: "2,501-3,000", bedrooms: "4-5",       baseHours: 4,    basePrice: 679 },
+  { id: "3001_3500",  label: "2XL",  sqftRange: "3,001-3,500", bedrooms: "5+",        baseHours: 4.5,  basePrice: 759 },
+  { id: "3501_4000",  label: "3XL",  sqftRange: "3,501-4,000", bedrooms: "5+",        baseHours: 5,    basePrice: 879 },
+  { id: "4001_4500",  label: "4XL",  sqftRange: "4,001-4,500", bedrooms: "6+",        baseHours: 5.5,  basePrice: 979 },
+  { id: "4501_5000",  label: "5XL",  sqftRange: "4,501-5,000", bedrooms: "6+",        baseHours: 6,    basePrice: 1079 },
   { id: "5000_plus",  label: "6XL",  sqftRange: "5,001+",      bedrooms: "7+",        baseHours: 0,    basePrice: 0 },
 ];
 

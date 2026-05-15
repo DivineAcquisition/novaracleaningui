@@ -473,16 +473,123 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
 
   // ─── GHL Private Integration sync (parallel to webhooks) ──────────────────
   // Pushes the contact + booking opportunity into GHL using the PIT token.
+  // Maps EVERY supplied custom field; fields the booking row doesn't
+  // capture are sent as empty strings so the GHL contact record always
+  // has a consistent shape.
   // Runs fire-and-forget: failures are logged but don't fail the request.
   try {
-    const cleaners = booking.cleaners
-      ? [{ name: `${booking.cleaners.first_name} ${booking.cleaners.last_name}`, phone: booking.cleaners.phone }]
-      : [];
+    // Collect up to 3 assigned cleaners (name + phone) so we can map to the
+    // 1)/2)/3) Contractor + Contractor Number custom fields. Prefer
+    // job_assignments (multi-cleaner team), fall back to booking.cleaners.
+    const teamCleaners: Array<{ name?: string; phone?: string }> = [];
+    if (booking.job_id) {
+      const { data: assigns } = await supabase
+        .from('job_assignments')
+        .select('cleaners (first_name, last_name, phone)')
+        .eq('job_id', booking.job_id)
+        .in('status', ['Offered', 'Confirmed', 'Assigned'])
+        .limit(3);
+      if (assigns && assigns.length > 0) {
+        assigns.forEach((a: any) => {
+          const c = a?.cleaners;
+          if (c) {
+            teamCleaners.push({
+              name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
+              phone: c.phone ?? undefined,
+            });
+          }
+        });
+      }
+    }
+    if (teamCleaners.length === 0 && booking.cleaners) {
+      teamCleaners.push({
+        name: `${booking.cleaners.first_name} ${booking.cleaners.last_name}`,
+        phone: booking.cleaners.phone,
+      });
+    }
+
     const totalChargedCentsForGhl = totalChargedCents;
     const depositCentsForGhl = booking.deposit_cents || 0;
     const remainingBalanceCents = booking.payment_option === 'deposit'
       ? Math.max(0, totalChargedCentsForGhl - depositCentsForGhl)
       : 0;
+
+    // Best-effort UTM lookup — bookings table doesn't carry UTM directly,
+    // so we look on the matching abandoned_cart row (populated by the
+    // tracking pipeline) as a fallback. Missing values become "".
+    let utmContent = '';
+    let utmMedium = '';
+    let utmCampaign = '';
+    try {
+      const { data: cart } = await supabase
+        .from('abandoned_carts')
+        .select('utm_content, utm_medium, utm_campaign')
+        .eq('email', booking.email)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      utmContent = (cart as any)?.utm_content || '';
+      utmMedium = (cart as any)?.utm_medium || '';
+      utmCampaign = (cart as any)?.utm_campaign || '';
+    } catch (_) {
+      // abandoned_carts may not have UTM columns yet — that's fine.
+    }
+
+    // Derived call_type from booking channel — phone-in vs online booking.
+    const channel = (booking.booking_channel || '').toLowerCase();
+    const callType = channel.includes('phone')
+      ? 'Inbound Call'
+      : channel.includes('sales') || channel.includes('admin')
+        ? 'Sales Intake'
+        : 'Online Booking';
+
+    // Pay-over-call: true only when the booking originated from an admin
+    // intake flow where payment was collected verbally (booking_channel
+    // hint + payment_method 'phone'/'verbal').
+    const payOverCall = (booking.payment_method || '').toLowerCase().includes('phone')
+      || (booking.payment_method || '').toLowerCase().includes('verbal');
+
+    // ── Full 18-field map. Keys match the GHL fieldKey list verbatim. ──
+    const ghlCustomFields: Record<string, string | number | boolean | undefined> = {
+      // AGP Tracking Attribution
+      utm_content: utmContent,
+      utm_medium: utmMedium,
+      utm_campaign: utmCampaign,
+
+      // Service & Scheduling
+      cleaning_type: mapServiceType(booking.service_type),
+
+      // Internal Sales
+      csr_name: booking.sdr_rep_name || '',
+      call_type: callType,
+      pay_over_call_: ynBool(payOverCall),
+      quoted_price_pretaxfees: fmtMoney(booking.base_price_cents),
+
+      // Billing & Payments
+      deposit_paid: ynBool(
+        booking.payment_option === 'full'
+        || (booking.payment_option === 'deposit' && booking.status !== 'pending_payment'),
+      ),
+      remaining_balance: fmtMoney(remainingBalanceCents),
+
+      // Plans & Pricing
+      discounted_amount_: fmtMoney(totalDiscountCents),
+
+      // Referral & Lead Source
+      market: booking.city || booking.zip_code || '',
+
+      // General Info
+      customer_source: booking.booker_source
+        || (booking.booking_number === 1 ? 'New Lead' : 'Returning Client'),
+
+      // Ops / Dispatch — 1) / 2) / 3) Contractor + Number
+      "1_contractor": teamCleaners[0]?.name || '',
+      "1_contractor_number": teamCleaners[0]?.phone || '',
+      "2_contractor": teamCleaners[1]?.name || '',
+      "2_contractor_number": teamCleaners[1]?.phone || '',
+      "3_contractor": teamCleaners[2]?.name || '',
+      "3_contractor_number": teamCleaners[2]?.phone || '',
+    };
 
     const ghlResult = await syncContactAndOpportunity({
       contact: {
@@ -503,33 +610,17 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
             : null,
           booking.zip_code ? `zip-${booking.zip_code}` : null,
         ].filter(Boolean) as string[],
-        customFieldsByKey: {
-          cleaning_type: mapServiceType(booking.service_type),
-          customer_source: booking.booker_source
-            || (booking.booking_number === 1 ? "New Lead" : "Returning Client"),
-          market: booking.city,
-          csr_name: booking.sdr_rep_name || undefined,
-          quoted_price_pretaxfees: fmtMoney(booking.base_price_cents),
-          discounted_amount_: fmtMoney(totalDiscountCents),
-          remaining_balance: fmtMoney(remainingBalanceCents),
-          deposit_paid: ynBool(
-            booking.payment_option === 'full'
-            || (booking.payment_option === 'deposit' && booking.status !== 'pending_payment')
-          ),
-          "1_contractor": cleaners[0]?.name,
-          "1_contractor_number": cleaners[0]?.phone,
-        },
+        customFieldsByKey: ghlCustomFields,
       },
       opportunity: {
         name: `NOV-${String(booking.booking_number).padStart(5, '0')} — ${booking.first_name} ${booking.last_name}`,
         status: booking.status === 'cancelled' ? 'lost' : booking.status === 'completed' ? 'won' : 'open',
         monetaryValue: Math.round(totalChargedCentsForGhl / 100),
         source: "Novara Booking",
-        customFieldsByKey: {
-          cleaning_type: mapServiceType(booking.service_type),
-          discounted_amount_: fmtMoney(totalDiscountCents),
-          remaining_balance: fmtMoney(remainingBalanceCents),
-        },
+        // The opportunity gets the same full custom-field map so all 18
+        // fields appear on the booking record in GHL as well as on the
+        // contact record.
+        customFieldsByKey: ghlCustomFields,
       },
     });
     logStep("GHL PIT sync complete", ghlResult);

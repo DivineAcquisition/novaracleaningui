@@ -241,7 +241,7 @@ export default function BookingOffer() {
               return (
                 <Card
                   className={cn(
-                    "relative overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                    "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                     isSelected
                       ? "border-primary shadow-lg ring-2 ring-primary/20"
                       : "border-primary/20 hover:border-primary/50",
@@ -327,18 +327,25 @@ export default function BookingOffer() {
               );
               const isSelected = selectedService === "deep";
               return (
+                <div className="relative pt-4">
+                  {/* Most Popular ribbon — rendered outside the Card so
+                      the Card can keep its rounded edges without
+                      clipping the badge with overflow-hidden. */}
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
+                    <Badge className="bg-gradient-primary text-white font-bold shadow-lg px-4 py-1 text-[11px] uppercase tracking-wider">
+                      <RiSparklingLine className="h-3 w-3 mr-1" />
+                      Most Popular
+                    </Badge>
+                  </div>
                 <Card
                   className={cn(
-                    "relative overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                    "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                     isSelected
                       ? "border-primary shadow-lg ring-2 ring-primary/20"
                       : "border-primary/30 hover:border-primary/60",
                   )}
                   onClick={handleSelectDeepClean}
                 >
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-primary text-white rounded-full text-[10px] font-semibold shadow uppercase tracking-wider">
-                    Most Popular
-                  </div>
 
                   <CardContent className="pt-7 pb-6 px-5 space-y-4">
                     <div className="flex items-center justify-between">
@@ -409,13 +416,14 @@ export default function BookingOffer() {
                     </Button>
                   </CardContent>
                 </Card>
+                </div>
               );
             })()}
 
             {/* Novara Glow Membership card */}
             <Card
               className={cn(
-                "relative overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                 selectedService === "membership"
                   ? "border-primary shadow-lg ring-2 ring-primary/20"
                   : "border-primary/20 hover:border-primary/50",

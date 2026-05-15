@@ -125,8 +125,16 @@ serve(async (req) => {
         // Use freshBooking for all downstream actions (has latest idempotency flags)
         const confirmedBooking = freshBooking;
 
-        // Create invoice for remaining balance if deposit was paid (skip if already has invoice)
-        if (confirmedBooking.payment_option === 'deposit' && !confirmedBooking.stripe_invoice_id) {
+        // Create invoice for remaining balance if deposit was paid (skip if already has invoice).
+        //
+        // DISABLED by default: the new flow saves the card on file at booking
+        // (setup_future_usage='off_session') and auto-charges the remaining
+        // balance when the cleaner marks the service complete (see
+        // complete-booking → off-session PaymentIntent). To re-enable the
+        // legacy email-invoice fallback, set INVOICE_FALLBACK_ENABLED=true
+        // in the function env.
+        const INVOICE_FALLBACK_ENABLED = Deno.env.get("INVOICE_FALLBACK_ENABLED") === "true";
+        if (INVOICE_FALLBACK_ENABLED && confirmedBooking.payment_option === 'deposit' && !confirmedBooking.stripe_invoice_id) {
           const remainingBalanceCents = confirmedBooking.total_estimate_cents - confirmedBooking.deposit_cents;
           
           if (remainingBalanceCents > 0) {
