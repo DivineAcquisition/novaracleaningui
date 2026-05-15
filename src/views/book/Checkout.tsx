@@ -97,7 +97,13 @@ export default function BookingCheckout() {
   const [stripePromise, setStripePromise] = useState<any>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
-  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  // Default to true so the initial render shows the 50%-off price that
+  // most first-time customers will actually be charged. The async
+  // checkNewCustomer() query below flips it to false only if the email
+  // already has a confirmed/completed booking — in which case the
+  // priced-inputs useEffect above will re-init Stripe with the new
+  // (un-discounted) amount so the Pay button stays in sync.
+  const [isNewCustomer, setIsNewCustomer] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
 
@@ -259,6 +265,12 @@ export default function BookingCheckout() {
       updateBookingData({
         referralCode: referralInput.toUpperCase()
       });
+      // Force Stripe to re-init so the Pay button reflects the new
+      // (lower) deposit amount. Without this the button is frozen at
+      // the amount returned when the PaymentIntent was first created.
+      setClientSecret(null);
+      setBookingId(null);
+      setPaymentAmount(0);
       toast.success(`Referral applied! $${discount.toFixed(2)} off`);
     } catch (err) {
       toast.error('Error validating referral code');
@@ -273,6 +285,10 @@ export default function BookingCheckout() {
     updateBookingData({
       referralCode: undefined
     });
+    // Re-init Stripe so the Pay button reverts to the un-discounted amount.
+    setClientSecret(null);
+    setBookingId(null);
+    setPaymentAmount(0);
     toast.info('Referral code removed');
   };
 
@@ -305,6 +321,11 @@ export default function BookingCheckout() {
       updateBookingData({
         promoCode: promoInput.toUpperCase()
       });
+      // Force Stripe to re-init so the Pay button reflects the
+      // promo-discounted deposit amount.
+      setClientSecret(null);
+      setBookingId(null);
+      setPaymentAmount(0);
       toast.success(`🎉 Promo applied! Saving $${discount.toFixed(2)}`);
       setShowPromoSuggestions(false);
     } catch (err) {
@@ -321,6 +342,10 @@ export default function BookingCheckout() {
     updateBookingData({
       promoCode: undefined
     });
+    // Re-init Stripe so the Pay button reverts to the un-discounted amount.
+    setClientSecret(null);
+    setBookingId(null);
+    setPaymentAmount(0);
     toast.info('Promo code removed');
   };
   // handlePaymentOptionChange removed — the customer no longer chooses a
@@ -476,6 +501,28 @@ export default function BookingCheckout() {
     }
     router.push("/book/details?booking_id=" + bookingId);
   };
+
+  // Defensive: if a priced input changes after the PaymentIntent has
+  // been created (promo / referral apply or remove, useCredit toggle,
+  // serviceType change), reset clientSecret so the Stripe Pay button
+  // re-mounts with the new amount. The explicit setClientSecret(null)
+  // calls inside each handler are the primary path; this is the safety
+  // net.
+  useEffect(() => {
+    if (!clientSecret) return;
+    if (paymentAmount === 0) return;
+    const expectedCents = Math.max(100, Math.round(depositPricing.deposit * 100));
+    if (Math.abs(expectedCents - paymentAmount) > 1) {
+      console.log('[Checkout] Priced inputs changed — re-initializing PaymentIntent', {
+        expectedCents,
+        paymentAmount,
+      });
+      setClientSecret(null);
+      setBookingId(null);
+      setPaymentAmount(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depositPricing.deposit, bookingData.serviceType, bookingData.useCredit, promoDiscount, referralDiscount]);
 
   // Initialize payment when all required fields are present
   useEffect(() => {
