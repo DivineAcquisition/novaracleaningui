@@ -50,6 +50,7 @@ import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
+import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -362,11 +363,29 @@ export default function BookingCheckout() {
     setIsProcessing(true);
     if (attempt === 0) setInitError(null);
 
+    // Pull attribution from localStorage (populated by UTMTracker
+    // since the customer's first visit) so the booking row stamps
+    // the same UTM/landing/referrer values the lead-capture event
+    // sent to GHL.
+    const tracking = getStoredTrackingData();
+    const trackingPayload = getTrackingPayload();
+
     // Build payload with both email fields for compatibility
     const payload = {
       ...bookingData,
       email,
-      customerEmail: email // Also send as customerEmail for backward compatibility
+      customerEmail: email, // Also send as customerEmail for backward compatibility
+      tracking: trackingPayload,
+      utmSource: tracking.utm_source || undefined,
+      utmMedium: tracking.utm_medium || undefined,
+      utmCampaign: tracking.utm_campaign || undefined,
+      utmContent: tracking.utm_content || undefined,
+      utmTerm: tracking.utm_term || undefined,
+      landingPage: tracking.landing_page || undefined,
+      referrer: tracking.referrer || undefined,
+      fbclid: tracking.fbclid || undefined,
+      gclid: tracking.gclid || undefined,
+      firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
     };
     const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/create-payment-intent`;
     const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';

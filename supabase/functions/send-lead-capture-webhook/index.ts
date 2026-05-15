@@ -25,10 +25,16 @@ interface LeadCapturePayload {
   state?: string;
   source?: string;
   landingPage?: string;
+  referrer?: string;
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
   fbclid?: string;
+  gclid?: string;
+  firstVisitTimestamp?: string;
+  tracking?: Record<string, string>;
 }
 
 serve(async (req) => {
@@ -143,7 +149,11 @@ serve(async (req) => {
       targets: webhookUrls.map(w => w.name) 
     });
 
-    // Push to GHL via Private Integration (PIT) — fire-and-forget, parallel to legacy webhooks.
+    // Push to GHL via Private Integration (PIT) — fire-and-forget,
+    // parallel to legacy webhooks. The full UTM + landing-page +
+    // referrer bag from the client is mapped to every supported GHL
+    // custom field so the contact record reflects the source the
+    // moment the lead opts in.
     ghlUpsertContact({
       email: leadData.email,
       phone: leadData.phone,
@@ -152,13 +162,28 @@ serve(async (req) => {
       city: leadData.city,
       state: leadData.state,
       postalCode: leadData.zipCode,
-      source: leadData.source || "Novara Website",
-      tags: ["lead", leadData.zipCode ? `zip-${leadData.zipCode}` : ""].filter(Boolean) as string[],
+      source: leadData.utmSource || leadData.source || "Novara Website",
+      tags: [
+        "lead",
+        leadData.zipCode ? `zip-${leadData.zipCode}` : "",
+        leadData.utmSource ? `src-${leadData.utmSource}` : "",
+        leadData.utmCampaign ? `cmp-${leadData.utmCampaign}` : "",
+      ].filter(Boolean) as string[],
       customFieldsByKey: {
-        utm_content: undefined,
+        // AGP Tracking Attribution
+        utm_content: leadData.utmContent,
         utm_medium: leadData.utmMedium,
         utm_campaign: leadData.utmCampaign,
-        customer_source: leadData.source,
+        utm_source: leadData.utmSource,
+        utm_term: leadData.utmTerm,
+        landing_page: leadData.landingPage,
+        referrer: leadData.referrer,
+        tracking_attribution: leadData.referrer || leadData.landingPage,
+        fb_lead_id: leadData.fbclid,
+        fbclid: leadData.fbclid,
+        gclid: leadData.gclid,
+        // General Info / Lead Source
+        customer_source: leadData.utmSource || leadData.source,
         market: leadData.city || leadData.zipCode,
       },
     }).catch((err) => logStep("GHL PIT sync failed (non-blocking)", { error: String(err) }));

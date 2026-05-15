@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { trackLead } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
+import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
 
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
@@ -133,8 +134,14 @@ export default function BookingZip() {
     const existingCartId = localStorage.getItem('abandoned_cart_id');
     const existingCartEmail = localStorage.getItem('abandoned_cart_email');
     
+    // Tracking bag — pulled once and reused for the cart-row stamp,
+    // the lead-capture webhook, and any downstream calls in this
+    // submit handler.
+    const tracking = getStoredTrackingData();
+    const trackingPayload = getTrackingPayload();
+
     if (existingCartId && existingCartEmail) {
-      // Update the placeholder row with real contact info
+      // Update the placeholder row with real contact info + attribution
       supabase
         .from('abandoned_carts')
         .update({
@@ -143,10 +150,21 @@ export default function BookingZip() {
           last_name: lastName,
           phone: formattedPhone,
           last_step: 'contact',
+          tracking: trackingPayload,
+          utm_source: tracking.utm_source,
+          utm_medium: tracking.utm_medium,
+          utm_campaign: tracking.utm_campaign,
+          utm_content: tracking.utm_content,
+          utm_term: tracking.utm_term,
+          landing_page: tracking.landing_page,
+          referrer: tracking.referrer,
+          fbclid: tracking.fbclid,
+          gclid: tracking.gclid,
+          first_visit_at: tracking.first_visit_timestamp,
         })
         .eq('id', existingCartId)
         .then(({ error }) => { if (error) console.error('Cart update error:', error); });
-      
+
       // Clean up localStorage placeholder
       localStorage.removeItem('abandoned_cart_email');
     } else {
@@ -159,10 +177,13 @@ export default function BookingZip() {
           phone: formattedPhone,
           zipCode,
           lastStep: 'contact',
+          tracking: trackingPayload,
         }
       }).catch(err => console.error('Track cart error:', err));
     }
     
+    // (tracking + trackingPayload already pulled above; reused here.)
+
     // Send lead capture webhook with client-side duplicate guard
     const capturedEmails: string[] = JSON.parse(localStorage.getItem('lead_captured_emails') || '[]');
     if (!capturedEmails.includes(email.toLowerCase())) {
@@ -175,9 +196,18 @@ export default function BookingZip() {
           zipCode,
           city: cityState.split(', ')[0] || '',
           state: cityState.split(', ')[1] || '',
-          source: 'Website',
-          landingPage: '/book/zip',
-          fbclid: fbclid || undefined,
+          source: tracking.utm_source || 'Website',
+          landingPage: tracking.landing_page || '/book/zip',
+          referrer: tracking.referrer || undefined,
+          fbclid: tracking.fbclid || fbclid || undefined,
+          gclid: tracking.gclid || undefined,
+          firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
+          utmSource: tracking.utm_source || undefined,
+          utmMedium: tracking.utm_medium || undefined,
+          utmCampaign: tracking.utm_campaign || undefined,
+          utmContent: tracking.utm_content || undefined,
+          utmTerm: tracking.utm_term || undefined,
+          tracking: trackingPayload,
         }
       }).then(() => {
         const updated = [...capturedEmails, email.toLowerCase()];
@@ -197,6 +227,8 @@ export default function BookingZip() {
     const formattedPhone = phone.replace(/\D/g, '');
     
     try {
+      const trackingPayload = getTrackingPayload();
+      const tracking = getStoredTrackingData();
       const { error } = await supabase.functions.invoke('add-to-waitlist', {
         body: {
           email,
@@ -204,7 +236,18 @@ export default function BookingZip() {
           lastName,
           phone: formattedPhone,
           zipCode,
-          source: 'website',
+          source: tracking.utm_source || 'website',
+          landingPage: tracking.landing_page || undefined,
+          referrer: tracking.referrer || undefined,
+          utmSource: tracking.utm_source || undefined,
+          utmMedium: tracking.utm_medium || undefined,
+          utmCampaign: tracking.utm_campaign || undefined,
+          utmContent: tracking.utm_content || undefined,
+          utmTerm: tracking.utm_term || undefined,
+          fbclid: tracking.fbclid || undefined,
+          gclid: tracking.gclid || undefined,
+          firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
+          tracking: trackingPayload,
         }
       });
       

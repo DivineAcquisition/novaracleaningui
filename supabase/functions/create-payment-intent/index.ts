@@ -455,6 +455,24 @@ serve(async (req) => {
         team_notes: referralCode 
           ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}`
           : (promoCode ? `Promo code: PROMO:${promoCode}` : null),
+
+        // ─── Attribution tracking (AlphaLux-style) ──────────────────
+        // The client captures UTM / landing / referrer in localStorage
+        // via UTMTracker, then posts the bag here at booking creation.
+        // We store the full JSON in `tracking` plus the most-queried
+        // fields in dedicated columns so admin reports can SQL-filter
+        // without digging into JSONB.
+        tracking: bookingData.tracking || null,
+        utm_source: bookingData.utmSource || bookingData.tracking?.utm_source || null,
+        utm_medium: bookingData.utmMedium || bookingData.tracking?.utm_medium || null,
+        utm_campaign: bookingData.utmCampaign || bookingData.tracking?.utm_campaign || null,
+        utm_content: bookingData.utmContent || bookingData.tracking?.utm_content || null,
+        utm_term: bookingData.utmTerm || bookingData.tracking?.utm_term || null,
+        landing_page: bookingData.landingPage || bookingData.tracking?.landing_page || null,
+        referrer: bookingData.referrer || bookingData.tracking?.referrer || null,
+        fbclid: bookingData.fbclid || bookingData.tracking?.fbclid || null,
+        gclid: bookingData.gclid || bookingData.tracking?.gclid || null,
+        first_visit_at: bookingData.firstVisitTimestamp || bookingData.tracking?.first_visit_timestamp || null,
       })
       .select()
       .single();

@@ -514,25 +514,38 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       ? Math.max(0, totalChargedCentsForGhl - depositCentsForGhl)
       : 0;
 
-    // Best-effort UTM lookup — bookings table doesn't carry UTM directly,
-    // so we look on the matching abandoned_cart row (populated by the
-    // tracking pipeline) as a fallback. Missing values become "".
-    let utmContent = '';
-    let utmMedium = '';
-    let utmCampaign = '';
-    try {
-      const { data: cart } = await supabase
-        .from('abandoned_carts')
-        .select('utm_content, utm_medium, utm_campaign')
-        .eq('email', booking.email)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      utmContent = (cart as any)?.utm_content || '';
-      utmMedium = (cart as any)?.utm_medium || '';
-      utmCampaign = (cart as any)?.utm_campaign || '';
-    } catch (_) {
-      // abandoned_carts may not have UTM columns yet — that's fine.
+    // Attribution — read from the booking's own tracking columns first
+    // (set at create-payment-intent time from the client's localStorage
+    // bag), and fall back to the latest abandoned_cart row if a booking
+    // row predates the tracking columns being populated.
+    let utmContent: string = booking.utm_content || '';
+    let utmMedium: string = booking.utm_medium || '';
+    let utmCampaign: string = booking.utm_campaign || '';
+    let utmSource: string = booking.utm_source || '';
+    let utmTerm: string = booking.utm_term || '';
+    let landingPage: string = booking.landing_page || '';
+    let referrerVal: string = booking.referrer || '';
+    let fbclidVal: string = booking.fbclid || '';
+    let gclidVal: string = booking.gclid || '';
+    if (!utmCampaign && !utmContent && !utmMedium && !landingPage) {
+      try {
+        const { data: cart } = await supabase
+          .from('abandoned_carts')
+          .select('utm_content, utm_medium, utm_campaign, utm_source, utm_term, landing_page, referrer, fbclid, gclid')
+          .eq('email', booking.email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        utmContent  = utmContent  || (cart as any)?.utm_content  || '';
+        utmMedium   = utmMedium   || (cart as any)?.utm_medium   || '';
+        utmCampaign = utmCampaign || (cart as any)?.utm_campaign || '';
+        utmSource   = utmSource   || (cart as any)?.utm_source   || '';
+        utmTerm     = utmTerm     || (cart as any)?.utm_term     || '';
+        landingPage = landingPage || (cart as any)?.landing_page || '';
+        referrerVal = referrerVal || (cart as any)?.referrer     || '';
+        fbclidVal   = fbclidVal   || (cart as any)?.fbclid       || '';
+        gclidVal    = gclidVal    || (cart as any)?.gclid        || '';
+      } catch (_) { /* tables may not exist yet — that's fine */ }
     }
 
     // Derived call_type from booking channel — phone-in vs online booking.
@@ -549,12 +562,24 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const payOverCall = (booking.payment_method || '').toLowerCase().includes('phone')
       || (booking.payment_method || '').toLowerCase().includes('verbal');
 
-    // ── Full 18-field map. Keys match the GHL fieldKey list verbatim. ──
+    // ── Full custom-field map. Keys match the GHL fieldKey list verbatim.
+    //   AGP Tracking Attribution covers utm_content / medium / campaign;
+    //   we also send utm_source / utm_term / landing_page / referrer /
+    //   fbclid / gclid which GHL will accept if the field exists or
+    //   silently ignore otherwise (the client logs the miss).         ──
     const ghlCustomFields: Record<string, string | number | boolean | undefined> = {
       // AGP Tracking Attribution
       utm_content: utmContent,
       utm_medium: utmMedium,
       utm_campaign: utmCampaign,
+      utm_source: utmSource,
+      utm_term: utmTerm,
+      landing_page: landingPage,
+      referrer: referrerVal,
+      tracking_attribution: referrerVal || landingPage,
+      fb_lead_id: fbclidVal,
+      fbclid: fbclidVal,
+      gclid: gclidVal,
 
       // Service & Scheduling
       cleaning_type: mapServiceType(booking.service_type),
