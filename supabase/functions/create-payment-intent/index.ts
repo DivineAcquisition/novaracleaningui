@@ -32,19 +32,20 @@ const ADD_ON_PRICING: Record<string, number> = {
   windows: 4000, // $40
 };
 
-// Zone B base standard clean prices in cents (v3.2 — tuned so the
-// post-50%-off displayed price lands at the floors $120 standard and
-// $225 deep at the smallest home size, scaling up from there).
+// Zone B base standard clean prices in cents (v3.3 — even-dollar bases
+// so post-50%-off totals land on clean numbers with no rounding drift
+// between offer card and checkout summary; deep at ×1.5 hits the $225
+// floor exactly at the smallest home size).
 const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 29900,
-  "1000_1500": 37900,
-  "1501_2000": 47900,
-  "2001_2500": 55900,
-  "2501_3000": 67900,
-  "3001_3500": 75900,
-  "3501_4000": 87900,
-  "4001_4500": 97900,
-  "4501_5000": 107900,
+  "0_999": 30000,
+  "1000_1500": 38000,
+  "1501_2000": 48000,
+  "2001_2500": 56000,
+  "2501_3000": 68000,
+  "3001_3500": 76000,
+  "3501_4000": 88000,
+  "4001_4500": 98000,
+  "4501_5000": 108000,
   "5000_plus": 0,
 };
 
