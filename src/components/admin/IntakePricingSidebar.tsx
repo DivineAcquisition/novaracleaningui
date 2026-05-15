@@ -8,7 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, DEPOSIT_AMOUNT } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, DEPOSIT_PERCENT } from "@/lib/pricing-system";
 
 interface SelectedCleaner {
   id: string;
@@ -63,7 +63,8 @@ export function IntakePricingSidebar({
     return `$${(cents / 100).toFixed(2)}`;
   };
 
-  const depositAmount = DEPOSIT_AMOUNT;
+  // 50% deposit on adjusted total (replaces the legacy $39 flat).
+  const depositAmount = Math.round(adjustedTotal * DEPOSIT_PERCENT);
   const remainingBalance = adjustedTotal - depositAmount;
 
   return (

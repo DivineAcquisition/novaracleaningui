@@ -253,7 +253,7 @@ export default function BookingZip() {
               </div>
               <div className="text-left">
                 <p className="font-semibold text-foreground text-sm">You were referred! 🎉</p>
-                <p className="text-xs text-muted-foreground">$50 off your first cleaning is waiting for you.</p>
+                <p className="text-xs text-muted-foreground">50% off your first cleaning is waiting for you.</p>
               </div>
             </div>
           )}

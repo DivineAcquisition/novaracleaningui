@@ -4,6 +4,7 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
+import { upsertContact as ghlUpsertContact, fmtMoney } from '../_shared/ghl-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -224,6 +225,36 @@ serve(async (req) => {
       console.log('GHL reschedule webhook sent, status:', ghlRes.status);
     } catch (ghlError) {
       console.error('GHL webhook failed (non-critical):', ghlError);
+    }
+
+    // Push reschedule update to GHL via Private Integration (PIT).
+    // Re-upserts the contact with a fresh tag + custom fields so the CRM reflects
+    // the new appointment date.
+    try {
+      await ghlUpsertContact({
+        email: booking.email,
+        phone: booking.phone,
+        firstName: booking.first_name,
+        lastName: booking.last_name,
+        address1: booking.address,
+        city: booking.city,
+        state: booking.state,
+        postalCode: booking.zip_code,
+        source: "Novara Reschedule",
+        tags: [
+          "rescheduled",
+          newDate ? `svc-${newDate}` : "",
+          booking.zip_code ? `zip-${booking.zip_code}` : "",
+        ].filter(Boolean) as string[],
+        customFieldsByKey: {
+          cleaning_type: booking.service_type,
+          market: booking.city,
+          quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
+        },
+      });
+      console.log('[reschedule-booking] GHL PIT sync ok');
+    } catch (ghlPitErr) {
+      console.error('[reschedule-booking] GHL PIT sync failed (non-blocking):', ghlPitErr);
     }
 
     return new Response(

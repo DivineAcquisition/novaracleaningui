@@ -640,7 +640,7 @@ const Index = () => {
               <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
             <p className="text-xs text-muted-foreground">
-              Starting at just $39 deposit. No hidden fees.
+              Pay 50% deposit on total to book. No hidden fees.
             </p>
           </div>
         </div>

@@ -36,7 +36,7 @@ import { toast } from "sonner";
 import { toast as toastHook } from "@/hooks/use-toast";
 import { SEO } from "@/components/SEO";
 
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, calculatePrice, DEPOSIT_AMOUNT, applyPromoCode } from "@/lib/pricing-system";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, calculatePrice, DEPOSIT_PERCENT, applyPromoCode } from "@/lib/pricing-system";
 import { IntakePricingSidebar } from "@/components/admin/IntakePricingSidebar";
 import { calculateServiceDuration } from "@/lib/time-slots";
 import { CleanerMultiSelect, SelectedCleaner } from "@/components/admin/CleanerMultiSelect";
@@ -514,6 +514,12 @@ export default function SalesTool() {
       const homeSize = HOME_SIZE_RANGES.find(h => h.id === homeSizeId);
       const estimatedHours = homeSize?.baseHours || 0;
 
+      // Deposit: 50% of total when "Deposit Paid", full amount when "Paid in Full", else 0.
+      const depositCentsForBooking =
+        paymentStatus === "Paid in Full" ? adjustedTotal
+        : paymentStatus === "Deposit Paid" ? Math.round(adjustedTotal * DEPOSIT_PERCENT)
+        : 0;
+
       const { data: booking, error: bookingError } = await supabase.from("bookings").insert({
         first_name: firstName, last_name: lastName, email, phone,
         address: street, city, state, zip_code: zipCode,
@@ -522,7 +528,7 @@ export default function SalesTool() {
         home_size_id: homeSizeId, service_type: serviceType, add_ons: addOns, frequency,
         service_date: serviceDate, time_slot: timeSlot,
         estimated_duration_hours: parseInt(estimatedDuration || "0"), arrival_window: arrivalWindow || null,
-        base_price_cents: pricing.basePrice, deposit_cents: DEPOSIT_AMOUNT, total_estimate_cents: adjustedTotal,
+        base_price_cents: pricing.basePrice, deposit_cents: depositCentsForBooking, total_estimate_cents: adjustedTotal,
         booking_channel: bookingChannel, booker_source: customerSource,
         payment_method: paymentMethod, payment_option: paymentStatus === "Paid in Full" ? "full" : "deposit",
         membership_plan: membershipPlan, status: bookingStatus,
@@ -564,8 +570,8 @@ export default function SalesTool() {
               homeSize: HOME_SIZE_RANGES.find(h => h.id === homeSizeId)?.label || homeSizeId,
               homeSizeId,
               address: street, city, state, zipCode,
-              totalAmount: adjustedTotal, depositAmount: DEPOSIT_AMOUNT,
-              balanceAmount: adjustedTotal - DEPOSIT_AMOUNT,
+              totalAmount: adjustedTotal, depositAmount: depositCentsForBooking,
+              balanceAmount: adjustedTotal - depositCentsForBooking,
               paymentOption: paymentStatus === "Paid in Full" ? "full" : "deposit",
               addOns, frequency,
             },
@@ -593,7 +599,7 @@ export default function SalesTool() {
           estimated_duration_hours: estimatedDuration,
           arrival_window: arrivalWindow || null,
           base_price_cents: pricing.basePrice,
-          deposit_cents: DEPOSIT_AMOUNT,
+          deposit_cents: depositCentsForBooking,
           total_estimate_cents: adjustedTotal,
           custom_discount: customDiscount,
           promo_code: promoValid ? promoCode : null,

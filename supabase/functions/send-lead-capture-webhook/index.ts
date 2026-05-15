@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { upsertContact as ghlUpsertContact } from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -141,6 +142,26 @@ serve(async (req) => {
       count: webhookUrls.length, 
       targets: webhookUrls.map(w => w.name) 
     });
+
+    // Push to GHL via Private Integration (PIT) — fire-and-forget, parallel to legacy webhooks.
+    ghlUpsertContact({
+      email: leadData.email,
+      phone: leadData.phone,
+      firstName: leadData.firstName,
+      lastName: leadData.lastName,
+      city: leadData.city,
+      state: leadData.state,
+      postalCode: leadData.zipCode,
+      source: leadData.source || "Novara Website",
+      tags: ["lead", leadData.zipCode ? `zip-${leadData.zipCode}` : ""].filter(Boolean) as string[],
+      customFieldsByKey: {
+        utm_content: undefined,
+        utm_medium: leadData.utmMedium,
+        utm_campaign: leadData.utmCampaign,
+        customer_source: leadData.source,
+        market: leadData.city || leadData.zipCode,
+      },
+    }).catch((err) => logStep("GHL PIT sync failed (non-blocking)", { error: String(err) }));
 
     if (webhookUrls.length === 0) {
       logStep("No webhooks configured, skipping external sends");

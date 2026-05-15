@@ -8,6 +8,7 @@ import {
   getTeamSize,
   DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
+import { syncContactAndOpportunity, fmtMoney, ynBool } from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -469,6 +470,74 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "SDR Rep Name": booking.sdr_rep_name || "",
       "Num Cleaners Assigned": booking.num_cleaners_assigned || teamSize,
     };
+
+  // ─── GHL Private Integration sync (parallel to webhooks) ──────────────────
+  // Pushes the contact + booking opportunity into GHL using the PIT token.
+  // Runs fire-and-forget: failures are logged but don't fail the request.
+  try {
+    const cleaners = booking.cleaners
+      ? [{ name: `${booking.cleaners.first_name} ${booking.cleaners.last_name}`, phone: booking.cleaners.phone }]
+      : [];
+    const totalChargedCentsForGhl = totalChargedCents;
+    const depositCentsForGhl = booking.deposit_cents || 0;
+    const remainingBalanceCents = booking.payment_option === 'deposit'
+      ? Math.max(0, totalChargedCentsForGhl - depositCentsForGhl)
+      : 0;
+
+    const ghlResult = await syncContactAndOpportunity({
+      contact: {
+        email: booking.email,
+        phone: booking.phone,
+        firstName: booking.first_name,
+        lastName: booking.last_name,
+        address1: booking.address,
+        city: booking.city,
+        state: booking.state,
+        postalCode: booking.zip_code,
+        source: "Novara Booking",
+        tags: [
+          "booking",
+          `service-${booking.service_type}`,
+          booking.membership_plan && booking.membership_plan !== 'none'
+            ? `member-${booking.membership_plan}`
+            : null,
+          booking.zip_code ? `zip-${booking.zip_code}` : null,
+        ].filter(Boolean) as string[],
+        customFieldsByKey: {
+          cleaning_type: mapServiceType(booking.service_type),
+          customer_source: booking.booker_source
+            || (booking.booking_number === 1 ? "New Lead" : "Returning Client"),
+          market: booking.city,
+          csr_name: booking.sdr_rep_name || undefined,
+          quoted_price_pretaxfees: fmtMoney(booking.base_price_cents),
+          discounted_amount_: fmtMoney(totalDiscountCents),
+          remaining_balance: fmtMoney(remainingBalanceCents),
+          deposit_paid: ynBool(
+            booking.payment_option === 'full'
+            || (booking.payment_option === 'deposit' && booking.status !== 'pending_payment')
+          ),
+          "1_contractor": cleaners[0]?.name,
+          "1_contractor_number": cleaners[0]?.phone,
+        },
+      },
+      opportunity: {
+        name: `NOV-${String(booking.booking_number).padStart(5, '0')} — ${booking.first_name} ${booking.last_name}`,
+        status: booking.status === 'cancelled' ? 'lost' : booking.status === 'completed' ? 'won' : 'open',
+        monetaryValue: Math.round(totalChargedCentsForGhl / 100),
+        source: "Novara Booking",
+        customFieldsByKey: {
+          cleaning_type: mapServiceType(booking.service_type),
+          discounted_amount_: fmtMoney(totalDiscountCents),
+          remaining_balance: fmtMoney(remainingBalanceCents),
+        },
+      },
+    });
+    logStep("GHL PIT sync complete", ghlResult);
+  } catch (ghlErr) {
+    logStep("GHL PIT sync failed (non-blocking)", {
+      error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),
+    });
+  }
 
   // Send to all configured booking webhooks in parallel
   const webhookUrls = [
