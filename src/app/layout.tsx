@@ -3,6 +3,7 @@ import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
+import { UTMTracker } from "@/components/UTMTracker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -140,6 +141,9 @@ export default function RootLayout({
             alt=""
           />
         </noscript>
+        {/* Silent global UTM/landing/referrer capture. Mounts on every
+            page so attribution is stored before any form submission. */}
+        <UTMTracker />
         <Providers>{children}</Providers>
       </body>
     </html>

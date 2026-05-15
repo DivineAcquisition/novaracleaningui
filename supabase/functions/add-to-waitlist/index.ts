@@ -20,6 +20,18 @@ interface WaitlistRequest {
   city?: string;
   state?: string;
   source?: string;
+  // Attribution (AlphaLux-style tracking bag from localStorage)
+  landingPage?: string;
+  referrer?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  fbclid?: string;
+  gclid?: string;
+  firstVisitTimestamp?: string;
+  tracking?: Record<string, string>;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -37,7 +49,11 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: WaitlistRequest = await req.json();
-    const { email, firstName, lastName, phone, zipCode, city, state, source = "website" } = body;
+    const {
+      email, firstName, lastName, phone, zipCode, city, state, source = "website",
+      landingPage, referrer, utmSource, utmMedium, utmCampaign, utmContent, utmTerm,
+      fbclid, gclid, firstVisitTimestamp, tracking,
+    } = body;
 
     if (!email || !zipCode) {
       return new Response(
@@ -64,7 +80,8 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Add to waitlist
+    // Add to waitlist — persist the full attribution bag alongside the
+    // contact fields so we can replay the source on later GHL syncs.
     const { data: waitlistEntry, error: insertError } = await supabase
       .from("waitlist")
       .insert({
@@ -76,6 +93,17 @@ const handler = async (req: Request): Promise<Response> => {
         city,
         state,
         source,
+        tracking: tracking || null,
+        utm_source: utmSource || null,
+        utm_medium: utmMedium || null,
+        utm_campaign: utmCampaign || null,
+        utm_content: utmContent || null,
+        utm_term: utmTerm || null,
+        landing_page: landingPage || null,
+        referrer: referrer || null,
+        fbclid: fbclid || null,
+        gclid: gclid || null,
+        first_visit_at: firstVisitTimestamp || null,
       })
       .select()
       .single();
@@ -159,10 +187,27 @@ const handler = async (req: Request): Promise<Response> => {
         city,
         state,
         postalCode: zipCode,
-        source: "Waitlist",
-        tags: ["waitlist", zipCode ? `zip-${zipCode}` : ""].filter(Boolean) as string[],
+        source: utmSource || "Waitlist",
+        tags: [
+          "waitlist",
+          zipCode ? `zip-${zipCode}` : "",
+          utmSource ? `src-${utmSource}` : "",
+          utmCampaign ? `cmp-${utmCampaign}` : "",
+        ].filter(Boolean) as string[],
         customFieldsByKey: {
-          customer_source: "Waitlist",
+          customer_source: utmSource || "Waitlist",
+          market: city || zipCode,
+          utm_source: utmSource,
+          utm_medium: utmMedium,
+          utm_campaign: utmCampaign,
+          utm_content: utmContent,
+          utm_term: utmTerm,
+          landing_page: landingPage,
+          referrer: referrer,
+          tracking_attribution: referrer || landingPage,
+          fb_lead_id: fbclid,
+          fbclid: fbclid,
+          gclid: gclid,
         },
       });
     } catch (ghlErr) {
