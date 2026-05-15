@@ -53,7 +53,7 @@ export const SavingsVisualizer = ({
 
         {fullPaymentDiscount > 0 && (
           <div className="flex justify-between text-green-600">
-            <span>Full Payment Discount</span>
+            <span>New Customer 50% Off</span>
             <span>-${fullPaymentDiscount.toFixed(2)}</span>
           </div>
         )}

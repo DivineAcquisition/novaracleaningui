@@ -71,7 +71,8 @@ export function calculateQuote(params: {
   }
   finalPriceCents = Math.max(0, finalPriceCents);
 
-  const depositCents = 3900; // $39 deposit
+  // 50% deposit on the final price (replaces the legacy $39 flat deposit).
+  const depositCents = Math.round(finalPriceCents * 0.5);
   const balanceDueCents = Math.max(0, finalPriceCents - depositCents);
 
   // Monthly total for recurring

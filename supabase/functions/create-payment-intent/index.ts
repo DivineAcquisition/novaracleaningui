@@ -32,22 +32,24 @@ const ADD_ON_PRICING: Record<string, number> = {
   windows: 4000, // $40
 };
 
-// Zone B base standard clean prices in cents
+// Zone B base standard clean prices in cents (v3 — raised for margin)
 const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 15000,
-  "1000_1500": 18900,
-  "1501_2000": 23900,
-  "2001_2500": 27900,
-  "2501_3000": 33900,
-  "3001_3500": 37900,
-  "3501_4000": 43900,
-  "4001_4500": 48900,
-  "4501_5000": 53900,
+  "0_999": 32900,
+  "1000_1500": 41900,
+  "1501_2000": 52900,
+  "2001_2500": 61900,
+  "2501_3000": 74900,
+  "3001_3500": 83900,
+  "3501_4000": 96900,
+  "4001_4500": 107900,
+  "4501_5000": 118900,
   "5000_plus": 0,
 };
 
-const DEPOSIT_AMOUNT = 3900; // $39
-const NEW_CUSTOMER_DISCOUNT = 6000; // $60
+// Deposit is now 50% of the booking total — no more flat $39 down.
+const DEPOSIT_PERCENT = 0.5;
+// New-customer discount is now 50% off subtotal (was a flat $60).
+const NEW_CUSTOMER_DISCOUNT_PERCENT = 0.5;
 
 // Membership discount on extras only
 const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
@@ -161,7 +163,10 @@ serve(async (req) => {
     
     const bookingNumber = (previousBookings?.length || 0) + 1;
     const isNewCustomer = bookingNumber === 1;
-    const newCustomerDiscount = (isNewCustomer && membershipPlan === 'none') ? NEW_CUSTOMER_DISCOUNT : 0;
+    // 50% off subtotal for new non-member customers.
+    const newCustomerDiscount = (isNewCustomer && membershipPlan === 'none')
+      ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT)
+      : 0;
 
     // Validate referral code if provided
     let referralDiscountCents = 0;
@@ -175,9 +180,11 @@ serve(async (req) => {
         .maybeSingle();
 
       if (referrer && referrer.email !== bookingData.email) {
-        referralDiscountCents = 5000; // $50 discount
+        // Referral reward is now 50% off the post-membership subtotal (replaces $50 flat).
+        const referralBase = Math.max(0, subtotal - membershipDiscount);
+        referralDiscountCents = Math.round(referralBase * 0.5);
         referralCode = bookingData.referralCode;
-        logStep("Valid referral code applied", { discount: referralDiscountCents, referrerEmail: referrer.email });
+        logStep("Valid referral code applied (50% off)", { discount: referralDiscountCents, referrerEmail: referrer.email });
       } else if (referrer && referrer.email === bookingData.email) {
         logStep("Referral code rejected - cannot refer yourself");
       } else {
@@ -298,17 +305,18 @@ serve(async (req) => {
     let fullPaymentDiscount = 0;
 
     if (bookingData.paymentOption === 'full') {
-      fullPaymentDiscount = Math.round(totalAmount * 0.10); // 10% off
-      amountToCharge = totalAmount - fullPaymentDiscount;
-      logStep("Full payment selected", { originalAmount: totalAmount, discount: fullPaymentDiscount, finalAmount: amountToCharge });
+      // Pay-in-full no longer stacks an extra 10% — the 50% promo is the headline discount.
+      fullPaymentDiscount = 0;
+      amountToCharge = totalAmount;
+      logStep("Full payment selected", { originalAmount: totalAmount, finalAmount: amountToCharge });
     } else {
-      // Deposit payment - always require at least $1 minimum for card verification
+      // Deposit payment — now 50% of total (was flat $39).
       if (bookingData.useCredit) {
         amountToCharge = 100; // $1 minimum authorization to capture card
         logStep("Member using credit - $1 card authorization required", { depositAmount: amountToCharge });
       } else {
-        amountToCharge = DEPOSIT_AMOUNT;
-        logStep("Deposit payment", { depositAmount: amountToCharge });
+        amountToCharge = Math.max(100, Math.round(totalAmount * DEPOSIT_PERCENT));
+        logStep("50% deposit payment", { depositAmount: amountToCharge, totalAmount });
       }
     }
 
@@ -416,7 +424,9 @@ serve(async (req) => {
         membership_plan: membershipPlan,
         uses_credit: bookingData.useCredit || false,
         base_price_cents: basePrice,
-        deposit_cents: bookingData.paymentOption === 'deposit' ? (bookingData.useCredit ? 100 : DEPOSIT_AMOUNT) : 0,
+        deposit_cents: bookingData.paymentOption === 'deposit'
+          ? (bookingData.useCredit ? 100 : amountToCharge)
+          : 0,
         total_estimate_cents: totalAmount,
         payment_intent_id: paymentIntentId,
         customer_id: customerId,
