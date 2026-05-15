@@ -7,7 +7,23 @@ const corsHeaders = {
 };
 
 const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
-const telnyxPhoneNumber = Deno.env.get("TELNYX_PHONE_NUMBER") || "+18337002611";
+
+// Active Telnyx numbers on the Novara account (May 2026):
+//   • +18334432004 — toll-free (preferred for outbound transactional SMS,
+//                   no 10DLC campaign required, higher throughput)
+//   • +14433838055 — local MD long-code (fallback)
+//
+// We try them in order: env override → toll-free → local. If Telnyx
+// rejects a sender as "Invalid source number" (e.g. the env var got
+// pointed at a number that's no longer on the account), we automatically
+// retry with the next known-good sender so a stale secret can't take
+// SMS delivery down.
+const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
+const TELNYX_SENDERS: string[] = Array.from(new Set([
+  ENV_TELNYX_FROM,
+  "+18334432004",
+  "+14433838055",
+].filter((v): v is string => Boolean(v && v.trim()))));
 
 interface SMSRequest {
   toPhone: string;
@@ -69,30 +85,59 @@ serve(async (req) => {
 
     const telnyxUrl = "https://api.telnyx.com/v2/messages";
     const recipient = normalizePhone(toPhone);
-    const requestBody = {
-      from: telnyxPhoneNumber,
-      to: recipient,
-      text: message,
-    };
 
-    const telnyxResponse = await fetch(telnyxUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${telnyxApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // Try each known-good sender in order. Auto-retry only on errors
+    // that imply the sender itself is bad ("Invalid source number" /
+    // "from number is not valid"). For any other Telnyx error
+    // (rate limit, recipient unreachable, etc.) bail immediately so we
+    // don't spam Telnyx with retries.
+    let lastErrorDetail = "No sender configured";
+    let lastErrorStatus = 500;
+    let succeeded = false;
+    let messageId: string | undefined;
+    let messageCost: number = 0;
+    let messageStatus: string = "sent";
+    let usedSender: string = TELNYX_SENDERS[0] || "";
 
-    const telnyxData = await telnyxResponse.json();
+    for (const candidate of TELNYX_SENDERS) {
+      const requestBody = { from: candidate, to: recipient, text: message };
+      const telnyxResponse = await fetch(telnyxUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${telnyxApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const telnyxData = await telnyxResponse.json().catch(() => ({}));
 
-    if (!telnyxResponse.ok) {
-      const errorDetail = telnyxData.errors?.[0]?.detail || telnyxData.errors?.[0]?.title || "Unknown error";
-      throw new Error(`Telnyx error: ${errorDetail}`);
+      if (telnyxResponse.ok) {
+        succeeded = true;
+        usedSender = candidate;
+        messageId = telnyxData.data?.id;
+        messageCost = telnyxData.data?.cost?.amount || 0;
+        messageStatus = telnyxData.data?.to?.[0]?.status || "sent";
+        console.log(`[SMS] Sent via ${candidate}. ID: ${messageId}`);
+        break;
+      }
+
+      lastErrorDetail =
+        telnyxData.errors?.[0]?.detail ||
+        telnyxData.errors?.[0]?.title ||
+        `HTTP ${telnyxResponse.status}`;
+      lastErrorStatus = telnyxResponse.status;
+      console.warn(`[SMS] Sender ${candidate} rejected: ${lastErrorDetail}`);
+
+      // Only retry the next sender on sender-specific errors.
+      const isSenderError = /invalid source number|from number|not valid|not authorized|messaging_profile|10dlc/i.test(
+        lastErrorDetail,
+      );
+      if (!isSenderError) break;
     }
 
-    const messageId = telnyxData.data?.id;
-    console.log(`[SMS] Sent successfully. ID: ${messageId}`);
+    if (!succeeded) {
+      throw new Error(`Telnyx error: ${lastErrorDetail}`);
+    }
 
     if (logEntry) {
       await supabase
@@ -100,7 +145,8 @@ serve(async (req) => {
         .update({
           status: "sent",
           provider_message_id: messageId,
-          cost: telnyxData.data?.cost?.amount || 0
+          cost: messageCost,
+          error_message: null,
         })
         .eq("id", logEntry.id);
     }
@@ -109,7 +155,8 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         messageId,
-        status: telnyxData.data?.to?.[0]?.status || "sent"
+        status: messageStatus,
+        from: usedSender,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
