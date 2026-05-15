@@ -31,10 +31,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
-import { PaymentComparison } from "@/components/booking/PaymentComparison";
+// PaymentComparison retired — customers always pay 50% deposit; the
+// remaining balance is auto-charged after completion.
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
 import { Skeleton } from "@/components/ui/skeleton";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
@@ -145,7 +146,10 @@ export default function BookingCheckout() {
   const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
   const [discountSectionOpen, setDiscountSectionOpen] = useState(false);
   const isScheduleSelected = !!bookingData.serviceDate && !!bookingData.timeSlot;
-  const effectivePaymentOption = bookingData.paymentOption || 'deposit';
+  // Customers always pay a 50% deposit at checkout — the pay-in-full
+  // option has been retired. The remaining 50% is auto-charged to the
+  // saved card when the cleaner marks the service complete.
+  const effectivePaymentOption: 'deposit' = 'deposit';
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
 
@@ -233,7 +237,7 @@ export default function BookingCheckout() {
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
   const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
   const depositPricing = calculatePrice(bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns, bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount);
-  const fullPaymentPricing = calculateFullPaymentWithDiscount(bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns, bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount);
+  // fullPaymentPricing removed — pay-in-full is no longer a customer option.
 
   // Handle Referral Code
   const handleApplyReferral = async () => {
@@ -318,12 +322,8 @@ export default function BookingCheckout() {
     });
     toast.info('Promo code removed');
   };
-  const handlePaymentOptionChange = (option: 'deposit' | 'full') => {
-    updateBookingData({
-      paymentOption: option
-    });
-    setClientSecret(null);
-  };
+  // handlePaymentOptionChange removed — the customer no longer chooses a
+  // payment option. The deposit amount is fixed at 50% of the total.
   const handleBack = () => router.push("/book/offer");
   const handleMembershipCheckout = async () => {
     setIsProcessing(true);
@@ -481,12 +481,12 @@ export default function BookingCheckout() {
     }, 100);
     return () => clearTimeout(timer);
   }, [bookingData.paymentOption, bookingData.email, bookingData.homeSizeId, bookingData.serviceDate, bookingData.timeSlot, clientSecret]);
-  const currentAmount = effectivePaymentOption === 'full' ? fullPaymentPricing.finalAmount : depositPricing.deposit;
-  const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + (effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0) + promoDiscount + referralDiscount;
+  const currentAmount = depositPricing.deposit;
+  const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
   return <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
-        <SEO title="Checkout" description="Complete your booking with secure payment. Deposit or pay in full." noindex />
+        <SEO title="Checkout" description="Complete your booking with a secure 50% deposit. Balance auto-charged after service." noindex />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -500,7 +500,7 @@ export default function BookingCheckout() {
               Review &amp; Reserve
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
-              Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining balance is automatically charged after your cleaning. Or pay in full now.
+              Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining 50% is automatically charged after your cleaning is complete.
             </p>
             <div className="flex justify-center pt-1">
               <GoogleGuaranteedBadge variant="compact" />
@@ -609,22 +609,36 @@ export default function BookingCheckout() {
           {isScheduleSelected && <>
               {/* Savings Visualizer */}
               <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={depositPricing.newCustomerDiscount || 0} membershipDiscount={depositPricing.membershipDiscount || 0} fullPaymentDiscount={0} promoDiscount={promoDiscount + referralDiscount} finalPrice={currentAmount} isMembershipSignup={isNewMembershipSignup} />
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">Choose Payment Option</h3>
-            <PaymentComparison depositPricing={{
-              deposit: depositPricing.deposit,
-              balanceDue: depositPricing.balanceDue,
-              subtotal: depositPricing.subtotal,
-              newCustomerDiscount: depositPricing.newCustomerDiscount || 0,
-              membershipDiscount: depositPricing.membershipDiscount || 0
-            }} fullPaymentPricing={{
-              originalTotal: fullPaymentPricing.originalTotal,
-              finalAmount: fullPaymentPricing.finalAmount,
-              discount: fullPaymentPricing.discount,
-              savings: fullPaymentPricing.savings,
-              newCustomerDiscount: depositPricing.newCustomerDiscount || 0
-            }} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
-          </div>
+
+          {/* Single-option payment summary — customers always pay a 50%
+              deposit at checkout. The remaining 50% is auto-charged to
+              the card on file when the cleaner marks the service
+              complete. (The "Pay in Full" toggle has been retired.) */}
+          <Card className="border-2 border-primary/30 bg-primary/[0.04]">
+            <CardContent className="p-4 md:p-5">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-gradient-primary text-white text-[10px] uppercase tracking-wider px-2 py-0.5">
+                      50% Deposit
+                    </Badge>
+                    <h4 className="font-semibold text-base">Due today</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Remaining ${depositPricing.balanceDue.toFixed(2)} is auto-charged to the card on file after your cleaning is complete.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl md:text-3xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                    ${depositPricing.deposit.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    of ${depositPricing.total.toFixed(2)} total
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* What's Included card — sits between the payment-option
               toggle and the promo/payment cards. Ported from the
@@ -799,7 +813,7 @@ export default function BookingCheckout() {
                 Payment Details
               </CardTitle>
               <CardDescription>
-                {effectivePaymentOption === 'deposit' ? `Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} after service` : `Pay $${currentAmount.toFixed(2)} now • No balance due`}
+                {`Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} auto-charged after service`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

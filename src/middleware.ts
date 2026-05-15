@@ -1,10 +1,37 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/integrations/supabase/middleware';
 
+// Paths on the hiring.* subdomain that we want to leave alone. Everything
+// else gets rewritten to the cleaner onboarding flow so the hiring
+// subdomain never accidentally exposes the customer booking funnel.
+const HIRING_ALLOWED_PREFIXES = [
+  '/cleaner',
+  '/auth/callback',          // Supabase magic-link callback
+  '/api',
+  '/_next',
+  '/favicon',
+];
+
 export async function middleware(request: NextRequest) {
   const response = await updateSession(request);
-  const hostname = request.headers.get('host') || '';
+  const hostname = (request.headers.get('host') || '').toLowerCase();
   const pathname = request.nextUrl.pathname;
+
+  // ─── Hiring subdomain — cleaner-only microsite ──────────────────────
+  // hiring.novaracleaning.com (and any *.hiring. variant) must only
+  // surface the cleaner application / onboarding pages. Anything else
+  // (the customer landing page, /book/*, /membership, /account, …) is
+  // rewritten to /cleaner/onboarding so the URL stays branded but the
+  // content is always the hiring funnel.
+  if (hostname.startsWith('hiring.')) {
+    const allowed = HIRING_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));
+    if (!allowed) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/cleaner/onboarding';
+      return NextResponse.rewrite(url);
+    }
+    return response;
+  }
 
   if (pathname === '/') {
     if (hostname.startsWith('app.')) {
