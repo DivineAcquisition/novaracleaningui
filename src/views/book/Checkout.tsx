@@ -33,7 +33,8 @@ import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BottomNavigation } from "@/components/booking/BottomNavigation";
 // PaymentComparison retired — customers always pay 50% deposit; the
 // remaining balance is auto-charged after completion.
-import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
+// SavingsVisualizer retired — replaced by the inline pricing breakdown
+// card below (original strikethrough + discounts + 50% deposit + remaining).
 import { Skeleton } from "@/components/ui/skeleton";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
@@ -673,35 +674,91 @@ export default function BookingCheckout() {
 
           {/* Show payment sections only when schedule is selected */}
           {isScheduleSelected && <>
-              {/* Savings Visualizer */}
-              <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={depositPricing.newCustomerDiscount || 0} membershipDiscount={depositPricing.membershipDiscount || 0} fullPaymentDiscount={0} promoDiscount={promoDiscount + referralDiscount} finalPrice={currentAmount} isMembershipSignup={isNewMembershipSignup} />
-
-          {/* Single-option payment summary — customers always pay a 50%
-              deposit at checkout. The remaining 50% is auto-charged to
-              the card on file when the cleaner marks the service
-              complete. (The "Pay in Full" toggle has been retired.) */}
+          {/* ─── Pricing breakdown ──────────────────────────────────
+              One single canonical card that replaces both the old
+              SavingsVisualizer and the old "Due Today" card. Shows the
+              strikethrough original cost, every applied discount, the
+              50% deposit due NOW (highlighted), and the remaining
+              balance that will be auto-charged after service. */}
           <Card className="border-2 border-primary/30 bg-primary/[0.04]">
-            <CardContent className="p-4 md:p-5">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <CardContent className="p-4 md:p-5 space-y-3">
+              {/* Strikethrough original cost — full pre-discount subtotal */}
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="text-muted-foreground">Original cost</span>
+                <span className="text-muted-foreground line-through">
+                  ${depositPricing.subtotal.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Discount lines */}
+              {(depositPricing.newCustomerDiscount || 0) > 0 && (
+                <div className="flex items-baseline justify-between text-sm text-primary font-medium">
+                  <span className="flex items-center gap-1">
+                    <RiGiftLine className="w-3.5 h-3.5" />
+                    New customer 50% off
+                  </span>
+                  <span>-${(depositPricing.newCustomerDiscount || 0).toFixed(2)}</span>
+                </div>
+              )}
+              {(depositPricing.membershipDiscount || 0) > 0 && (
+                <div className="flex items-baseline justify-between text-sm text-primary font-medium">
+                  <span>Membership discount</span>
+                  <span>-${(depositPricing.membershipDiscount || 0).toFixed(2)}</span>
+                </div>
+              )}
+              {(promoDiscount + referralDiscount) > 0 && (
+                <div className="flex items-baseline justify-between text-sm text-primary font-medium">
+                  <span className="flex items-center gap-1">
+                    <RiPriceTag3Line className="w-3.5 h-3.5" />
+                    {appliedPromoCode && appliedReferralCode
+                      ? `Promo + referral`
+                      : appliedPromoCode
+                        ? `Promo ${appliedPromoCode}`
+                        : `Referral ${appliedReferralCode}`}
+                  </span>
+                  <span>-${(promoDiscount + referralDiscount).toFixed(2)}</span>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Service total after discounts */}
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="font-semibold">Service total</span>
+                <span className="font-semibold">${depositPricing.total.toFixed(2)}</span>
+              </div>
+
+              <Separator />
+
+              {/* PAY NOW — 50% deposit, headline */}
+              <div className="flex items-baseline justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-gradient-primary text-white text-[10px] uppercase tracking-wider px-2 py-0.5">
                       50% Deposit
                     </Badge>
-                    <h4 className="font-semibold text-base">Due today</h4>
+                    <span className="font-bold text-base">Pay now</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Remaining ${depositPricing.balanceDue.toFixed(2)} is auto-charged to the card on file after your cleaning is complete.
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Charged to your card today
                   </p>
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl md:text-3xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-                    ${depositPricing.deposit.toFixed(2)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    of ${depositPricing.total.toFixed(2)} total
-                  </div>
+                <span className="text-2xl md:text-3xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                  ${depositPricing.deposit.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Balance after service completion */}
+              <div className="flex items-baseline justify-between rounded-md bg-background/60 border border-primary/15 px-3 py-2">
+                <div>
+                  <div className="font-semibold text-sm">Remaining balance</div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Auto-charged after your cleaning is complete
+                  </p>
                 </div>
+                <span className="text-lg md:text-xl font-bold text-foreground">
+                  ${depositPricing.balanceDue.toFixed(2)}
+                </span>
               </div>
             </CardContent>
           </Card>
