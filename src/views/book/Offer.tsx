@@ -57,7 +57,7 @@ export default function BookingOffer() {
   const router = useRouter();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<'membership' | 'promo' | null>(null);
+  const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'membership' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -100,8 +100,20 @@ export default function BookingOffer() {
   // Check for custom quote requirement (5000+ sq ft)
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
 
+  const handleSelectStandard = () => {
+    setSelectedService('standard');
+    updateBookingData({
+      serviceType: 'standard',
+      membershipPlan: 'none',
+    });
+    trackViewContent(prices.standard, 'Standard Cleaning — 50% Off First Clean');
+    setTimeout(() => {
+      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
   const handleSelectDeepClean = () => {
-    setSelectedService('promo');
+    setSelectedService('deep');
     updateBookingData({
       serviceType: 'deep',
       membershipPlan: 'none',
@@ -215,16 +227,105 @@ export default function BookingOffer() {
             </div>
           </div>
 
-          {/* Offer cards — Deep Clean (one-time) and Glow Membership.
-              Layout follows the AlphaLux single-column card structure
-              but recoloured with our purple primary. */}
+          {/* Offer cards — Standard Clean, Deep Clean (one-time), and
+              Glow Membership. Standard + Deep both qualify for the 50%
+              new-customer promo; Membership has its own per-clean
+              discount (14–42%) and does NOT stack the 50% off. */}
           <div className="grid gap-5 md:gap-6 max-w-xl mx-auto">
-            {/* Deep Clean — 50% off card */}
+            {/* Standard Clean — 50% off card */}
+            {selectedHomeSize && prices.standard > 0 && (() => {
+              const standardDiscounted = Math.round(
+                prices.standard * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT),
+              );
+              const isSelected = selectedService === "standard";
+              return (
+                <Card
+                  className={cn(
+                    "relative overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                    isSelected
+                      ? "border-primary shadow-lg ring-2 ring-primary/20"
+                      : "border-primary/20 hover:border-primary/50",
+                  )}
+                  onClick={handleSelectStandard}
+                >
+                  <CardContent className="pt-6 pb-6 px-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <RiHomeLine className="h-4 w-4" />
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          <RiPercentLine className="h-3 w-3 mr-1" />
+                          50% off · auto-applied
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-bold font-jakarta">Standard Clean</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        Regular maintenance cleaning — first-time customers save 50%.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-muted-foreground line-through mb-1">
+                        Regular: ${prices.standard}
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                          ${standardDiscounted}
+                        </span>
+                        <span className="text-sm text-muted-foreground">/clean</span>
+                      </div>
+                      <p className="text-xs text-primary font-semibold mt-1.5">
+                        50% off applied automatically
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Pay 50% deposit today, balance after service — or pay in full.
+                      </p>
+                    </div>
+
+                    <ul className="space-y-2">
+                      {[
+                        "Kitchen: countertops, sink, stovetop, appliance exteriors",
+                        "Bathrooms: sanitize fixtures, polish mirrors",
+                        "Living areas: dust, vacuum, mop",
+                        "Bedrooms: dust furniture, make beds on request",
+                        "All supplies & equipment included",
+                      ].map((line) => (
+                        <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
+                          <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-foreground">{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <Button
+                      size="lg"
+                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectStandard();
+                      }}
+                    >
+                      Claim Offer — Save 50%
+                      <RiArrowRightSLine className="w-4 h-4 ml-1" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Deep Clean — 50% off card (Most Popular) */}
             {selectedHomeSize && prices.deepClean > 0 && (() => {
               const deepCleanDiscounted = Math.round(
                 prices.deepClean * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT),
               );
-              const isSelected = selectedService === "promo";
+              const isSelected = selectedService === "deep";
               return (
                 <Card
                   className={cn(
@@ -243,7 +344,7 @@ export default function BookingOffer() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                          <RiHomeLine className="h-4 w-4" />
+                          <RiSparklingLine className="h-4 w-4" />
                         </div>
                         <Badge
                           variant="outline"
@@ -282,9 +383,9 @@ export default function BookingOffer() {
 
                     <ul className="space-y-2">
                       {[
-                        "Insured & bonded 2-person team",
-                        "Kitchen, bathrooms, bedrooms, living areas",
-                        "Baseboards, interior windows, sills",
+                        "Everything in Standard Clean",
+                        "Inside cabinet cleaning & baseboards",
+                        "Interior windows & sills",
                         "Eco-friendly products & HEPA vacuums",
                         "48-hour re-clean guarantee",
                       ].map((line) => (
@@ -363,7 +464,7 @@ export default function BookingOffer() {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Pay 50% deposit today, balance after service.
+                    Membership pricing already discounted — 50%-off promo does not stack.
                   </p>
                 </div>
 

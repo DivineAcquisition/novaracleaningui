@@ -289,9 +289,13 @@ export function calculatePrice(
   const extrasAmount = serviceAddition + addOnsTotal;
   const membershipDiscount = membership && !useCredit ? extrasAmount * membership.discount : 0;
 
-  // New customer promo — 50% off the entire subtotal (replaces the old $60 flat).
-  // Members aren't eligible (they already get plan pricing).
-  const newCustomerDiscount = isNewCustomer && membershipPlan === 'none'
+  // New customer promo — 50% off the entire subtotal.
+  // Only Standard and Deep one-time cleans qualify. Members already
+  // get plan-level pricing (14–42% off per clean), and Move-In/Out is
+  // intentionally excluded.
+  const promoEligible =
+    membershipPlan === 'none' && (serviceType === 'standard' || serviceType === 'deep');
+  const newCustomerDiscount = isNewCustomer && promoEligible
     ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT * 100) / 100
     : 0;
 
