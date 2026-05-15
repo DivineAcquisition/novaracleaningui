@@ -9,20 +9,21 @@ const corsHeaders = {
 const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
 
 // Active Telnyx numbers on the Novara account (May 2026):
-//   • +18334432004 — toll-free (preferred for outbound transactional SMS,
-//                   no 10DLC campaign required, higher throughput)
-//   • +14433838055 — local MD long-code (fallback)
+//   • +14433838055 — local MD long-code (PRIMARY — once 10DLC Brand +
+//                   Campaign approval lands in Telnyx Mission Control,
+//                   transactional SMS routes through here at ~$0.005/msg)
+//   • +18334432004 — toll-free (FALLBACK — will deliver once Telnyx's
+//                   Toll-Free Verification form is approved for this number)
 //
-// We try them in order: env override → toll-free → local. If Telnyx
-// rejects a sender as "Invalid source number" (e.g. the env var got
-// pointed at a number that's no longer on the account), we automatically
-// retry with the next known-good sender so a stale secret can't take
-// SMS delivery down.
+// We try them in order: env override → local → toll-free. Auto-retry on
+// sender-specific Telnyx errors. The companion telnyx-delivery-webhook
+// function then updates sms_logs.delivery_status / delivered_at when
+// the carrier confirms or rejects delivery.
 const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
 const TELNYX_SENDERS: string[] = Array.from(new Set([
   ENV_TELNYX_FROM,
-  "+18334432004",
   "+14433838055",
+  "+18334432004",
 ].filter((v): v is string => Boolean(v && v.trim()))));
 
 interface SMSRequest {
@@ -30,6 +31,10 @@ interface SMSRequest {
   message: string;
   type: "job_offer" | "reminder" | "confirmation" | "verification";
   jobAssignmentId?: string;
+  // Optional override — when set, skips the fallback list and sends from
+  // exactly this number. Used by admin diagnostics / health checks to
+  // attribute failures to a specific sender. Not used by customer flows.
+  fromOverride?: string;
 }
 
 function normalizePhone(phone: string): string {
@@ -50,12 +55,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-  let lastRequest: SMSRequest | null = null;
   let logEntryId: string | null = null;
 
   try {
-    const { toPhone, message, type, jobAssignmentId }: SMSRequest = await req.json();
-    lastRequest = { toPhone, message, type, jobAssignmentId };
+    const { toPhone, message, type, jobAssignmentId, fromOverride }: SMSRequest = await req.json();
 
     console.log(`[SMS] Sending ${type} to ${toPhone}`);
 
@@ -86,20 +89,18 @@ serve(async (req) => {
     const telnyxUrl = "https://api.telnyx.com/v2/messages";
     const recipient = normalizePhone(toPhone);
 
-    // Try each known-good sender in order. Auto-retry only on errors
-    // that imply the sender itself is bad ("Invalid source number" /
-    // "from number is not valid"). For any other Telnyx error
-    // (rate limit, recipient unreachable, etc.) bail immediately so we
-    // don't spam Telnyx with retries.
+    // Allow the caller to override the sender (used for diagnostic tests).
+    // Otherwise fall through to the configured fallback list.
+    const senders = fromOverride ? [fromOverride] : TELNYX_SENDERS;
+
     let lastErrorDetail = "No sender configured";
-    let lastErrorStatus = 500;
     let succeeded = false;
     let messageId: string | undefined;
     let messageCost: number = 0;
     let messageStatus: string = "sent";
-    let usedSender: string = TELNYX_SENDERS[0] || "";
+    let usedSender: string = senders[0] || "";
 
-    for (const candidate of TELNYX_SENDERS) {
+    for (const candidate of senders) {
       const requestBody = { from: candidate, to: recipient, text: message };
       const telnyxResponse = await fetch(telnyxUrl, {
         method: "POST",
@@ -125,10 +126,8 @@ serve(async (req) => {
         telnyxData.errors?.[0]?.detail ||
         telnyxData.errors?.[0]?.title ||
         `HTTP ${telnyxResponse.status}`;
-      lastErrorStatus = telnyxResponse.status;
       console.warn(`[SMS] Sender ${candidate} rejected: ${lastErrorDetail}`);
 
-      // Only retry the next sender on sender-specific errors.
       const isSenderError = /invalid source number|from number|not valid|not authorized|messaging_profile|10dlc/i.test(
         lastErrorDetail,
       );
