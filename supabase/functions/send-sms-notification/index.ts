@@ -9,21 +9,28 @@ const corsHeaders = {
 const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
 
 // Active Telnyx numbers on the Novara account (May 2026):
-//   • +14433838055 — local MD long-code (PRIMARY — once 10DLC Brand +
-//                   Campaign approval lands in Telnyx Mission Control,
-//                   transactional SMS routes through here at ~$0.005/msg)
-//   • +18334432004 — toll-free (FALLBACK — will deliver once Telnyx's
-//                   Toll-Free Verification form is approved for this number)
+//   • +18334432004 — toll-free (PRIMARY — Telnyx Toll-Free Verification
+//                   submitted and pending approval. Once approved, every
+//                   customer SMS routes through here on the first try.)
+//   • +14433838055 — local MD long-code (FALLBACK — needs 10DLC Brand +
+//                   Campaign registration before US carriers accept it.
+//                   Until then, sending via this number silently fails
+//                   at the carrier layer with a 10DLC rejection.)
 //
-// We try them in order: env override → local → toll-free. Auto-retry on
-// sender-specific Telnyx errors. The companion telnyx-delivery-webhook
-// function then updates sms_logs.delivery_status / delivered_at when
-// the carrier confirms or rejects delivery.
+// Order is intentional: the API-level fallback retry only fires when the
+// FIRST Telnyx /v2/messages call returns a 4xx with a sender-specific
+// error. In our case Telnyx returns 200 + queued for both numbers — the
+// carrier rejection is async via the delivery webhook. So we must put the
+// number most likely to actually DELIVER first; the fallback only saves
+// us if Telnyx itself outright refuses a sender (e.g. number released).
+//
+// env override → toll-free → local. Update TELNYX_PHONE_NUMBER in Supabase
+// secrets to a different number if ops moves the primary sender.
 const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
 const TELNYX_SENDERS: string[] = Array.from(new Set([
   ENV_TELNYX_FROM,
-  "+14433838055",
   "+18334432004",
+  "+14433838055",
 ].filter((v): v is string => Boolean(v && v.trim()))));
 
 interface SMSRequest {
