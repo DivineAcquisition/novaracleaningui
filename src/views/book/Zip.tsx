@@ -16,6 +16,7 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { trackLead } from "@/lib/meta-pixel";
@@ -260,17 +261,36 @@ export default function BookingZip() {
 
           <div className="space-y-4">
             <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
-              {formMode === 'waitlist-success' 
-                ? "You're On The List! 🎉" 
-                : "Book Your Cleaning Today For Only $39"}
+              {formMode === 'waitlist-success'
+                ? "You're On The List! 🎉"
+                : "Book Your Cleaning Today"}
             </h1>
-            
+
+            {/* New-customer 50% off sub-headline — sits directly under
+                the page headline, in our primary brand color. Hidden on
+                the waitlist-success state. */}
+            {formMode !== 'waitlist-success' && (
+              <p className="text-lg md:text-2xl font-bold font-jakarta">
+                <span className="bg-gradient-primary bg-clip-text text-transparent">
+                  50% Off
+                </span>{" "}
+                Your First Cleaning
+              </p>
+            )}
+
             {formMode !== 'waitlist-success' && (
               <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">
-                {formMode === 'waitlist' 
+                {formMode === 'waitlist'
                   ? "We're not in your area yet, but we're expanding soon!"
                   : "Premium cleaning service at transparent prices. Enter your ZIP code to get started."}
               </p>
+            )}
+
+            {/* Rotating value-prop carousel under the headline. Three
+                messages cycle every 3s: no-call, instant pricing,
+                next-day availability. */}
+            {formMode !== 'waitlist-success' && (
+              <RotatingSubheadline className="pt-1" />
             )}
           </div>
 

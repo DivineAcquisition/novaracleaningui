@@ -3,7 +3,8 @@ import {
   RiArrowLeftLine,
   RiArrowRightSLine,
   RiCheckLine,
-  RiFlashlightLine,
+  RiHomeLine,
+  RiPercentLine,
   RiPhoneLine,
   RiSparklingLine,
   RiStarLine,
@@ -185,96 +186,177 @@ export default function BookingOffer() {
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
         <PromoBanner />
 
-        <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8">
-          {/* Header Section */}
-          <div className="text-center space-y-4">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold font-jakarta">
-              Choose Your Service
+        <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8" id="offers-section">
+          {/* Header — promo-led layout: badge + "Save 50%" hero +
+              auto-applied-code line. Uses our primary purple in place
+              of AlphaLux's gold. */}
+          <div className="text-center space-y-3 md:space-y-4">
+            <Badge className="bg-primary/10 text-primary border border-primary/40 px-3 py-1 text-xs font-bold uppercase tracking-wider">
+              <RiSparklingLine className="h-3.5 w-3.5 mr-1.5" />
+              New Customer Special — 50% Off
+            </Badge>
+
+            <h1 className="font-jakarta text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight">
+              Save{" "}
+              <span className="bg-gradient-primary bg-clip-text text-transparent">
+                50%
+              </span>{" "}
+              On Your First Cleaning
             </h1>
-            
-            <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              One-time deep clean or recurring membership — you decide.
+
+            <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-primary font-semibold">
+              New-customer discount applied automatically at checkout
             </p>
-            
-            <GoogleGuaranteedBadge variant="compact" />
+
+            <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto">
+              Pick a one-time deep clean or join the Glow membership — either way you save 50% on the first clean.
+            </p>
+
+            <div className="flex justify-center pt-1">
+              <GoogleGuaranteedBadge variant="compact" />
+            </div>
           </div>
 
-          {/* Deep Clean — 50% Off (one-time, new customers) */}
-          {selectedHomeSize && prices.deepClean > 0 && (() => {
-            const deepCleanDiscounted = Math.round(prices.deepClean * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT));
-            return (
-              <div className="col-span-full">
-                <Card className="relative overflow-hidden border-2 border-amber-400/60 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 hover:border-amber-400 transition-all duration-300 hover:shadow-xl">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                  <CardContent className="pt-6 pb-6 px-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-amber-500 text-white font-bold px-3 py-1">
-                            <RiFlashlightLine className="w-3 h-3 mr-1" />
-                            50% Off — First Clean
-                          </Badge>
+          {/* Offer cards — Deep Clean (one-time) and Glow Membership.
+              Layout follows the AlphaLux single-column card structure
+              but recoloured with our purple primary. */}
+          <div className="grid gap-5 md:gap-6 max-w-xl mx-auto">
+            {/* Deep Clean — 50% off card */}
+            {selectedHomeSize && prices.deepClean > 0 && (() => {
+              const deepCleanDiscounted = Math.round(
+                prices.deepClean * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT),
+              );
+              const isSelected = selectedService === "promo";
+              return (
+                <Card
+                  className={cn(
+                    "relative overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                    isSelected
+                      ? "border-primary shadow-lg ring-2 ring-primary/20"
+                      : "border-primary/30 hover:border-primary/60",
+                  )}
+                  onClick={handleSelectDeepClean}
+                >
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-primary text-white rounded-full text-[10px] font-semibold shadow uppercase tracking-wider">
+                    Most Popular
+                  </div>
+
+                  <CardContent className="pt-7 pb-6 px-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <RiHomeLine className="h-4 w-4" />
                         </div>
-                        <h3 className="text-2xl font-bold font-jakarta">Deep Cleaning</h3>
-                        <p className="text-muted-foreground text-sm max-w-md">
-                          Thorough top-to-bottom deep clean. First-time customers save 50%.
-                        </p>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
-                            ${deepCleanDiscounted}
-                          </span>
-                          <span className="text-lg text-muted-foreground line-through">${prices.deepClean}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Pay 50% deposit today, balance after service — or pay in full.
-                        </p>
-                      </div>
-                      <div className="flex-shrink-0">
-                        <Button
-                          size="lg"
-                          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-semibold"
-                          onClick={handleSelectDeepClean}
+                        <Badge
+                          variant="outline"
+                          className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                         >
-                          Claim Offer
-                          <RiArrowRightSLine className="w-4 h-4 ml-1" />
-                        </Button>
+                          <RiPercentLine className="h-3 w-3 mr-1" />
+                          50% off · auto-applied
+                        </Badge>
                       </div>
                     </div>
+
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-bold font-jakarta">Deep Clean</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        Thorough top-to-bottom reset — first-time customers save 50%.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-muted-foreground line-through mb-1">
+                        Regular: ${prices.deepClean}
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                          ${deepCleanDiscounted}
+                        </span>
+                        <span className="text-sm text-muted-foreground">/clean</span>
+                      </div>
+                      <p className="text-xs text-primary font-semibold mt-1.5">
+                        50% off applied automatically
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Pay 50% deposit today, balance after service — or pay in full.
+                      </p>
+                    </div>
+
+                    <ul className="space-y-2">
+                      {[
+                        "Insured & bonded 2-person team",
+                        "Kitchen, bathrooms, bedrooms, living areas",
+                        "Baseboards, interior windows, sills",
+                        "Eco-friendly products & HEPA vacuums",
+                        "48-hour re-clean guarantee",
+                      ].map((line) => (
+                        <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
+                          <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-foreground">{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <Button
+                      size="lg"
+                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectDeepClean();
+                      }}
+                    >
+                      Claim Offer — Save 50%
+                      <RiArrowRightSLine className="w-4 h-4 ml-1" />
+                    </Button>
                   </CardContent>
                 </Card>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
-          {/* Offer Cards */}
-          <div id="offers-section" className="max-w-xl mx-auto">
-            {/* Novara Glow Membership (Most Popular) */}
-            <div className="relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                <Badge className="bg-success text-white font-bold shadow-lg px-4 py-1.5">
-                  Most Popular — Save {prices.membership.biweeklySavingsPercent}%
-                </Badge>
-              </div>
-              
-              <Card className="overflow-hidden border-2 border-success/30 hover:border-success/60 transition-all duration-300 hover:shadow-xl">
-              <CardContent className="pt-14 pb-6 px-5 space-y-5">
-                <div>
-                  <h3 className="text-2xl font-bold font-jakarta">Novara Glow Membership</h3>
-                  <p className="text-muted-foreground">Recurring cleaning — choose your frequency</p>
-                </div>
-                
-                <div className="space-y-2">
-                  {/* Bi-Weekly highlight */}
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-success">${prices.membership.biweekly}</span>
-                    <span className="text-muted-foreground">/month</span>
+            {/* Novara Glow Membership card */}
+            <Card
+              className={cn(
+                "relative overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                selectedService === "membership"
+                  ? "border-primary shadow-lg ring-2 ring-primary/20"
+                  : "border-primary/20 hover:border-primary/50",
+              )}
+              onClick={handleSelectMembership}
+            >
+              <CardContent className="pt-6 pb-6 px-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                      <RiVipCrownLine className="h-4 w-4" />
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                    >
+                      <RiStarLine className="h-3 w-3 mr-1" />
+                      Save up to {prices.membership.biweeklySavingsPercent}%
+                    </Badge>
                   </div>
-                  <p className="text-sm text-success font-medium">
-                    Bi-Weekly: 2 cleans/month at ${prices.membership.biweeklyPerClean}/clean
-                  </p>
+                </div>
 
-                  {/* Other frequency options */}
-                  <div className="flex gap-2 pt-1">
+                <div>
+                  <h3 className="text-xl md:text-2xl font-bold font-jakarta">Novara Glow Membership</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Recurring cleaning — same trusted team, every visit.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                      ${prices.membership.biweekly}
+                    </span>
+                    <span className="text-sm text-muted-foreground">/month</span>
+                  </div>
+                  <p className="text-xs text-primary font-semibold mt-1.5">
+                    Bi-Weekly · 2 cleans/month at ${prices.membership.biweeklyPerClean}/clean
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-2">
                     <Badge variant="secondary" className="text-[10px]">
                       Monthly: ${prices.membership.monthly}/mo
                     </Badge>
@@ -282,44 +364,46 @@ export default function BookingOffer() {
                       Weekly: ${prices.membership.weekly}/mo
                     </Badge>
                   </div>
-
-                  <p className="text-sm text-muted-foreground">
-                    Pay 50% deposit today, balance after service
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Pay 50% deposit today, balance after service.
                   </p>
                 </div>
 
-                <ul className="space-y-2.5">
-                  {MEMBERSHIP_FEATURES.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm">
-                      <div className="w-5 h-5 rounded-full bg-success/15 flex items-center justify-center flex-shrink-0">
-                        <RiCheckLine className="w-3 h-3 text-success" />
-                      </div>
-                      <span>{feature}</span>
+                <ul className="space-y-2">
+                  {MEMBERSHIP_FEATURES.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-xs md:text-sm">
+                      <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                      <span className="text-foreground">{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                <div className="space-y-2 pt-2">
+                <div className="space-y-2 pt-1">
                   <Button
                     size="lg"
-                    className="w-full bg-success hover:bg-success/90 font-semibold"
-                    onClick={handleSelectMembership}
+                    className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectMembership();
+                    }}
                   >
                     Get Started
                     <RiArrowRightSLine className="w-4 h-4 ml-1" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="w-full"
-                    onClick={() => setShowMembershipModal(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowMembershipModal(true);
+                    }}
                   >
                     What's Included?
                   </Button>
                 </div>
               </CardContent>
             </Card>
-            </div>
           </div>
 
           {/* Schedule Picker - Shows after service selection with animation */}
