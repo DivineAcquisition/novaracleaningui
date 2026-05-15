@@ -30,7 +30,7 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { PaymentComparison } from "@/components/booking/PaymentComparison";
 import { SavingsVisualizer } from "@/components/booking/SavingsVisualizer";
 import { Skeleton } from "@/components/ui/skeleton";
-import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours, NEW_CUSTOMER_DISCOUNT } from "@/lib/pricing-system";
+import { calculatePrice, calculateFullPaymentWithDiscount, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
@@ -477,7 +477,7 @@ export default function BookingCheckout() {
     return () => clearTimeout(timer);
   }, [bookingData.paymentOption, bookingData.email, bookingData.homeSizeId, bookingData.serviceDate, bookingData.timeSlot, clientSecret]);
   const currentAmount = effectivePaymentOption === 'full' ? fullPaymentPricing.finalAmount : depositPricing.deposit;
-  const totalSavings = (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0) + (depositPricing.membershipDiscount || 0) + (effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0) + promoDiscount + referralDiscount;
+  const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + (effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
   return <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
@@ -599,21 +599,21 @@ export default function BookingCheckout() {
           {/* Show payment sections only when schedule is selected */}
           {isScheduleSelected && <>
               {/* Savings Visualizer */}
-              <SavingsVisualizer originalPrice={depositPricing.subtotal + (isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0)} newCustomerDiscount={isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0} membershipDiscount={depositPricing.membershipDiscount || 0} fullPaymentDiscount={effectivePaymentOption === 'full' ? fullPaymentPricing.discount : 0} promoDiscount={promoDiscount + referralDiscount} finalPrice={currentAmount} isMembershipSignup={isNewMembershipSignup} />
+              <SavingsVisualizer originalPrice={depositPricing.subtotal} newCustomerDiscount={depositPricing.newCustomerDiscount || 0} membershipDiscount={depositPricing.membershipDiscount || 0} fullPaymentDiscount={0} promoDiscount={promoDiscount + referralDiscount} finalPrice={currentAmount} isMembershipSignup={isNewMembershipSignup} />
           <div className="space-y-3">
             <h3 className="font-semibold text-lg">Choose Payment Option</h3>
             <PaymentComparison depositPricing={{
               deposit: depositPricing.deposit,
               balanceDue: depositPricing.balanceDue,
               subtotal: depositPricing.subtotal,
-              newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0,
+              newCustomerDiscount: depositPricing.newCustomerDiscount || 0,
               membershipDiscount: depositPricing.membershipDiscount || 0
             }} fullPaymentPricing={{
               originalTotal: fullPaymentPricing.originalTotal,
               finalAmount: fullPaymentPricing.finalAmount,
               discount: fullPaymentPricing.discount,
               savings: fullPaymentPricing.savings,
-              newCustomerDiscount: isNewCustomer ? NEW_CUSTOMER_DISCOUNT : 0
+              newCustomerDiscount: depositPricing.newCustomerDiscount || 0
             }} selectedOption={effectivePaymentOption} onSelect={handlePaymentOptionChange} />
           </div>
 

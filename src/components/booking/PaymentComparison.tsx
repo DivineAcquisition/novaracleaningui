@@ -50,8 +50,8 @@ export function PaymentComparison({
         <CardContent className="p-4 md:p-5 space-y-3">
           <div className="flex items-start justify-between">
             <div>
-              <h4 className="font-semibold text-base md:text-lg">Pay Deposit Now</h4>
-              <p className="text-xs text-muted-foreground mt-1">Standard option</p>
+              <h4 className="font-semibold text-base md:text-lg">Pay 50% Deposit</h4>
+              <p className="text-xs text-muted-foreground mt-1">Half today, half after service</p>
             </div>
             {selectedOption === 'deposit' && (
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
@@ -80,12 +80,12 @@ export function PaymentComparison({
                 <div className="flex items-center justify-between text-green-600 font-medium">
                   <span className="flex items-center gap-1.5">
                     <RiGiftLine className="w-3.5 h-3.5" />
-                    New customer $60 off:
+                    New customer 50% off:
                   </span>
                   <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
                 </div>
               )}
-              
+
               {depositPricing.membershipDiscount > 0 && (
                 <div className="flex justify-between text-success font-medium">
                   <span>Membership discount:</span>
@@ -120,15 +120,15 @@ export function PaymentComparison({
       >
         <div className="absolute -top-2 -right-2 z-10">
           <div className="bg-success text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
-            Save 10%
+            No balance due
           </div>
         </div>
-        
+
         <CardContent className="p-4 md:p-5 space-y-3">
           <div className="flex items-start justify-between">
             <div>
               <h4 className="font-semibold text-base md:text-lg">Pay in Full</h4>
-              <p className="text-xs text-muted-foreground mt-1">Best value</p>
+              <p className="text-xs text-muted-foreground mt-1">One-and-done</p>
             </div>
             {selectedOption === 'full' && (
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
@@ -157,19 +157,14 @@ export function PaymentComparison({
                 <div className="flex items-center justify-between text-green-600 font-medium">
                   <span className="flex items-center gap-1.5">
                     <RiGiftLine className="w-3.5 h-3.5" />
-                    New customer $60 off:
+                    New customer 50% off:
                   </span>
                   <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
                 </div>
               )}
-              
-              <div className="flex justify-between text-success font-medium">
-                <span>10% full payment discount:</span>
-                <span>-${fullPaymentPricing.discount.toFixed(2)}</span>
-              </div>
-              
+
               <Separator className="my-2" />
-              
+
               <div className="flex items-center justify-between font-bold text-success pt-1">
                 <span className="flex items-center gap-1.5">
                   <RiFlashlightLine className="w-4 h-4" />
@@ -177,9 +172,9 @@ export function PaymentComparison({
                 </span>
                 <span className="text-lg">${fullPaymentPricing.savings.toFixed(2)}</span>
               </div>
-              
+
               <p className="text-xs text-muted-foreground italic pt-2">
-                No balance due - pay once and you're done! ✓
+                No balance due — pay once and you're done.
               </p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -321,6 +322,32 @@ serve(async (req) => {
             });
 
             logStep("Confirmation emails sent successfully");
+
+              // Customer SMS confirmation — best-effort, non-blocking.
+              try {
+                const dateLabel = formatServiceDate(confirmedBooking.service_date);
+                const timeLabel = formatTimeSlot(confirmedBooking.time_slot);
+                const amountDue = confirmedBooking.payment_option === 'deposit'
+                  ? Math.max(0, confirmedBooking.total_estimate_cents - (confirmedBooking.deposit_cents || 0))
+                  : 0;
+                const tail = amountDue > 0
+                  ? ` Remaining $${(amountDue / 100).toFixed(2)} is due after service.`
+                  : ` Paid in full — see you soon!`;
+                const smsMsg =
+                  `Novara Cleaning: Booking confirmed for ${dateLabel}` +
+                  (timeLabel ? ` (${timeLabel})` : "") +
+                  `.${tail} Questions? Reply or call (844) 735-2070. Reply STOP to opt out.`;
+                await sendSms(supabase, {
+                  toPhone: confirmedBooking.phone,
+                  message: smsMsg,
+                  type: "confirmation",
+                });
+                logStep("Customer confirmation SMS sent");
+              } catch (smsErr) {
+                logStep("Customer confirmation SMS failed (non-blocking)", {
+                  error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+                });
+              }
 
               // Mark confirmation email as sent to prevent duplicates on webhook retries
               await supabase

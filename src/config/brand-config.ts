@@ -92,11 +92,13 @@ export const TYPOGRAPHY = {
 // =============================================================================
 
 export const PRICING = {
-  hourlyRate: 75,              // $ per hour
-  depositAmount: 39,           // $ deposit collected at booking
-  newCustomerDiscount: 60,     // $ off first booking (V2)
-  overtimeRate: 75,            // $ per additional hour
-  firstCleanSurcharge: 75,     // $ deep clean surcharge for new members
+  hourlyRate: 75,                  // $ per hour
+  depositPercent: 0.5,             // 50% deposit on total when "Pay 50% Deposit" is chosen
+  depositAmount: 0,                // Deprecated — kept for backwards compatibility
+  newCustomerDiscountPercent: 0.5, // 50% off the entire booking for new customers
+  newCustomerDiscount: 0,          // Deprecated — discount is now percent-based
+  overtimeRate: 75,                // $ per additional hour
+  firstCleanSurcharge: 0,          // No longer applied
 } as const;
 
 // =============================================================================
@@ -113,15 +115,15 @@ export interface HomeSizeConfig {
 }
 
 export const HOME_SIZES: HomeSizeConfig[] = [
-  { id: "0_999",      label: "XS",   sqftRange: "0-999",       bedrooms: "Studio-1",  baseHours: 2,    basePrice: 150 },
-  { id: "1000_1500",  label: "S",    sqftRange: "1,000-1,500", bedrooms: "1-2",       baseHours: 2.5,  basePrice: 189 },
-  { id: "1501_2000",  label: "M",    sqftRange: "1,501-2,000", bedrooms: "2-3",       baseHours: 3,    basePrice: 239 },
-  { id: "2001_2500",  label: "L",    sqftRange: "2,001-2,500", bedrooms: "3-4",       baseHours: 3.5,  basePrice: 279 },
-  { id: "2501_3000",  label: "XL",   sqftRange: "2,501-3,000", bedrooms: "4-5",       baseHours: 4,    basePrice: 339 },
-  { id: "3001_3500",  label: "2XL",  sqftRange: "3,001-3,500", bedrooms: "5+",        baseHours: 4.5,  basePrice: 379 },
-  { id: "3501_4000",  label: "3XL",  sqftRange: "3,501-4,000", bedrooms: "5+",        baseHours: 5,    basePrice: 439 },
-  { id: "4001_4500",  label: "4XL",  sqftRange: "4,001-4,500", bedrooms: "6+",        baseHours: 5.5,  basePrice: 489 },
-  { id: "4501_5000",  label: "5XL",  sqftRange: "4,501-5,000", bedrooms: "6+",        baseHours: 6,    basePrice: 539 },
+  { id: "0_999",      label: "XS",   sqftRange: "0-999",       bedrooms: "Studio-1",  baseHours: 2,    basePrice: 329 },
+  { id: "1000_1500",  label: "S",    sqftRange: "1,000-1,500", bedrooms: "1-2",       baseHours: 2.5,  basePrice: 419 },
+  { id: "1501_2000",  label: "M",    sqftRange: "1,501-2,000", bedrooms: "2-3",       baseHours: 3,    basePrice: 529 },
+  { id: "2001_2500",  label: "L",    sqftRange: "2,001-2,500", bedrooms: "3-4",       baseHours: 3.5,  basePrice: 619 },
+  { id: "2501_3000",  label: "XL",   sqftRange: "2,501-3,000", bedrooms: "4-5",       baseHours: 4,    basePrice: 749 },
+  { id: "3001_3500",  label: "2XL",  sqftRange: "3,001-3,500", bedrooms: "5+",        baseHours: 4.5,  basePrice: 839 },
+  { id: "3501_4000",  label: "3XL",  sqftRange: "3,501-4,000", bedrooms: "5+",        baseHours: 5,    basePrice: 969 },
+  { id: "4001_4500",  label: "4XL",  sqftRange: "4,001-4,500", bedrooms: "6+",        baseHours: 5.5,  basePrice: 1079 },
+  { id: "4501_5000",  label: "5XL",  sqftRange: "4,501-5,000", bedrooms: "6+",        baseHours: 6,    basePrice: 1189 },
   { id: "5000_plus",  label: "6XL",  sqftRange: "5,001+",      bedrooms: "7+",        baseHours: 0,    basePrice: 0 },
 ];
 
@@ -235,7 +237,7 @@ export const MEMBERSHIP_PLANS: MembershipPlanConfig[] = [
   {
     id: "monthly",
     name: "Glow Monthly",
-    monthlyPrice: 129,
+    monthlyPrice: 289,
     cleansPerMonth: 1,
     includedHours: 2,
     overtimeDiscount: 15,
@@ -249,7 +251,7 @@ export const MEMBERSHIP_PLANS: MembershipPlanConfig[] = [
   {
     id: "biweekly",
     name: "Glow Bi-Weekly",
-    monthlyPrice: 199,
+    monthlyPrice: 439,
     cleansPerMonth: 2,
     includedHours: 3,
     overtimeDiscount: 25,
@@ -265,7 +267,7 @@ export const MEMBERSHIP_PLANS: MembershipPlanConfig[] = [
   {
     id: "weekly",
     name: "Glow Weekly",
-    monthlyPrice: 349,
+    monthlyPrice: 769,
     cleansPerMonth: 4,
     includedHours: 3,
     overtimeDiscount: 35,
@@ -297,28 +299,24 @@ export interface PromoConfig {
 // $99 FIRST CLEAN PROMO (Toggle on/off here)
 // =============================================================================
 
+// The old $99 standard-clean intro promo has been retired — Standard Cleaning is
+// no longer offered to customers (Membership + Deep Clean only). The new-customer
+// 50% off promo replaces it across the funnel.
 export const FIRST_CLEAN_PROMO = {
-  enabled: true,               // Set to false to disable the promo entirely
-  price: 99,                   // Flat $99 for first clean
-  label: "$99 First Clean",
-  description: "Standard clean only. First-time customers. One per household.",
+  enabled: false,
+  price: 0,
+  label: "",
+  description: "",
   serviceTypeRestriction: "standard" as const,
 } as const;
 
 export const ACTIVE_PROMOS: PromoConfig[] = [
   {
-    code: "NEWYEAR60",
-    description: "$60 off Deep Clean",
-    discountType: "amount",
-    discountValue: 60,
-    expiresAt: "2025-01-31",
-    appliesTo: ["deep", "move"],
-  },
-  {
-    code: "FIRST30",
-    description: "$30 off your first booking",
-    discountType: "amount",
-    discountValue: 30,
+    code: "NEW50",
+    description: "50% off your first booking — new customers",
+    discountType: "percent",
+    discountValue: 50,
+    appliesTo: ["deep"],
   },
 ];
 
@@ -385,19 +383,19 @@ export function calculateTotal(
   applyNewCustomerDiscount: boolean = false
 ): number {
   let total = calculateBasePrice(homeSizeId, serviceTierId);
-  
+
   // Add add-ons
   addOnIds.forEach(id => {
     const addOn = ADD_ONS.find(a => a.id === id);
     if (addOn) total += addOn.price;
   });
-  
-  // Apply new customer discount
+
+  // 50% off for new customers (replaces the legacy flat-dollar discount).
   if (applyNewCustomerDiscount) {
-    total -= PRICING.newCustomerDiscount;
+    total = total * (1 - PRICING.newCustomerDiscountPercent);
   }
-  
-  return Math.max(0, total);
+
+  return Math.max(0, Math.round(total * 100) / 100);
 }
 
 /**

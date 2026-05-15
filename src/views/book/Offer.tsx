@@ -27,11 +27,11 @@ import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import {
   HOME_SIZE_RANGES,
-  DEPOSIT_AMOUNT,
+  DEPOSIT_PERCENT,
+  NEW_CUSTOMER_DISCOUNT_PERCENT,
   MEMBERSHIP_PRICES,
   getServicePrice,
 } from "@/lib/pricing-system";
-import { FIRST_CLEAN_PROMO } from "@/config/brand-config";
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -100,13 +100,13 @@ export default function BookingOffer() {
   // Check for custom quote requirement (5000+ sq ft)
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
 
-  const handleSelectPromo = () => {
+  const handleSelectDeepClean = () => {
     setSelectedService('promo');
     updateBookingData({
-      serviceType: 'standard',
+      serviceType: 'deep',
       membershipPlan: 'none',
     });
-    trackViewContent(FIRST_CLEAN_PROMO.price, '$99 First Clean Promo');
+    trackViewContent(prices.deepClean, 'Deep Cleaning — 50% Off First Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -199,46 +199,52 @@ export default function BookingOffer() {
             <GoogleGuaranteedBadge variant="compact" />
           </div>
 
-          {/* $99 First Clean Promo Card */}
-          {FIRST_CLEAN_PROMO.enabled && (
-            <div className="col-span-full">
-              <Card className="relative overflow-hidden border-2 border-amber-400/60 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 hover:border-amber-400 transition-all duration-300 hover:shadow-xl">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <CardContent className="pt-6 pb-6 px-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-amber-500 text-white font-bold px-3 py-1">
-                          <RiFlashlightLine className="w-3 h-3 mr-1" />
-                          Limited Offer
-                        </Badge>
+          {/* Deep Clean — 50% Off (one-time, new customers) */}
+          {selectedHomeSize && prices.deepClean > 0 && (() => {
+            const deepCleanDiscounted = Math.round(prices.deepClean * (1 - NEW_CUSTOMER_DISCOUNT_PERCENT));
+            return (
+              <div className="col-span-full">
+                <Card className="relative overflow-hidden border-2 border-amber-400/60 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 hover:border-amber-400 transition-all duration-300 hover:shadow-xl">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <CardContent className="pt-6 pb-6 px-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-amber-500 text-white font-bold px-3 py-1">
+                            <RiFlashlightLine className="w-3 h-3 mr-1" />
+                            50% Off — First Clean
+                          </Badge>
+                        </div>
+                        <h3 className="text-2xl font-bold font-jakarta">Deep Cleaning</h3>
+                        <p className="text-muted-foreground text-sm max-w-md">
+                          Thorough top-to-bottom deep clean. First-time customers save 50%.
+                        </p>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
+                            ${deepCleanDiscounted}
+                          </span>
+                          <span className="text-lg text-muted-foreground line-through">${prices.deepClean}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Pay 50% deposit today, balance after service — or pay in full.
+                        </p>
                       </div>
-                      <h3 className="text-2xl font-bold font-jakarta">{FIRST_CLEAN_PROMO.label}</h3>
-                      <p className="text-muted-foreground text-sm max-w-md">
-                        {FIRST_CLEAN_PROMO.description}
-                      </p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-amber-600 dark:text-amber-400">${FIRST_CLEAN_PROMO.price}</span>
-                        {selectedHomeSize && (
-                          <span className="text-lg text-muted-foreground line-through">${prices.standard}</span>
-                        )}
+                      <div className="flex-shrink-0">
+                        <Button
+                          size="lg"
+                          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+                          onClick={handleSelectDeepClean}
+                        >
+                          Claim Offer
+                          <RiArrowRightSLine className="w-4 h-4 ml-1" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex-shrink-0">
-                      <Button
-                        size="lg"
-                        className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-semibold"
-                        onClick={handleSelectPromo}
-                      >
-                        Claim Offer
-                        <RiArrowRightSLine className="w-4 h-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()}
 
           {/* Offer Cards */}
           <div id="offers-section" className="max-w-xl mx-auto">
@@ -278,10 +284,10 @@ export default function BookingOffer() {
                   </div>
 
                   <p className="text-sm text-muted-foreground">
-                    Pay only ${DEPOSIT_AMOUNT} deposit today
+                    Pay 50% deposit today, balance after service
                   </p>
                 </div>
-                
+
                 <ul className="space-y-2.5">
                   {MEMBERSHIP_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-sm">
@@ -292,14 +298,14 @@ export default function BookingOffer() {
                     </li>
                   ))}
                 </ul>
-                
+
                 <div className="space-y-2 pt-2">
-                  <Button 
-                    size="lg" 
+                  <Button
+                    size="lg"
                     className="w-full bg-success hover:bg-success/90 font-semibold"
                     onClick={handleSelectMembership}
                   >
-                    Get Started — ${DEPOSIT_AMOUNT} Today
+                    Get Started
                     <RiArrowRightSLine className="w-4 h-4 ml-1" />
                   </Button>
                   <Button 

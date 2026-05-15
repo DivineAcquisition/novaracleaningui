@@ -28,82 +28,59 @@ import { cn } from "@/lib/utils";
 const logo = "/novara-logo.png";
 import {
   HOME_SIZE_RANGES, SERVICE_ZONES, ADD_ONS, MEMBERSHIP_PRICES,
-  DEPOSIT_AMOUNT, NEW_CUSTOMER_DISCOUNT, FIRST_CLEAN_SURCHARGE,
   type ZoneId,
 } from "@/lib/pricing-system";
 import { SEO } from "@/components/SEO";
 
-// ─── Precomputed pricing rows from the PDF ──────────────
-const STANDARD_PRICES: Record<string, Record<ZoneId, number>> = {
-  '0_999':     { B: 150, A: 173, C: 135 },
-  '1000_1500': { B: 189, A: 217, C: 170 },
-  '1501_2000': { B: 239, A: 275, C: 215 },
-  '2001_2500': { B: 279, A: 321, C: 251 },
-  '2501_3000': { B: 339, A: 390, C: 305 },
-  '3001_3500': { B: 379, A: 436, C: 341 },
-  '3501_4000': { B: 439, A: 505, C: 395 },
-  '4001_4500': { B: 489, A: 562, C: 440 },
-  '4501_5000': { B: 539, A: 620, C: 485 },
-};
+// Derive the displayed zone-price tables from the canonical pricing system so
+// this marketing page automatically tracks any future base-price changes.
+const buildZonePriceRow = (basePrice: number): Record<ZoneId, number> => ({
+  A: Math.round(basePrice * SERVICE_ZONES.A.modifier),
+  B: Math.round(basePrice * SERVICE_ZONES.B.modifier),
+  C: Math.round(basePrice * SERVICE_ZONES.C.modifier),
+});
 
-const DEEP_PRICES: Record<string, Record<ZoneId, number>> = {
-  '0_999':     { B: 225, A: 259, C: 203 },
-  '1000_1500': { B: 284, A: 327, C: 256 },
-  '1501_2000': { B: 359, A: 413, C: 323 },
-  '2001_2500': { B: 419, A: 482, C: 377 },
-  '2501_3000': { B: 509, A: 585, C: 458 },
-  '3001_3500': { B: 569, A: 654, C: 512 },
-  '3501_4000': { B: 659, A: 758, C: 593 },
-  '4001_4500': { B: 734, A: 844, C: 661 },
-  '4501_5000': { B: 809, A: 930, C: 728 },
-};
+const STANDARD_PRICES: Record<string, Record<ZoneId, number>> = Object.fromEntries(
+  HOME_SIZE_RANGES.filter(h => h.standardPrice > 0).map(h => [h.id, buildZonePriceRow(h.standardPrice)]),
+);
 
-const MOVEINOUT_PRICES: Record<string, Record<ZoneId, number>> = {
-  '0_999':     { B: 300, A: 345, C: 270 },
-  '1000_1500': { B: 378, A: 435, C: 340 },
-  '1501_2000': { B: 478, A: 550, C: 430 },
-  '2001_2500': { B: 558, A: 642, C: 502 },
-  '2501_3000': { B: 678, A: 780, C: 610 },
-  '3001_3500': { B: 758, A: 872, C: 682 },
-  '3501_4000': { B: 878, A: 1010, C: 790 },
-  '4001_4500': { B: 978, A: 1125, C: 880 },
-  '4501_5000': { B: 1078, A: 1240, C: 970 },
+const DEEP_PRICES: Record<string, Record<ZoneId, number>> = Object.fromEntries(
+  HOME_SIZE_RANGES.filter(h => h.standardPrice > 0).map(h => [h.id, buildZonePriceRow(Math.round(h.standardPrice * 1.5))]),
+);
+
+const MOVEINOUT_PRICES: Record<string, Record<ZoneId, number>> = Object.fromEntries(
+  HOME_SIZE_RANGES.filter(h => h.standardPrice > 0).map(h => [h.id, buildZonePriceRow(Math.round(h.standardPrice * 2.0))]),
+);
+
+const buildMembershipRow = (basePrice: number, savings: string, perCleanDivisor?: number) => {
+  const row = buildZonePriceRow(basePrice) as Record<ZoneId, number> & {
+    savings: string;
+    perClean?: number;
+  };
+  row.savings = savings;
+  if (perCleanDivisor) row.perClean = Math.round((basePrice / perCleanDivisor) * 100) / 100;
+  return row;
 };
 
 const MEMBERSHIP_ZONE_PRICES = {
-  monthly: {
-    '0_999':     { B: 129, A: 148, C: 116, savings: '14%' },
-    '1000_1500': { B: 159, A: 183, C: 143, savings: '16%' },
-    '1501_2000': { B: 199, A: 229, C: 179, savings: '17%' },
-    '2001_2500': { B: 229, A: 263, C: 206, savings: '18%' },
-    '2501_3000': { B: 279, A: 321, C: 251, savings: '18%' },
-    '3001_3500': { B: 319, A: 367, C: 287, savings: '16%' },
-    '3501_4000': { B: 369, A: 424, C: 332, savings: '16%' },
-    '4001_4500': { B: 409, A: 470, C: 368, savings: '16%' },
-    '4501_5000': { B: 459, A: 528, C: 413, savings: '15%' },
-  },
-  biweekly: {
-    '0_999':     { B: 199, A: 229, C: 179, savings: '34%', perClean: 99.50 },
-    '1000_1500': { B: 249, A: 286, C: 224, savings: '34%', perClean: 124.50 },
-    '1501_2000': { B: 319, A: 367, C: 287, savings: '33%', perClean: 159.50 },
-    '2001_2500': { B: 369, A: 424, C: 332, savings: '34%', perClean: 184.50 },
-    '2501_3000': { B: 449, A: 516, C: 404, savings: '34%', perClean: 224.50 },
-    '3001_3500': { B: 499, A: 574, C: 449, savings: '34%', perClean: 249.50 },
-    '3501_4000': { B: 579, A: 666, C: 521, savings: '34%', perClean: 289.50 },
-    '4001_4500': { B: 649, A: 746, C: 584, savings: '34%', perClean: 324.50 },
-    '4501_5000': { B: 719, A: 827, C: 647, savings: '33%', perClean: 359.50 },
-  },
-  weekly: {
-    '0_999':     { B: 349, A: 401, C: 314, savings: '42%', perClean: 87.25 },
-    '1000_1500': { B: 449, A: 516, C: 404, savings: '41%', perClean: 112.25 },
-    '1501_2000': { B: 569, A: 654, C: 512, savings: '40%', perClean: 142.25 },
-    '2001_2500': { B: 659, A: 758, C: 593, savings: '41%', perClean: 164.75 },
-    '2501_3000': { B: 799, A: 919, C: 719, savings: '41%', perClean: 199.75 },
-    '3001_3500': { B: 899, A: 1034, C: 809, savings: '41%', perClean: 224.75 },
-    '3501_4000': { B: 1039, A: 1195, C: 935, savings: '41%', perClean: 259.75 },
-    '4001_4500': { B: 1159, A: 1333, C: 1043, savings: '41%', perClean: 289.75 },
-    '4501_5000': { B: 1279, A: 1471, C: 1151, savings: '41%', perClean: 319.75 },
-  },
+  monthly: Object.fromEntries(
+    HOME_SIZE_RANGES.filter(h => MEMBERSHIP_PRICES[h.id]).map(h => [
+      h.id,
+      buildMembershipRow(MEMBERSHIP_PRICES[h.id].monthly, '15%'),
+    ]),
+  ),
+  biweekly: Object.fromEntries(
+    HOME_SIZE_RANGES.filter(h => MEMBERSHIP_PRICES[h.id]).map(h => [
+      h.id,
+      buildMembershipRow(MEMBERSHIP_PRICES[h.id].biweekly, '34%', 2),
+    ]),
+  ),
+  weekly: Object.fromEntries(
+    HOME_SIZE_RANGES.filter(h => MEMBERSHIP_PRICES[h.id]).map(h => [
+      h.id,
+      buildMembershipRow(MEMBERSHIP_PRICES[h.id].weekly, '42%', 4),
+    ]),
+  ),
 };
 
 const sizes = HOME_SIZE_RANGES.filter(s => s.id !== '5000_plus');
@@ -117,7 +94,7 @@ export default function PricingSheet() {
 
   return (
     <div className="min-h-screen bg-white">
-      <SEO title="Pricing" description="Transparent home cleaning pricing based on your home size. Standard, deep, and move-in/out cleaning available. Starting at $99." />
+      <SEO title="Pricing" description="Transparent home cleaning pricing based on your home size. New customers save 50% on their first clean." />
       {/* Nav */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-white/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -151,7 +128,7 @@ export default function PricingSheet() {
               Simple, <span className="bg-gradient-to-r from-[#5C0FFE] to-[#8F7BFD] bg-clip-text text-transparent">Transparent</span> Pricing
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Zone-based pricing across Maryland. Only ${DEPOSIT_AMOUNT} deposit to book. New customers save ${NEW_CUSTOMER_DISCOUNT}.
+              Zone-based pricing across Maryland. Pay 50% deposit to book. New customers save 50% on their first clean.
             </p>
           </div>
         </div>
@@ -293,11 +270,11 @@ export default function PricingSheet() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
           <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#5C0FFE]/10 border border-[#5C0FFE]/20">
             <RiFlashlightLine className="w-4 h-4 text-[#5C0FFE]" />
-            <span className="text-sm font-semibold text-[#5C0FFE]">${DEPOSIT_AMOUNT} deposit to book</span>
+            <span className="text-sm font-semibold text-[#5C0FFE]">50% deposit to book</span>
           </div>
           <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-green-500/10 border border-green-500/20">
             <RiTrophyLine className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-semibold text-green-700">New customers save ${NEW_CUSTOMER_DISCOUNT}</span>
+            <span className="text-sm font-semibold text-green-700">New customers save 50%</span>
           </div>
           <Button onClick={handleBookNow} className="h-11 px-8 font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">
             Book Your Clean <RiArrowRightLine className="w-4 h-4 ml-2" />
@@ -331,7 +308,7 @@ export default function PricingSheet() {
             Recurring cleaning services at a fraction of the one-time price. Choose your frequency — <span className="font-semibold text-foreground">Monthly</span>, <span className="font-semibold text-foreground">Bi-Weekly</span>, or <span className="font-semibold text-foreground">Weekly</span> — and enjoy consistent, reliable cleaning with the same trusted team. Cancel or pause anytime.
           </p>
           <p className="text-xs text-amber-600 font-medium mt-3">
-            * First month: +${FIRST_CLEAN_SURCHARGE} required deep clean for all new members
+            * All new members receive a first-clean deep clean at no extra deep-clean charge.
           </p>
         </div>
 
@@ -507,7 +484,7 @@ export default function PricingSheet() {
         <div className="text-center space-y-6 pb-12">
           <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Ready for a Spotless Home?</h2>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Book in under 2 minutes. Only ${DEPOSIT_AMOUNT} deposit. Bi-weekly members save up to 34%.
+            Book in under 2 minutes. 50% deposit on total. Bi-weekly members save up to 34%.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button onClick={handleBookNow} size="lg" className="h-14 px-10 text-base font-semibold bg-[#5C0FFE] hover:bg-[#5C0FFE]/90 text-white shadow-lg">

@@ -4,6 +4,7 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import * as React from "https://esm.sh/react@18.3.1";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { WaitlistConfirmation } from "../_shared/email-templates/WaitlistConfirmation.tsx";
+import { upsertContact as ghlUpsertContact } from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -120,7 +121,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send to GHL webhook for CRM tracking
+    // Send to GHL webhook for CRM tracking (legacy inbound webhook — kept for compatibility)
     if (ghlWebhookUrl) {
       try {
         await fetch(ghlWebhookUrl, {
@@ -146,6 +147,26 @@ const handler = async (req: Request): Promise<Response> => {
       } catch (webhookError) {
         console.error("Error sending to GHL:", webhookError);
       }
+    }
+
+    // Push to GHL via Private Integration (PIT) — runs in parallel with the webhook.
+    try {
+      await ghlUpsertContact({
+        email,
+        phone,
+        firstName,
+        lastName,
+        city,
+        state,
+        postalCode: zipCode,
+        source: "Waitlist",
+        tags: ["waitlist", zipCode ? `zip-${zipCode}` : ""].filter(Boolean) as string[],
+        customFieldsByKey: {
+          customer_source: "Waitlist",
+        },
+      });
+    } catch (ghlErr) {
+      console.error("[add-to-waitlist] GHL PIT sync failed (non-blocking)", ghlErr);
     }
 
     return new Response(

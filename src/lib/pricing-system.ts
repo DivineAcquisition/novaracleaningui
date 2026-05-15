@@ -1,8 +1,8 @@
-// ─── NovaraCleaning Pricing System v2.0 — Maryland ──────
+// ─── NovaraCleaning Pricing System v3.0 — Maryland ──────
 // Zone B = Base | Zone A = ×1.15 | Zone C = ×0.90
 // Deep = Standard × 1.5 | Move-In/Out = Standard × 2.0
-// First Clean: +$75 deep clean for all new members
-// 5% Platform Fee deducted from contractor pay
+// Base prices raised ~2.2x in v3 to protect margins under the 50% new-customer promo.
+// Deposit: 50% of total (no more flat $39 down).
 
 export interface HomeSizeRange {
   id: string;
@@ -16,11 +16,23 @@ export interface HomeSizeRange {
 }
 
 export const HOURLY_RATE = 75;
-export const DEPOSIT_AMOUNT = 39;
 export const OVERTIME_RATE = 75;
 export const OVERTIME_INCREMENT = 0.5;
-export const NEW_CUSTOMER_DISCOUNT = 60;
-export const FIRST_CLEAN_SURCHARGE = 75; // Required deep clean for new members
+
+// 50% deposit on total when "Pay 50% Deposit" is chosen.
+export const DEPOSIT_PERCENT = 0.5;
+
+// Legacy export kept for backwards-compatibility with views still importing it.
+// It is no longer used to compute deposits — those are now 50% of total.
+export const DEPOSIT_AMOUNT = 0;
+
+// New-customer promo is now a percentage (50% off) instead of a fixed $ amount.
+export const NEW_CUSTOMER_DISCOUNT_PERCENT = 0.5;
+// Legacy export — older components expected a fixed dollar amount. Now 0 because
+// the discount is computed as a percentage of the subtotal at calculation time.
+export const NEW_CUSTOMER_DISCOUNT = 0;
+
+export const FIRST_CLEAN_SURCHARGE = 0; // No longer applied — standard tier hidden from UI.
 
 // ─── Service Zones ──────────────────────────────────────
 export const SERVICE_ZONES = {
@@ -31,17 +43,19 @@ export const SERVICE_ZONES = {
 
 export type ZoneId = 'A' | 'B' | 'C';
 
-// ─── Home Size Ranges (Zone B base prices) ──────────────
+// ─── Home Size Ranges (Zone B base prices — v3, raised for margin) ─────
+// Raised ~2.2x from v2 so post-50%-off price ≥ old list price and contractor
+// margin (~30%+) is preserved.
 export const HOME_SIZE_RANGES: HomeSizeRange[] = [
-  { id: '0_999',      label: '0 – 999 sq ft',       minSqft: 0,    maxSqft: 999,   bedroomRange: 'Studio – 1 BR',         baseHours: 2.0, standardPrice: 150,   cleaners: '1' },
-  { id: '1000_1500',  label: '1,000 – 1,500 sq ft',  minSqft: 1000, maxSqft: 1500,  bedroomRange: '1–2 BR condos/homes',   baseHours: 2.5, standardPrice: 189,   cleaners: '1' },
-  { id: '1501_2000',  label: '1,501 – 2,000 sq ft',  minSqft: 1501, maxSqft: 2000,  bedroomRange: '2–3 BR apartments',     baseHours: 3.0, standardPrice: 239,   cleaners: '1' },
-  { id: '2001_2500',  label: '2,001 – 2,500 sq ft',  minSqft: 2001, maxSqft: 2500,  bedroomRange: '3–4 BR homes',          baseHours: 3.5, standardPrice: 279,   cleaners: '1' },
-  { id: '2501_3000',  label: '2,501 – 3,000 sq ft',  minSqft: 2501, maxSqft: 3000,  bedroomRange: '4 BR homes',            baseHours: 4.0, standardPrice: 339,   cleaners: '1-2' },
-  { id: '3001_3500',  label: '3,001 – 3,500 sq ft',  minSqft: 3001, maxSqft: 3500,  bedroomRange: '4–5 BR homes',          baseHours: 4.5, standardPrice: 379,   cleaners: '1-2' },
-  { id: '3501_4000',  label: '3,501 – 4,000 sq ft',  minSqft: 3501, maxSqft: 4000,  bedroomRange: '5 BR homes',            baseHours: 5.0, standardPrice: 439,   cleaners: '2' },
-  { id: '4001_4500',  label: '4,001 – 4,500 sq ft',  minSqft: 4001, maxSqft: 4500,  bedroomRange: '5+ BR homes',           baseHours: 5.5, standardPrice: 489,   cleaners: '2' },
-  { id: '4501_5000',  label: '4,501 – 5,000 sq ft',  minSqft: 4501, maxSqft: 5000,  bedroomRange: '5+ BR large homes',     baseHours: 6.0, standardPrice: 539,   cleaners: '2' },
+  { id: '0_999',      label: '0 – 999 sq ft',       minSqft: 0,    maxSqft: 999,   bedroomRange: 'Studio – 1 BR',         baseHours: 2.0, standardPrice: 329,   cleaners: '1' },
+  { id: '1000_1500',  label: '1,000 – 1,500 sq ft',  minSqft: 1000, maxSqft: 1500,  bedroomRange: '1–2 BR condos/homes',   baseHours: 2.5, standardPrice: 419,   cleaners: '1' },
+  { id: '1501_2000',  label: '1,501 – 2,000 sq ft',  minSqft: 1501, maxSqft: 2000,  bedroomRange: '2–3 BR apartments',     baseHours: 3.0, standardPrice: 529,   cleaners: '1' },
+  { id: '2001_2500',  label: '2,001 – 2,500 sq ft',  minSqft: 2001, maxSqft: 2500,  bedroomRange: '3–4 BR homes',          baseHours: 3.5, standardPrice: 619,   cleaners: '1' },
+  { id: '2501_3000',  label: '2,501 – 3,000 sq ft',  minSqft: 2501, maxSqft: 3000,  bedroomRange: '4 BR homes',            baseHours: 4.0, standardPrice: 749,   cleaners: '1-2' },
+  { id: '3001_3500',  label: '3,001 – 3,500 sq ft',  minSqft: 3001, maxSqft: 3500,  bedroomRange: '4–5 BR homes',          baseHours: 4.5, standardPrice: 839,   cleaners: '1-2' },
+  { id: '3501_4000',  label: '3,501 – 4,000 sq ft',  minSqft: 3501, maxSqft: 4000,  bedroomRange: '5 BR homes',            baseHours: 5.0, standardPrice: 969,   cleaners: '2' },
+  { id: '4001_4500',  label: '4,001 – 4,500 sq ft',  minSqft: 4001, maxSqft: 4500,  bedroomRange: '5+ BR homes',           baseHours: 5.5, standardPrice: 1079,  cleaners: '2' },
+  { id: '4501_5000',  label: '4,501 – 5,000 sq ft',  minSqft: 4501, maxSqft: 5000,  bedroomRange: '5+ BR large homes',     baseHours: 6.0, standardPrice: 1189,  cleaners: '2' },
   { id: '5000_plus',  label: '5,000+ sq ft',          minSqft: 5000, maxSqft: 999999, bedroomRange: '6+ BR estates',         baseHours: 0,   standardPrice: 0,     cleaners: 'Custom' },
 ];
 
@@ -112,18 +126,18 @@ export const MEMBERSHIP_PLANS = {
   },
 };
 
-// ─── Membership pricing lookup (Zone B base) ────────────
-// Index by home size ID → { monthly, biweekly, weekly }
+// ─── Membership pricing lookup (Zone B base — v3) ───────
+// Raised ~2.2x for v3 alongside one-time base prices.
 export const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
-  '0_999':     { monthly: 129, biweekly: 199, weekly: 349 },
-  '1000_1500': { monthly: 159, biweekly: 249, weekly: 449 },
-  '1501_2000': { monthly: 199, biweekly: 319, weekly: 569 },
-  '2001_2500': { monthly: 229, biweekly: 369, weekly: 659 },
-  '2501_3000': { monthly: 279, biweekly: 449, weekly: 799 },
-  '3001_3500': { monthly: 319, biweekly: 499, weekly: 899 },
-  '3501_4000': { monthly: 369, biweekly: 579, weekly: 1039 },
-  '4001_4500': { monthly: 409, biweekly: 649, weekly: 1159 },
-  '4501_5000': { monthly: 459, biweekly: 719, weekly: 1279 },
+  '0_999':     { monthly: 289, biweekly: 439, weekly: 769 },
+  '1000_1500': { monthly: 349, biweekly: 549, weekly: 989 },
+  '1501_2000': { monthly: 439, biweekly: 699, weekly: 1249 },
+  '2001_2500': { monthly: 509, biweekly: 819, weekly: 1449 },
+  '2501_3000': { monthly: 619, biweekly: 989, weekly: 1759 },
+  '3001_3500': { monthly: 699, biweekly: 1099, weekly: 1979 },
+  '3501_4000': { monthly: 819, biweekly: 1279, weekly: 2289 },
+  '4001_4500': { monthly: 899, biweekly: 1429, weekly: 2549 },
+  '4501_5000': { monthly: 1009, biweekly: 1579, weekly: 2819 },
 };
 
 // ─── Helpers ────────────────────────────────────────────
@@ -210,14 +224,15 @@ export function calculateFullPaymentWithDiscount(
   promoDiscount: number = 0
 ): FullPaymentCalculation {
   const pricing = calculatePrice(homeSizeId, serviceType, addOns, membershipPlan, useCredit, isNewCustomer, promoDiscount);
-  const fullPaymentDiscount = Math.round(pricing.total * 0.10 * 100) / 100;
-  const finalAmount = pricing.total - fullPaymentDiscount;
+  // Pay-in-full no longer stacks an extra 10% off on top of the 50% new-customer
+  // promo — customer just pays the full discounted total today (no deposit split).
+  const finalAmount = pricing.total;
   const originalTotal = pricing.subtotal;
-  const totalSavings = pricing.newCustomerDiscount + pricing.membershipDiscount + fullPaymentDiscount + promoDiscount;
-  
+  const totalSavings = pricing.newCustomerDiscount + pricing.membershipDiscount + promoDiscount;
+
   return {
     originalTotal,
-    discount: fullPaymentDiscount,
+    discount: 0,
     newCustomerDiscount: pricing.newCustomerDiscount,
     promoDiscount,
     finalAmount: Math.max(0, finalAmount),
@@ -239,17 +254,17 @@ export function calculatePrice(
     return {
       basePrice: 0, serviceAddition: 0, addOnsTotal: 0, subtotal: 0,
       membershipDiscount: 0, newCustomerDiscount: 0, total: 0,
-      deposit: DEPOSIT_AMOUNT, balanceDue: 0, hours: 0,
+      deposit: 0, balanceDue: 0, hours: 0,
     };
   }
 
   // Base price = standard clean for the home size (Zone B)
   const basePrice = homeSize.standardPrice;
-  
+
   // Service tier: deep = 50% more, moveInOut = 100% more
   const tier = SERVICE_TIER_PRICING[serviceType as keyof typeof SERVICE_TIER_PRICING];
   const serviceAddition = tier ? Math.round(basePrice * (tier.multiplier - 1)) : 0;
-  
+
   // Add-ons (Move-In/Out includes fridge & oven)
   let addOnsTotal = 0;
   if (serviceType === 'moveInOut') {
@@ -261,29 +276,36 @@ export function calculatePrice(
       return total + (ADD_ONS[addon as keyof typeof ADD_ONS]?.price || 0);
     }, 0);
   }
-  
+
   const subtotal = basePrice + serviceAddition + addOnsTotal;
-  
+
   // Membership discount on extras
   const membership = MEMBERSHIP_PLANS[membershipPlan as keyof typeof MEMBERSHIP_PLANS];
   const extrasAmount = serviceAddition + addOnsTotal;
   const membershipDiscount = membership && !useCredit ? extrasAmount * membership.discount : 0;
-  
-  // New customer discount (only for non-members)
-  const newCustomerDiscount = isNewCustomer && membershipPlan === 'none' ? NEW_CUSTOMER_DISCOUNT : 0;
-  
+
+  // New customer promo — 50% off the entire subtotal (replaces the old $60 flat).
+  // Members aren't eligible (they already get plan pricing).
+  const newCustomerDiscount = isNewCustomer && membershipPlan === 'none'
+    ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT * 100) / 100
+    : 0;
+
   // Credit coverage
   const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;
-  
-  const deposit = useCredit ? 0 : DEPOSIT_AMOUNT;
-  const total = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - promoDiscount;
+
+  const total = Math.max(0, subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - promoDiscount);
+
+  // Deposit = 50% of total (rounded to nearest cent). Zero if using membership credit.
+  const deposit = useCredit ? 0 : Math.round(total * DEPOSIT_PERCENT * 100) / 100;
   const balanceDue = Math.max(0, total - deposit);
-  
+
   return {
     basePrice, serviceAddition, addOnsTotal, subtotal,
     membershipDiscount, newCustomerDiscount,
-    total: Math.max(0, total), deposit: useCredit ? 0 : DEPOSIT_AMOUNT,
-    balanceDue, hours: homeSize.baseHours,
+    total,
+    deposit,
+    balanceDue,
+    hours: homeSize.baseHours,
   };
 }
 

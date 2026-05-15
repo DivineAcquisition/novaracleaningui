@@ -4,6 +4,8 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
+import { upsertContact as ghlUpsertContact, fmtMoney } from '../_shared/ghl-client.ts';
+import { sendSms, formatServiceDate, formatTimeSlot } from '../_shared/sms.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -224,6 +226,79 @@ serve(async (req) => {
       console.log('GHL reschedule webhook sent, status:', ghlRes.status);
     } catch (ghlError) {
       console.error('GHL webhook failed (non-critical):', ghlError);
+    }
+
+    // Push reschedule update to GHL via Private Integration (PIT).
+    // Re-upserts the contact with a fresh tag + custom fields so the CRM reflects
+    // the new appointment date.
+    try {
+      await ghlUpsertContact({
+        email: booking.email,
+        phone: booking.phone,
+        firstName: booking.first_name,
+        lastName: booking.last_name,
+        address1: booking.address,
+        city: booking.city,
+        state: booking.state,
+        postalCode: booking.zip_code,
+        source: "Novara Reschedule",
+        tags: [
+          "rescheduled",
+          newDate ? `svc-${newDate}` : "",
+          booking.zip_code ? `zip-${booking.zip_code}` : "",
+        ].filter(Boolean) as string[],
+        customFieldsByKey: {
+          cleaning_type: booking.service_type,
+          market: booking.city,
+          quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
+        },
+      });
+      console.log('[reschedule-booking] GHL PIT sync ok');
+    } catch (ghlPitErr) {
+      console.error('[reschedule-booking] GHL PIT sync failed (non-blocking):', ghlPitErr);
+    }
+
+    // Customer SMS — confirm the new appointment time.
+    try {
+      if (booking.phone) {
+        await sendSms(supabase, {
+          toPhone: booking.phone,
+          message:
+            `Novara Cleaning: Your appointment has been rescheduled to ` +
+            `${formatServiceDate(newDate)}` +
+            (newTimeSlot ? ` (${formatTimeSlot(newTimeSlot)})` : "") +
+            `. Need to make another change? Reply or call (844) 735-2070. Reply STOP to opt out.`,
+          type: "confirmation",
+        });
+        console.log('[reschedule-booking] Customer reschedule SMS sent');
+      }
+    } catch (smsErr) {
+      console.error('[reschedule-booking] Customer SMS failed (non-blocking):', smsErr);
+    }
+
+    // Notify the assigned cleaner about the new date/time if one exists.
+    try {
+      if (booking.cleaner_id) {
+        const { data: cleaner } = await supabase
+          .from('cleaners')
+          .select('phone, first_name')
+          .eq('id', booking.cleaner_id)
+          .maybeSingle();
+        if (cleaner?.phone) {
+          await sendSms(supabase, {
+            toPhone: cleaner.phone,
+            message:
+              `Novara Cleaning: Your assigned job has been rescheduled to ` +
+              `${formatServiceDate(newDate)}` +
+              (newTimeSlot ? ` (${formatTimeSlot(newTimeSlot)})` : "") +
+              `. Check the Cleaner app for the updated schedule.`,
+            type: "job_offer",
+          });
+          console.log('[reschedule-booking] Cleaner reschedule SMS sent');
+        }
+      }
+    } catch (smsErr) {
+      console.error('[reschedule-booking] Cleaner SMS failed (non-blocking):', smsErr);
     }
 
     return new Response(

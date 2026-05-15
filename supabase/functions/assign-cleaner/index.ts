@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +125,48 @@ serve(async (req) => {
     } catch (webhookError) {
       // Log but don't fail the assignment if webhook fails
       logStep("Zapier webhook failed (non-critical)", { error: webhookError });
+    }
+
+    // Notify the customer (best-effort, non-blocking).
+    try {
+      if (booking.phone) {
+        const cleanerName = `${selectedCleaner.first_name} ${selectedCleaner.last_name}`.trim();
+        await sendSms(supabase, {
+          toPhone: booking.phone,
+          message:
+            `Novara Cleaning: ${cleanerName} has been assigned to your cleaning` +
+            (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
+            (booking.time_slot ? ` (${formatTimeSlot(booking.time_slot)})` : "") +
+            `. We'll send a reminder before service. Reply STOP to opt out.`,
+          type: "confirmation",
+        });
+        logStep("Customer assignment SMS sent");
+      }
+    } catch (smsErr) {
+      logStep("Customer assignment SMS failed (non-blocking)", {
+        error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
+    }
+
+    // Notify the cleaner that they've been assigned (manual-assign path — the
+    // auto-dispatch path uses dispatch-job's job-offer SMS instead).
+    try {
+      if (selectedCleaner.phone) {
+        await sendSms(supabase, {
+          toPhone: selectedCleaner.phone,
+          message:
+            `Novara Cleaning: You've been assigned to a job` +
+            (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
+            (booking.time_slot ? ` (${formatTimeSlot(booking.time_slot)})` : "") +
+            ` at ${booking.address}, ${booking.city}. Open the Cleaner app for full details.`,
+          type: "job_offer",
+        });
+        logStep("Cleaner assignment SMS sent");
+      }
+    } catch (smsErr) {
+      logStep("Cleaner assignment SMS failed (non-blocking)", {
+        error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
     }
 
     return new Response(

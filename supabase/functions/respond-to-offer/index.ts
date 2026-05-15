@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,6 +105,33 @@ serve(async (req) => {
       await supabase.functions.invoke("update-cleaner-scores", {
         body: { cleanerId: assignment.cleaner_id }
       });
+
+      // Notify the customer that their cleaner has been confirmed.
+      try {
+        const { data: bookingForJob } = await supabase
+          .from("bookings")
+          .select("phone, first_name, service_date, time_slot")
+          .eq("job_id", assignment.job_id)
+          .maybeSingle();
+
+        if (bookingForJob?.phone) {
+          const cleanerName = `${assignment.cleaners?.first_name ?? ""} ${assignment.cleaners?.last_name ?? ""}`.trim() || "Your cleaner";
+          const dateLabel = formatServiceDate(bookingForJob.service_date);
+          const timeLabel = formatTimeSlot(bookingForJob.time_slot);
+          await sendSms(supabase, {
+            toPhone: bookingForJob.phone,
+            message:
+              `Novara Cleaning: ${cleanerName} has been confirmed for your cleaning` +
+              (dateLabel ? ` on ${dateLabel}` : "") +
+              (timeLabel ? ` (${timeLabel})` : "") +
+              `. You'll get a reminder before service. Reply STOP to opt out.`,
+            type: "confirmation",
+          });
+          console.log("[RESPOND] Customer assignment SMS sent");
+        }
+      } catch (smsErr) {
+        console.error("[RESPOND] Customer SMS failed (non-blocking)", smsErr);
+      }
     }
 
     console.log(`[RESPOND] Updated assignment to ${newStatus}`);

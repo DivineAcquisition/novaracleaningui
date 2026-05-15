@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
+import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -208,6 +209,54 @@ Deno.serve(async (req) => {
       logStep("Zapier webhook triggered");
     } catch (webhookError) {
       logStep("Zapier webhook failed (non-critical)", { error: webhookError });
+    }
+
+    // Customer cancellation SMS — best-effort, non-blocking.
+    try {
+      if (booking.phone) {
+        const refundLine = refundAmount > 0
+          ? ` A refund of $${(refundAmount / 100).toFixed(2)} is on its way.`
+          : "";
+        await sendSms(supabase, {
+          toPhone: booking.phone,
+          message:
+            `Novara Cleaning: Your cleaning` +
+            (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
+            ` has been cancelled.${refundLine} Need to rebook? Call (844) 735-2070. Reply STOP to opt out.`,
+          type: "confirmation",
+        });
+        logStep("Customer cancellation SMS sent");
+      }
+    } catch (smsErr) {
+      logStep("Customer cancellation SMS failed (non-blocking)", {
+        error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
+    }
+
+    // Notify the assigned cleaner if one exists.
+    try {
+      if (booking.cleaner_id) {
+        const { data: cleaner } = await supabase
+          .from('cleaners')
+          .select('phone, first_name')
+          .eq('id', booking.cleaner_id)
+          .maybeSingle();
+        if (cleaner?.phone) {
+          await sendSms(supabase, {
+            toPhone: cleaner.phone,
+            message:
+              `Novara Cleaning: A job you were assigned to` +
+              (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
+              ` has been cancelled by the customer. No action needed.`,
+            type: "job_offer",
+          });
+          logStep("Cleaner cancellation SMS sent");
+        }
+      }
+    } catch (smsErr) {
+      logStep("Cleaner cancellation SMS failed (non-blocking)", {
+        error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
     }
 
     return new Response(
