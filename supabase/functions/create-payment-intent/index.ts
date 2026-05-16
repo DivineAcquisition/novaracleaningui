@@ -307,25 +307,33 @@ serve(async (req) => {
       totalAmount 
     });
 
-    // Determine amount to charge based on payment option
-    // CRITICAL: Always charge at minimum $1 for card verification, even when using credit
+    // Determine amount to charge.
+    //
+    // Customer-facing UX has retired the "Pay in Full" option entirely;
+    // every customer pays a 50% deposit at booking and the remaining 50%
+    // is auto-charged after the cleaner marks complete (see complete-
+    // booking). To stop a stale `bookingData.paymentOption === 'full'`
+    // (e.g. persisted from before the toggle was removed, or set by
+    // a future admin tool) from accidentally charging the full amount,
+    // we IGNORE 'full' here and force deposit unless the request comes
+    // in for a member booking using their cleaning credit.
+    //
+    // `useCredit: true` still charges the $1 card-verification minimum
+    // so the saved card can be auto-charged later if the credit is
+    // already exhausted.
     let amountToCharge = 0;
     let fullPaymentDiscount = 0;
 
-    if (bookingData.paymentOption === 'full') {
-      // Pay-in-full no longer stacks an extra 10% — the 50% promo is the headline discount.
-      fullPaymentDiscount = 0;
-      amountToCharge = totalAmount;
-      logStep("Full payment selected", { originalAmount: totalAmount, finalAmount: amountToCharge });
+    if (bookingData.useCredit) {
+      amountToCharge = 100; // $1 minimum authorization to capture card
+      logStep("Member using credit - $1 card authorization required", { depositAmount: amountToCharge });
     } else {
-      // Deposit payment — now 50% of total (was flat $39).
-      if (bookingData.useCredit) {
-        amountToCharge = 100; // $1 minimum authorization to capture card
-        logStep("Member using credit - $1 card authorization required", { depositAmount: amountToCharge });
-      } else {
-        amountToCharge = Math.max(100, Math.round(totalAmount * DEPOSIT_PERCENT));
-        logStep("50% deposit payment", { depositAmount: amountToCharge, totalAmount });
-      }
+      amountToCharge = Math.max(100, Math.round(totalAmount * DEPOSIT_PERCENT));
+      logStep("50% deposit payment (paymentOption='full' ignored if sent)", {
+        depositAmount: amountToCharge,
+        totalAmount,
+        clientSentPaymentOption: bookingData.paymentOption,
+      });
     }
 
     // Check if customer exists in Stripe
@@ -445,7 +453,11 @@ serve(async (req) => {
         payment_intent_id: paymentIntentId,
         customer_id: customerId,
         status: 'pending_payment', // CRITICAL: Always pending until payment verified
-        payment_option: bookingData.paymentOption,
+        // Always 'deposit' for customer-facing bookings — see comment
+        // on amountToCharge above. Members using credit are also
+        // recorded as 'deposit' since the $1 authorization is
+        // functionally a deposit hold.
+        payment_option: 'deposit',
         full_payment_discount: fullPaymentDiscount,
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,

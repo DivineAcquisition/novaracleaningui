@@ -161,9 +161,15 @@ export default function BookingCheckout() {
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
 
-  // Initialize Stripe
+  // Initialize Stripe.
+  // ALWAYS overwrite paymentOption to 'deposit' on mount — the
+  // Pay-in-Full UI was retired, but BookingContext persists in
+  // localStorage and any returning visitor whose previous session set
+  // paymentOption='full' would otherwise have the server charge them
+  // the full amount instead of the 50% deposit. Hard-overwrite so a
+  // stale value can't slip through.
   useEffect(() => {
-    if (!bookingData.paymentOption) {
+    if (bookingData.paymentOption !== 'deposit') {
       updateBookingData({
         paymentOption: 'deposit'
       });
@@ -396,11 +402,15 @@ export default function BookingCheckout() {
     const tracking = getStoredTrackingData();
     const trackingPayload = getTrackingPayload();
 
-    // Build payload with both email fields for compatibility
+    // Build payload with both email fields for compatibility.
+    // Hard-pin paymentOption to 'deposit' so a stale 'full' value in
+    // BookingContext (from before the Pay-in-Full UI was retired) can't
+    // make the server charge the full amount.
     const payload = {
       ...bookingData,
       email,
       customerEmail: email, // Also send as customerEmail for backward compatibility
+      paymentOption: 'deposit' as const,
       tracking: trackingPayload,
       utmSource: tracking.utm_source || undefined,
       utmMedium: tracking.utm_medium || undefined,
