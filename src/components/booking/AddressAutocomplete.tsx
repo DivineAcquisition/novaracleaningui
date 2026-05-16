@@ -23,7 +23,7 @@ import {
   getHistoryItemDisplay,
   type AddressHistoryItem,
 } from "@/lib/address-history";
-import { formatAddress } from "@/lib/address-formatter";
+import { formatAddress, parseAddressString, mergeAddressParts } from "@/lib/address-formatter";
 
 interface AddressComponents {
   street: string;
@@ -88,53 +88,72 @@ export function AddressAutocomplete({
 
   const handleInputBlur = async () => {
     const value = inputRef.current?.value?.trim();
-    if (value) {
-      try {
-        // Try to geocode the manually entered address
-        console.log('[AddressAutocomplete] Attempting geocode fallback for:', value);
-        
-        const { data, error } = await supabase.functions.invoke('geocode-address', {
-          body: { 
-            address: value,
-            city: "",
-            state: "",
-            zip: ""
-          }
-        });
+    if (!value) return;
 
-        if (error) {
-          console.error('[AddressAutocomplete] Geocode error:', error);
-          // Still accept the address without coordinates
-          onAddressSelect({
-            street: value,
-            city: "",
-            state: "",
-            zipCode: "",
-          });
-        } else if (data) {
-          console.log('[AddressAutocomplete] Geocode success:', data);
-          setGeocodedLocation(data.display_name || null);
-          onAddressSelect({
-            street: value,
-            city: "",
-            state: "",
-            zipCode: "",
-            lat: data.lat,
-            lng: data.lng,
-          });
-        }
-      } catch (error) {
-        console.error('[AddressAutocomplete] Geocode fallback failed:', error);
-        // Still accept the address without coordinates
-        onAddressSelect({
-          street: value,
+    // Locally parse the typed string first — this is the safety net that
+    // pulls City / State / ZIP out of a cram-everything-in-Street entry
+    // (e.g. "123 Main St, Frederick, MD 21703") even if geocode fails.
+    const locallyParsed = parseAddressString(value);
+
+    try {
+      console.log('[AddressAutocomplete] Attempting geocode for:', value);
+
+      const { data, error } = await supabase.functions.invoke('geocode-address', {
+        body: {
+          address: value,
           city: "",
           state: "",
-          zipCode: "",
-        });
+          zip: "",
+        },
+      });
+
+      if (error || !data) {
+        console.warn('[AddressAutocomplete] Geocode missed — using local parse', { error });
+        emitParsed(locallyParsed);
+        return;
       }
+
+      console.log('[AddressAutocomplete] Geocode response:', data);
+      setGeocodedLocation(data.display_name || null);
+
+      // Prefer geocoded parts (more reliable), fall back to the
+      // local parse for any blank component.
+      const parsed = data.parsed && typeof data.parsed === 'object'
+        ? mergeAddressParts(data.parsed, locallyParsed)
+        : locallyParsed;
+
+      onAddressSelect({
+        street: parsed.street || value,
+        city: parsed.city || "",
+        state: parsed.state || "",
+        zipCode: parsed.zipCode || "",
+        lat: data.lat,
+        lng: data.lng,
+      });
+
+      // Reflect the cleaned street back into the input so the user
+      // sees the canonical version (and Street alone, not the full
+      // mush they typed).
+      if (inputRef.current && parsed.street) {
+        inputRef.current.value = parsed.street;
+      }
+    } catch (err) {
+      console.error('[AddressAutocomplete] Geocode failed:', err);
+      emitParsed(locallyParsed);
     }
   };
+
+  function emitParsed(parsed: ReturnType<typeof parseAddressString>) {
+    onAddressSelect({
+      street: parsed.street,
+      city: parsed.city,
+      state: parsed.state,
+      zipCode: parsed.zipCode,
+    });
+    if (inputRef.current && parsed.street) {
+      inputRef.current.value = parsed.street;
+    }
+  }
 
   return (
     <div className="space-y-2">

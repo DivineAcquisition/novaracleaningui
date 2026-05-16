@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { upsertContact as ghlUpsertContact } from "../_shared/ghl-client.ts";
+import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -187,6 +188,38 @@ serve(async (req) => {
         market: leadData.city || leadData.zipCode,
       },
     }).catch((err) => logStep("GHL PIT sync failed (non-blocking)", { error: String(err) }));
+
+    // Mirror to the user's LeadConnector inbound webhook as a backup.
+    // Same payload as the Zapier targets PLUS the contact-shaped fields
+    // GHL's inbound automation expects (snake_case) so the workflow on
+    // the GHL side can map straight from the body.
+    await mirrorToLeadConnector({
+      event: "lead.captured",
+      payload: {
+        first_name: leadData.firstName,
+        last_name: leadData.lastName,
+        full_name: `${leadData.firstName} ${leadData.lastName}`.trim(),
+        email: leadData.email,
+        phone: leadData.phone,
+        city: leadData.city || "",
+        state: leadData.state || "",
+        postal_code: leadData.zipCode || "",
+        country: "US",
+        source: leadData.source || "Website",
+        landing_page: leadData.landingPage || "/",
+        referrer: leadData.referrer || "",
+        utm_source: leadData.utmSource || "",
+        utm_medium: leadData.utmMedium || "",
+        utm_campaign: leadData.utmCampaign || "",
+        utm_content: leadData.utmContent || "",
+        utm_term: leadData.utmTerm || "",
+        fbclid: leadData.fbclid || "",
+        gclid: leadData.gclid || "",
+        first_visit_timestamp: leadData.firstVisitTimestamp || "",
+        tracking: leadData.tracking || null,
+        lead_payload: payload,
+      },
+    });
 
     if (webhookUrls.length === 0) {
       logStep("No webhooks configured, skipping external sends");

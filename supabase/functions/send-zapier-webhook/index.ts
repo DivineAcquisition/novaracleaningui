@@ -8,7 +8,8 @@ import {
   getTeamSize,
   DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
-import { syncContactAndOpportunity, fmtMoney, ynBool } from "../_shared/ghl-client.ts";
+import { syncContactAndOpportunity, fmtMoney, ynBool, splitFullAddress } from "../_shared/ghl-client.ts";
+import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -616,16 +617,26 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "3_contractor_number": teamCleaners[2]?.phone || '',
     };
 
+    // Defensive split of the booking address — guarantees that
+    // GHL's `address1` only contains the street even if a legacy row
+    // stored the full string in that column, and that City / State /
+    // ZIP are populated from whatever source we have.
+    const splitAddr = splitFullAddress(booking.address || "");
+    const ghlAddress1 = splitAddr.street || booking.address || "";
+    const ghlCity = booking.city || splitAddr.city || "";
+    const ghlState = booking.state || splitAddr.state || "";
+    const ghlZip = booking.zip_code || splitAddr.zipCode || "";
+
     const ghlResult = await syncContactAndOpportunity({
       contact: {
         email: booking.email,
         phone: booking.phone,
         firstName: booking.first_name,
         lastName: booking.last_name,
-        address1: booking.address,
-        city: booking.city,
-        state: booking.state,
-        postalCode: booking.zip_code,
+        address1: ghlAddress1,
+        city: ghlCity,
+        state: ghlState,
+        postalCode: ghlZip,
         source: "Novara Booking",
         tags: [
           "booking",
@@ -649,6 +660,47 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       },
     });
     logStep("GHL PIT sync complete", ghlResult);
+
+    // ─── LeadConnector inbound webhook mirror ────────────────────────
+    // Always-on backup: send the structured payload plus the same
+    // contact + opportunity bundle to the user's GHL inbound webhook.
+    // This is the safety net — if the PIT call above silently dropped
+    // a field (or the PIT creds are misconfigured), the GHL workflow
+    // attached to this inbound URL still receives every booking.
+    await mirrorToLeadConnector({
+      event: `booking.${booking.status || "update"}`,
+      payload: {
+        booking_id: booking.id,
+        booking_number: booking.booking_number,
+        // Structured contact fields (mirrors GHL's expected shape)
+        first_name: booking.first_name,
+        last_name: booking.last_name,
+        full_name: `${booking.first_name || ""} ${booking.last_name || ""}`.trim(),
+        email: booking.email,
+        phone: booking.phone,
+        address1: ghlAddress1,
+        city: ghlCity,
+        state: ghlState,
+        postal_code: ghlZip,
+        country: "US",
+        // Full Zapier-shaped payload (every field the GHL automation
+        // might need — service, scheduling, payment, attribution…)
+        booking_payload: payload,
+        // Same custom-field map sent to the GHL PIT, keyed by fieldKey
+        custom_fields: ghlCustomFields,
+        // Cleaner team summary
+        cleaners: teamCleaners,
+        // Opportunity intent
+        opportunity: {
+          name: `NOV-${String(booking.booking_number).padStart(5, "0")} — ${booking.first_name} ${booking.last_name}`,
+          status: booking.status === "cancelled" ? "lost"
+            : booking.status === "completed" ? "won"
+            : "open",
+          monetary_value: Math.round(totalChargedCentsForGhl / 100),
+          source: "Novara Booking",
+        },
+      },
+    });
   } catch (ghlErr) {
     logStep("GHL PIT sync failed (non-blocking)", {
       error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),

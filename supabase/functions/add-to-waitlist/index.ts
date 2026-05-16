@@ -5,6 +5,7 @@ import * as React from "https://esm.sh/react@18.3.1";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { WaitlistConfirmation } from "../_shared/email-templates/WaitlistConfirmation.tsx";
 import { upsertContact as ghlUpsertContact } from "../_shared/ghl-client.ts";
+import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -213,6 +214,37 @@ const handler = async (req: Request): Promise<Response> => {
     } catch (ghlErr) {
       console.error("[add-to-waitlist] GHL PIT sync failed (non-blocking)", ghlErr);
     }
+
+    // Mirror to LeadConnector inbound webhook — always-on backup so
+    // every waitlist signup also lands in GHL even when the PIT path
+    // fails or env vars are missing.
+    await mirrorToLeadConnector({
+      event: "waitlist.added",
+      payload: {
+        first_name: firstName || "",
+        last_name: lastName || "",
+        full_name: `${firstName || ""} ${lastName || ""}`.trim(),
+        email,
+        phone: phone || "",
+        city: city || "",
+        state: state || "",
+        postal_code: zipCode,
+        country: "US",
+        source: source || "waitlist",
+        waitlist_id: waitlistEntry.id,
+        landing_page: landingPage || "",
+        referrer: referrer || "",
+        utm_source: utmSource || "",
+        utm_medium: utmMedium || "",
+        utm_campaign: utmCampaign || "",
+        utm_content: utmContent || "",
+        utm_term: utmTerm || "",
+        fbclid: fbclid || "",
+        gclid: gclid || "",
+        first_visit_timestamp: firstVisitTimestamp || "",
+        tracking: tracking || null,
+      },
+    });
 
     return new Response(
       JSON.stringify({ 
