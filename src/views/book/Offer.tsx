@@ -3,7 +3,6 @@ import {
   RiArrowLeftLine,
   RiArrowRightSLine,
   RiCheckLine,
-  RiHomeLine,
   RiPercentLine,
   RiPhoneLine,
   RiSparklingLine,
@@ -56,7 +55,7 @@ export default function BookingOffer() {
   const router = useRouter();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'membership' | null>(null);
+  const [selectedService, setSelectedService] = useState<'combo' | 'membership' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -77,12 +76,11 @@ export default function BookingOffer() {
     // Pre-discount list prices (Zone B base — backend applies zone modifier)
     const standardList = getServicePrice(homeSizeId, 'standard', 'B');
     const deepList = getServicePrice(homeSizeId, 'deep', 'B');
+    const comboList = standardList + deepList; // Deep + Standard bundle
 
-    // Post-50%-off totals + 50% deposit (matches calculatePrice in
-    // Checkout exactly, so Offer card numbers and Checkout summary
-    // numbers are identical to the cent).
-    const stdPricing = calculatePrice(homeSizeId, 'standard', [], 'none', false, /* isNewCustomer */ true, 0);
-    const deepPricing = calculatePrice(homeSizeId, 'deep', [], 'none', false, /* isNewCustomer */ true, 0);
+    // Combo post-50%-off totals + 50% deposit (matches calculatePrice
+    // for serviceType='combo' in Checkout exactly).
+    const comboPricing = calculatePrice(homeSizeId, 'combo', [], 'none', false, /* isNewCustomer */ true, 0);
 
     // Membership prices (Zone B base)
     const memberPrices = MEMBERSHIP_PRICES[homeSizeId] || { monthly: 129, biweekly: 199, weekly: 349 };
@@ -96,12 +94,10 @@ export default function BookingOffer() {
     return {
       standard: standardList,
       deepClean: deepList,
-      standardPromoTotal: stdPricing.total,
-      standardPromoDeposit: stdPricing.deposit,
-      standardPromoBalance: stdPricing.balanceDue,
-      deepPromoTotal: deepPricing.total,
-      deepPromoDeposit: deepPricing.deposit,
-      deepPromoBalance: deepPricing.balanceDue,
+      comboList,
+      comboPromoTotal: comboPricing.total,
+      comboPromoDeposit: comboPricing.deposit,
+      comboPromoBalance: comboPricing.balanceDue,
       membership: {
         monthly: memberPrices.monthly,
         biweekly: memberPrices.biweekly,
@@ -115,25 +111,17 @@ export default function BookingOffer() {
   // Check for custom quote requirement (5000+ sq ft)
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
 
-  const handleSelectStandard = () => {
-    setSelectedService('standard');
+  const handleSelectCombo = () => {
+    setSelectedService('combo');
     updateBookingData({
-      serviceType: 'standard',
+      // serviceType stays 'combo' so the server prices both visits as a
+      // bundle. The first visit (Deep Clean) date is picked here on
+      // /book/offer; the second visit (Standard Clean follow-up) is
+      // captured on /book/details after deposit.
+      serviceType: 'combo',
       membershipPlan: 'none',
     });
-    trackViewContent(prices.standard, 'Standard Cleaning — 50% Off First Clean');
-    setTimeout(() => {
-      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  };
-
-  const handleSelectDeepClean = () => {
-    setSelectedService('deep');
-    updateBookingData({
-      serviceType: 'deep',
-      membershipPlan: 'none',
-    });
-    trackViewContent(prices.deepClean, 'Deep Cleaning — 50% Off First Clean');
+    trackViewContent(prices.comboList, 'Deep + Standard Combo — 50% Off First Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -242,209 +230,113 @@ export default function BookingOffer() {
             </div>
           </div>
 
-          {/* Offer cards — Standard Clean, Deep Clean (one-time), and
-              Glow Membership. Standard + Deep both qualify for the 50%
-              new-customer promo; Membership has its own per-clean
+          {/* Two offer cards: Deep + Standard Combo (one-time bundle)
+              and Glow Membership (recurring). Combo qualifies for the
+              50% new-customer promo; Membership has its own per-clean
               discount (14–42%) and does NOT stack the 50% off. */}
           <div className="grid gap-5 md:gap-6 max-w-xl mx-auto">
-            {/* Standard Clean — 50% off card */}
-            {selectedHomeSize && prices.standard > 0 && (() => {
-              const standardDiscounted = prices.standardPromoTotal;
-              const standardDepositToday = prices.standardPromoDeposit;
-              const standardBalanceAfter = prices.standardPromoBalance;
-              const isSelected = selectedService === "standard";
-              return (
-                <Card
-                  className={cn(
-                    "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
-                    isSelected
-                      ? "border-primary shadow-lg ring-2 ring-primary/20"
-                      : "border-primary/20 hover:border-primary/50",
-                  )}
-                  onClick={handleSelectStandard}
-                >
-                  <CardContent className="pt-6 pb-6 px-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                          <RiHomeLine className="h-4 w-4" />
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                        >
-                          <RiPercentLine className="h-3 w-3 mr-1" />
-                          50% off · auto-applied
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl md:text-2xl font-bold font-jakarta">Standard Clean</h3>
-                      <p className="text-xs md:text-sm text-muted-foreground">
-                        Regular maintenance cleaning — first-time customers save 50%.
-                      </p>
-                    </div>
-
-                    <div>
-                      <div className="text-xs text-muted-foreground line-through mb-1">
-                        Regular: ${prices.standard.toFixed(2)}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-                          ${standardDiscounted.toFixed(2)}
-                        </span>
-                        <span className="text-sm text-muted-foreground">total / clean</span>
-                      </div>
-                      <p className="text-xs text-primary font-semibold mt-1.5">
-                        50% off applied automatically
-                      </p>
-                      <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Pay today (50% deposit)</span>
-                          <span className="font-semibold text-foreground">${standardDepositToday.toFixed(2)}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Auto-charged after service</span>
-                          <span className="font-semibold text-foreground">${standardBalanceAfter.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <ul className="space-y-2">
-                      {[
-                        "Kitchen: countertops, sink, stovetop, appliance exteriors",
-                        "Bathrooms: sanitize fixtures, polish mirrors",
-                        "Living areas: dust, vacuum, mop",
-                        "Bedrooms: dust furniture, make beds on request",
-                        "All supplies & equipment included",
-                      ].map((line) => (
-                        <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
-                          <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                          <span className="text-foreground">{line}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <Button
-                      size="lg"
-                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectStandard();
-                      }}
-                    >
-                      Claim Offer — Save 50%
-                      <RiArrowRightSLine className="w-4 h-4 ml-1" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })()}
-
-            {/* Deep Clean — 50% off card (Most Popular) */}
-            {selectedHomeSize && prices.deepClean > 0 && (() => {
-              const deepCleanDiscounted = prices.deepPromoTotal;
-              const deepDepositToday = prices.deepPromoDeposit;
-              const deepBalanceAfter = prices.deepPromoBalance;
-              const isSelected = selectedService === "deep";
+            {/* Deep + Standard Combo — 50% off card (Most Popular) */}
+            {selectedHomeSize && prices.comboList > 0 && (() => {
+              const comboDiscounted = prices.comboPromoTotal;
+              const comboDepositToday = prices.comboPromoDeposit;
+              const comboBalanceAfter = prices.comboPromoBalance;
+              const isSelected = selectedService === "combo";
               return (
                 <div className="relative pt-4">
                   {/* Most Popular ribbon — rendered outside the Card so
-                      the Card can keep its rounded edges without
-                      clipping the badge with overflow-hidden. */}
+                      the Card can keep its rounded edges without being
+                      clipped by overflow-hidden. */}
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
                     <Badge className="bg-gradient-primary text-white font-bold shadow-lg px-4 py-1 text-[11px] uppercase tracking-wider">
                       <RiSparklingLine className="h-3 w-3 mr-1" />
                       Most Popular
                     </Badge>
                   </div>
-                <Card
-                  className={cn(
-                    "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
-                    isSelected
-                      ? "border-primary shadow-lg ring-2 ring-primary/20"
-                      : "border-primary/30 hover:border-primary/60",
-                  )}
-                  onClick={handleSelectDeepClean}
-                >
-
-                  <CardContent className="pt-7 pb-6 px-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                          <RiSparklingLine className="h-4 w-4" />
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                        >
-                          <RiPercentLine className="h-3 w-3 mr-1" />
-                          50% off · auto-applied
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl md:text-2xl font-bold font-jakarta">Deep Clean</h3>
-                      <p className="text-xs md:text-sm text-muted-foreground">
-                        Thorough top-to-bottom reset — first-time customers save 50%.
-                      </p>
-                    </div>
-
-                    <div>
-                      <div className="text-xs text-muted-foreground line-through mb-1">
-                        Regular: ${prices.deepClean.toFixed(2)}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-                          ${deepCleanDiscounted.toFixed(2)}
-                        </span>
-                        <span className="text-sm text-muted-foreground">total / clean</span>
-                      </div>
-                      <p className="text-xs text-primary font-semibold mt-1.5">
-                        50% off applied automatically
-                      </p>
-                      <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Pay today (50% deposit)</span>
-                          <span className="font-semibold text-foreground">${deepDepositToday.toFixed(2)}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Auto-charged after service</span>
-                          <span className="font-semibold text-foreground">${deepBalanceAfter.toFixed(2)}</span>
+                  <Card
+                    className={cn(
+                      "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                      isSelected
+                        ? "border-primary shadow-lg ring-2 ring-primary/20"
+                        : "border-primary/30 hover:border-primary/60",
+                    )}
+                    onClick={handleSelectCombo}
+                  >
+                    <CardContent className="pt-7 pb-6 px-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                            <RiSparklingLine className="h-4 w-4" />
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                          >
+                            <RiPercentLine className="h-3 w-3 mr-1" />
+                            50% off · auto-applied
+                          </Badge>
                         </div>
                       </div>
-                    </div>
 
-                    <ul className="space-y-2">
-                      {[
-                        "Everything in Standard Clean",
-                        "Inside cabinet cleaning & baseboards",
-                        "Interior windows & sills",
-                        "Eco-friendly products & HEPA vacuums",
-                        "48-hour re-clean guarantee",
-                      ].map((line) => (
-                        <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
-                          <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                          <span className="text-foreground">{line}</span>
-                        </li>
-                      ))}
-                    </ul>
+                      <div>
+                        <h3 className="text-xl md:text-2xl font-bold font-jakarta">Deep + Standard Combo</h3>
+                        <p className="text-xs md:text-sm text-muted-foreground">
+                          Initial Deep Clean + a follow-up Standard Clean within 14 days. Schedule the second visit on the next page.
+                        </p>
+                      </div>
 
-                    <Button
-                      size="lg"
-                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectDeepClean();
-                      }}
-                    >
-                      Claim Offer — Save 50%
-                      <RiArrowRightSLine className="w-4 h-4 ml-1" />
-                    </Button>
-                  </CardContent>
-                </Card>
+                      <div>
+                        <div className="text-xs text-muted-foreground line-through mb-1">
+                          Regular: ${prices.comboList.toFixed(2)} (2 visits)
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                            ${comboDiscounted.toFixed(2)}
+                          </span>
+                          <span className="text-sm text-muted-foreground">total · 2 visits</span>
+                        </div>
+                        <p className="text-xs text-primary font-semibold mt-1.5">
+                          50% off applied automatically — both visits
+                        </p>
+                        <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Pay today (50% deposit)</span>
+                            <span className="font-semibold text-foreground">${comboDepositToday.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Auto-charged after second clean</span>
+                            <span className="font-semibold text-foreground">${comboBalanceAfter.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <ul className="space-y-2">
+                        {[
+                          "Visit 1 — Deep Clean: top-to-bottom reset",
+                          "Visit 2 — Standard Clean within 14 days",
+                          "Same trusted 2-person team for both visits",
+                          "Eco-friendly products & HEPA vacuums",
+                          "48-hour re-clean guarantee",
+                        ].map((line) => (
+                          <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
+                            <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                            <span className="text-foreground">{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Button
+                        size="lg"
+                        className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectCombo();
+                        }}
+                      >
+                        Claim Offer — Save 50%
+                        <RiArrowRightSLine className="w-4 h-4 ml-1" />
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               );
             })()}
@@ -544,23 +436,30 @@ export default function BookingOffer() {
 
           {/* Schedule Picker - Shows after service selection with animation */}
           {selectedService && (
-            <div 
-              id="schedule-section" 
+            <div
+              id="schedule-section"
               className="scroll-mt-4 animate-fade-in"
               style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
             >
+              {selectedService === 'combo' && (
+                <div className="max-w-xl mx-auto mb-3 rounded-lg bg-primary/5 border border-primary/20 px-4 py-2 text-xs md:text-sm text-foreground">
+                  <strong>Visit 1 — Deep Clean.</strong> Pick the date below.
+                  You'll lock in your <strong>Visit 2 — Standard Clean</strong>{' '}
+                  on the next page (within 14 days of the deep).
+                </div>
+              )}
               <SchedulePicker
                 selectedDate={selectedDate}
                 selectedTime={bookingData.timeSlot}
                 onDateSelect={(date) => {
                   setSelectedDate(date);
-                  updateBookingData({ 
+                  updateBookingData({
                     serviceDate: format(date, 'yyyy-MM-dd'),
-                    timeSlot: '' 
+                    timeSlot: ''
                   });
                 }}
                 onTimeSelect={(date, timeSlot, startTime, endTime) => {
-                  updateBookingData({ 
+                  updateBookingData({
                     serviceDate: format(date, 'yyyy-MM-dd'),
                     timeSlot,
                     startTime,

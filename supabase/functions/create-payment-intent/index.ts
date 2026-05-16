@@ -20,9 +20,13 @@ const logStep = (step: string, details?: any) => {
 
 // ─── v2.0 Pricing (cents) ────────────────────────────────
 // Deep = Standard × 1.5 | Move-In/Out = Standard × 2.0
+// Combo = Standard + Deep = 2.5× standard (the "Deep + Standard
+// Combo" bundle: initial Deep Clean + a follow-up Standard Clean
+// within 14 days, scheduled on /book/details after deposit).
 const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
   standard: 1.0,
   deep: 1.5,
+  combo: 2.5,
   moveInOut: 2.0,
 };
 
@@ -166,12 +170,14 @@ serve(async (req) => {
     
     const bookingNumber = (previousBookings?.length || 0) + 1;
     const isNewCustomer = bookingNumber === 1;
-    // 50% off subtotal for new customers — STANDARD and DEEP only.
-    // Memberships have their own plan-level discount; Move-In/Out is
-    // intentionally excluded from the promo.
+    // 50% off subtotal for new customers — STANDARD, DEEP, and COMBO
+    // (Deep+Standard bundle) qualify. Memberships have their own
+    // plan-level discount; Move-In/Out is intentionally excluded.
     const promoEligible =
       membershipPlan === 'none' &&
-      (bookingData.serviceType === 'standard' || bookingData.serviceType === 'deep');
+      (bookingData.serviceType === 'standard' ||
+       bookingData.serviceType === 'deep' ||
+       bookingData.serviceType === 'combo');
     const newCustomerDiscount = (isNewCustomer && promoEligible)
       ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT)
       : 0;
@@ -440,6 +446,7 @@ serve(async (req) => {
         zip_code: bookingData.zipCode,
         home_size_id: bookingData.homeSizeId,
         service_type: bookingData.serviceType,
+        offer_type: bookingData.serviceType, // 'combo' / 'standard' / 'deep' — used by reports + GHL sync
         add_ons: relevantAddOns,
         service_date: bookingData.serviceDate,
         time_slot: bookingData.timeSlot,

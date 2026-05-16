@@ -63,9 +63,12 @@ export const HOME_SIZE_RANGES: HomeSizeRange[] = [
 ];
 
 // ─── Service Tier Multipliers ───────────────────────────
+// `combo` is the bundled "Deep Clean + follow-up Standard Clean within
+// 14 days" offer — priced as standard + deep (1.0 + 1.5 = 2.5×).
 export const SERVICE_TIER_PRICING = {
   standard: { label: 'Standard Clean', multiplier: 1.0, addition: 0 },
   deep:     { label: 'Deep Clean',     multiplier: 1.5, addition: 0 }, // +50% of standard
+  combo:    { label: 'Deep + Standard Combo', multiplier: 2.5, addition: 0 }, // standard + deep bundle
   moveInOut: { label: 'Move-In/Out',   multiplier: 2.0, addition: 0 }, // +100% of standard, includes fridge & oven
 };
 
@@ -290,11 +293,12 @@ export function calculatePrice(
   const membershipDiscount = membership && !useCredit ? extrasAmount * membership.discount : 0;
 
   // New customer promo — 50% off the entire subtotal.
-  // Only Standard and Deep one-time cleans qualify. Members already
-  // get plan-level pricing (14–42% off per clean), and Move-In/Out is
-  // intentionally excluded.
+  // Standard, Deep, and Combo (Deep+Standard) one-time bookings qualify.
+  // Members already get plan-level pricing (14–42% off per clean), and
+  // Move-In/Out is intentionally excluded.
   const promoEligible =
-    membershipPlan === 'none' && (serviceType === 'standard' || serviceType === 'deep');
+    membershipPlan === 'none' &&
+    (serviceType === 'standard' || serviceType === 'deep' || serviceType === 'combo');
   const newCustomerDiscount = isNewCustomer && promoEligible
     ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT * 100) / 100
     : 0;
