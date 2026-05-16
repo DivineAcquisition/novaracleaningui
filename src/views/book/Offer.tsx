@@ -3,6 +3,7 @@ import {
   RiArrowLeftLine,
   RiArrowRightSLine,
   RiCheckLine,
+  RiInformationLine,
   RiPercentLine,
   RiPhoneLine,
   RiSparklingLine,
@@ -24,6 +25,7 @@ import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
+import { CleanComparisonDialog } from "@/components/booking/CleanComparisonDialog";
 import {
   HOME_SIZE_RANGES,
   MEMBERSHIP_PRICES,
@@ -55,6 +57,7 @@ export default function BookingOffer() {
   const router = useRouter();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showMembershipModal, setShowMembershipModal] = useState(false);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
   const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'membership' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
@@ -239,6 +242,20 @@ export default function BookingOffer() {
             <div className="flex justify-center pt-1">
               <GoogleGuaranteedBadge variant="compact" />
             </div>
+          </div>
+
+          {/* "What's the difference?" comparison opener — sits between
+              the page header and the offer cards so the customer can
+              see the side-by-side without leaving the page. */}
+          <div className="flex justify-center -mb-2">
+            <button
+              type="button"
+              onClick={() => setShowComparisonModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/[0.04] px-3 py-1.5 text-xs md:text-sm font-medium text-primary hover:bg-primary/10 hover:border-primary/50 transition-colors"
+            >
+              <RiInformationLine className="h-4 w-4" />
+              What&apos;s the difference between Standard &amp; Deep?
+            </button>
           </div>
 
           {/* Three offer cards: Standard Clean, Deep Clean (Most
@@ -572,6 +589,12 @@ export default function BookingOffer() {
             </Button>
           </div>
         </div>
+
+        {/* Standard vs Deep comparison modal */}
+        <CleanComparisonDialog
+          open={showComparisonModal}
+          onOpenChange={setShowComparisonModal}
+        />
 
         {/* Membership Modal */}
         <Dialog open={showMembershipModal} onOpenChange={setShowMembershipModal}>
