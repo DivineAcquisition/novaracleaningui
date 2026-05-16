@@ -36,20 +36,19 @@ const ADD_ON_PRICING: Record<string, number> = {
   windows: 4000, // $40
 };
 
-// Zone B base standard clean prices in cents (v3.3 — even-dollar bases
-// so post-50%-off totals land on clean numbers with no rounding drift
-// between offer card and checkout summary; deep at ×1.5 hits the $225
-// floor exactly at the smallest home size).
+// Zone B base standard clean prices in cents (v3.4 — v3.3 lowered 10%
+// across the board. Membership pricing stays at the listed rate card —
+// only one-time / combo prices come down).
 const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 30000,
-  "1000_1500": 38000,
-  "1501_2000": 48000,
-  "2001_2500": 56000,
-  "2501_3000": 68000,
-  "3001_3500": 76000,
-  "3501_4000": 88000,
-  "4001_4500": 98000,
-  "4501_5000": 108000,
+  "0_999": 27000,
+  "1000_1500": 34200,
+  "1501_2000": 43200,
+  "2001_2500": 50400,
+  "2501_3000": 61200,
+  "3001_3500": 68400,
+  "3501_4000": 79200,
+  "4001_4500": 88200,
+  "4501_5000": 97200,
   "5000_plus": 0,
 };
 
