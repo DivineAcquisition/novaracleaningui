@@ -103,7 +103,15 @@ export default function BookingZip() {
       // ZIP is in service area - show contact form
       setCityState(`${coverage.city}, ${coverage.state}`);
       setFormMode('contact');
-      updateBookingData({ zipCode });
+      // Persist ZIP + the resolved city/state into the booking context so
+      // downstream pages (Details, Checkout, GHL sync) inherit them
+      // automatically — no more empty City/State in GHL when the
+      // customer drops off before the Details page.
+      updateBookingData({
+        zipCode,
+        city: coverage.city,
+        state: coverage.state,
+      });
 
       // Fire Meta Pixel Lead event for in-area ZIPs
       trackLead(zipCode);

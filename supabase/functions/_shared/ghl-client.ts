@@ -96,6 +96,61 @@ async function ghlFetch(
 let fieldIdCache: Record<string, string> | null = null;
 let fieldIdCachePromise: Promise<Record<string, string>> | null = null;
 
+// ─── Pipeline / first-stage cache ─────────────────────────────────────────
+// Used when GHL_PIPELINE_ID / GHL_PIPELINE_STAGE_ID are NOT set as env
+// vars — we auto-discover the first pipeline and its first stage so
+// opportunities still get created rather than silently no-op'ing.
+let pipelineCache: { pipelineId: string; pipelineStageId: string } | null = null;
+let pipelineCachePromise: Promise<{ pipelineId: string; pipelineStageId: string } | null> | null = null;
+
+async function autoDiscoverPipeline(
+  cfg: GhlConfig,
+): Promise<{ pipelineId: string; pipelineStageId: string } | null> {
+  if (pipelineCache) return pipelineCache;
+  if (pipelineCachePromise) return await pipelineCachePromise;
+
+  pipelineCachePromise = (async () => {
+    try {
+      const res = await ghlFetch(
+        cfg,
+        `/opportunities/pipelines?locationId=${encodeURIComponent(cfg.locationId)}`,
+      );
+      if (!res.ok) {
+        log("auto-pipeline fetch failed", { status: res.status });
+        return null;
+      }
+      const json = (await res.json()) as Json;
+      const pipelines = (json.pipelines ?? []) as Array<{
+        id?: string;
+        name?: string;
+        stages?: Array<{ id?: string; name?: string; position?: number }>;
+      }>;
+      if (pipelines.length === 0) {
+        log("auto-pipeline — no pipelines on location");
+        return null;
+      }
+      const p = pipelines[0];
+      const stages = p.stages ?? [];
+      const stage = stages.length > 0
+        ? stages.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0]
+        : null;
+      if (!p.id || !stage?.id) {
+        log("auto-pipeline — pipeline or stage missing id", { pipelineName: p.name });
+        return null;
+      }
+      const result = { pipelineId: p.id, pipelineStageId: stage.id };
+      log("auto-pipeline resolved", { pipelineName: p.name, stageName: stage.name });
+      pipelineCache = result;
+      return result;
+    } catch (err) {
+      log("auto-pipeline error", { message: err instanceof Error ? err.message : String(err) });
+      return null;
+    }
+  })();
+
+  return await pipelineCachePromise;
+}
+
 async function loadCustomFieldMap(cfg: GhlConfig): Promise<Record<string, string>> {
   if (fieldIdCache) return fieldIdCache;
   if (fieldIdCachePromise) return await fieldIdCachePromise;
@@ -183,6 +238,17 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
     const fieldMap = await loadCustomFieldMap(cfg);
     const customFields = buildCustomFieldsArray(fieldMap, input.customFieldsByKey);
 
+    // Defensive split — if caller passed a full "Street, City, ST ZIP"
+    // string as address1, lift City / State / ZIP out so each lands in
+    // its native GHL slot and address1 contains the street only. This
+    // mirrors the client-side parser so the API contract is the same
+    // regardless of which integration path called us.
+    const split = splitFullAddress(input.address1 || "");
+    const finalStreet = split.street || input.address1 || undefined;
+    const finalCity = input.city || split.city || undefined;
+    const finalState = input.state || split.state || undefined;
+    const finalZip = input.postalCode || split.zipCode || undefined;
+
     const body: Json = {
       locationId: cfg.locationId,
       email: input.email || undefined,
@@ -190,10 +256,10 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
       firstName: input.firstName || undefined,
       lastName: input.lastName || undefined,
       name: input.name || undefined,
-      address1: input.address1 || undefined,
-      city: input.city || undefined,
-      state: input.state || undefined,
-      postalCode: input.postalCode || undefined,
+      address1: finalStreet,
+      city: finalCity,
+      state: finalState,
+      postalCode: finalZip,
       country: input.country || "US",
       source: input.source || "Novara Booking",
       tags: input.tags && input.tags.length > 0 ? input.tags : undefined,
@@ -240,9 +306,21 @@ export async function createOpportunity(
     return null;
   }
 
-  const pipelineId = input.pipelineId || cfg.pipelineId;
+  // Resolve pipeline + stage: explicit input wins, env-var second,
+  // auto-discover (first pipeline / first stage) third. This stops
+  // opportunity creation from silently being skipped when the env
+  // vars aren't set.
+  let pipelineId = input.pipelineId || cfg.pipelineId;
+  let pipelineStageId = input.pipelineStageId || cfg.pipelineStageId;
+  if (!pipelineId || !pipelineStageId) {
+    const discovered = await autoDiscoverPipeline(cfg);
+    if (discovered) {
+      pipelineId = pipelineId || discovered.pipelineId;
+      pipelineStageId = pipelineStageId || discovered.pipelineStageId;
+    }
+  }
   if (!pipelineId) {
-    log("createOpportunity skipped — no pipelineId (set GHL_PIPELINE_ID)");
+    log("createOpportunity skipped — could not resolve pipelineId");
     return null;
   }
 
@@ -254,7 +332,7 @@ export async function createOpportunity(
       locationId: cfg.locationId,
       contactId: input.contactId,
       pipelineId,
-      pipelineStageId: input.pipelineStageId || cfg.pipelineStageId || undefined,
+      pipelineStageId: pipelineStageId || undefined,
       name: input.name,
       status: input.status || "open",
       monetaryValue: input.monetaryValue,
@@ -313,4 +391,50 @@ export function ynBool(v: boolean | null | undefined): string {
   if (v === true) return "Yes";
   if (v === false) return "No";
   return "";
+}
+
+// ─── Address splitter (mirrors client-side parseAddressString) ────────────
+const US_STATE_CODE_SET = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DC","DE","FL","GA","HI","ID","IL","IN",
+  "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH",
+  "NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT",
+  "VT","VA","WA","WV","WI","WY",
+]);
+
+/**
+ * Pull ZIP + 2-letter state + city + street out of a freeform address.
+ * Returns blank fields when nothing matches; the caller is responsible
+ * for falling back to the original string.
+ */
+export function splitFullAddress(input: string): {
+  street: string; city: string; state: string; zipCode: string;
+} {
+  const empty = { street: "", city: "", state: "", zipCode: "" };
+  if (!input || typeof input !== "string") return empty;
+  let work = input.trim().replace(/\s+/g, " ");
+  if (!work) return empty;
+
+  let zipCode = ""; let state = ""; let city = ""; let street = work;
+
+  const zipMatch = work.match(/\b(\d{5})(?:-\d{4})?\b\s*$/);
+  if (zipMatch) {
+    zipCode = zipMatch[1];
+    work = work.slice(0, zipMatch.index).trim().replace(/,\s*$/, "");
+  }
+
+  const stateMatch = work.match(/,?\s*([A-Za-z]{2})\s*$/);
+  if (stateMatch && US_STATE_CODE_SET.has(stateMatch[1].toUpperCase())) {
+    state = stateMatch[1].toUpperCase();
+    work = work.slice(0, stateMatch.index).trim().replace(/,\s*$/, "");
+  }
+
+  const lastComma = work.lastIndexOf(",");
+  if (lastComma >= 0) {
+    city = work.slice(lastComma + 1).trim();
+    street = work.slice(0, lastComma).trim();
+  } else {
+    street = work;
+  }
+
+  return { street, city, state, zipCode };
 }

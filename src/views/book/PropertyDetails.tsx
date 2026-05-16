@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { SEO } from "@/components/SEO";
+import { US_STATES, parseAddressString } from "@/lib/address-formatter";
 
 // Customer-facing arrival windows. Mirrors the windows offered on
 // /book/offer's SchedulePicker so the second-visit slot uses the same
@@ -63,9 +64,13 @@ export default function PropertyDetails() {
   const bookingId = searchParams.get("booking_id");
   const { bookingData } = useBooking();
   
+  // Address fields. We pre-seed City / State / ZIP from BookingContext
+  // so the customer doesn't have to re-type what they already gave us
+  // on the ZIP step (chain awareness). State defaults to MD since the
+  // primary service area is Maryland.
   const [address, setAddress] = useState<string>("");
-  const [city, setCity] = useState<string>("");
-  const [state, setState] = useState<string>("");
+  const [city, setCity] = useState<string>(bookingData.city || "");
+  const [state, setState] = useState<string>(bookingData.state || "MD");
   const [zipCode, setZipCode] = useState<string>(bookingData.zipCode || "");
   const [bedrooms, setBedrooms] = useState<string>("");
   const [bathrooms, setBathrooms] = useState<string>("");
@@ -97,6 +102,16 @@ export default function PropertyDetails() {
       router.push("/book/checkout");
     }
   }, [bookingId, bookingData.bookingId, router]);
+
+  // Keep address chain in sync — if the context updates (e.g. user
+  // bounces back to /book/zip and changes ZIP), reflect the new value
+  // here unless the user has already typed over it.
+  useEffect(() => {
+    if (bookingData.zipCode && !zipCode) setZipCode(bookingData.zipCode);
+    if (bookingData.city && !city) setCity(bookingData.city);
+    if (bookingData.state && !state) setState(bookingData.state);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingData.zipCode, bookingData.city, bookingData.state]);
 
   // Pull the booking row so we know whether to surface the second-visit
   // picker (combo only) and what the deep-clean date is so we can bound
@@ -141,10 +156,26 @@ export default function PropertyDetails() {
   })() : "";
 
   const handleAddressSelect = (addr: { street: string; city: string; state: string; zipCode: string; lat?: number; lng?: number }) => {
-    setAddress(addr.street);
-    setCity(addr.city);
-    setState(addr.state);
-    if (addr.zipCode) setZipCode(addr.zipCode);
+    // Defensive parse: if the autocomplete returned a "Street" that
+    // really contains the full address (e.g. user typed it all), split
+    // out the city/state/zip before we drop it into the Street field.
+    let street = addr.street || "";
+    let nextCity = addr.city || "";
+    let nextState = addr.state || "";
+    let nextZip = addr.zipCode || "";
+
+    if (!nextCity || !nextState || !nextZip) {
+      const parsed = parseAddressString(street);
+      if (parsed.street) street = parsed.street;
+      if (!nextCity) nextCity = parsed.city;
+      if (!nextState) nextState = parsed.state;
+      if (!nextZip) nextZip = parsed.zipCode;
+    }
+
+    setAddress(street);
+    if (nextCity) setCity(nextCity);
+    if (nextState) setState(nextState);
+    if (nextZip) setZipCode(nextZip);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -217,6 +248,21 @@ export default function PropertyDetails() {
 
       if (error) throw error;
 
+      // Re-fire the GHL / webhook sync now that the booking row has a
+      // real Street / City / State / ZIP. The initial sync (fired from
+      // stripe-webhook → payment_intent.succeeded) ran BEFORE this
+      // page captured the address, so the GHL contact was created with
+      // empty address fields. Firing again here updates the existing
+      // contact with the address and adds/updates the opportunity.
+      // Fire-and-forget — failures don't block the customer.
+      try {
+        await supabase.functions.invoke("send-zapier-webhook", {
+          body: { bookingId },
+        });
+      } catch (resyncErr) {
+        console.warn("[PropertyDetails] post-save webhook resync failed", resyncErr);
+      }
+
       toast.success("Details saved successfully!");
       router.push("/book/confirmation?booking_id=" + bookingId);
     } catch (error) {
@@ -273,14 +319,18 @@ export default function PropertyDetails() {
                   <Label htmlFor="state">
                     State <span className="text-destructive">*</span>
                   </Label>
-                  <Input
-                    id="state"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    className="h-12"
-                    placeholder="MD"
-                    required
-                  />
+                  <Select value={state} onValueChange={setState}>
+                    <SelectTrigger id="state" className="h-12">
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {US_STATES.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.value} — {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
