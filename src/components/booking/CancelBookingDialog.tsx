@@ -3,7 +3,6 @@
 import { RiAlertLine, RiCheckboxCircleLine, RiLoader4Line } from "@remixicon/react";
 import { useState } from "react";
 import { format, differenceInHours } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ResponsiveModal } from "@/components/booking/ResponsiveModal";
 
 interface Booking {
   id: string;
@@ -44,7 +44,15 @@ const CANCEL_REASONS = [
   { value: "other", label: "Other reason" },
 ];
 
-export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: CancelBookingDialogProps) {
+// mirrors CANCEL_SHORT_NOTICE_FEE_CENTS in supabase/functions/_shared/booking-policy.ts
+const SHORT_NOTICE_FEE_CENTS = 5000;
+
+export function CancelBookingDialog({
+  open,
+  onOpenChange,
+  booking,
+  onSuccess,
+}: CancelBookingDialogProps) {
   const [step, setStep] = useState<"reason" | "confirm" | "done">("reason");
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
@@ -55,11 +63,6 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
   const hoursUntil = differenceInHours(serviceDate, new Date());
   const isWithin24Hours = hoursUntil < 24 && hoursUntil > 0;
   const totalDollars = (booking.total_estimate_cents / 100).toFixed(2);
-  // Server is the source of truth for fees — we send `auto` and trust
-  // cancel-booking to compute the right number from the same policy
-  // helper. Surface the customer-facing estimate here so the dialog
-  // copy matches what they'll be charged.
-  const SHORT_NOTICE_FEE_CENTS = 5000; // mirrors _shared/booking-policy.ts CANCEL_SHORT_NOTICE_FEE_CENTS
   const refundLabel = booking.uses_credit
     ? "Membership credit will be restored — no cash refund."
     : isWithin24Hours
@@ -67,10 +70,13 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
       : `Full refund — $${totalDollars}`;
 
   const handleCancel = async () => {
-    if (!reason) { toast.error("Please select a reason"); return; }
+    if (!reason) {
+      toast.error("Please select a reason");
+      return;
+    }
     setIsCancelling(true);
     try {
-      const cancelReason = `${CANCEL_REASONS.find(r => r.value === reason)?.label || reason}${notes ? `: ${notes}` : ""}`;
+      const cancelReason = `${CANCEL_REASONS.find((r) => r.value === reason)?.label || reason}${notes ? `: ${notes}` : ""}`;
       const response = await supabase.functions.invoke("cancel-booking", {
         body: {
           bookingId: booking.id,
@@ -82,7 +88,9 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
         },
       });
       if (response.error) {
-        const msg = typeof response.error === "object" && "message" in response.error ? (response.error as any).message : String(response.error);
+        const msg = typeof response.error === "object" && "message" in response.error
+          ? (response.error as { message: string }).message
+          : String(response.error);
         throw new Error(msg);
       }
       if (response.data?.error) throw new Error(response.data.error);
@@ -90,8 +98,9 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
       setStep("done");
       toast.success("Booking cancelled. A confirmation email has been sent.");
       onSuccess();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to cancel booking");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to cancel booking";
+      toast.error(msg);
     } finally {
       setIsCancelling(false);
     }
@@ -99,95 +108,187 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
 
   const handleClose = () => {
     onOpenChange(false);
-    setTimeout(() => { setStep("reason"); setReason(""); setNotes(""); setRefundInfo(""); }, 200);
+    setTimeout(() => {
+      setStep("reason");
+      setReason("");
+      setNotes("");
+      setRefundInfo("");
+    }, 200);
   };
 
+  // Footer is per-step — gives the sticky bottom CTA bar on mobile so
+  // the primary action is always reachable without scrolling, and the
+  // secondary "Keep Booking" / "Go Back" is always one tap away.
+  const footer =
+    step === "reason" ? (
+      <div className="flex w-full gap-3 sm:justify-end">
+        <Button variant="outline" onClick={handleClose} className="flex-1 sm:flex-none">
+          Keep Booking
+        </Button>
+        <Button
+          onClick={() => setStep("confirm")}
+          disabled={!reason}
+          variant="destructive"
+          className="flex-1 sm:flex-none"
+        >
+          Continue
+        </Button>
+      </div>
+    ) : step === "confirm" ? (
+      <div className="flex w-full gap-3 sm:justify-end">
+        <Button
+          variant="outline"
+          onClick={() => setStep("reason")}
+          disabled={isCancelling}
+          className="flex-1 sm:flex-none"
+        >
+          Go Back
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={handleCancel}
+          disabled={isCancelling}
+          className="flex-1 sm:flex-none"
+        >
+          {isCancelling && <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />}
+          Confirm Cancellation
+        </Button>
+      </div>
+    ) : null;
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{step === "done" ? "Booking Cancelled" : "Cancel Booking"}</DialogTitle>
-          <DialogDescription className="sr-only">Cancel your upcoming cleaning</DialogDescription>
-        </DialogHeader>
-
-        {step === "reason" && (
-          <div className="space-y-4">
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="p-3.5 text-sm">
-                <p className="font-semibold">{format(serviceDate, "EEEE, MMMM d")} at {booking.time_slot}</p>
-                <p className="text-muted-foreground text-xs">{booking.service_type} &middot; {booking.address}, {booking.city}</p>
-              </CardContent>
-            </Card>
-            <div className="space-y-2">
-              <Label>Why are you cancelling?</Label>
-              <Select value={reason} onValueChange={setReason}>
-                <SelectTrigger><SelectValue placeholder="Select a reason..." /></SelectTrigger>
-                <SelectContent>
-                  {CANCEL_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Additional notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
-              <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything else..." className="resize-none" rows={2} />
-            </div>
-            <div className="flex gap-3 justify-end pt-2 border-t">
-              <Button variant="outline" onClick={handleClose}>Keep Booking</Button>
-              <Button onClick={() => setStep("confirm")} disabled={!reason} variant="destructive">Continue</Button>
-            </div>
+    <ResponsiveModal
+      open={open}
+      onOpenChange={handleClose}
+      title={step === "done" ? "Booking Cancelled" : "Cancel Booking"}
+      description={
+        step === "reason"
+          ? "Tell us what changed and we'll get this sorted."
+          : step === "confirm"
+            ? "Review your cancellation summary."
+            : undefined
+      }
+      desktopMaxWidthClass="max-w-md"
+      footer={footer}
+    >
+      {step === "reason" && (
+        <div className="space-y-4">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-3.5 text-sm">
+              <p className="font-semibold">
+                {format(serviceDate, "EEEE, MMMM d")} at {booking.time_slot}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {booking.service_type} · {booking.address}, {booking.city}
+              </p>
+            </CardContent>
+          </Card>
+          <div className="space-y-2">
+            <Label>Why are you cancelling?</Label>
+            <Select value={reason} onValueChange={setReason}>
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Select a reason..." />
+              </SelectTrigger>
+              <SelectContent>
+                {CANCEL_REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
-
-        {step === "confirm" && (
-          <div className="space-y-4">
-            <div className="rounded-xl bg-destructive/5 border border-destructive/20 p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
-                  <RiAlertLine className="w-5 h-5 text-destructive" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Are you sure?</p>
-                  <p className="text-xs text-muted-foreground">This cannot be undone.</p>
-                </div>
-              </div>
-              <Separator />
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span className="font-medium">{format(serviceDate, "MMM d, yyyy")}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-medium">${totalDollars}</span></div>
-                {!booking.uses_credit && (
-                  <><Separator /><div className="flex justify-between items-center"><span className="text-muted-foreground">Refund</span><Badge variant="outline" className={cn("text-xs", isWithin24Hours ? "text-amber-600 border-amber-300" : "text-emerald-600 border-emerald-300")}>{refundLabel}</Badge></div></>
-                )}
-                {booking.uses_credit && (
-                  <><Separator /><div className="flex justify-between items-center"><span className="text-muted-foreground">Credit</span><Badge variant="outline" className="text-xs text-emerald-600 border-emerald-300">Will be restored</Badge></div></>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end pt-2 border-t">
-              <Button variant="outline" onClick={() => setStep("reason")} disabled={isCancelling}>Go Back</Button>
-              <Button variant="destructive" onClick={handleCancel} disabled={isCancelling}>
-                {isCancelling && <RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />}
-                Confirm Cancellation
-              </Button>
-            </div>
+          <div className="space-y-2">
+            <Label>
+              Additional notes <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Anything else..."
+              className="resize-none"
+              rows={3}
+            />
           </div>
-        )}
+        </div>
+      )}
 
-        {step === "done" && (
-          <div className="space-y-4 text-center py-4">
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-              <RiCheckboxCircleLine className="w-7 h-7 text-emerald-600" />
+      {step === "confirm" && (
+        <div className="space-y-4">
+          <div className="space-y-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-destructive/10">
+                <RiAlertLine className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Are you sure?</p>
+                <p className="text-xs text-muted-foreground">This cannot be undone.</p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold">Booking cancelled</p>
-              <p className="text-sm text-muted-foreground mt-1">Confirmation email sent.</p>
-              {refundInfo && refundInfo !== "None" && (
-                <p className="text-sm text-emerald-600 mt-2 font-medium">Refund of {refundInfo} will process in 5-10 business days.</p>
+            <Separator />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Date</span>
+                <span className="font-medium">{format(serviceDate, "MMM d, yyyy")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-medium">${totalDollars}</span>
+              </div>
+              {!booking.uses_credit && (
+                <>
+                  <Separator />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Refund</span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-right text-[11px] leading-tight whitespace-normal",
+                        isWithin24Hours
+                          ? "border-amber-300 text-amber-700"
+                          : "border-emerald-300 text-emerald-700",
+                      )}
+                    >
+                      {refundLabel}
+                    </Badge>
+                  </div>
+                </>
+              )}
+              {booking.uses_credit && (
+                <>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Credit</span>
+                    <Badge variant="outline" className="border-emerald-300 text-xs text-emerald-700">
+                      Will be restored
+                    </Badge>
+                  </div>
+                </>
               )}
             </div>
-            <Button onClick={handleClose} className="w-full">Done</Button>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+
+      {step === "done" && (
+        <div className="space-y-4 py-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-900/30">
+            <RiCheckboxCircleLine className="h-7 w-7 text-emerald-600" />
+          </div>
+          <div>
+            <p className="font-semibold">Booking cancelled</p>
+            <p className="mt-1 text-sm text-muted-foreground">Confirmation email sent.</p>
+            {refundInfo && refundInfo !== "None" && (
+              <p className="mt-2 text-sm font-medium text-emerald-600">
+                Refund of {refundInfo} will process in 5–10 business days.
+              </p>
+            )}
+          </div>
+          <Button onClick={handleClose} className="w-full">
+            Done
+          </Button>
+        </div>
+      )}
+    </ResponsiveModal>
   );
 }
