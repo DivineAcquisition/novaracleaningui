@@ -1,8 +1,10 @@
 "use client";
 import {
   RiArrowRightLine,
+  RiCalendarLine,
   RiCheckboxCircleLine,
-  RiMapPinLine
+  RiMapPinLine,
+  RiSparklingLine
 } from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +20,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { SEO } from "@/components/SEO";
+
+// Customer-facing arrival windows. Mirrors the windows offered on
+// /book/offer's SchedulePicker so the second-visit slot uses the same
+// shape (id + label + start/end ISO times).
+const ARRIVAL_WINDOWS = [
+  { id: "8-12",  label: "8:00 AM – 12:00 PM", startHour: 8,  endHour: 12 },
+  { id: "12-16", label: "12:00 PM – 4:00 PM", startHour: 12, endHour: 16 },
+  { id: "16-20", label: "4:00 PM – 8:00 PM",  startHour: 16, endHour: 20 },
+];
 
 const DWELLING_TYPES = [
   { value: 'house', label: 'House' },
@@ -64,6 +75,18 @@ export default function PropertyDetails() {
   const [accessNotes, setAccessNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Second-visit (Standard Clean follow-up) state — only used when the
+  // booking is the Deep + Standard Combo offer. Defaulted to the first
+  // valid follow-up date (deep + 7 days) on mount; the customer can
+  // pick anything within +1 to +14 days of the deep clean.
+  const [bookingMeta, setBookingMeta] = useState<{
+    serviceType: string | null;
+    serviceDate: string | null;
+    isCombo: boolean;
+  }>({ serviceType: null, serviceDate: null, isCombo: false });
+  const [secondVisitDate, setSecondVisitDate] = useState<string>("");
+  const [secondVisitSlot, setSecondVisitSlot] = useState<string>("");
+
   useEffect(() => {
     if (!bookingId) {
       if (bookingData.bookingId) {
@@ -74,6 +97,48 @@ export default function PropertyDetails() {
       router.push("/book/checkout");
     }
   }, [bookingId, bookingData.bookingId, router]);
+
+  // Pull the booking row so we know whether to surface the second-visit
+  // picker (combo only) and what the deep-clean date is so we can bound
+  // the follow-up window to +1..+14 days.
+  useEffect(() => {
+    if (!bookingId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("bookings")
+        .select("service_type, service_date")
+        .eq("id", bookingId)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      const isCombo = data.service_type === "combo";
+      setBookingMeta({
+        serviceType: data.service_type,
+        serviceDate: data.service_date,
+        isCombo,
+      });
+      // Default the second visit to deep date + 7 days for convenience.
+      if (isCombo && data.service_date && !secondVisitDate) {
+        const d = new Date(`${data.service_date}T12:00:00`);
+        d.setDate(d.getDate() + 7);
+        setSecondVisitDate(d.toISOString().slice(0, 10));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId]);
+
+  // Compute the allowed +1..+14 day range for the follow-up Standard.
+  const secondVisitMin = bookingMeta.serviceDate ? (() => {
+    const d = new Date(`${bookingMeta.serviceDate}T12:00:00`);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })() : "";
+  const secondVisitMax = bookingMeta.serviceDate ? (() => {
+    const d = new Date(`${bookingMeta.serviceDate}T12:00:00`);
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().slice(0, 10);
+  })() : "";
 
   const handleAddressSelect = (addr: { street: string; city: string; state: string; zipCode: string; lat?: number; lng?: number }) => {
     setAddress(addr.street);
@@ -90,6 +155,24 @@ export default function PropertyDetails() {
       return;
     }
 
+    // Combo bookings require the second-visit date + arrival window.
+    if (bookingMeta.isCombo && (!secondVisitDate || !secondVisitSlot)) {
+      toast.error("Please pick a date and arrival window for your follow-up Standard Clean");
+      return;
+    }
+
+    // Validate the second-visit date sits within +1..+14 days of the
+    // first visit (defense-in-depth against a tampered date input).
+    if (bookingMeta.isCombo && secondVisitDate && bookingMeta.serviceDate) {
+      const first = new Date(`${bookingMeta.serviceDate}T12:00:00`);
+      const second = new Date(`${secondVisitDate}T12:00:00`);
+      const days = Math.round((second.getTime() - first.getTime()) / 86400000);
+      if (days < 1 || days > 14) {
+        toast.error("Follow-up Standard Clean must be 1–14 days after your Deep Clean");
+        return;
+      }
+    }
+
     if (!bookingId) {
       toast.error("Invalid booking");
       return;
@@ -98,6 +181,20 @@ export default function PropertyDetails() {
     setIsSubmitting(true);
 
     try {
+      // Build second-visit ISO start/end so dispatch + availability
+      // tooling can use the same shape as the first visit.
+      const secondVisitFields: Record<string, unknown> = {};
+      if (bookingMeta.isCombo && secondVisitDate && secondVisitSlot) {
+        const window = ARRIVAL_WINDOWS.find((w) => w.id === secondVisitSlot);
+        if (window) {
+          const pad = (n: number) => String(n).padStart(2, "0");
+          secondVisitFields.second_visit_date = secondVisitDate;
+          secondVisitFields.second_visit_time_slot = secondVisitSlot;
+          secondVisitFields.second_visit_start_time = `${secondVisitDate}T${pad(window.startHour)}:00:00`;
+          secondVisitFields.second_visit_end_time = `${secondVisitDate}T${pad(window.endHour)}:00:00`;
+        }
+      }
+
       const { error } = await supabase
         .from("bookings")
         .update({
@@ -111,6 +208,10 @@ export default function PropertyDetails() {
           flooring_type: flooringType || null,
           pets,
           access_notes: accessNotes || null,
+          // Stamp the offer-type column too so reports / GHL syncs can
+          // distinguish combo bookings from standalone deep / standard.
+          ...(bookingMeta.serviceType ? { offer_type: bookingMeta.serviceType } : {}),
+          ...secondVisitFields,
         })
         .eq("id", bookingId);
 
@@ -292,6 +393,62 @@ export default function PropertyDetails() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Combo bookings — schedule the follow-up Standard Clean */}
+              {bookingMeta.isCombo && (
+                <div className="space-y-3 border-t pt-6">
+                  <div className="flex items-center gap-2">
+                    <RiSparklingLine className="w-5 h-5 text-primary" />
+                    <h3 className="text-base md:text-lg font-semibold">
+                      Schedule Your Follow-Up Standard Clean
+                    </h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Your combo includes a Standard Clean within 14 days of your Deep Clean
+                    {bookingMeta.serviceDate ? ` on ${bookingMeta.serviceDate}` : ""}.
+                    Pick the date and arrival window that works for you.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="secondVisitDate">
+                        Standard Clean date <span className="text-destructive">*</span>
+                      </Label>
+                      <div className="relative">
+                        <RiCalendarLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          id="secondVisitDate"
+                          type="date"
+                          value={secondVisitDate}
+                          min={secondVisitMin}
+                          max={secondVisitMax}
+                          onChange={(e) => setSecondVisitDate(e.target.value)}
+                          className="h-12 pl-9"
+                          required
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Allowed range: {secondVisitMin || "—"} → {secondVisitMax || "—"}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="secondVisitSlot">
+                        Arrival window <span className="text-destructive">*</span>
+                      </Label>
+                      <Select value={secondVisitSlot} onValueChange={setSecondVisitSlot}>
+                        <SelectTrigger id="secondVisitSlot" className="h-12">
+                          <SelectValue placeholder="Select an arrival window" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ARRIVAL_WINDOWS.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>{w.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="accessNotes">
