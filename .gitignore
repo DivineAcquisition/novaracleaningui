@@ -25,3 +25,4 @@ out
 *.sln
 *.sw?
 tsconfig.tsbuildinfo
+supabase/.temp/
