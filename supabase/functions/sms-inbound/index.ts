@@ -181,33 +181,22 @@ serve(async (req) => {
     );
   }
 
-  // ─── Locate the customer's most recent active booking ──────────
-  const { data: booking } = await supabase
+  // ─── Locate the customer's NEXT upcoming active booking ────────
+  // Phones in `bookings.phone` are stored in mixed formats (some E.164,
+  // some 10-digit, some legacy with formatting). Match against the last
+  // 10 digits of the inbound number with ILIKE so all variants line up.
+  const lastTen = fromPhone.replace(/\D/g, "").slice(-10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const { data: bookingRow } = await supabase
     .from("bookings")
     .select("id, status, service_date, time_slot, uses_credit, first_name, phone, total_estimate_cents, deposit_cents, email")
-    .eq("phone", fromPhone)
+    .ilike("phone", `%${lastTen}%`)
     .in("status", ["pending_payment", "confirmed", "assigned"])
+    .gte("service_date", todayIso)
     .order("service_date", { ascending: true })
     .limit(1)
     .maybeSingle();
-
-  // Also try variants of the phone in case the booking row stored a
-  // different format (e.g. without +1). This is a defensive 2nd query
-  // — most bookings are stored with the same format Telnyx sends.
-  let bookingFallback: typeof booking = null;
-  if (!booking) {
-    const digits = fromPhone.replace(/\D/g, "");
-    const { data: row } = await supabase
-      .from("bookings")
-      .select("id, status, service_date, time_slot, uses_credit, first_name, phone, total_estimate_cents, deposit_cents, email")
-      .ilike("phone", `%${digits.slice(-10)}%`)
-      .in("status", ["pending_payment", "confirmed", "assigned"])
-      .order("service_date", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    bookingFallback = row || null;
-  }
-  const activeBooking = booking || bookingFallback;
+  const activeBooking = bookingRow || null;
 
   if (!activeBooking && (TOKEN_RESCHEDULE.has(upper) || TOKEN_CANCEL.has(upper) || TOKEN_YES.has(upper))) {
     return finalize(
