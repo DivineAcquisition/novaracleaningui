@@ -55,10 +55,16 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
   const hoursUntil = differenceInHours(serviceDate, new Date());
   const isWithin24Hours = hoursUntil < 24 && hoursUntil > 0;
   const totalDollars = (booking.total_estimate_cents / 100).toFixed(2);
-  const refundType = isWithin24Hours ? "partial" : "full";
-  const refundLabel = isWithin24Hours
-    ? `Partial refund (50%) — $${(booking.total_estimate_cents / 200).toFixed(2)}`
-    : `Full refund — $${totalDollars}`;
+  // Server is the source of truth for fees — we send `auto` and trust
+  // cancel-booking to compute the right number from the same policy
+  // helper. Surface the customer-facing estimate here so the dialog
+  // copy matches what they'll be charged.
+  const SHORT_NOTICE_FEE_CENTS = 5000; // mirrors _shared/booking-policy.ts CANCEL_SHORT_NOTICE_FEE_CENTS
+  const refundLabel = booking.uses_credit
+    ? "Membership credit will be restored — no cash refund."
+    : isWithin24Hours
+      ? `Refund of $${((booking.total_estimate_cents - SHORT_NOTICE_FEE_CENTS) / 100).toFixed(2)} (after $${(SHORT_NOTICE_FEE_CENTS / 100).toFixed(0)} short-notice fee)`
+      : `Full refund — $${totalDollars}`;
 
   const handleCancel = async () => {
     if (!reason) { toast.error("Please select a reason"); return; }
@@ -66,7 +72,14 @@ export function CancelBookingDialog({ open, onOpenChange, booking, onSuccess }: 
     try {
       const cancelReason = `${CANCEL_REASONS.find(r => r.value === reason)?.label || reason}${notes ? `: ${notes}` : ""}`;
       const response = await supabase.functions.invoke("cancel-booking", {
-        body: { bookingId: booking.id, cancelReason, refundType: booking.uses_credit ? "none" : refundType },
+        body: {
+          bookingId: booking.id,
+          cancelReason,
+          // Server computes the fee + refund. `auto` lets the policy
+          // helper decide based on the booking + 24-hour rule.
+          refundType: booking.uses_credit ? "none" : "auto",
+          source: "customer_portal",
+        },
       });
       if (response.error) {
         const msg = typeof response.error === "object" && "message" in response.error ? (response.error as any).message : String(response.error);

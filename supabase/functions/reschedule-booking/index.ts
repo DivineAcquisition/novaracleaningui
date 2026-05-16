@@ -4,8 +4,10 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
-import { upsertContact as ghlUpsertContact, fmtMoney } from '../_shared/ghl-client.ts';
+import { syncBookingLifecycle, fmtMoney, ynBool } from '../_shared/ghl-client.ts';
 import { sendSms, formatServiceDate, formatTimeSlot } from '../_shared/sms.ts';
+import { decideRescheduleFee, SUPPORT_PHONE_DISPLAY, smsActionTail } from '../_shared/booking-policy.ts';
+import { mirrorToLeadConnector } from '../_shared/leadconnector-mirror.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +22,8 @@ interface RescheduleRequest {
   newTimeSlot: string;
   oldDate: string;
   oldTimeSlot: string;
+  /** Origin tag — "customer_portal" | "sms_reply" | "admin". */
+  source?: string;
 }
 
 serve(async (req) => {
@@ -33,9 +37,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot }: RescheduleRequest = await req.json();
+    const { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source = 'customer_portal' }: RescheduleRequest = await req.json();
 
-    console.log('Reschedule request:', { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot });
+    console.log('Reschedule request:', { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source });
 
     // 1. Get booking details
     const { data: booking, error: bookingError } = await supabase
@@ -67,12 +71,22 @@ serve(async (req) => {
       );
     }
 
-    // 3. Update booking with new date/time
+    // Decide reschedule fee BEFORE we mutate the row (so the fee is
+    // calculated against the ORIGINAL service date, not the new one).
+    const feeDecision = decideRescheduleFee({ serviceDate: booking.service_date });
+    console.log('Reschedule fee decided:', feeDecision);
+
+    // 3. Update booking with new date/time + audit columns
     const { error: updateError } = await supabase
       .from('bookings')
       .update({
         service_date: newDate,
         time_slot: newTimeSlot,
+        rescheduled_at: new Date().toISOString(),
+        rescheduled_from_date: oldDate,
+        rescheduled_from_time_slot: oldTimeSlot,
+        reschedule_fee_cents: (booking.reschedule_fee_cents || 0) + feeDecision.feeCents,
+        reschedule_count: (booking.reschedule_count || 0) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq('id', bookingId);
@@ -229,45 +243,96 @@ serve(async (req) => {
     }
 
     // Push reschedule update to GHL via Private Integration (PIT).
-    // Re-upserts the contact with a fresh tag + custom fields so the CRM reflects
-    // the new appointment date.
+    // Now uses syncBookingLifecycle which UPDATES the existing
+    // opportunity for the contact rather than creating a duplicate,
+    // and pushes the fresh service date + reschedule fee into the
+    // custom field map.
     try {
-      await ghlUpsertContact({
-        email: booking.email,
-        phone: booking.phone,
-        firstName: booking.first_name,
-        lastName: booking.last_name,
-        address1: booking.address,
-        city: booking.city,
-        state: booking.state,
-        postalCode: booking.zip_code,
-        source: "Novara Reschedule",
-        tags: [
-          "rescheduled",
-          newDate ? `svc-${newDate}` : "",
-          booking.zip_code ? `zip-${booking.zip_code}` : "",
-        ].filter(Boolean) as string[],
-        customFieldsByKey: {
-          cleaning_type: booking.service_type,
-          market: booking.city,
-          quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
+      const remainingBalanceCents = Math.max(
+        0,
+        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+      );
+      await syncBookingLifecycle({
+        contact: {
+          email: booking.email,
+          phone: booking.phone,
+          firstName: booking.first_name,
+          lastName: booking.last_name,
+          address1: booking.address,
+          city: booking.city,
+          state: booking.state,
+          postalCode: booking.zip_code,
+          source: "Novara Reschedule",
+          tags: [
+            "rescheduled",
+            newDate ? `svc-${newDate}` : "",
+            booking.zip_code ? `zip-${booking.zip_code}` : "",
+            feeDecision.feeCents > 0 ? "short-notice-reschedule" : "",
+          ].filter(Boolean) as string[],
+          customFieldsByKey: {
+            cleaning_type: booking.service_type,
+            market: booking.city,
+            quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
+            remaining_balance: fmtMoney(remainingBalanceCents + feeDecision.feeCents),
+            deposit_paid: ynBool(true),
+          },
+        },
+        opportunity: {
+          name: `NOV-${String(booking.booking_number).padStart(5, '0')} — ${booking.first_name} ${booking.last_name}`,
+          status: 'open',
+          monetaryValue: Math.round(((booking.total_estimate_cents || 0) + feeDecision.feeCents) / 100),
+          source: "Novara Reschedule",
+          customFieldsByKey: {
+            cleaning_type: booking.service_type,
+            quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
+            remaining_balance: fmtMoney(remainingBalanceCents + feeDecision.feeCents),
+          },
         },
       });
-      console.log('[reschedule-booking] GHL PIT sync ok');
+      console.log('[reschedule-booking] GHL PIT lifecycle sync ok');
     } catch (ghlPitErr) {
       console.error('[reschedule-booking] GHL PIT sync failed (non-blocking):', ghlPitErr);
     }
 
-    // Customer SMS — confirm the new appointment time.
+    // LeadConnector inbound webhook mirror — backup so the GHL
+    // workflow attached to the inbound URL always sees the new state.
+    try {
+      await mirrorToLeadConnector({
+        event: 'booking.rescheduled',
+        payload: {
+          booking_id: bookingId,
+          booking_number: booking.booking_number,
+          first_name: booking.first_name,
+          last_name: booking.last_name,
+          email: booking.email,
+          phone: booking.phone,
+          old_date: oldDate,
+          old_time_slot: oldTimeSlot,
+          new_date: newDate,
+          new_time_slot: newTimeSlot,
+          reschedule_fee_cents: feeDecision.feeCents,
+          reschedule_fee_basis: feeDecision.basis,
+          hours_until_original: feeDecision.hoursUntilService,
+          source,
+        },
+      });
+    } catch (mirrorErr) {
+      console.error('[reschedule-booking] LeadConnector mirror failed (non-critical):', mirrorErr);
+    }
+
+    // Customer SMS — confirm the new appointment time + fee disclosure.
     try {
       if (booking.phone) {
+        const feeLine = feeDecision.feeCents > 0
+          ? ` A $${(feeDecision.feeCents / 100).toFixed(0)} short-notice fee was added to your invoice.`
+          : "";
         await sendSms(supabase, {
           toPhone: booking.phone,
           message:
             `Novara Cleaning: Your appointment has been rescheduled to ` +
             `${formatServiceDate(newDate)}` +
             (newTimeSlot ? ` (${formatTimeSlot(newTimeSlot)})` : "") +
-            `. Need to make another change? Reply or call (844) 735-2070. Reply STOP to opt out.`,
+            `.${feeLine} ${smsActionTail()}`,
           type: "confirmation",
         });
         console.log('[reschedule-booking] Customer reschedule SMS sent');
@@ -302,9 +367,11 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
-        message: 'Booking rescheduled successfully'
+        message: 'Booking rescheduled successfully',
+        rescheduleFeeCents: feeDecision.feeCents,
+        feeBasis: feeDecision.basis,
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

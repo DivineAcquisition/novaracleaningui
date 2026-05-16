@@ -365,6 +365,10 @@ export async function createOpportunity(
 /**
  * Convenience helper: upsert a contact AND (if booking-related data is supplied)
  * create an opportunity for it. Never throws.
+ *
+ * For LIFECYCLE events (reschedule, cancel, complete) prefer
+ * `syncBookingLifecycle` instead — it UPDATES the existing opportunity
+ * for the contact rather than creating a duplicate every time.
  */
 export async function syncContactAndOpportunity(args: {
   contact: GhlContactInput;
@@ -376,6 +380,134 @@ export async function syncContactAndOpportunity(args: {
   }
   const opportunityId = await createOpportunity({ ...args.opportunity, contactId });
   return { contactId, opportunityId };
+}
+
+// ─── Opportunity lookup + update ──────────────────────────────────────────
+//
+// GHL's PIT API exposes:
+//   GET  /opportunities/search?location_id=&contact_id=
+//   PUT  /opportunities/:id    (body fields are partial — only what you send)
+//
+// We use these to keep ONE opportunity per booking and mutate its status
+// + custom fields rather than spamming the pipeline with a new card on
+// every reschedule / cancel / completion.
+
+/**
+ * Find the most-recent opportunity for a contact. Returns null when the
+ * contact has no opportunities or GHL isn't configured. Never throws.
+ */
+export async function findLatestOpportunityForContact(
+  contactId: string,
+): Promise<{ id: string; name?: string; status?: string } | null> {
+  const cfg = readConfig();
+  if (!cfg || !contactId) return null;
+  try {
+    const url =
+      `/opportunities/search?location_id=${encodeURIComponent(cfg.locationId)}` +
+      `&contact_id=${encodeURIComponent(contactId)}&limit=20`;
+    const res = await ghlFetch(cfg, url);
+    if (!res.ok) {
+      log("findLatestOpportunityForContact failed", { status: res.status });
+      return null;
+    }
+    const json = (await res.json()) as Json;
+    const opps = (json.opportunities ?? []) as Array<{
+      id?: string; name?: string; status?: string; updatedAt?: string; createdAt?: string;
+    }>;
+    if (opps.length === 0) return null;
+    opps.sort((a, b) => {
+      const aT = Date.parse(a.updatedAt || a.createdAt || "") || 0;
+      const bT = Date.parse(b.updatedAt || b.createdAt || "") || 0;
+      return bT - aT;
+    });
+    const top = opps[0];
+    return top.id ? { id: top.id, name: top.name, status: top.status } : null;
+  } catch (err) {
+    log("findLatestOpportunityForContact error", { message: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+export interface GhlOpportunityUpdate {
+  name?: string;
+  status?: "open" | "won" | "lost" | "abandoned";
+  pipelineId?: string;
+  pipelineStageId?: string;
+  monetaryValue?: number;
+  assignedTo?: string;
+  customFieldsByKey?: Record<string, string | number | boolean | null | undefined>;
+}
+
+/**
+ * PUT /opportunities/:id — partial update. Returns true on 2xx, false
+ * otherwise. Never throws.
+ */
+export async function updateOpportunity(
+  opportunityId: string,
+  patch: GhlOpportunityUpdate,
+): Promise<boolean> {
+  const cfg = readConfig();
+  if (!cfg || !opportunityId) return false;
+  try {
+    const fieldMap = await loadCustomFieldMap(cfg);
+    const customFields = buildCustomFieldsArray(fieldMap, patch.customFieldsByKey);
+    const body: Json = {};
+    if (patch.name !== undefined) body.name = patch.name;
+    if (patch.status !== undefined) body.status = patch.status;
+    if (patch.pipelineId !== undefined) body.pipelineId = patch.pipelineId;
+    if (patch.pipelineStageId !== undefined) body.pipelineStageId = patch.pipelineStageId;
+    if (patch.monetaryValue !== undefined) body.monetaryValue = patch.monetaryValue;
+    if (patch.assignedTo !== undefined) body.assignedTo = patch.assignedTo;
+    if (customFields.length > 0) body.customFields = customFields;
+
+    const res = await ghlFetch(cfg, `/opportunities/${encodeURIComponent(opportunityId)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      log("updateOpportunity failed", { id: opportunityId, status: res.status, bodyPreview: text.slice(0, 200) });
+      return false;
+    }
+    log("updateOpportunity ok", { id: opportunityId, status: patch.status });
+    return true;
+  } catch (err) {
+    log("updateOpportunity error", { message: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
+}
+
+/**
+ * Lifecycle sync — single helper used by cancel/reschedule/complete and
+ * the inbound-SMS handler. It:
+ *   1. upserts the contact (refreshes address / tags / custom fields)
+ *   2. finds the existing opportunity for that contact and PATCHES it
+ *      (status + name + monetary + custom fields). If no opportunity
+ *      exists yet, creates one — so partial-state bookings still land.
+ *
+ * Never throws. Returns the resolved contactId + opportunityId for
+ * caller logging.
+ */
+export async function syncBookingLifecycle(args: {
+  contact: GhlContactInput;
+  opportunity: Omit<GhlOpportunityInput, "contactId">;
+}): Promise<{ contactId: string | null; opportunityId: string | null; updated: boolean }> {
+  const contactId = await upsertContact(args.contact);
+  if (!contactId) return { contactId: null, opportunityId: null, updated: false };
+
+  const existing = await findLatestOpportunityForContact(contactId);
+  if (existing) {
+    const ok = await updateOpportunity(existing.id, {
+      name: args.opportunity.name,
+      status: args.opportunity.status,
+      monetaryValue: args.opportunity.monetaryValue,
+      customFieldsByKey: args.opportunity.customFieldsByKey,
+    });
+    return { contactId, opportunityId: existing.id, updated: ok };
+  }
+
+  const newOppId = await createOpportunity({ ...args.opportunity, contactId });
+  return { contactId, opportunityId: newOppId, updated: false };
 }
 
 // ─── Shared payload mappers ───────────────────────────────────────────────

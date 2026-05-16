@@ -11,29 +11,31 @@ export function isWeekend(date: Date): boolean {
   return day === 0 || day === 6; // Sunday = 0, Saturday = 6
 }
 
-export function generateTimeSlots(serviceDuration: number, serviceType: string): TimeSlot[] {
-  // Base start times available (in 24hr format)
-  const baseStartTimes = [8, 10, 12, 14, 16, 18];
-  
-  // Filter times based on service duration to ensure completion before 8pm
-  const maxEndTime = 20; // 8pm
+export function generateTimeSlots(serviceDuration: number, _serviceType: string): TimeSlot[] {
+  // IMPORTANT: the IDs returned here MUST match the IDs the main booking
+  // funnel writes into `bookings.time_slot`. SchedulePicker (used during
+  // checkout) writes hourly-window IDs like "9:00 AM - 10:00 AM" — so
+  // reschedule MUST emit the same IDs, otherwise the rescheduled row
+  // becomes unjoinable to its old availability slot, the inbound webhook
+  // can't pretty-print the time, and downstream Zapier/GHL syncs receive
+  // a different shape than other bookings.
+  //
+  // We generate every hourly start from 8 AM to 5 PM (so the latest
+  // bookable visit starts at 5 PM). serviceDuration only affects the
+  // `estimatedDuration` field for the UI label — it does NOT change the
+  // slot id.
+  const baseStartTimes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
   const slots: TimeSlot[] = [];
-  
   for (const startTime of baseStartTimes) {
-    const endTime = startTime + serviceDuration;
-    
-    // Only include if service can finish by 8pm
-    if (endTime <= maxEndTime) {
-      slots.push({
-        id: `${startTime}-${endTime}`,
-        label: formatTimeSlot(startTime, endTime),
-        startTime: formatTime(startTime),
-        endTime: formatTime(endTime),
-        estimatedDuration: serviceDuration,
-      });
-    }
+    const endTime = startTime + 1;
+    slots.push({
+      id: `${formatTime(startTime)} - ${formatTime(endTime)}`,
+      label: formatTime(startTime),
+      startTime: formatTime(startTime),
+      endTime: formatTime(endTime),
+      estimatedDuration: serviceDuration,
+    });
   }
-  
   return slots;
 }
 

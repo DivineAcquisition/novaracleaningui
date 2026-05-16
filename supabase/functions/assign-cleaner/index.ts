@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+import { smsActionTail } from "../_shared/booking-policy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -137,7 +138,7 @@ serve(async (req) => {
             `Novara Cleaning: ${cleanerName} has been assigned to your cleaning` +
             (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
             (booking.time_slot ? ` (${formatTimeSlot(booking.time_slot)})` : "") +
-            `. We'll send a reminder before service. Reply STOP to opt out.`,
+            `. We'll send a reminder before service. ${smsActionTail()}`,
           type: "confirmation",
         });
         logStep("Customer assignment SMS sent");

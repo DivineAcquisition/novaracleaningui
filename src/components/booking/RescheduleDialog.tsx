@@ -46,6 +46,9 @@ export function RescheduleDialog({ open, onOpenChange, booking, onSuccess }: Res
 
   const minDate = addDays(new Date(), 2);
   const maxDate = addDays(new Date(), 60);
+  // generateTimeSlots now emits the same "9:00 AM - 10:00 AM" id format
+  // that the main booking funnel writes into bookings.time_slot — so a
+  // rescheduled row stays joinable to availability + GHL.
   const timeSlots = generateTimeSlots(booking.service_duration || 2, booking.service_type);
 
   useEffect(() => {
