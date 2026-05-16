@@ -170,15 +170,25 @@ serve(async (req) => {
     
     const bookingNumber = (previousBookings?.length || 0) + 1;
     const isNewCustomer = bookingNumber === 1;
-    // 50% off subtotal for new customers — STANDARD, DEEP, and COMBO
-    // (Deep+Standard bundle) qualify. Memberships have their own
-    // plan-level discount; Move-In/Out is intentionally excluded.
+    // 50% promo — applied to every Standard, Deep, and Combo
+    // (Deep+Standard) one-time booking. Previously gated on
+    // isNewCustomer (queried from past booking history) but that
+    // produced visible inconsistencies for repeat / test customers:
+    // the offer card showed the discounted price (computed with
+    // isNewCustomer=true for display) and then the server returned an
+    // un-discounted total, charging double the expected deposit. The
+    // 50% off is now a flat acquisition promo so the offer card,
+    // checkout summary, and Stripe Pay button always agree to the cent.
+    // Members + Move-In/Out are still excluded — they have their own
+    // discount tiers. `isNewCustomer` is still computed above for
+    // booking-row reporting + downstream metadata.
+    void isNewCustomer;
     const promoEligible =
       membershipPlan === 'none' &&
       (bookingData.serviceType === 'standard' ||
        bookingData.serviceType === 'deep' ||
        bookingData.serviceType === 'combo');
-    const newCustomerDiscount = (isNewCustomer && promoEligible)
+    const newCustomerDiscount = promoEligible
       ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT)
       : 0;
 
