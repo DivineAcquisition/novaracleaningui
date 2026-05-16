@@ -685,52 +685,30 @@ export default function BookingCheckout() {
           {/* Show payment sections only when schedule is selected */}
           {isScheduleSelected && <>
           {/* ─── Pricing breakdown ──────────────────────────────────
-              One single canonical card that replaces both the old
-              SavingsVisualizer and the old "Due Today" card. Shows the
-              strikethrough original cost, every applied discount, the
-              50% deposit due NOW (highlighted), and the remaining
-              balance that will be auto-charged after service. */}
+              One canonical card. NO strikethrough "Original cost" line
+              (per product direction — the original-vs-discounted story
+              already lives on the offer card; here we just show what
+              the customer actually owes). Just the post-discount
+              service total, the 50% deposit due NOW, and the remaining
+              balance auto-charged after service. */}
           <Card className="border-2 border-primary/30 bg-primary/[0.04]">
             <CardContent className="p-4 md:p-5 space-y-3">
-              {/* Strikethrough original cost — full pre-discount subtotal */}
-              <div className="flex items-baseline justify-between text-sm">
-                <span className="text-muted-foreground">Original cost</span>
-                <span className="text-muted-foreground line-through">
-                  ${depositPricing.subtotal.toFixed(2)}
-                </span>
-              </div>
-
-              {/* Discount lines */}
-              {(depositPricing.newCustomerDiscount || 0) > 0 && (
-                <div className="flex items-baseline justify-between text-sm text-primary font-medium">
-                  <span className="flex items-center gap-1">
-                    <RiGiftLine className="w-3.5 h-3.5" />
-                    New customer 50% off
-                  </span>
-                  <span>-${(depositPricing.newCustomerDiscount || 0).toFixed(2)}</span>
-                </div>
-              )}
-              {(depositPricing.membershipDiscount || 0) > 0 && (
-                <div className="flex items-baseline justify-between text-sm text-primary font-medium">
-                  <span>Membership discount</span>
-                  <span>-${(depositPricing.membershipDiscount || 0).toFixed(2)}</span>
-                </div>
-              )}
+              {/* Optional discount-applied line — shown only when a
+                  user-entered promo or referral code is in effect, so
+                  the customer sees the savings register on this page. */}
               {(promoDiscount + referralDiscount) > 0 && (
                 <div className="flex items-baseline justify-between text-sm text-primary font-medium">
                   <span className="flex items-center gap-1">
                     <RiPriceTag3Line className="w-3.5 h-3.5" />
                     {appliedPromoCode && appliedReferralCode
-                      ? `Promo + referral`
+                      ? `Promo + referral applied`
                       : appliedPromoCode
-                        ? `Promo ${appliedPromoCode}`
-                        : `Referral ${appliedReferralCode}`}
+                        ? `Promo ${appliedPromoCode} applied`
+                        : `Referral ${appliedReferralCode} applied`}
                   </span>
                   <span>-${(promoDiscount + referralDiscount).toFixed(2)}</span>
                 </div>
               )}
-
-              <Separator />
 
               {/* Service total after discounts */}
               <div className="flex items-baseline justify-between text-sm">

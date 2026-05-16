@@ -292,14 +292,25 @@ export function calculatePrice(
   const extrasAmount = serviceAddition + addOnsTotal;
   const membershipDiscount = membership && !useCredit ? extrasAmount * membership.discount : 0;
 
-  // New customer promo — 50% off the entire subtotal.
-  // Standard, Deep, and Combo (Deep+Standard) one-time bookings qualify.
-  // Members already get plan-level pricing (14–42% off per clean), and
-  // Move-In/Out is intentionally excluded.
+  // 50% promo — applied flat to every Standard, Deep, and Combo
+  // (Deep+Standard) one-time booking. Previously gated on
+  // `isNewCustomer === true` (queried by server from past bookings),
+  // but that produced visible inconsistencies for repeat / test
+  // customers: the offer card showed the discounted price (computed
+  // with isNewCustomer=true for display), then the server returned an
+  // un-discounted total and charged double the expected deposit.
+  // The 50% off is now treated as a permanent acquisition promo so
+  // the offer card, the checkout summary, and the Stripe Pay button
+  // always agree to the cent. Members + Move-In/Out are still
+  // excluded — they have their own discount tiers.
   const promoEligible =
     membershipPlan === 'none' &&
     (serviceType === 'standard' || serviceType === 'deep' || serviceType === 'combo');
-  const newCustomerDiscount = isNewCustomer && promoEligible
+  // `isNewCustomer` is intentionally ignored on the discount math but
+  // is still threaded through the function signature so callers don't
+  // have to update.
+  void isNewCustomer;
+  const newCustomerDiscount = promoEligible
     ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT * 100) / 100
     : 0;
 
