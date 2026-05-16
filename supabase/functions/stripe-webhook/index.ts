@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+import { smsActionTail } from "../_shared/booking-policy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -344,7 +345,7 @@ serve(async (req) => {
                 const smsMsg =
                   `Novara Cleaning: Booking confirmed for ${dateLabel}` +
                   (timeLabel ? ` (${timeLabel})` : "") +
-                  `.${tail} Questions? Reply or call (844) 735-2070. Reply STOP to opt out.`;
+                  `.${tail} ${smsActionTail()}`;
                 await sendSms(supabase, {
                   toPhone: confirmedBooking.phone,
                   message: smsMsg,
