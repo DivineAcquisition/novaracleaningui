@@ -1,20 +1,8 @@
 // ─── google-calendar-health ──────────────────────────────────────────────
-// Single-purpose diagnostic. Verifies the Google Calendar service-
-// account credentials are correctly configured and that the calendar
-// is reachable. Returns:
-//
-//   { ok: true,  calendar_id, calendar_summary, upcoming_events_count }
-//   { ok: false, step, error }
-//
-// Steps tested in order — if any fails we return the first failure:
-//   1. Env vars present
-//   2. JWT mints + token exchange returns a Bearer token
-//   3. GET /calendars/{id} returns 200 (proves the SA was granted
-//      access to the target calendar)
-//   4. GET /calendars/{id}/events?timeMin=now&maxResults=5 returns 200
-//
-// Surface this from an admin "Google Calendar status" panel — green
-// dot if {ok:true}, red with the step+error otherwise.
+// Diagnostic. Verifies Google Calendar service-account credentials are
+// correctly configured and that the calendar is reachable. Also lists
+// EVERY calendar the service account currently has access to so we can
+// see if the calendar share is missing.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
@@ -23,8 +11,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// PEM → ArrayBuffer. Handles both real-newline and escaped-newline
-// stored secrets, and both common header strings.
 function pemToArrayBuffer(rawPem: string): ArrayBuffer {
   const pem = rawPem.replace(/\\n/g, "\n");
   const headerCandidates = ["-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----"];
@@ -57,13 +43,7 @@ function b64url(input: string | Uint8Array): string {
 async function signJwt(email: string, privateKeyPem: string, scope: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
-  const claim = {
-    iss: email,
-    scope,
-    aud: "https://oauth2.googleapis.com/token",
-    iat: now,
-    exp: now + 3600,
-  };
+  const claim = { iss: email, scope, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 };
   const unsigned = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claim))}`;
   const key = await crypto.subtle.importKey(
     "pkcs8",
@@ -92,22 +72,19 @@ async function exchangeToken(jwt: string): Promise<string> {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
   const result: Record<string, unknown> = { ok: false };
 
-  // 1) env vars
   const calendarId = Deno.env.get("GOOGLE_CALENDAR_ID");
   const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   const privateKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
   if (!calendarId || !email || !privateKey) {
     result.step = "env_vars";
-    result.error = "Missing one or more of GOOGLE_CALENDAR_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY";
+    result.error = "Missing GOOGLE_CALENDAR_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, or GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY";
     return new Response(JSON.stringify(result, null, 2), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
   result.calendar_id = calendarId;
   result.service_account_email = email;
 
-  // 2) JWT → token
   let token: string;
   try {
     const jwt = await signJwt(email, privateKey, "https://www.googleapis.com/auth/calendar");
@@ -118,7 +95,24 @@ serve(async (req) => {
     return new Response(JSON.stringify(result, null, 2), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  // 3) GET /calendars/{id}
+  // ALWAYS list calendars the SA can see — invaluable for diagnosing
+  // "is the calendar even shared?" without leaving the dashboard.
+  try {
+    const listRes = await fetch(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const listJson = await listRes.json();
+    if (listRes.ok) {
+      result.calendars_visible_to_service_account = (listJson.items || []).map((c: any) => ({
+        id: c.id,
+        summary: c.summary,
+        access_role: c.accessRole,
+      }));
+    }
+  } catch (_) { /* ignore — diagnostic only */ }
+
+  // Calendar metadata
   try {
     const calRes = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`,
@@ -129,17 +123,25 @@ serve(async (req) => {
       result.step = "calendar_metadata";
       result.http_status = calRes.status;
       result.error = calJson.error?.message || `HTTP ${calRes.status}`;
-      // Pull out the most actionable hint based on Google's error reason.
-      const reason = calJson.error?.details?.[0]?.reason
-        || calJson.error?.errors?.[0]?.reason
-        || "";
+      const reason = calJson.error?.details?.[0]?.reason || calJson.error?.errors?.[0]?.reason || "";
       if (reason === "SERVICE_DISABLED" || /has not been used in project|is disabled/i.test(String(result.error))) {
         const activation = calJson.error?.details?.[0]?.metadata?.activationUrl
           || "https://console.cloud.google.com/apis/library/calendar-json.googleapis.com";
-        result.hint = `Google Calendar API is DISABLED in your Cloud project. Click the activation URL → press ENABLE → wait 1–2 min → re-run this health check.`;
+        result.hint = `Google Calendar API is DISABLED in your Cloud project. Click the activation URL → press ENABLE → wait 1–2 min → re-run.`;
         result.fix_url = activation;
       } else if (calRes.status === 404 || calRes.status === 403 || reason === "notFound" || reason === "forbidden") {
-        result.hint = `The service account ${email} probably hasn't been granted access to calendar ${calendarId}. In Google Calendar → Settings → "Settings for my calendars" → ${calendarId} → "Share with specific people or groups" → add ${email} with "Make changes to events" permission.`;
+        const visibleCount = Array.isArray(result.calendars_visible_to_service_account)
+          ? (result.calendars_visible_to_service_account as unknown[]).length
+          : 0;
+        result.hint = visibleCount === 0
+          ? `The service account ${email} can see ZERO calendars right now. You need to share the Novara calendar with it.\n` +
+            `1. Open https://calendar.google.com\n` +
+            `2. Hover the Novara calendar in the left sidebar → 3 dots → "Settings and sharing"\n` +
+            `3. Under "Share with specific people or groups" click "Add people and groups"\n` +
+            `4. Paste: ${email}\n` +
+            `5. Permission: "Make changes to events" (NOT "See all event details")\n` +
+            `6. Click Send. Re-run this health check ~30 sec later.`
+          : `The service account CAN see ${visibleCount} other calendar(s) (listed in 'calendars_visible_to_service_account' above), but NOT ${calendarId}. Either the calendar ID is wrong, OR this specific calendar isn't shared with the service account. Either share it the same way, or update GOOGLE_CALENDAR_ID to one from the visible list.`;
       }
       return new Response(JSON.stringify(result, null, 2), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -151,7 +153,7 @@ serve(async (req) => {
     return new Response(JSON.stringify(result, null, 2), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  // 4) List a few upcoming events
+  // Events list
   try {
     const evRes = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
