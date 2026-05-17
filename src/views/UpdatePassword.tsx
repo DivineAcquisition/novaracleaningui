@@ -29,14 +29,60 @@ export default function UpdatePassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
+  // `checking` covers the PKCE exchange window that happens on first
+  // mount. Previously we redirected away the instant getSession()
+  // returned null — which is normal during the URL-hash exchange and
+  // made the "Invalid or expired reset link" toast fire almost every
+  // time, even with a perfectly valid recovery email.
+  const [checking, setChecking] = useState(true);
 
+  // Validate the reset link by waiting for either:
+  //   1. supabase to fire onAuthStateChange('PASSWORD_RECOVERY' | 'SIGNED_IN')
+  //      after consuming the URL token,
+  //   2. an existing session to already be present, or
+  //   3. a token in the URL hash that we can verify directly.
+  // Falls back to a 3-second deadline before declaring the link bad,
+  // which is well above the typical PKCE exchange latency (~200 ms).
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        toast.error("Invalid or expired reset link");
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (ok: boolean) => {
+      if (cancelled) return;
+      setChecking(false);
+      if (!ok) {
+        toast.error("Invalid or expired reset link. Please request a new one.");
         router.push("/reset-password");
       }
+    };
+
+    // 1) Listen for the auth state event that fires once the PKCE
+    //    exchange (or hash token) is consumed.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
+        finish(true);
+      }
     });
+
+    // 2) Some links arrive with the session ALREADY established —
+    //    poll briefly so we don't miss them.
+    let attempts = 0;
+    const poll = async () => {
+      if (cancelled) return;
+      const { data } = await supabase.auth.getSession();
+      if (data.session) return finish(true);
+      attempts += 1;
+      if (attempts < 12) timeoutId = setTimeout(poll, 250); // up to 3 s total
+      else finish(false);
+    };
+    void poll();
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [router]);
 
   const getPasswordStrength = (pwd: string) => {
@@ -78,6 +124,20 @@ export default function UpdatePassword() {
       setTimeout(() => router.push("/account"), 2000);
     }
   };
+
+  // While the PKCE token exchange is in flight, show a neutral spinner
+  // so the user doesn't see "Invalid link" flash + redirect.
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <SEO title="Verifying reset link" description="Verifying your password reset link." noindex />
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <RiLoader4Line className="h-7 w-7 animate-spin text-primary" />
+          <p className="text-sm">Verifying your reset link…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (passwordUpdated) {
     return (

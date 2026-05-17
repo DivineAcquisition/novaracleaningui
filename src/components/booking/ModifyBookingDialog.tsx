@@ -8,8 +8,8 @@ import {
   RiSparklingLine
 } from "@remixicon/react";
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ResponsiveModal } from "@/components/booking/ResponsiveModal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -159,17 +159,43 @@ export function ModifyBookingDialog({ booking, open, onOpenChange, onSuccess }: 
 
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === booking.home_size_id);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Modify Booking</DialogTitle>
-          <DialogDescription>
-            Update your cleaning service details before your scheduled date
-          </DialogDescription>
-        </DialogHeader>
+  const footer = (
+    <div className="flex w-full gap-3 sm:justify-end">
+      <Button
+        variant="outline"
+        onClick={() => onOpenChange(false)}
+        disabled={isLoading}
+        className="flex-1 sm:flex-none"
+      >
+        Cancel
+      </Button>
+      <Button
+        onClick={handleSubmit}
+        disabled={isLoading || !hasChanges}
+        className="flex-1 bg-gradient-primary sm:flex-none"
+      >
+        {isLoading ? (
+          <>
+            <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
+            Updating...
+          </>
+        ) : (
+          `Confirm Changes${priceDifference > 0 ? ` (+$${priceDifference.toFixed(2)})` : ""}`
+        )}
+      </Button>
+    </div>
+  );
 
-        <div className="space-y-6">
+  return (
+    <ResponsiveModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Modify Booking"
+      description="Update your cleaning service details before your scheduled date"
+      desktopMaxWidthClass="max-w-2xl"
+      footer={footer}
+    >
+      <div className="space-y-6">
           {/* Service Type Selection */}
           <div className="space-y-3">
             <Label className="text-base font-semibold">Service Type</Label>
@@ -242,7 +268,7 @@ export function ModifyBookingDialog({ booking, open, onOpenChange, onSuccess }: 
           {/* Property Details */}
           <div className="space-y-3">
             <Label className="text-base font-semibold">Property Details</Label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="bedrooms">Bedrooms</Label>
                 <Input
@@ -322,27 +348,6 @@ export function ModifyBookingDialog({ booking, open, onOpenChange, onSuccess }: 
             </Alert>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSubmit} 
-            disabled={isLoading || !hasChanges}
-            className="bg-gradient-primary"
-          >
-            {isLoading ? (
-              <>
-                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                Updating...
-              </>
-            ) : (
-              `Confirm Changes${priceDifference > 0 ? ` (+$${priceDifference.toFixed(2)})` : ''}`
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ResponsiveModal>
   );
 }

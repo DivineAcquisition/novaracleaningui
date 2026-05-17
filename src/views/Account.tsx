@@ -311,10 +311,17 @@ export default function Account() {
                         </p>
                       </div>
                     </div>
-                    <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                      onClick={() => router.push(`/book/checkout?booking_id=${booking.id}`)}>
-                      Complete Payment <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
-                    </Button>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <Button size="sm" className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                        onClick={() => router.push(`/book/checkout?booking_id=${booking.id}`)}>
+                        Complete Payment <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleCancel(booking)}>
+                        <RiCloseLine className="w-4 h-4" />
+                        <span className="sr-only">Discard incomplete booking</span>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
