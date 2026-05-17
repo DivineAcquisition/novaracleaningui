@@ -113,8 +113,14 @@ serve(async (req) => {
     const serviceDate = new Date(booking.service_date);
     
     // Format start and end datetime
-    const startDateTime = new Date(`${booking.service_date}T${convertTo24Hour(startTime)}`);
-    const endDateTime = new Date(`${booking.service_date}T${convertTo24Hour(endTime)}`);
+    // Build the dateTime as a LOCAL-time ISO string (no Z, no offset).
+    // When Google sees a dateTime without a timezone designator, it
+    // interprets it as wall-clock time IN the timeZone field. If we
+    // instead .toISOString() it, the runtime treats the input as UTC
+    // and the saved event lands 4 hrs off (the bug we just shipped a
+    // fix for — see end-to-end test 2026-05-17).
+    const startDateTime = `${booking.service_date}T${convertTo24Hour(startTime)}`;
+    const endDateTime = `${booking.service_date}T${convertTo24Hour(endTime)}`;
 
     // Create event payload
     const eventPayload = {
@@ -130,11 +136,11 @@ ${booking.team_notes ? `Team Notes: ${booking.team_notes}` : ''}
       `.trim(),
       location: `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
       start: {
-        dateTime: startDateTime.toISOString(),
+        dateTime: startDateTime,
         timeZone: 'America/New_York',
       },
       end: {
-        dateTime: endDateTime.toISOString(),
+        dateTime: endDateTime,
         timeZone: 'America/New_York',
       },
       colorId: '7', // Peacock blue for cleaning events

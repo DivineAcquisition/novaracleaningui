@@ -165,12 +165,14 @@ serve(async (req) => {
     if (action === 'reschedule') {
       console.log('Updating calendar event...');
 
-      // Parse booking time slot to get start/end times
+      // Parse booking time slot to get start/end times.
+      // We build a LOCAL-time ISO string (no Z, no offset). Google
+      // reads dateTime + timeZone as wall-clock time in that zone.
+      // toISOString() would have us send UTC and the saved event
+      // would land 4 hrs off (bug found 2026-05-17 end-to-end test).
       const [startTime, endTime] = booking.time_slot.split(' - ');
-      
-      // Format start and end datetime
-      const startDateTime = new Date(`${booking.service_date}T${convertTo24Hour(startTime)}`);
-      const endDateTime = new Date(`${booking.service_date}T${convertTo24Hour(endTime)}`);
+      const startDateTime = `${booking.service_date}T${convertTo24Hour(startTime)}`;
+      const endDateTime = `${booking.service_date}T${convertTo24Hour(endTime)}`;
 
       // Update event payload
       const eventPayload = {
@@ -186,11 +188,11 @@ ${booking.team_notes ? `Team Notes: ${booking.team_notes}` : ''}
         `.trim(),
         location: `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
         start: {
-          dateTime: startDateTime.toISOString(),
+          dateTime: startDateTime,
           timeZone: 'America/New_York',
         },
         end: {
-          dateTime: endDateTime.toISOString(),
+          dateTime: endDateTime,
           timeZone: 'America/New_York',
         },
       };
