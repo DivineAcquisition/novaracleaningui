@@ -585,9 +585,12 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       logStep('Stripe lookup for GHL mapper failed (non-critical)', stripeMapErr);
     }
 
-    // Lifetime revenue + last completed service — cheap aggregate.
+    // Lifetime revenue + completed count + first/last service —
+    // single aggregate scan over completed bookings for this email.
     let lifetimeRevenueCents: number | null = null;
     let lastServiceAt: string | null = null;
+    let firstServiceAt: string | null = null;
+    let completedBookingCount = 0;
     try {
       const { data: completedRows } = await supabase
         .from('bookings')
@@ -596,13 +599,65 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         .eq('status', 'completed')
         .order('service_date', { ascending: false });
       if (completedRows && completedRows.length > 0) {
+        completedBookingCount = completedRows.length;
         lifetimeRevenueCents = completedRows.reduce(
           (sum: number, r: any) => sum + (r.final_charge_cents || r.total_estimate_cents || 0),
           0,
         );
         lastServiceAt = (completedRows[0] as any).service_date || null;
+        firstServiceAt = (completedRows[completedRows.length - 1] as any).service_date || null;
       }
     } catch (_) { /* ignore */ }
+
+    // Cancelled bookings count — feeds churn risk model.
+    let cancelledBookingCount = 0;
+    try {
+      const { count } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('email', booking.email)
+        .eq('status', 'cancelled');
+      cancelledBookingCount = count || 0;
+    } catch (_) { /* ignore */ }
+
+    // Referral metrics — sum credits issued, count revenue generated
+    // from bookings referred by this customer.
+    let referralRevenueCents: number | null = null;
+    let referralCreditCents: number | null = null;
+    let referralName: string | null = null;
+    if (booking.email) {
+      try {
+        const { data: rRows } = await supabase
+          .from('referrals')
+          .select('credit_cents, referred_email, referred_booking_id, status, redeemed_at')
+          .eq('referrer_email', booking.email);
+        if (rRows && rRows.length > 0) {
+          referralCreditCents = rRows.reduce(
+            (s: number, r: any) => s + (r.credit_cents || 0),
+            0,
+          );
+          // Most-recent redeemed referred customer name = first email
+          const redeemed = rRows.filter((r: any) => r.redeemed_at).sort(
+            (a: any, b: any) => Date.parse(b.redeemed_at) - Date.parse(a.redeemed_at),
+          );
+          referralName = redeemed[0]?.referred_email || rRows[0].referred_email || null;
+          // Revenue: sum total_estimate of bookings tied to these referrals
+          const refBookingIds = rRows
+            .map((r: any) => r.referred_booking_id)
+            .filter(Boolean) as string[];
+          if (refBookingIds.length > 0) {
+            const { data: refBookings } = await supabase
+              .from('bookings')
+              .select('total_estimate_cents, final_charge_cents')
+              .in('id', refBookingIds);
+            referralRevenueCents = (refBookings || []).reduce(
+              (s: number, r: any) => s + (r.final_charge_cents || r.total_estimate_cents || 0),
+              0,
+            );
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
 
     const referralLinkForGhl = customerData?.referral_code
       ? `https://try.novaracleaning.com/book/zip?ref=${customerData.referral_code}`
@@ -618,13 +673,19 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       cleaners: teamCleaners,
       lastPayment,
       lastServiceAt,
+      firstServiceAt,
       lifetimeRevenueCents,
+      completedBookingCount,
+      cancelledBookingCount,
       failedPaymentCount,
       stripeCustomerId: stripeCustomerIdForGhl,
       stripeSubscriptionId: stripeSubscriptionIdForGhl,
       defaultPaymentMethod,
       referralCode: customerData?.referral_code || null,
       referralLink: referralLinkForGhl,
+      referralName,
+      referralRevenueCents,
+      referralCreditCents,
       publicOrigin: 'https://try.novaracleaning.com',
     });
     logStep("GHL custom fields built", { keys: Object.keys(ghlCustomFields).length });
