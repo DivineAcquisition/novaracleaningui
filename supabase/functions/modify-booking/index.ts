@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -245,17 +246,58 @@ serve(async (req) => {
         console.error("Failed to send email:", emailError);
         // Don't fail the whole operation if email fails
       }
+    }
 
-      // Trigger Zapier webhook for modified booking
-      try {
-        await supabaseAdmin.functions.invoke('send-zapier-webhook', {
-          body: { bookingId }
-        });
-        logStep("Zapier webhook triggered");
-      } catch (webhookError) {
-        // Log but don't fail the modification if webhook fails
-        logStep("Zapier webhook failed (non-critical)", { error: webhookError });
-      }
+    // ALWAYS push the modification to GHL — even when extra payment is
+    // pending. send-zapier-webhook owns the GHL PIT sync
+    // (syncBookingLifecycle), the LeadConnector mirror, and the
+    // legacy Zapier targets in one shot. If the customer abandons the
+    // Stripe checkout the booking row already reflects the requested
+    // change, so GHL must reflect it too.
+    try {
+      await supabaseAdmin.functions.invoke('send-zapier-webhook', {
+        body: { bookingId },
+      });
+      logStep("Zapier + GHL sync triggered");
+    } catch (webhookError) {
+      logStep("send-zapier-webhook failed (non-critical)", { error: webhookError });
+    }
+
+    // Direct LeadConnector mirror with the diff so the GHL workflow
+    // can branch on `requires_payment` and `price_difference_cents`
+    // (e.g. send a "complete your modification" follow-up).
+    try {
+      await mirrorToLeadConnector({
+        event: requiresPayment ? "booking.modified.payment_pending" : "booking.modified",
+        payload: {
+          booking_id: bookingId,
+          email: user.email,
+          phone: booking.phone,
+          first_name: booking.first_name,
+          last_name: booking.last_name,
+          previous: {
+            service_type: booking.service_type,
+            add_ons: booking.add_ons || [],
+            bedrooms: booking.bedrooms,
+            bathrooms: booking.bathrooms,
+            dwelling_type: booking.dwelling_type,
+            total_estimate_cents: booking.total_estimate_cents,
+          },
+          updated: {
+            service_type: serviceType,
+            add_ons: addOns,
+            bedrooms,
+            bathrooms,
+            dwelling_type: dwellingType,
+            total_estimate_cents: Math.round(newTotal * 100),
+          },
+          price_difference_cents: priceDifferenceCents,
+          requires_payment: requiresPayment,
+          checkout_url: checkoutUrl,
+        },
+      });
+    } catch (mirrorErr) {
+      logStep("LeadConnector mirror failed (non-critical)", mirrorErr);
     }
 
     return new Response(

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
+import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -297,14 +298,41 @@ serve(async (req) => {
       });
     }
 
-    // Trigger Zapier webhook for completed booking
+    // Trigger Zapier webhook for completed booking — this fans out to
+    // GHL PIT (syncBookingLifecycle marks the opportunity won + updates
+    // remaining_balance / deposit_paid fields), LeadConnector inbound,
+    // and legacy Zapier targets.
     try {
       await supabase.functions.invoke('send-zapier-webhook', {
         body: { bookingId }
       });
-      logStep("Zapier webhook triggered");
+      logStep("Zapier + GHL sync triggered");
     } catch (webhookError) {
-      logStep("Zapier webhook failed (non-critical)", { error: webhookError });
+      logStep("send-zapier-webhook failed (non-critical)", { error: webhookError });
+    }
+
+    // Direct LeadConnector mirror with the completion-specific context
+    // (balance-charge result, payout status) so the GHL workflow can
+    // route the won opportunity into the right downstream automation.
+    try {
+      await mirrorToLeadConnector({
+        event: "booking.completed",
+        payload: {
+          booking_id: bookingId,
+          email: booking.email,
+          phone: booking.phone,
+          first_name: booking.first_name,
+          last_name: booking.last_name,
+          service_date: booking.service_date,
+          time_slot: booking.time_slot,
+          balance_charge: {
+            status: balanceChargeStatus,
+            error: balanceChargeError,
+          },
+        },
+      });
+    } catch (mirrorErr) {
+      logStep("LeadConnector mirror failed (non-critical)", mirrorErr);
     }
 
     return new Response(
