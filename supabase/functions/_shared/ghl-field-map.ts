@@ -93,8 +93,14 @@ export interface MapperInputs {
   lastServiceAt?: string | null;
   /** Total lifetime spend for this customer in cents. */
   lifetimeRevenueCents?: number | null;
+  /** Number of completed bookings on this customer's record (used for LTV cadence). */
+  completedBookingCount?: number | null;
+  /** ISO date of the customer's first completed service — anchors the LTV cadence. */
+  firstServiceAt?: string | null;
   /** Number of failed charges for this customer in the last 90 days. */
   failedPaymentCount?: number | null;
+  /** Number of past cancelled bookings on this customer (for churn risk model). */
+  cancelledBookingCount?: number | null;
   /** Stripe customer id + subscription id for the Glow path. */
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
@@ -213,6 +219,99 @@ function fmtIsoDate(d?: string | null): string {
   } catch { return ""; }
 }
 
+/**
+ * Parse a stored time_slot string ("9:00 AM - 10:00 AM", "8-12",
+ * "9:00 AM", etc.) into a start and end time string the GHL TEXT
+ * fields `service_start_time` / `service_end_time` can hold. Returns
+ * "" for parts the slot doesn't carry so empty values are filtered.
+ */
+function deriveServiceTimes(slot?: string | null): { start: string; end: string } {
+  if (!slot) return { start: "", end: "" };
+  const trimmed = String(slot).trim();
+  // "9:00 AM - 10:00 AM" — the SchedulePicker canonical format.
+  const ampmMatch = trimmed.match(/^(\d{1,2}:\d{2}\s*[AP]M)\s*[-–]\s*(\d{1,2}:\d{2}\s*[AP]M)$/i);
+  if (ampmMatch) return { start: ampmMatch[1].toUpperCase(), end: ampmMatch[2].toUpperCase() };
+  // "8-12" / "12-16" / "16-20" — legacy 4-hour blocks (24h).
+  const blockMatch = trimmed.match(/^(\d{1,2})\s*[-–]\s*(\d{1,2})$/);
+  if (blockMatch) {
+    const fmt = (h: number) => {
+      const period = h >= 12 ? "PM" : "AM";
+      const hour = h % 12 === 0 ? 12 : h % 12;
+      return `${hour}:00 ${period}`;
+    };
+    return { start: fmt(parseInt(blockMatch[1], 10)), end: fmt(parseInt(blockMatch[2], 10)) };
+  }
+  // "9-11am" — legacy compact format.
+  const compactMatch = trimmed.toLowerCase().match(/^(\d{1,2})\s*-\s*(\d{1,2})\s*(am|pm)$/);
+  if (compactMatch) {
+    const period = compactMatch[3].toUpperCase();
+    return { start: `${compactMatch[1]}:00 ${period}`, end: `${compactMatch[2]}:00 ${period}` };
+  }
+  // Fallback: put the whole slot in start, leave end blank.
+  return { start: trimmed, end: "" };
+}
+
+/**
+ * Simple LTV projection: anchored on either lifetime revenue +
+ * months since first service (one-time customers) or monthly
+ * subscription total (active members).
+ */
+function projectLtv(args: {
+  isMember: boolean;
+  baseCents?: number | null;
+  totalCents?: number | null;
+  monthlyCents?: number | null;
+  lifetimeCents?: number | null;
+  firstServiceAt?: string | null;
+  completedCount?: number | null;
+}): { m3: number | null; m6: number | null; m12: number | null } {
+  // Members: monthly × N
+  if (args.isMember && args.monthlyCents) {
+    return {
+      m3: args.monthlyCents * 3,
+      m6: args.monthlyCents * 6,
+      m12: args.monthlyCents * 12,
+    };
+  }
+  // One-time customer with history: extrapolate from past cadence
+  if ((args.lifetimeCents ?? 0) > 0 && args.firstServiceAt && (args.completedCount ?? 0) > 0) {
+    const first = new Date(`${String(args.firstServiceAt).slice(0, 10)}T12:00:00`).getTime();
+    if (!Number.isNaN(first)) {
+      const monthsSpan = Math.max(1, (Date.now() - first) / (1000 * 60 * 60 * 24 * 30.4));
+      const cadenceCents = (args.lifetimeCents || 0) / monthsSpan;
+      return {
+        m3: Math.round(cadenceCents * 3),
+        m6: Math.round(cadenceCents * 6),
+        m12: Math.round(cadenceCents * 12),
+      };
+    }
+  }
+  // Brand-new customer: extrapolate current booking total at quarterly cadence.
+  const t = args.totalCents || args.baseCents || 0;
+  if (t > 0) return { m3: t, m6: t * 2, m12: t * 4 };
+  return { m3: null, m6: null, m12: null };
+}
+
+/**
+ * Heuristic churn-risk label. SINGLE_OPTIONS — values must match the
+ * options configured in GHL. Common pre-configured set:
+ * "Low" | "Medium" | "High" | "Unknown".
+ */
+function churnRisk(args: {
+  cancelledCount?: number | null;
+  failedPaymentCount?: number | null;
+  completedCount?: number | null;
+  isMember: boolean;
+}): "Low" | "Medium" | "High" | "Unknown" {
+  const cancels = args.cancelledCount ?? 0;
+  const fails = args.failedPaymentCount ?? 0;
+  const completed = args.completedCount ?? 0;
+  if (cancels >= 2 || fails >= 2) return "High";
+  if (cancels === 1 || fails === 1) return "Medium";
+  if (completed >= 1 || args.isMember) return "Low";
+  return "Unknown";
+}
+
 function fmtServiceDateTime(date?: string | null, slot?: string | null): string {
   if (!date) return "";
   if (!slot) return date;
@@ -240,6 +339,30 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
   const cleanerName = (idx: number) => cleaner(idx)?.name || "";
   const cleanerPhone = (idx: number) => cleaner(idx)?.phone || "";
 
+  // Derived service window for the TEXT fields
+  const { start: derivedStart, end: derivedEnd } = deriveServiceTimes(b.time_slot);
+  const serviceStart = b.service_start_time || derivedStart || "";
+  const serviceEnd = b.service_end_time || derivedEnd || "";
+
+  // LTV projections
+  const ltv = projectLtv({
+    isMember,
+    baseCents: b.base_price_cents,
+    totalCents: b.final_charge_cents || b.total_estimate_cents,
+    monthlyCents: isMember ? b.base_price_cents : null,
+    lifetimeCents: input.lifetimeRevenueCents,
+    firstServiceAt: input.firstServiceAt,
+    completedCount: input.completedBookingCount,
+  });
+
+  // Churn risk
+  const risk = churnRisk({
+    cancelledCount: input.cancelledBookingCount,
+    failedPaymentCount: input.failedPaymentCount,
+    completedCount: input.completedBookingCount,
+    isMember,
+  });
+
   const map: Record<string, string | number | boolean | null | undefined> = {
     // ─── AGP Tracking Attribution ───────────────────────────────
     utm_source: b.utm_source || "",
@@ -259,6 +382,16 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     referral_name: input.referralName || "",
     referral_revenue_generated: fmtMoney(input.referralRevenueCents),
     referral_credit_issued: fmtMoney(input.referralCreditCents),
+    revenue_lost_at_churn: b.status === "cancelled" && (b.cancel_fee_cents !== undefined || (b.final_charge_cents || b.total_estimate_cents))
+      ? fmtMoney(Math.max(0, (b.final_charge_cents || b.total_estimate_cents || 0) - (b.cancel_fee_cents || 0)))
+      : "",
+    // LTV projections — see projectLtv() above. Empty when we have no
+    // way to estimate (no history + zero current value).
+    project_ltv_in_3_months: fmtMoney(ltv.m3),
+    project_ltv_in_6_months: fmtMoney(ltv.m6),
+    project_ltv_in_12_months: fmtMoney(ltv.m12),
+    // Churn risk SINGLE_OPTIONS (Low / Medium / High / Unknown)
+    churn_risk_level: risk,
 
     // ─── Internal Sales ─────────────────────────────────────────
     csr_name: b.sdr_rep_name || "",
@@ -285,8 +418,8 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
       ? fmtServiceDateTime(input.lastServiceAt.slice(0, 10), null)
       : (b.status === "completed" ? fmtServiceDateTime(b.service_date, b.time_slot) : ""),
     preferred_start_date: fmtIsoDate(b.service_date),
-    service_start_time: b.service_start_time || "",
-    service_end_time: b.service_end_time || "",
+    service_start_time: serviceStart,
+    service_end_time: serviceEnd,
 
     // ─── Property notes ────────────────────────────────────────
     entry__gate_notes: b.access_notes || "",
