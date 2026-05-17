@@ -485,14 +485,15 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
   // has a consistent shape.
   // Runs fire-and-forget: failures are logged but don't fail the request.
   try {
-    // Collect up to 3 assigned cleaners (name + phone) so we can map to the
-    // 1)/2)/3) Contractor + Contractor Number custom fields. Prefer
-    // job_assignments (multi-cleaner team), fall back to booking.cleaners.
-    const teamCleaners: Array<{ name?: string; phone?: string }> = [];
+    // Collect up to 3 assigned cleaners (name + phone + pay rate) so
+    // we can map to the 1)/2)/3) Contractor fields + assigned_cleaner
+    // _pay_tier. Prefer job_assignments (multi-cleaner team), fall
+    // back to booking.cleaners.
+    const teamCleaners: Array<{ name?: string; phone?: string; payRate?: number }> = [];
     if (booking.job_id) {
       const { data: assigns } = await supabase
         .from('job_assignments')
-        .select('cleaners (first_name, last_name, phone)')
+        .select('cleaners (first_name, last_name, phone, pay_rate_hr)')
         .eq('job_id', booking.job_id)
         .in('status', ['Offered', 'Confirmed', 'Assigned'])
         .limit(3);
@@ -503,6 +504,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
             teamCleaners.push({
               name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
               phone: c.phone ?? undefined,
+              payRate: c.pay_rate_hr ?? undefined,
             });
           }
         });
@@ -512,6 +514,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       teamCleaners.push({
         name: `${booking.cleaners.first_name} ${booking.cleaners.last_name}`,
         phone: booking.cleaners.phone,
+        payRate: (booking.cleaners as any).pay_rate_hr,
       });
     }
 
@@ -548,14 +551,27 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     } catch (_) { /* tables may not exist yet — that's fine */ }
 
     // ── Pull Stripe + lifetime context for the mapper ────────────
-    // Default payment method, last payment, failed-payment count,
-    // Stripe customer / subscription ids. All best-effort — anything
-    // missing simply ends up blank in GHL.
+    // Stripe is the source of truth for lifetime revenue + paid-job
+    // count + payment-state. We:
+    //   1. Look up the customer by email
+    //   2. Sum ALL successful charges (lifetime revenue)
+    //   3. Count successful charges (paid job count → average job value)
+    //   4. Walk recent charges to detect last-failure / failure streak
+    //   5. Generate a Stripe Payment Link for any outstanding balance
+    //   6. Pull subscription state (paused / canceled / trialing)
     let defaultPaymentMethod: string | null = null;
     let lastPayment: { amountCents: number; date: string } | null = null;
     let failedPaymentCount: number | null = null;
+    let stripeLifetimeRevenueCents: number | null = null;
+    let stripePaidJobCount: number | null = null;
+    let hasFailedPaymentRecently = false;
+    let failedPaymentStreak = 0;
+    let isMemberPaused = false;
+    let isMemberTrialing = false;
+    let isMemberCanceled = false;
+    let paymentLinkUrl: string | null = null;
     let stripeCustomerIdForGhl: string | null = booking.customer_id || null;
-    const stripeSubscriptionIdForGhl: string | null = membershipData?.subscription_id || null;
+    let stripeSubscriptionIdForGhl: string | null = membershipData?.subscription_id || null;
     try {
       const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
       if (stripeKey && booking.email) {
@@ -564,6 +580,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         if (customers.data.length > 0) {
           const cus: any = customers.data[0];
           stripeCustomerIdForGhl = stripeCustomerIdForGhl || cus.id;
+
+          // Default card brand+last4
           const pmRef = cus.invoice_settings?.default_payment_method;
           if (pmRef && typeof pmRef === 'object') {
             defaultPaymentMethod = `${pmRef.card?.brand || 'card'} ending ${pmRef.card?.last4 || '????'}`;
@@ -572,40 +590,135 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
               const pmObj: any = await sk.paymentMethods.retrieve(pmRef);
               defaultPaymentMethod = `${pmObj.card?.brand || 'card'} ending ${pmObj.card?.last4 || '????'}`;
             } catch (_) { /* ignore */ }
+          } else {
+            // Fall back to most recently attached card
+            try {
+              const pms = await sk.paymentMethods.list({ customer: cus.id, type: 'card', limit: 1 });
+              if (pms.data.length > 0) {
+                const pm: any = pms.data[0];
+                defaultPaymentMethod = `${pm.card?.brand || 'card'} ending ${pm.card?.last4 || '????'}`;
+              }
+            } catch (_) { /* ignore */ }
           }
-          const chargesRecent = await sk.charges.list({ customer: cus.id, limit: 5 });
-          const succeeded: any = chargesRecent.data.find((c: any) => c.paid && c.status === 'succeeded');
-          if (succeeded) {
-            lastPayment = { amountCents: succeeded.amount, date: new Date(succeeded.created * 1000).toISOString() };
+
+          // Lifetime revenue + paid count + failure streak. Iterate
+          // pages until exhausted (capped at 500 charges) so even
+          // long-tenured customers get accurate totals.
+          let lifetimeCents = 0;
+          let paidCount = 0;
+          let streak = 0;
+          let recentFailures = 0;
+          let starting_after: string | undefined;
+          let iter = 0;
+          while (iter < 5) { // 5 × 100 = 500 charges max
+            iter += 1;
+            const page: any = await sk.charges.list({ customer: cus.id, limit: 100, starting_after });
+            for (const ch of page.data as any[]) {
+              if (ch.paid && ch.status === 'succeeded' && !ch.refunded) {
+                const net = (ch.amount || 0) - (ch.amount_refunded || 0);
+                if (net > 0) {
+                  lifetimeCents += net;
+                  paidCount += 1;
+                  if (!lastPayment) {
+                    lastPayment = { amountCents: net, date: new Date(ch.created * 1000).toISOString() };
+                  }
+                }
+                // Successful charge breaks the failure streak.
+                if (streak < 0) streak = 0;
+              } else if (ch.status === 'failed') {
+                recentFailures += 1;
+                streak += 1;
+                if (!hasFailedPaymentRecently) hasFailedPaymentRecently = true;
+              }
+            }
+            if (!page.has_more) break;
+            starting_after = page.data[page.data.length - 1]?.id;
+            if (!starting_after) break;
           }
-          failedPaymentCount = chargesRecent.data.filter((c: any) => c.status === 'failed').length;
+          stripeLifetimeRevenueCents = lifetimeCents;
+          stripePaidJobCount = paidCount;
+          failedPaymentCount = recentFailures;
+          failedPaymentStreak = streak;
+
+          // Active subscription state — paused / canceled / trialing.
+          try {
+            const subs: any = await sk.subscriptions.list({ customer: cus.id, status: 'all', limit: 5 });
+            const activeSub: any = subs.data.find((s: any) => s.status === 'active' || s.status === 'trialing' || s.status === 'past_due' || s.status === 'paused');
+            if (activeSub) {
+              stripeSubscriptionIdForGhl = stripeSubscriptionIdForGhl || activeSub.id;
+              if (activeSub.pause_collection) isMemberPaused = true;
+              if (activeSub.status === 'trialing') isMemberTrialing = true;
+            }
+            const canceledSub = subs.data.find((s: any) => s.status === 'canceled');
+            if (canceledSub && !activeSub) isMemberCanceled = true;
+          } catch (_) { /* ignore */ }
+
+          // Stripe Payment Link for outstanding balance — single-use,
+          // amount = remaining balance + any fees. We use Payment Links
+          // (not invoices) because they accept any card immediately
+          // with no Stripe-side configuration overhead.
+          const outstanding = Math.max(
+            0,
+            (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0)
+              + (booking.cancel_fee_cents || 0)
+              + (booking.reschedule_fee_cents || 0),
+          );
+          if (outstanding > 0 && booking.status !== 'cancelled') {
+            try {
+              const price: any = await sk.prices.create({
+                currency: 'usd',
+                unit_amount: outstanding,
+                product_data: { name: `NOV-${String(booking.booking_number).padStart(5, '0')} balance` },
+              });
+              const link: any = await sk.paymentLinks.create({
+                line_items: [{ price: price.id, quantity: 1 }],
+                metadata: { booking_id: booking.id, kind: 'balance' },
+                after_completion: { type: 'redirect', redirect: { url: 'https://try.novaracleaning.com/account?payment=success' } },
+              });
+              paymentLinkUrl = link.url;
+            } catch (linkErr) {
+              logStep('Payment Link create failed (non-critical)', linkErr);
+            }
+          }
         }
       }
     } catch (stripeMapErr) {
       logStep('Stripe lookup for GHL mapper failed (non-critical)', stripeMapErr);
     }
 
-    // Lifetime revenue + completed count + first/last service —
-    // single aggregate scan over completed bookings for this email.
+    // Lifetime revenue (fallback) + completed count + first/last service
+    // + ALL-BOOKINGS discount aggregate. One scan over the bookings
+    // table covers all four numbers.
     let lifetimeRevenueCents: number | null = null;
     let lastServiceAt: string | null = null;
     let firstServiceAt: string | null = null;
     let completedBookingCount = 0;
+    let allBookingsTotalDiscountCents = 0;
     try {
-      const { data: completedRows } = await supabase
+      const { data: allRows } = await supabase
         .from('bookings')
-        .select('total_estimate_cents, final_charge_cents, service_date')
+        .select('status, total_estimate_cents, final_charge_cents, base_price_cents, service_date')
         .eq('email', booking.email)
-        .eq('status', 'completed')
         .order('service_date', { ascending: false });
-      if (completedRows && completedRows.length > 0) {
-        completedBookingCount = completedRows.length;
-        lifetimeRevenueCents = completedRows.reduce(
-          (sum: number, r: any) => sum + (r.final_charge_cents || r.total_estimate_cents || 0),
-          0,
-        );
-        lastServiceAt = (completedRows[0] as any).service_date || null;
-        firstServiceAt = (completedRows[completedRows.length - 1] as any).service_date || null;
+      if (allRows && allRows.length > 0) {
+        const completed = allRows.filter((r: any) => r.status === 'completed');
+        completedBookingCount = completed.length;
+        if (completed.length > 0) {
+          lifetimeRevenueCents = completed.reduce(
+            (sum: number, r: any) => sum + (r.final_charge_cents || r.total_estimate_cents || 0),
+            0,
+          );
+          lastServiceAt = (completed[0] as any).service_date || null;
+          firstServiceAt = (completed[completed.length - 1] as any).service_date || null;
+        }
+        // Total Discount Given — running SUM across EVERY booking
+        // (regardless of status) of (base_price - total_estimate).
+        // Cancelled bookings still count toward the discount the
+        // customer was offered.
+        allBookingsTotalDiscountCents = allRows.reduce((sum: number, r: any) => {
+          const d = Math.max(0, (r.base_price_cents || 0) - (r.total_estimate_cents || 0));
+          return sum + d;
+        }, 0);
       }
     } catch (_) { /* ignore */ }
 
@@ -680,6 +793,15 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       failedPaymentCount,
       stripeCustomerId: stripeCustomerIdForGhl,
       stripeSubscriptionId: stripeSubscriptionIdForGhl,
+      isMemberPaused,
+      isMemberTrialing,
+      isMemberCanceled,
+      hasFailedPaymentRecently,
+      failedPaymentStreak,
+      stripeLifetimeRevenueCents,
+      stripePaidJobCount,
+      allBookingsTotalDiscountCents,
+      paymentLinkUrl,
       defaultPaymentMethod,
       referralCode: customerData?.referral_code || null,
       referralLink: referralLinkForGhl,
