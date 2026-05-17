@@ -20,8 +20,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { calculatePrice, ADD_ONS } from "@/lib/pricing-system";
@@ -241,7 +239,7 @@ export function ModifyBookingDialog({
         toast.info("Redirecting to checkout for the additional charge…");
         window.location.href = data.checkoutUrl;
       } else {
-        toast.success("Booking updated. GHL and your inbox are in sync.");
+        toast.success("Booking updated. Confirmation on its way.");
         onSuccess();
         onOpenChange(false);
       }
@@ -288,7 +286,7 @@ export function ModifyBookingDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Modify Booking"
-      description="Adjust service, add-ons, and property details. Changes sync to GHL automatically."
+      description="Adjust service, add-ons, and property details before your scheduled date."
       desktopMaxWidthClass="max-w-3xl"
       footer={footer}
       bodyClassName="bg-muted/20"
@@ -493,9 +491,8 @@ export function ModifyBookingDialog({
             <RiErrorWarningLine className="h-4 w-4" />
             <AlertDescription className="text-xs">
               An additional <strong>${priceDifference.toFixed(2)}</strong> is required.
-              You'll be sent to a secure checkout to authorize the charge. The booking
-              row and your GHL opportunity are updated immediately so we don't lose
-              context if you abandon checkout.
+              You'll be sent to a secure checkout to authorize the charge before the
+              update takes effect.
             </AlertDescription>
           </Alert>
         )}
@@ -509,14 +506,6 @@ export function ModifyBookingDialog({
           </Alert>
         )}
 
-        <Separator className="opacity-50" />
-
-        {/* Footnote — GHL sync transparency */}
-        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <RiInformationLine className="h-3 w-3" />
-          Every change here automatically syncs your GHL contact + opportunity custom
-          fields and fires the LeadConnector workflow.
-        </p>
       </div>
     </ResponsiveModal>
   );
