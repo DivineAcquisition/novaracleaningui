@@ -81,7 +81,8 @@ export interface BookingRowLike {
 export interface MapperCleaner {
   name?: string;
   phone?: string;
-  payTier?: string;
+  /** Hourly pay rate in dollars OR cents — the mapPayTier helper accepts either. */
+  payRate?: number;
 }
 
 export interface MapperInputs {
@@ -104,8 +105,23 @@ export interface MapperInputs {
   /** Stripe customer id + subscription id for the Glow path. */
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
+  /** Membership state (computed from Stripe). */
+  isMemberPaused?: boolean | null;
+  isMemberTrialing?: boolean | null;
+  isMemberCanceled?: boolean | null;
   /** Last-4 / brand of the default card on file. */
   defaultPaymentMethod?: string | null;
+  /** TRUE if the most recent Stripe charge on this customer failed. */
+  hasFailedPaymentRecently?: boolean | null;
+  /** Consecutive failed charges — 3+ trips the "Collections" status. */
+  failedPaymentStreak?: number | null;
+  /** STRIPE-DRIVEN lifetime aggregates — preferred over the bookings-table fallback. */
+  stripeLifetimeRevenueCents?: number | null;
+  stripePaidJobCount?: number | null;
+  /** Sum of (base_price - total_estimate) across ALL of this customer's bookings, in cents. */
+  allBookingsTotalDiscountCents?: number | null;
+  /** Stripe Payment Link / invoice URL for the customer to pay their outstanding balance. */
+  paymentLinkUrl?: string | null;
   /** Referral metadata. */
   referralCode?: string | null;
   referralLink?: string | null;
@@ -116,13 +132,17 @@ export interface MapperInputs {
   publicOrigin?: string;
 }
 
-// ─── Enum maps (must match the SINGLE_OPTIONS values configured in GHL) ──
+// ─── Enum maps — values MUST match the SINGLE_OPTIONS configured in GHL.
+// Verified against the live customFields endpoint on 2026-05-17.
+// "Combo" / "Recurring Maintenance" aren't in the GHL options list, so
+// we collapse them to the closest configured value.
 const SERVICE_TYPE_LABEL: Record<string, string> = {
   standard: "Standard Cleaning",
   deep: "Deep Cleaning",
   moveInOut: "Move In/Out Cleaning",
-  combo: "Combo (Deep + Standard)",
-  recurring: "Recurring Maintenance",
+  combo: "Deep Cleaning",          // collapse combo → Deep (the headline visit)
+  recurring: "Standard Cleaning",  // recurring = standard cadence
+  office: "Office Cleaning",
 };
 
 const DWELLING_LABEL: Record<string, string> = {
@@ -150,64 +170,147 @@ const HOME_SIZE_SQFT_MIDPOINT: Record<string, number> = {
   "5000_plus": 5500,
 };
 
+// Home size labels match GHL options exactly (with " SQ-FT" suffix).
+// GHL has no "0-999" option; we collapse the smallest tier into the
+// next one up so the dropdown always lines up.
 const HOME_SIZE_LABEL: Record<string, string> = {
-  "0_999": "0–999",
-  "1000_1500": "1,000–1,500",
-  "1501_2000": "1,501–2,000",
-  "2001_2500": "2,001–2,500",
-  "2501_3000": "2,501–3,000",
-  "3001_3500": "3,001–3,500",
-  "3501_4000": "3,501–4,000",
-  "4001_4500": "4,001–4,500",
-  "4501_5000": "4,501–5,000",
-  "5000_plus": "5,000+",
+  "0_999": "1000-1500 SQ-FT",
+  "1000_1500": "1000-1500 SQ-FT",
+  "1501_2000": "1501-2000 SQ-FT",
+  "2001_2500": "2001-2500 SQ-FT",
+  "2501_3000": "2501-3000 SQ-FT",
+  "3001_3500": "3001-3500 SQ-FT",
+  "3501_4000": "3501-4000 SQ-FT",
+  "4001_4500": "4001-4500 SQ-FT",
+  "4501_5000": "4501-5000 SQ-FT",
+  "5000_plus": "5000+ SQ-FT",
 };
 
-const MEMBERSHIP_PLAN_LABEL: Record<string, string> = {
-  none: "None",
-  monthly: "Monthly (1 clean/month)",
-  biweekly: "Bi-Weekly (2 cleans/month)",
-  weekly: "Weekly (4 cleans/month)",
-};
-
-const BILLING_FREQUENCY_LABEL: Record<string, string> = {
-  none: "One-Time",
+// Novara Glow Plan — ONLY the 3 paid tiers. For non-members, send "" so
+// the field stays blank (no "None" option in GHL).
+const NOVARA_GLOW_PLAN_LABEL: Record<string, string> = {
   monthly: "Monthly",
   biweekly: "Bi-Weekly",
   weekly: "Weekly",
 };
 
-const SERVICE_FREQUENCY_LABEL: Record<string, string> = {
-  none: "One-Time",
-  monthly: "Monthly",
-  biweekly: "Bi-Weekly",
-  weekly: "Weekly",
-};
+// Billing Frequency — Per Visit | Monthly | Prepaid Annual.
+// Per Visit = one-time customer. Monthly = any Glow subscription.
+// Prepaid Annual = future tier (annual plan); reserved for later.
+function mapBillingFrequency(membershipPlan?: string | null): "Per Visit" | "Monthly" | "Prepaid Annual" {
+  const p = (membershipPlan || "none").toLowerCase();
+  if (p === "annual" || p === "prepaid_annual" || p === "yearly") return "Prepaid Annual";
+  if (p && p !== "none") return "Monthly";
+  return "Per Visit";
+}
 
-function mapPaymentStatus(status?: string | null, paymentOption?: string | null, depositCents?: number | null): string {
-  if (status === "completed") return "Paid in Full";
-  if (status === "cancelled") return "Refunded";
-  if (status === "pending_payment") return "Unpaid";
-  if (paymentOption === "full") return "Paid in Full";
-  if ((depositCents ?? 0) > 0) return "Deposit Paid";
-  return "Unpaid";
+// Service Frequency — One-Time | Weekly | Bi-Weekly | Monthly.
+function mapServiceFrequency(membershipPlan?: string | null): "One-Time" | "Weekly" | "Bi-Weekly" | "Monthly" {
+  const p = (membershipPlan || "none").toLowerCase();
+  if (p === "weekly") return "Weekly";
+  if (p === "biweekly" || p === "bi-weekly") return "Bi-Weekly";
+  if (p === "monthly") return "Monthly";
+  return "One-Time";
+}
+
+// Call Type — matches GHL options.
+function mapCallType(source?: string | null, bookingNumber?: number | null, isMember?: boolean): "New Booking" | "Reschedule" | "Rebooking / Repeat CX" | "Recurring / Membership" {
+  if (isMember) return "Recurring / Membership";
+  if (source === "reschedule" || source === "customer_portal_reschedule") return "Reschedule";
+  if ((bookingNumber ?? 0) > 1) return "Rebooking / Repeat CX";
+  return "New Booking";
+}
+
+// Lead Source — buckets UTM source into GHL's curated list.
+function mapLeadSource(utmSource?: string | null, fbclid?: string | null, gclid?: string | null, bookerSource?: string | null, bookingChannel?: string | null): string {
+  const s = (utmSource || "").toLowerCase();
+  if (fbclid) {
+    if (s.includes("instagram") || s === "ig") return "IG Ads";
+    return "FB Ads";
+  }
+  if (gclid || s === "google" || s === "googleads") return "Google Ads";
+  if (s === "instagram" || s === "ig") return "IG Ads";
+  if (s === "facebook" || s === "fb") return "FB Ads";
+  if (s === "seo" || s === "organic") return "SEO";
+  if (s === "referral" || (bookerSource || "").toLowerCase().includes("referr")) return "Referral";
+  if (s === "direct" || (bookerSource || "").toLowerCase() === "direct") return "Direct";
+  const ch = (bookingChannel || "").toLowerCase();
+  if (ch.includes("phone") || ch.includes("call")) return "Inbound Call";
+  if (ch.includes("web") || ch === "website" || ch === "online") return "Website";
+  return "Other";
+}
+
+// Customer Source — only the 6 GHL options. Maps from booker_source +
+// UTM hints. Returns "" if no good fit so we don't pollute the field.
+function mapCustomerSource(utmSource?: string | null, fbclid?: string | null, gclid?: string | null, referralCode?: string | null, bookerSource?: string | null): string {
+  if (referralCode) return "Referred By Someone";
+  const s = (utmSource || "").toLowerCase();
+  const b = (bookerSource || "").toLowerCase();
+  if (fbclid || s === "facebook" || s === "fb" || b.includes("facebook")) return "Facebook";
+  if (s === "instagram" || s === "ig" || b.includes("instagram")) return "Instagram";
+  if (gclid || s === "google" || b.includes("google")) return "Google";
+  if (s.includes("ads") || s === "paid" || b.includes("ad")) return "Advertisment";
+  if (b.includes("friend") || b.includes("family") || b === "fnf") return "Friend Or Family";
+  return ""; // unknown — leave blank, GHL doesn't have an "Other"
+}
+
+// Assigned Cleaner Pay Tier — maps an hourly rate (in cents or dollars)
+// to the configured GHL tier label.
+function mapPayTier(payRate?: number | null): string {
+  if (!payRate || payRate <= 0) return "";
+  const dollars = payRate >= 100 ? payRate / 100 : payRate; // accept cents or dollars
+  if (dollars >= 22) return "Elite ($22/hr)";
+  if (dollars >= 20) return "Proven ($20/hr)";
+  return "Foundation ($18/hr)";
+}
+
+// Membership Status — Not Started | Payment Issue | Paused | Canceled | Active | Trialing.
+function mapMembershipStatus(args: {
+  isMember: boolean;
+  isPaused?: boolean;
+  isTrialing?: boolean;
+  hasFailedPayment?: boolean;
+  isCanceled?: boolean;
+}): "Not Started" | "Payment Issue" | "Paused" | "Canceled" | "Active" | "Trialing" {
+  if (!args.isMember && !args.isCanceled && !args.isPaused && !args.isTrialing) return "Not Started";
+  if (args.isCanceled) return "Canceled";
+  if (args.isPaused) return "Paused";
+  if (args.hasFailedPayment) return "Payment Issue";
+  if (args.isTrialing) return "Trialing";
+  return "Active";
+}
+
+// Payment Status — Current | Past Due | Failed | Collections.
+function mapPaymentStatusV2(args: {
+  status?: string | null;
+  serviceDateIso?: string | null;
+  outstandingCents: number;
+  hasFailedPaymentRecently: boolean;
+  failedPaymentStreak?: number | null;
+}): "Current" | "Past Due" | "Failed" | "Collections" {
+  // Collections: 3+ consecutive failed attempts → escalate
+  if ((args.failedPaymentStreak ?? 0) >= 3) return "Collections";
+  // Past-Due: service date is in the past and a balance is still owed
+  if (args.serviceDateIso && args.outstandingCents > 0) {
+    const dt = Date.parse(`${String(args.serviceDateIso).slice(0, 10)}T12:00:00`);
+    if (!Number.isNaN(dt) && dt < Date.now() - 24 * 60 * 60 * 1000) return "Past Due";
+  }
+  // Failed: last charge attempt failed (no past-due timeline yet)
+  if (args.hasFailedPaymentRecently) return "Failed";
+  return "Current";
 }
 
 function mapDepositType(payment_option?: string | null, deposit?: number | null, total?: number | null): string {
+  // Matches GHL options: Pay After Service | Paid In Full | $39 Only |
+  // $50 Only | 25% Down | 50% Down. Falls back to "50% Down" since
+  // that's the standard funnel default.
   if (payment_option === "full") return "Paid In Full";
   if (!deposit) return "Pay After Service";
   if (deposit === 3900) return "$39 Only";
   if (deposit === 5000) return "$50 Only";
   if (total && Math.abs(deposit / total - 0.5) < 0.05) return "50% Down";
   if (total && Math.abs(deposit / total - 0.25) < 0.05) return "25% Down";
-  return "Custom";
-}
-
-function mapCallType(booking_channel?: string | null): string {
-  const ch = (booking_channel || "").toLowerCase();
-  if (ch.includes("phone")) return "Inbound Call";
-  if (ch.includes("sales") || ch.includes("admin")) return "Sales Intake";
-  return "Online Booking";
+  return "50% Down";
 }
 
 function fmtIsoDate(d?: string | null): string {
@@ -329,8 +432,19 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
 
   const totalCents = b.final_charge_cents || b.total_estimate_cents || 0;
   const remainingCents = Math.max(0, totalCents - (b.deposit_cents || 0));
-  const isCredit = !!b.uses_credit;
+  // Account-wide outstanding for the Payment Status check (per-booking
+  // remaining + cancellation/reschedule fees).
+  const outstandingCents = remainingCents + (b.cancel_fee_cents || 0) + (b.reschedule_fee_cents || 0);
+  const _isCredit = !!b.uses_credit; // reserved for credit-only branch
   const isMember = !!(b.membership_plan && b.membership_plan !== "none");
+
+  // Prefer Stripe-driven aggregates when present; fall back to the
+  // bookings-table-sum that send-zapier-webhook always computes.
+  const lifetimeCents = input.stripeLifetimeRevenueCents ?? input.lifetimeRevenueCents ?? 0;
+  const paidJobCount = input.stripePaidJobCount ?? input.completedBookingCount ?? 0;
+  const avgJobValueCents = paidJobCount > 0
+    ? Math.round(lifetimeCents / paidJobCount)
+    : (b.final_charge_cents || b.total_estimate_cents || 0);
 
   // 1) / 2) / 3) Contractor fields are right-padded with empty strings
   // when fewer than 3 cleaners are assigned, so GHL doesn't keep stale
@@ -338,6 +452,12 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
   const cleaner = (idx: number): MapperCleaner | undefined => input.cleaners[idx];
   const cleanerName = (idx: number) => cleaner(idx)?.name || "";
   const cleanerPhone = (idx: number) => cleaner(idx)?.phone || "";
+  // Pay tier: use the highest tier across assigned cleaners (lead
+  // determines the team's posted tier on the contact record).
+  const topPayRate = input.cleaners.reduce(
+    (max, c) => (c.payRate && c.payRate > max ? c.payRate : max),
+    0,
+  );
 
   // Derived service window for the TEXT fields
   const { start: derivedStart, end: derivedEnd } = deriveServiceTimes(b.time_slot);
@@ -374,8 +494,13 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     fb_lead_id: b.fbclid || "",
 
     // ─── Lead Source / Customer Source ──────────────────────────
-    lead_source: b.utm_source || b.booker_source || (b.booking_channel === "Website" ? "Website" : ""),
-    customer_source: b.booker_source || (b.booking_number === 1 ? "New Lead" : "Returning Client"),
+    // Both fields use closed-vocabulary SINGLE_OPTIONS in GHL.
+    // mapLeadSource buckets UTM / clid / channel hints into 9 options.
+    // mapCustomerSource picks from the 6 acquisition options
+    // (Facebook, Instagram, Advertisment, Google, Referred By Someone,
+    // Friend Or Family); blank when no good fit.
+    lead_source: mapLeadSource(b.utm_source, b.fbclid, b.gclid, b.booker_source, b.booking_channel),
+    customer_source: mapCustomerSource(b.utm_source, b.fbclid, b.gclid, input.referralCode, b.booker_source),
     market: b.city || b.zip_code || "",
     referral_code: input.referralCode || "",
     referral_link: input.referralLink || "",
@@ -395,7 +520,9 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
 
     // ─── Internal Sales ─────────────────────────────────────────
     csr_name: b.sdr_rep_name || "",
-    call_type: mapCallType(b.booking_channel),
+    // Call Type SINGLE_OPTIONS: New Booking | Reschedule |
+    // Rebooking / Repeat CX | Recurring / Membership.
+    call_type: mapCallType(b.booking_channel, b.booking_number, isMember),
     pay_over_call_: ynBool(
       (b.payment_method || "").toLowerCase().includes("phone")
       || (b.payment_method || "").toLowerCase().includes("verbal"),
@@ -403,8 +530,8 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     quoted_price_pretaxfees: fmtMoney(b.base_price_cents),
 
     // ─── Service & Scheduling ───────────────────────────────────
-    cleaning_type: SERVICE_TYPE_LABEL[b.service_type || ""] || b.service_type || "",
-    service_frequency: SERVICE_FREQUENCY_LABEL[b.membership_plan || "none"] || "One-Time",
+    cleaning_type: SERVICE_TYPE_LABEL[b.service_type || ""] || "Standard Cleaning",
+    service_frequency: mapServiceFrequency(b.membership_plan),
     home_size_range: HOME_SIZE_LABEL[b.home_size_id || ""] || "",
     estimated_sqft: HOME_SIZE_SQFT_MIDPOINT[b.home_size_id || ""] ?? "",
     estimated_duration_hrs: b.estimated_duration_hours ?? "",
@@ -426,7 +553,16 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     job_notes_internal: b.team_notes || b.dispatch_notes || "",
 
     // ─── Billing & Payments ────────────────────────────────────
-    payment_status: mapPaymentStatus(b.status, b.payment_option, b.deposit_cents),
+    // Payment Status SINGLE_OPTIONS: Current | Past Due | Failed |
+    // Collections. Derived from outstanding balance + service date +
+    // Stripe failed-payment streak (computed in send-zapier-webhook).
+    payment_status: mapPaymentStatusV2({
+      status: b.status,
+      serviceDateIso: b.service_date,
+      outstandingCents,
+      hasFailedPaymentRecently: !!input.hasFailedPaymentRecently,
+      failedPaymentStreak: input.failedPaymentStreak,
+    }),
     deposit_paid: ynBool(
       b.payment_option === "full"
       || (b.payment_option === "deposit" && b.status !== "pending_payment"),
@@ -434,10 +570,7 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     deposit_amount_: fmtMoney(b.deposit_cents),
     deposit_type: mapDepositType(b.payment_option, b.deposit_cents, totalCents),
     final_cost_: fmtMoney(b.final_charge_cents || b.total_estimate_cents),
-    remaining_balance: fmtMoney(remainingCents + (b.cancel_fee_cents || 0) + (b.reschedule_fee_cents || 0)),
-    // Note: GHL location uses `remaining_balance` as the single source
-    // of truth — `outstanding_balance` is not configured there, so we
-    // don't bother sending it.
+    remaining_balance: fmtMoney(outstandingCents),
     // Discount $: base price - discounted total. Always positive.
     discounted_amount_: fmtMoney(
       Math.max(0, (b.base_price_cents || 0) - (b.total_estimate_cents || 0)),
@@ -451,37 +584,42 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
       const pct = Math.round(((base - total) / base) * 100);
       return `${pct}%`;
     })(),
-    // Numerical (no $). For now equals discounted_amount_ — when an
-    // aggregate "across all bookings" view becomes useful we can sum
-    // it server-side and pass into MapperInputs.
-    total_discount_given: Math.max(0, Math.round((((b.base_price_cents || 0) - (b.total_estimate_cents || 0)) / 100))),
+    // Total Discount Given — NUMERICAL. Running SUM across ALL of
+    // this customer's bookings (caller passes the aggregate). Falls
+    // back to the current-booking-only discount when no aggregate
+    // is passed so the field is never blank.
+    total_discount_given: input.allBookingsTotalDiscountCents != null
+      ? Math.round(input.allBookingsTotalDiscountCents / 100)
+      : Math.max(0, Math.round((((b.base_price_cents || 0) - (b.total_estimate_cents || 0)) / 100))),
     size_adjustment_: "",
-    // Platform fee per clean — what Novara takes off the top before
-    // paying cleaners. Stored in cents on the booking row.
+    // Platform fee per clean — Novara's cut before paying cleaners.
     platform_fee_per_clean: fmtMoney(b.platform_fee_cents),
-    // Avg job value: lifetime / completed-count. Falls back to the
-    // current booking total when no completed history yet so the field
-    // is never blank on a brand new customer.
-    average_job_value: input.lifetimeRevenueCents && b.booking_number
-      ? fmtMoney(Math.round(input.lifetimeRevenueCents / Math.max(1, b.booking_number)))
-      : fmtMoney(b.final_charge_cents || b.total_estimate_cents),
-    lifetime_revenue: fmtMoney(input.lifetimeRevenueCents ?? (b.final_charge_cents || b.total_estimate_cents || null)),
+    // Average job value — lifetime / paid-job-count weighted average.
+    // Always computed (current booking total is the fallback) so the
+    // field is never blank for a brand-new customer.
+    average_job_value: fmtMoney(avgJobValueCents),
+    // Lifetime revenue — running SUM of every successful Stripe
+    // charge attributed to this customer. Stripe is the source of
+    // truth; bookings-table sum is the fallback.
+    lifetime_revenue: fmtMoney(lifetimeCents),
     monthly_subscription_total_: isMember ? fmtMoney(b.base_price_cents) : "",
-    // Estimated annual value: for active members = monthly * 12; for
-    // one-time customers = current total * estimated annual visits
-    // (3 default = quarterly cadence). Empty until we know enough.
+    // Estimated annual value — members = monthly × 12; one-time =
+    // booking total × 3 visits/year as a conservative projection.
     estimated_annual_value: isMember
       ? fmtMoney((b.base_price_cents || 0) * 12)
       : fmtMoney((b.final_charge_cents || b.total_estimate_cents || 0) * 3),
     last_payment_date: input.lastPayment ? fmtIsoDate(input.lastPayment.date) : "",
     last_payment_amount: fmtMoney(input.lastPayment?.amountCents),
     last_invoice_url: b.hosted_invoice_url || "",
-    payment_link: b.hosted_invoice_url || (b.id ? `${origin}/book/checkout?booking_id=${b.id}` : ""),
+    // Payment Link — Stripe Payment Link / hosted invoice URL the
+    // customer can click to pay outstanding balance. send-zapier-
+    // webhook generates one via stripe.paymentLinks.create and
+    // passes it in; we fall back to the hosted invoice URL when
+    // already available.
+    payment_link: input.paymentLinkUrl || b.hosted_invoice_url || "",
     default_payment_method: input.defaultPaymentMethod || "",
     failed_payment_count: input.failedPaymentCount ?? "",
-    // past_due is a CHECKBOX in GHL — only send when actually true so
-    // we don't store a literal "false" string in the checked-options
-    // array. Empty/undefined values are filtered out by buildCustomFieldsArray.
+    // past_due is a CHECKBOX — only send when actually true.
     past_due: (b.status === "pending_payment" && (input.failedPaymentCount ?? 0) > 0) ? "true" : undefined,
 
     // ─── Stripe IDs ────────────────────────────────────────────
@@ -489,13 +627,27 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     stripe_subscription_id: input.stripeSubscriptionId || "",
 
     // ─── Membership ────────────────────────────────────────────
-    membership_status: isMember ? "Active" : "None",
-    novara_glow_plan: MEMBERSHIP_PLAN_LABEL[b.membership_plan || "none"] || "None",
-    billing_frequency: BILLING_FREQUENCY_LABEL[b.membership_plan || "none"] || "One-Time",
+    // Membership Status SINGLE_OPTIONS: Not Started | Payment Issue
+    // | Paused | Canceled | Active | Trialing.
+    membership_status: mapMembershipStatus({
+      isMember,
+      isPaused: !!input.isMemberPaused,
+      isTrialing: !!input.isMemberTrialing,
+      hasFailedPayment: !!input.hasFailedPaymentRecently,
+      isCanceled: !!input.isMemberCanceled,
+    }),
+    // Novara Glow Plan SINGLE_OPTIONS: Monthly | Bi-Weekly | Weekly
+    // (no "None" option — blank for non-members).
+    novara_glow_plan: NOVARA_GLOW_PLAN_LABEL[b.membership_plan || ""] || "",
+    // Billing Frequency SINGLE_OPTIONS: Per Visit | Monthly |
+    // Prepaid Annual.
+    billing_frequency: mapBillingFrequency(b.membership_plan),
 
     // ─── Operations / Dispatch ─────────────────────────────────
     team_size_assigned: b.num_cleaners_assigned ?? input.cleaners.length ?? "",
-    assigned_cleaner_pay_tier: input.cleaners[0]?.payTier || "",
+    // Pay Tier SINGLE_OPTIONS: Foundation ($18/hr) | Proven
+    // ($20/hr) | Elite ($22/hr). Uses the team's highest tier.
+    assigned_cleaner_pay_tier: mapPayTier(topPayRate),
     "1_contractor": cleanerName(0),
     "1_contractor_number": cleanerPhone(0),
     "2_contractor": cleanerName(1),
