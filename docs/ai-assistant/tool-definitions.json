@@ -1,0 +1,219 @@
+{
+  "$schema": "https://docs.telnyx.com/api/ai/assistants/tools-spec.json",
+  "_comment": "Paste each tool individually into the Telnyx AI Assistant 'Tools' tab. Every tool POSTs to the ai-tool-router edge function: https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-tool-router?tool=<name>. The router switches on the ?tool= query param and returns the JSON the assistant needs.",
+  "_base_url": "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-tool-router",
+  "_auth": "None — verify_jwt is OFF on the function. The router does its own per-call validation.",
+  "tools": [
+    {
+      "name": "lookup_customer",
+      "description": "Look up a customer by phone number. Returns booking history, contact details, membership status, outstanding balance, payment status, and a payment link if any balance is owed. ALWAYS call this on the first message of a conversation so you have context.",
+      "url_query": "?tool=lookup_customer",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone": { "type": "string", "description": "Customer's phone in any format. E.164 preferred (e.g. +14436486798)." }
+        },
+        "required": ["phone"]
+      },
+      "returns": {
+        "found": "boolean",
+        "first_name": "string|null",
+        "last_name": "string|null",
+        "email": "string|null",
+        "address1": "string|null",
+        "city": "string|null",
+        "state": "string|null",
+        "zip_code": "string|null",
+        "is_member": "boolean",
+        "novara_glow_plan": "string|null (Monthly|Bi-Weekly|Weekly)",
+        "lifetime_revenue_cents": "number",
+        "total_bookings": "number",
+        "completed_bookings": "number",
+        "outstanding_balance_cents": "number",
+        "payment_status": "string (Current|Past Due|Failed|Collections)",
+        "next_booking": "{ id, service_date, time_slot, service_type, status }|null",
+        "payment_link_for_balance": "string|null (Stripe Payment Link if outstanding > 0)"
+      }
+    },
+    {
+      "name": "check_service_area",
+      "description": "Check whether a ZIP code is in Novara's service area. Returns city + state + zone if serviced.",
+      "url_query": "?tool=check_service_area",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "zip_code": { "type": "string", "description": "5-digit US ZIP code." }
+        },
+        "required": ["zip_code"]
+      },
+      "returns": {
+        "serviced": "boolean",
+        "zip_code": "string",
+        "city": "string|null",
+        "state": "string|null",
+        "zone": "string|null (A|B|C)"
+      }
+    },
+    {
+      "name": "get_price_estimate",
+      "description": "Calculate the price for a cleaning. Uses the live pricing-system (50% NEW promo applied automatically for first-time customers).",
+      "url_query": "?tool=get_price_estimate",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "home_size_id": {
+            "type": "string",
+            "enum": ["0_999","1000_1500","1501_2000","2001_2500","2501_3000","3001_3500","3501_4000","4001_4500","4501_5000","5000_plus"],
+            "description": "Sqft tier. Use the bedrooms-to-sqft map in the system prompt §3.A."
+          },
+          "service_type": {
+            "type": "string",
+            "enum": ["standard","deep","moveInOut","combo"]
+          },
+          "add_ons": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["fridge","oven","windows"] },
+            "description": "Optional extras. Ignored for moveInOut (fridge+oven included)."
+          },
+          "membership_plan": {
+            "type": "string",
+            "enum": ["none","monthly","biweekly","weekly"],
+            "description": "Default 'none' (one-off). Set to a Glow tier if customer is enrolling."
+          },
+          "is_new_customer": {
+            "type": "boolean",
+            "description": "True if no prior completed bookings on file. From lookup_customer."
+          }
+        },
+        "required": ["home_size_id","service_type"]
+      },
+      "returns": {
+        "subtotal_cents": "number",
+        "promo_discount_cents": "number (50% NEW if applicable)",
+        "total_cents": "number",
+        "deposit_cents": "number (50% of total)",
+        "remaining_cents": "number (after deposit)",
+        "human_summary": "string (one-line price recap for the AI to paste verbatim)"
+      }
+    },
+    {
+      "name": "get_available_slots",
+      "description": "Get available time slots for a given date. Returns up to 5 nearest available start times.",
+      "url_query": "?tool=get_available_slots",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service_date": { "type": "string", "description": "YYYY-MM-DD. Must be ≥ 3 days from today and not a Sunday." },
+          "service_duration_hours": { "type": "number", "description": "Estimated job hours from the home size + service type. Defaults to 2." }
+        },
+        "required": ["service_date"]
+      },
+      "returns": {
+        "service_date": "string",
+        "available_slots": [
+          { "id": "9:00 AM - 10:00 AM", "label": "9:00 AM", "start_time": "09:00", "end_time": "10:00" }
+        ],
+        "fully_booked": "boolean",
+        "next_available_date": "string|null (only set when fully_booked)"
+      }
+    },
+    {
+      "name": "create_booking",
+      "description": "Create a pending_payment booking and return a Stripe Payment Link for the deposit. Customer pays via the link → Stripe webhook auto-confirms.",
+      "url_query": "?tool=create_booking",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "address": { "type": "string", "description": "Street only." },
+          "city": { "type": "string" },
+          "state": { "type": "string", "description": "2-letter code." },
+          "zip_code": { "type": "string" },
+          "bedrooms": { "type": "number" },
+          "bathrooms": { "type": "number" },
+          "dwelling_type": { "type": "string", "enum": ["house","apartment","condo","townhouse","office_space","mansion"] },
+          "home_size_id": { "type": "string", "enum": ["0_999","1000_1500","1501_2000","2001_2500","2501_3000","3001_3500","3501_4000","4001_4500","4501_5000","5000_plus"] },
+          "service_type": { "type": "string", "enum": ["standard","deep","moveInOut","combo"] },
+          "add_ons": { "type": "array", "items": { "type": "string", "enum": ["fridge","oven","windows"] } },
+          "service_date": { "type": "string", "description": "YYYY-MM-DD." },
+          "time_slot": { "type": "string", "description": "Slot id from get_available_slots (e.g. '9:00 AM - 10:00 AM')." },
+          "membership_plan": { "type": "string", "enum": ["none","monthly","biweekly","weekly"], "default": "none" },
+          "access_notes": { "type": "string", "description": "Optional: gate code, parking, key location." }
+        },
+        "required": ["first_name","last_name","email","phone","address","city","state","zip_code","bedrooms","bathrooms","dwelling_type","home_size_id","service_type","service_date","time_slot"]
+      },
+      "returns": {
+        "booking_id": "string (uuid)",
+        "booking_number": "number",
+        "payment_link": "string (Stripe Payment Link URL — send this to the customer verbatim)",
+        "deposit_cents": "number",
+        "total_cents": "number",
+        "service_date": "string",
+        "time_slot": "string"
+      }
+    },
+    {
+      "name": "handle_keyword",
+      "description": "Hand a deterministic keyword (R / C / YES / NO / STOP / HELP) off to the existing sms-inbound function so the reschedule / cancel / opt-out flows behave consistently with the SMS confirmations we send.",
+      "url_query": "?tool=handle_keyword",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone": { "type": "string" },
+          "keyword": { "type": "string", "enum": ["R","C","YES","NO","STOP","HELP"] }
+        },
+        "required": ["phone","keyword"]
+      },
+      "returns": {
+        "reply_text": "string (paste verbatim back to the customer)",
+        "action_taken": "string (cancel_prompt | cancel_executed | reschedule_prompt | declined | help | stop)"
+      }
+    },
+    {
+      "name": "add_to_waitlist",
+      "description": "Add a customer to the waitlist when their ZIP is outside the service area.",
+      "url_query": "?tool=add_to_waitlist",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "zip_code": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" }
+        },
+        "required": ["zip_code","email","phone"]
+      },
+      "returns": { "ok": "boolean", "waitlist_id": "string|null" }
+    },
+    {
+      "name": "escalate_to_human",
+      "description": "Flag this conversation for human takeover. Stops AI auto-replies for 4 hours and notifies the on-call admin.",
+      "url_query": "?tool=escalate_to_human",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone": { "type": "string" },
+          "reason": {
+            "type": "string",
+            "enum": ["quality_issue","refund","legal","custom_quote","competitor_match","safety","phone_request","ai_loop","other"]
+          },
+          "summary": { "type": "string", "description": "1-2 sentence handoff note for the human." }
+        },
+        "required": ["phone","reason","summary"]
+      },
+      "returns": { "ok": "boolean", "ticket_id": "string|null" }
+    }
+  ]
+}
