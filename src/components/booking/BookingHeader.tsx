@@ -24,10 +24,10 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
         <div className="flex items-center justify-between mb-4">
           {/* Logo */}
           <div className="flex items-center">
-            <img 
-              src="/novara-logo.png" 
-              alt="Novara" 
-              className="h-12 w-12 rounded-xl object-contain"
+            <img
+              src="/novara-logo.png"
+              alt="Novara"
+              className="h-9 w-9 rounded-lg object-contain sm:h-10 sm:w-10"
             />
           </div>
 
