@@ -105,6 +105,9 @@ verify_jwt = false
 [functions.sms-inbound]
 verify_jwt = false
 
+[functions.reconcile-ghl]
+verify_jwt = false
+
 [functions.respond-to-offer]
 verify_jwt = false
 

@@ -73,6 +73,10 @@ function log(step: string, details?: unknown) {
   console.log(`[GHL] ${step}${suffix}`);
 }
 
+// Retry-on-failure wrapper for every GHL API call. Network blips +
+// transient 5xx + 429 rate-limits get up to 3 attempts with
+// exponential backoff (200 ms → 600 ms → 1.8 s). Non-retryable
+// statuses (4xx other than 429) return immediately.
 async function ghlFetch(
   cfg: GhlConfig,
   path: string,
@@ -88,7 +92,36 @@ async function ghlFetch(
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  return await fetch(url, { ...init, headers });
+
+  const maxAttempts = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, { ...init, headers });
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || attempt === maxAttempts) return res;
+      log("ghlFetch retrying", { attempt, status: res.status, path });
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxAttempts) {
+        log("ghlFetch network error — giving up", {
+          attempt,
+          path,
+          err: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+      log("ghlFetch network error retrying", {
+        attempt,
+        path,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+    // 200ms * 3^(attempt-1) → 200, 600, 1800 ms
+    await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt - 1)));
+  }
+  // Should be unreachable but TypeScript needs a value.
+  throw lastErr instanceof Error ? lastErr : new Error("ghlFetch exhausted retries");
 }
 
 // ─── Custom-field id cache ────────────────────────────────────────────────
