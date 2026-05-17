@@ -8,7 +8,8 @@ import {
   getTeamSize,
   DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
-import { syncBookingLifecycle, fmtMoney, ynBool, splitFullAddress } from "../_shared/ghl-client.ts";
+import { syncBookingLifecycle, splitFullAddress } from "../_shared/ghl-client.ts";
+import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
@@ -515,20 +516,11 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       ? Math.max(0, totalChargedCentsForGhl - depositCentsForGhl)
       : 0;
 
-    // Attribution — read from the booking's own tracking columns first
-    // (set at create-payment-intent time from the client's localStorage
-    // bag), and fall back to the latest abandoned_cart row if a booking
-    // row predates the tracking columns being populated.
-    let utmContent: string = booking.utm_content || '';
-    let utmMedium: string = booking.utm_medium || '';
-    let utmCampaign: string = booking.utm_campaign || '';
-    let utmSource: string = booking.utm_source || '';
-    let utmTerm: string = booking.utm_term || '';
-    let landingPage: string = booking.landing_page || '';
-    let referrerVal: string = booking.referrer || '';
-    let fbclidVal: string = booking.fbclid || '';
-    let gclidVal: string = booking.gclid || '';
-    if (!utmCampaign && !utmContent && !utmMedium && !landingPage) {
+    // Attribution backfill — when the booking row predates UTM column
+    // population, pull from the latest abandoned_cart row keyed by
+    // email. We mutate the booking object so the centralized mapper
+    // sees a complete set of columns regardless.
+    if (!booking.utm_campaign && !booking.utm_content && !booking.utm_medium && !booking.landing_page) {
       try {
         const { data: cart } = await supabase
           .from('abandoned_carts')
@@ -537,85 +529,100 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
-        utmContent  = utmContent  || (cart as any)?.utm_content  || '';
-        utmMedium   = utmMedium   || (cart as any)?.utm_medium   || '';
-        utmCampaign = utmCampaign || (cart as any)?.utm_campaign || '';
-        utmSource   = utmSource   || (cart as any)?.utm_source   || '';
-        utmTerm     = utmTerm     || (cart as any)?.utm_term     || '';
-        landingPage = landingPage || (cart as any)?.landing_page || '';
-        referrerVal = referrerVal || (cart as any)?.referrer     || '';
-        fbclidVal   = fbclidVal   || (cart as any)?.fbclid       || '';
-        gclidVal    = gclidVal    || (cart as any)?.gclid        || '';
+        if (cart) {
+          booking.utm_content  = booking.utm_content  || (cart as any).utm_content  || null;
+          booking.utm_medium   = booking.utm_medium   || (cart as any).utm_medium   || null;
+          booking.utm_campaign = booking.utm_campaign || (cart as any).utm_campaign || null;
+          booking.utm_source   = booking.utm_source   || (cart as any).utm_source   || null;
+          booking.utm_term     = booking.utm_term     || (cart as any).utm_term     || null;
+          booking.landing_page = booking.landing_page || (cart as any).landing_page || null;
+          booking.referrer     = booking.referrer     || (cart as any).referrer     || null;
+          booking.fbclid       = booking.fbclid       || (cart as any).fbclid       || null;
+          booking.gclid        = booking.gclid        || (cart as any).gclid        || null;
+        }
       } catch (_) { /* tables may not exist yet — that's fine */ }
     }
 
-    // Derived call_type from booking channel — phone-in vs online booking.
-    const channel = (booking.booking_channel || '').toLowerCase();
-    const callType = channel.includes('phone')
-      ? 'Inbound Call'
-      : channel.includes('sales') || channel.includes('admin')
-        ? 'Sales Intake'
-        : 'Online Booking';
+    // ── Pull Stripe + lifetime context for the mapper ────────────
+    // Default payment method, last payment, failed-payment count,
+    // Stripe customer / subscription ids. All best-effort — anything
+    // missing simply ends up blank in GHL.
+    let defaultPaymentMethod: string | null = null;
+    let lastPayment: { amountCents: number; date: string } | null = null;
+    let failedPaymentCount: number | null = null;
+    let stripeCustomerIdForGhl: string | null = booking.customer_id || null;
+    const stripeSubscriptionIdForGhl: string | null = membershipData?.subscription_id || null;
+    try {
+      const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+      if (stripeKey && booking.email) {
+        const sk = new Stripe(stripeKey, { apiVersion: '2025-08-27.basil' as any });
+        const customers = await sk.customers.list({ email: booking.email, limit: 1 });
+        if (customers.data.length > 0) {
+          const cus: any = customers.data[0];
+          stripeCustomerIdForGhl = stripeCustomerIdForGhl || cus.id;
+          const pmRef = cus.invoice_settings?.default_payment_method;
+          if (pmRef && typeof pmRef === 'object') {
+            defaultPaymentMethod = `${pmRef.card?.brand || 'card'} ending ${pmRef.card?.last4 || '????'}`;
+          } else if (typeof pmRef === 'string') {
+            try {
+              const pmObj: any = await sk.paymentMethods.retrieve(pmRef);
+              defaultPaymentMethod = `${pmObj.card?.brand || 'card'} ending ${pmObj.card?.last4 || '????'}`;
+            } catch (_) { /* ignore */ }
+          }
+          const chargesRecent = await sk.charges.list({ customer: cus.id, limit: 5 });
+          const succeeded: any = chargesRecent.data.find((c: any) => c.paid && c.status === 'succeeded');
+          if (succeeded) {
+            lastPayment = { amountCents: succeeded.amount, date: new Date(succeeded.created * 1000).toISOString() };
+          }
+          failedPaymentCount = chargesRecent.data.filter((c: any) => c.status === 'failed').length;
+        }
+      }
+    } catch (stripeMapErr) {
+      logStep('Stripe lookup for GHL mapper failed (non-critical)', stripeMapErr);
+    }
 
-    // Pay-over-call: true only when the booking originated from an admin
-    // intake flow where payment was collected verbally (booking_channel
-    // hint + payment_method 'phone'/'verbal').
-    const payOverCall = (booking.payment_method || '').toLowerCase().includes('phone')
-      || (booking.payment_method || '').toLowerCase().includes('verbal');
+    // Lifetime revenue + last completed service — cheap aggregate.
+    let lifetimeRevenueCents: number | null = null;
+    let lastServiceAt: string | null = null;
+    try {
+      const { data: completedRows } = await supabase
+        .from('bookings')
+        .select('total_estimate_cents, final_charge_cents, service_date')
+        .eq('email', booking.email)
+        .eq('status', 'completed')
+        .order('service_date', { ascending: false });
+      if (completedRows && completedRows.length > 0) {
+        lifetimeRevenueCents = completedRows.reduce(
+          (sum: number, r: any) => sum + (r.final_charge_cents || r.total_estimate_cents || 0),
+          0,
+        );
+        lastServiceAt = (completedRows[0] as any).service_date || null;
+      }
+    } catch (_) { /* ignore */ }
 
-    // ── Full custom-field map. Keys match the GHL fieldKey list verbatim.
-    //   AGP Tracking Attribution covers utm_content / medium / campaign;
-    //   we also send utm_source / utm_term / landing_page / referrer /
-    //   fbclid / gclid which GHL will accept if the field exists or
-    //   silently ignore otherwise (the client logs the miss).         ──
-    const ghlCustomFields: Record<string, string | number | boolean | undefined> = {
-      // AGP Tracking Attribution
-      utm_content: utmContent,
-      utm_medium: utmMedium,
-      utm_campaign: utmCampaign,
-      utm_source: utmSource,
-      utm_term: utmTerm,
-      landing_page: landingPage,
-      referrer: referrerVal,
-      tracking_attribution: referrerVal || landingPage,
-      fb_lead_id: fbclidVal,
-      fbclid: fbclidVal,
-      gclid: gclidVal,
+    const referralLinkForGhl = customerData?.referral_code
+      ? `https://try.novaracleaning.com/book/zip?ref=${customerData.referral_code}`
+      : '';
 
-      // Service & Scheduling
-      cleaning_type: mapServiceType(booking.service_type),
-
-      // Internal Sales
-      csr_name: booking.sdr_rep_name || '',
-      call_type: callType,
-      pay_over_call_: ynBool(payOverCall),
-      quoted_price_pretaxfees: fmtMoney(booking.base_price_cents),
-
-      // Billing & Payments
-      deposit_paid: ynBool(
-        booking.payment_option === 'full'
-        || (booking.payment_option === 'deposit' && booking.status !== 'pending_payment'),
-      ),
-      remaining_balance: fmtMoney(remainingBalanceCents),
-
-      // Plans & Pricing
-      discounted_amount_: fmtMoney(totalDiscountCents),
-
-      // Referral & Lead Source
-      market: booking.city || booking.zip_code || '',
-
-      // General Info
-      customer_source: booking.booker_source
-        || (booking.booking_number === 1 ? 'New Lead' : 'Returning Client'),
-
-      // Ops / Dispatch — 1) / 2) / 3) Contractor + Number
-      "1_contractor": teamCleaners[0]?.name || '',
-      "1_contractor_number": teamCleaners[0]?.phone || '',
-      "2_contractor": teamCleaners[1]?.name || '',
-      "2_contractor_number": teamCleaners[1]?.phone || '',
-      "3_contractor": teamCleaners[2]?.name || '',
-      "3_contractor_number": teamCleaners[2]?.phone || '',
-    };
+    // ── Centralized 60+ field GHL custom-field bag ──────────────
+    // buildGhlCustomFields covers Service & Scheduling, Billing &
+    // Payments, Internal Sales, Ops/Dispatch, Customer Journey,
+    // Referral, AGP Tracking, Membership, and Stripe identifiers.
+    const ghlCustomFields = buildGhlCustomFields({
+      // deno-lint-ignore no-explicit-any
+      booking: booking as any,
+      cleaners: teamCleaners,
+      lastPayment,
+      lastServiceAt,
+      lifetimeRevenueCents,
+      failedPaymentCount,
+      stripeCustomerId: stripeCustomerIdForGhl,
+      stripeSubscriptionId: stripeSubscriptionIdForGhl,
+      defaultPaymentMethod,
+      referralCode: customerData?.referral_code || null,
+      referralLink: referralLinkForGhl,
+      publicOrigin: 'https://try.novaracleaning.com',
+    });
 
     // Defensive split of the booking address — guarantees that
     // GHL's `address1` only contains the street even if a legacy row

@@ -802,6 +802,94 @@ serve(async (req) => {
         break;
       }
 
+      case 'payment_method.attached':
+      case 'payment_method.updated':
+      case 'setup_intent.succeeded':
+      case 'customer.updated': {
+        // Customer added a new card / updated billing info via the
+        // Stripe Customer Portal (or via setup intent during checkout).
+        // We push a quick GHL contact update so the
+        // `default_payment_method` custom field reflects the new card
+        // brand + last4 immediately.
+        let customerId: string | undefined;
+        // deno-lint-ignore no-explicit-any
+        const obj = event.data.object as any;
+        if (event.type === 'customer.updated') {
+          customerId = obj?.id;
+        } else if (event.type === 'setup_intent.succeeded') {
+          customerId = typeof obj?.customer === 'string' ? obj.customer : obj?.customer?.id;
+        } else {
+          customerId = typeof obj?.customer === 'string' ? obj.customer : obj?.customer?.id;
+        }
+        if (!customerId) {
+          logStep("payment-method webhook skipped — no customer id", { eventType: event.type });
+          break;
+        }
+        try {
+          const customer = await stripe.customers.retrieve(customerId);
+          if (!customer || (customer as any).deleted) break;
+          // deno-lint-ignore no-explicit-any
+          const cus: any = customer;
+          const email = cus.email;
+          if (!email) break;
+
+          // Resolve the customer's default card → "Visa ending 4242"
+          let defaultPaymentMethod = "";
+          const pmRef = cus.invoice_settings?.default_payment_method;
+          if (pmRef && typeof pmRef === "object") {
+            defaultPaymentMethod = `${pmRef.card?.brand || 'card'} ending ${pmRef.card?.last4 || '????'}`;
+          } else if (typeof pmRef === "string") {
+            try {
+              const pmObj = await stripe.paymentMethods.retrieve(pmRef);
+              // deno-lint-ignore no-explicit-any
+              const pm = pmObj as any;
+              defaultPaymentMethod = `${pm.card?.brand || 'card'} ending ${pm.card?.last4 || '????'}`;
+            } catch (_) { /* ignore */ }
+          } else {
+            // Fall back to the most recently attached card
+            const pms = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+            if (pms.data.length > 0) {
+              const pm: any = pms.data[0];
+              defaultPaymentMethod = `${pm.card?.brand || 'card'} ending ${pm.card?.last4 || '????'}`;
+            }
+          }
+
+          const { upsertContact } = await import("../_shared/ghl-client.ts");
+          await upsertContact({
+            email,
+            phone: cus.phone || null,
+            firstName: (cus.name || "").split(" ")[0] || null,
+            lastName: (cus.name || "").split(" ").slice(1).join(" ") || null,
+            source: "Novara Billing Update",
+            tags: ["payment-method-updated"],
+            customFieldsByKey: {
+              default_payment_method: defaultPaymentMethod,
+              stripe_customer_id: customerId,
+            },
+          });
+          logStep("GHL contact updated with new payment method", { email, defaultPaymentMethod });
+
+          // Mirror the event to the LeadConnector inbound webhook so
+          // the GHL workflow can route a "card on file updated"
+          // automation if the operator wants.
+          const { mirrorToLeadConnector } = await import("../_shared/leadconnector-mirror.ts");
+          await mirrorToLeadConnector({
+            event: `stripe.${event.type}`,
+            payload: {
+              stripe_customer_id: customerId,
+              email,
+              phone: cus.phone || null,
+              default_payment_method: defaultPaymentMethod,
+            },
+          });
+        } catch (pmErr) {
+          logStep("payment-method GHL sync failed (non-critical)", {
+            error: pmErr instanceof Error ? pmErr.message : String(pmErr),
+          });
+        }
+        break;
+      }
+
       case 'account.updated': {
         const account = event.data.object as Stripe.Account;
         const accountId = account.id;

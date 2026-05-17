@@ -128,7 +128,7 @@ export function RescheduleDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Reschedule Booking"
-      description="Choose a new date and time. We use the same slot picker as our online checkout."
+      description="Pick a new date and time for your appointment."
       desktopMaxWidthClass="max-w-2xl"
       footer={footer}
     >

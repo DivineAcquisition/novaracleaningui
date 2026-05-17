@@ -451,6 +451,18 @@ export default function Account() {
                     <RiCalendarLine className="w-4 h-4 mr-2" /> Use Credit to Book
                   </Button>
                 )}
+                {/* Glow members manage their card / billing cycle /
+                    pause-resume / cancel inside the same Stripe Customer
+                    Portal that one-time customers use to update their
+                    card. One link, both flows covered. */}
+                <Button
+                  variant="outline"
+                  className="w-full h-10 mt-2 rounded-lg"
+                  onClick={handleManageSubscription}
+                >
+                  <RiBankCardLine className="w-4 h-4 mr-2 text-primary" />
+                  Manage Subscription & Card
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -486,12 +498,16 @@ export default function Account() {
                   onClick={goToBooking}>
                   <RiCalendarLine className="w-4 h-4 mr-2 text-primary" /> Book Cleaning
                 </Button>
-                {subscription?.hasCustomer && (
-                  <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
-                    onClick={handleManageSubscription}>
-                    <RiBankCardLine className="w-4 h-4 mr-2 text-primary" /> Billing
-                  </Button>
-                )}
+                {/* Billing / payment-method update — always show so
+                    customers can update their card even without an
+                    active membership. The Stripe Customer Portal also
+                    handles subscription management for Glow members
+                    from the same screen. */}
+                <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
+                  onClick={handleManageSubscription}>
+                  <RiBankCardLine className="w-4 h-4 mr-2 text-primary" />
+                  {subscription?.subscribed ? "Billing & Card" : "Payment Method"}
+                </Button>
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
                   onClick={handleChangePassword} disabled={isResettingPassword}>
                   <RiLockLine className="w-4 h-4 mr-2 text-primary" /> {isResettingPassword ? "Sending..." : "Password"}
