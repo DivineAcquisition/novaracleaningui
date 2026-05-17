@@ -8,7 +8,7 @@ import {
   getTeamSize,
   DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
-import { syncContactAndOpportunity, fmtMoney, ynBool, splitFullAddress } from "../_shared/ghl-client.ts";
+import { syncBookingLifecycle, fmtMoney, ynBool, splitFullAddress } from "../_shared/ghl-client.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
@@ -627,7 +627,14 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const ghlState = booking.state || splitAddr.state || "";
     const ghlZip = booking.zip_code || splitAddr.zipCode || "";
 
-    const ghlResult = await syncContactAndOpportunity({
+    // syncBookingLifecycle upserts the contact AND patches the existing
+    // opportunity for that contact (status + name + monetary + custom
+    // fields). Falls back to creating an opportunity only if none
+    // exists yet. This is the single point that keeps GHL in lockstep
+    // with every booking mutation we run (payment, assignment, cleaner
+    // accept, complete, cancel, reschedule, modify) — none of those
+    // paths produce duplicate opportunities anymore.
+    const ghlResult = await syncBookingLifecycle({
       contact: {
         email: booking.email,
         phone: booking.phone,
