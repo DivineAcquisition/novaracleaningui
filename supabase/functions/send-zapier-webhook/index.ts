@@ -17,10 +17,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ZAPIER_BOOKING_WEBHOOK_URL = Deno.env.get("ZAPIER_WEBHOOK_URL") || "";
-const ZAPIER_DISPATCH_WEBHOOK_URL = Deno.env.get("ZAPIER_DISPATCH_WEBHOOK_URL") || "";
-const GHL_BOOKING_WEBHOOK_URL = Deno.env.get("GHL_BOOKING_WEBHOOK_URL") || "";
-const ZAPIER_BOOKING_WEBHOOK_URL_2 = Deno.env.get("ZAPIER_BOOKING_WEBHOOK_URL_2") || "";
+// Legacy ZAPIER_* / GHL_BOOKING_WEBHOOK_URL env vars are intentionally
+// not read here — the user removed all Zapier outbound destinations on
+// 2026-05-17. Only the GHL PIT API + LeadConnector inbound mirror are
+// in use now.
 
 const logStep = (step: string, details?: any) => {
   console.log(`[SEND-ZAPIER-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
@@ -278,7 +278,25 @@ async function handleJobDispatchWebhook(supabase: any, jobId: string) {
     payload["Team Average Rating"] = avgRating.toFixed(2);
   }
 
-  return await sendWebhook(supabase, payload, jobId, 'job', ZAPIER_DISPATCH_WEBHOOK_URL);
+  // Dispatch events used to fan out to a Zapier dispatch webhook —
+  // removed 2026-05-17. Mirror to LeadConnector so GHL workflows can
+  // pick the event up if needed; otherwise return the payload to the
+  // caller (auto-dispatch / dispatch-job).
+  try {
+    await mirrorToLeadConnector({
+      event: "job.dispatched",
+      payload: {
+        job_id: jobId,
+        dispatch_payload: payload,
+      },
+    });
+  } catch (mirrorErr) {
+    logStep("LeadConnector mirror (dispatch) failed (non-critical)", mirrorErr);
+  }
+  return new Response(
+    JSON.stringify({ success: true, jobId, payload }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+  );
 }
 
 async function handleBookingWebhook(supabase: any, bookingId: string) {
@@ -956,134 +974,22 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     } catch (_) { /* best effort */ }
   }
 
-  // Send to all configured booking webhooks in parallel.
-  // GHL_BOOKING_WEBHOOK_URL is INTENTIONALLY EXCLUDED — the GHL
-  // workflow attached to that inbound URL was mapping legacy Zapier
-  // payload fields to `final_cost_` / `deposit_amount_` custom fields
-  // with the WRONG values (e.g. "Remaining Balance" → `final_cost_`),
-  // clobbering what the PIT API + buildGhlCustomFields had just set
-  // correctly. The PIT lifecycle sync above is now the single
-  // authoritative source for every GHL custom field. The
-  // user-supplied LeadConnector inbound webhook (mirrorToLeadConnector)
-  // continues to fire as an always-on backup for downstream
-  // automations.
-  const webhookUrls = [
-    { url: ZAPIER_BOOKING_WEBHOOK_URL, name: 'Zapier Primary' },
-    { url: ZAPIER_BOOKING_WEBHOOK_URL_2, name: 'Zapier Secondary' },
-  ].filter(w => w.url);
-  // Reference kept so the unused-var lint stays quiet — we deliberately
-  // do NOT use GHL_BOOKING_WEBHOOK_URL anymore.
-  void GHL_BOOKING_WEBHOOK_URL;
-
-  logStep("Sending to multiple webhooks", { count: webhookUrls.length, targets: webhookUrls.map(w => w.name) });
-
-  const results = await Promise.allSettled(
-    webhookUrls.map(webhook => sendSingleWebhook(supabase, payload, bookingId, 'booking', webhook.url, webhook.name))
-  );
-
-  const successful = results.filter(r => r.status === 'fulfilled').length;
-  const failed = results.filter(r => r.status === 'rejected').length;
-
-  logStep("Webhook results", { successful, failed, total: webhookUrls.length });
-
-  // Always 200 — the authoritative work (GHL PIT lifecycle sync +
-  // LeadConnector mirror) already ran above. The remaining
-  // webhookUrls are legacy Zapier targets that are optional. Returning
-  // 500 here used to mislead callers into retrying when GHL was
-  // actually already up-to-date.
+  // GHL PIT lifecycle sync + LeadConnector inbound mirror are the
+  // ONLY GHL destinations (both already executed above). Legacy
+  // Zapier outbound webhooks have been removed per the user's
+  // 2026-05-17 request: 'you can get rid of zapier webhook setup,
+  // I no longer need it.'
   return new Response(
     JSON.stringify({
       success: true,
       bookingId,
       ghl_sync: "ok",
-      webhooksAttempted: webhookUrls.length,
-      webhooksSuccessful: successful,
-      webhooksFailed: failed,
       payload,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
   );
 }
 
-async function sendSingleWebhook(supabase: any, payload: any, id: string, type: string, webhookUrl: string, webhookName: string) {
-  logStep(`Sending to ${webhookName}`, { id, type });
-
-  // Ensure webhook URL is configured
-  if (!webhookUrl) {
-    logStep(`Missing webhook URL for ${webhookName}`);
-    throw new Error(`Webhook URL not configured for ${webhookName}`);
-  }
-
-  // Log destination host for verification without leaking full URL
-  try {
-    const urlHost = new URL(webhookUrl).host;
-    logStep(`Destination: ${urlHost}`, { webhookName });
-  } catch (_) {
-    logStep(`Invalid webhook URL format for ${webhookName}`);
-  }
-
-  // Send with retry logic
-  let retryCount = 0;
-  const MAX_RETRIES = 3;
-
-  while (retryCount < MAX_RETRIES) {
-    try {
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const respText = await response.text().catch(() => "");
-      logStep(`${webhookName} response`, {
-        status: response.status,
-        bodyPreview: respText ? respText.slice(0, 200) : ""
-      });
-
-      if (response.ok) {
-        logStep(`${webhookName} sent successfully`, { id, status: response.status });
-        return { success: true, webhookName, status: response.status };
-      }
-
-      throw new Error(`${webhookName} failed with status ${response.status}`);
-    } catch (err) {
-      retryCount++;
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      logStep(`${webhookName} attempt ${retryCount} failed`, { error: errorMessage });
-      
-      if (retryCount >= MAX_RETRIES) {
-        // Log failure to database
-        await supabase.from('webhook_failures').insert({
-          booking_id: type === 'booking' ? id : null,
-          webhook_url: webhookUrl,
-          payload: payload,
-          error_message: `${webhookName}: ${errorMessage}`,
-          retry_count: retryCount
-        });
-        throw new Error(`${webhookName}: ${errorMessage}`);
-      }
-      
-      // Exponential backoff
-      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-    }
-  }
-
-  throw new Error(`${webhookName}: All retry attempts failed`);
-}
-
-// Legacy single webhook function for dispatch webhooks
-async function sendWebhook(supabase: any, payload: any, id: string, type: string, webhookUrl: string) {
-  return sendSingleWebhook(supabase, payload, id, type, webhookUrl, 'Zapier Dispatch')
-    .then(result => {
-      return new Response(
-        JSON.stringify({ success: true, id, type, payload }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-      );
-    })
-    .catch(err => {
-      return new Response(
-        JSON.stringify({ error: err.message }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
-    });
-}
+// sendSingleWebhook / sendWebhook helpers were removed 2026-05-17 when
+// the Zapier outbound destinations were retired. GHL PIT + LeadConnector
+// mirror are the only outbound paths now.
