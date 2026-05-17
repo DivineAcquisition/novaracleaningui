@@ -741,6 +741,37 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     });
     logStep("GHL PIT sync complete", ghlResult);
 
+    // Stamp the booking row as synced so the reconcile cron + the
+    // notify_ghl_sync trigger know not to refire. We use the special
+    // sync-only column set so the trigger's "only sync columns
+    // changed" guard short-circuits and does NOT recurse.
+    try {
+      await supabase
+        .from("bookings")
+        .update({
+          ghl_synced_at: new Date().toISOString(),
+          ghl_sync_attempts: (booking.ghl_sync_attempts || 0) + 1,
+          ghl_sync_error: null,
+        })
+        .eq("id", booking.id);
+    } catch (stampErr) {
+      logStep("ghl_synced_at stamp failed (non-critical)", {
+        error: stampErr instanceof Error ? stampErr.message : String(stampErr),
+      });
+    }
+
+    // Log success row in ghl_sync_log so admins / reconciliation can
+    // see exactly when each booking was last refreshed.
+    try {
+      await supabase.from("ghl_sync_log").insert({
+        booking_id: booking.id,
+        source: "edge_function",
+        trigger_op: "sync",
+        succeeded: true,
+        http_status: 200,
+      });
+    } catch (_) { /* best effort */ }
+
     // ─── LeadConnector inbound webhook mirror ────────────────────────
     // Always-on backup: send the structured payload plus the same
     // contact + opportunity bundle to the user's GHL inbound webhook.
@@ -782,9 +813,25 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       },
     });
   } catch (ghlErr) {
-    logStep("GHL PIT sync failed (non-blocking)", {
-      error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),
-    });
+    const errMsg = ghlErr instanceof Error ? ghlErr.message : String(ghlErr);
+    logStep("GHL PIT sync failed (non-blocking)", { error: errMsg });
+    // Record the failure so reconcile-ghl can retry on its next pass.
+    try {
+      await supabase
+        .from("bookings")
+        .update({
+          ghl_sync_attempts: (booking.ghl_sync_attempts || 0) + 1,
+          ghl_sync_error: errMsg.slice(0, 500),
+        })
+        .eq("id", booking.id);
+      await supabase.from("ghl_sync_log").insert({
+        booking_id: booking.id,
+        source: "edge_function",
+        trigger_op: "sync",
+        succeeded: false,
+        error_message: errMsg.slice(0, 500),
+      });
+    } catch (_) { /* best effort */ }
   }
 
   // Send to all configured booking webhooks in parallel.
