@@ -302,17 +302,44 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     deposit_type: mapDepositType(b.payment_option, b.deposit_cents, totalCents),
     final_cost_: fmtMoney(b.final_charge_cents || b.total_estimate_cents),
     remaining_balance: fmtMoney(remainingCents + (b.cancel_fee_cents || 0) + (b.reschedule_fee_cents || 0)),
-    outstanding_balance: fmtMoney(remainingCents),
+    // Note: GHL location uses `remaining_balance` as the single source
+    // of truth — `outstanding_balance` is not configured there, so we
+    // don't bother sending it.
+    // Discount $: base price - discounted total. Always positive.
     discounted_amount_: fmtMoney(
       Math.max(0, (b.base_price_cents || 0) - (b.total_estimate_cents || 0)),
     ),
-    discount_: "", // percent — not consistently captured
+    // Discount %: ((base - total) / base) * 100, rounded. TEXT field
+    // in GHL so we send "50%" not "50".
+    discount_: (() => {
+      const base = b.base_price_cents || 0;
+      const total = b.total_estimate_cents || 0;
+      if (base <= 0 || total >= base) return "";
+      const pct = Math.round(((base - total) / base) * 100);
+      return `${pct}%`;
+    })(),
+    // Numerical (no $). For now equals discounted_amount_ — when an
+    // aggregate "across all bookings" view becomes useful we can sum
+    // it server-side and pass into MapperInputs.
+    total_discount_given: Math.max(0, Math.round((((b.base_price_cents || 0) - (b.total_estimate_cents || 0)) / 100))),
     size_adjustment_: "",
+    // Platform fee per clean — what Novara takes off the top before
+    // paying cleaners. Stored in cents on the booking row.
+    platform_fee_per_clean: fmtMoney(b.platform_fee_cents),
+    // Avg job value: lifetime / completed-count. Falls back to the
+    // current booking total when no completed history yet so the field
+    // is never blank on a brand new customer.
     average_job_value: input.lifetimeRevenueCents && b.booking_number
       ? fmtMoney(Math.round(input.lifetimeRevenueCents / Math.max(1, b.booking_number)))
-      : "",
-    lifetime_revenue: fmtMoney(input.lifetimeRevenueCents),
+      : fmtMoney(b.final_charge_cents || b.total_estimate_cents),
+    lifetime_revenue: fmtMoney(input.lifetimeRevenueCents ?? (b.final_charge_cents || b.total_estimate_cents || null)),
     monthly_subscription_total_: isMember ? fmtMoney(b.base_price_cents) : "",
+    // Estimated annual value: for active members = monthly * 12; for
+    // one-time customers = current total * estimated annual visits
+    // (3 default = quarterly cadence). Empty until we know enough.
+    estimated_annual_value: isMember
+      ? fmtMoney((b.base_price_cents || 0) * 12)
+      : fmtMoney((b.final_charge_cents || b.total_estimate_cents || 0) * 3),
     last_payment_date: input.lastPayment ? fmtIsoDate(input.lastPayment.date) : "",
     last_payment_amount: fmtMoney(input.lastPayment?.amountCents),
     last_invoice_url: b.hosted_invoice_url || "",
