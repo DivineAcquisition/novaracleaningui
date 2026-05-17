@@ -9,8 +9,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GHL_LEAD_CAPTURE_WEBHOOK_URL = Deno.env.get("GHL_LEAD_CAPTURE_WEBHOOK_URL") || "";
-const ZAPIER_LEAD_CAPTURE_WEBHOOK_URL = Deno.env.get("ZAPIER_LEAD_CAPTURE_WEBHOOK_URL") || "";
+// Legacy GHL_LEAD_CAPTURE_WEBHOOK_URL + ZAPIER_LEAD_CAPTURE_WEBHOOK_URL
+// outbound destinations were retired 2026-05-17. The GHL PIT
+// upsertContact call (ghlUpsertContact below) + the LeadConnector
+// inbound mirror (mirrorToLeadConnector below) are the only sync
+// paths now.
 
 const logStep = (step: string, details?: any) => {
   console.log(`[SEND-LEAD-CAPTURE-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
@@ -139,22 +142,10 @@ serve(async (req) => {
       "Status": "New Lead"
     };
 
-    // Send to all configured webhooks in parallel
-    const webhookUrls = [
-      { url: GHL_LEAD_CAPTURE_WEBHOOK_URL, name: 'GoHighLevel Lead Capture' },
-      { url: ZAPIER_LEAD_CAPTURE_WEBHOOK_URL, name: 'Zapier Lead Capture' }
-    ].filter(w => w.url);
-
-    logStep("Sending to webhooks", { 
-      count: webhookUrls.length, 
-      targets: webhookUrls.map(w => w.name) 
-    });
-
-    // Push to GHL via Private Integration (PIT) — fire-and-forget,
-    // parallel to legacy webhooks. The full UTM + landing-page +
-    // referrer bag from the client is mapped to every supported GHL
-    // custom field so the contact record reflects the source the
-    // moment the lead opts in.
+    // Push to GHL via Private Integration (PIT) — single authoritative
+    // path. The full UTM + landing-page + referrer bag from the client
+    // is mapped to every supported GHL custom field so the contact
+    // record reflects the source the moment the lead opts in.
     ghlUpsertContact({
       email: leadData.email,
       phone: leadData.phone,
@@ -221,52 +212,11 @@ serve(async (req) => {
       },
     });
 
-    if (webhookUrls.length === 0) {
-      logStep("No webhooks configured, skipping external sends");
-      return new Response(
-        JSON.stringify({ success: true, message: "No webhooks configured", payload }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-      );
-    }
-
-    const results = await Promise.allSettled(
-      webhookUrls.map(async (webhook) => {
-        logStep(`Sending to ${webhook.name}`);
-        
-        const response = await fetch(webhook.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        const respText = await response.text().catch(() => "");
-        logStep(`${webhook.name} response`, {
-          status: response.status,
-          bodyPreview: respText ? respText.slice(0, 200) : ""
-        });
-
-        if (!response.ok) {
-          throw new Error(`${webhook.name} failed with status ${response.status}`);
-        }
-
-        return { success: true, webhookName: webhook.name, status: response.status };
-      })
-    );
-
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    const failed = results.filter(r => r.status === 'rejected').length;
-
-    logStep("Webhook results", { successful, failed, total: webhookUrls.length });
-
+    // GHL PIT upsertContact + LeadConnector inbound mirror (both
+    // above) are the only outbound destinations now.
     return new Response(
-      JSON.stringify({ 
-        success: successful > 0, 
-        webhooksAttempted: webhookUrls.length,
-        webhooksSuccessful: successful,
-        webhooksFailed: failed,
-        payload 
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: successful > 0 ? 200 : 500 }
+      JSON.stringify({ success: true, ghl_sync: "ok", payload }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
 
   } catch (error) {

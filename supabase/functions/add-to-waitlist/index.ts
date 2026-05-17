@@ -45,7 +45,6 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const ghlWebhookUrl = Deno.env.get("GHL_LEAD_CAPTURE_WEBHOOK_URL");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -150,35 +149,9 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send to GHL webhook for CRM tracking (legacy inbound webhook — kept for compatibility)
-    if (ghlWebhookUrl) {
-      try {
-        await fetch(ghlWebhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            firstName,
-            lastName,
-            phone,
-            zipCode,
-            city,
-            state,
-            source: "waitlist",
-            tags: ["waitlist", `zip-${zipCode}`],
-            customFields: {
-              waitlist_zip: zipCode,
-              waitlist_date: new Date().toISOString(),
-            },
-          }),
-        });
-        console.log("Sent to GHL webhook");
-      } catch (webhookError) {
-        console.error("Error sending to GHL:", webhookError);
-      }
-    }
-
-    // Push to GHL via Private Integration (PIT) — runs in parallel with the webhook.
+    // Push to GHL via Private Integration (PIT) — single authoritative
+    // path. Legacy GHL_LEAD_CAPTURE_WEBHOOK_URL outbound was retired
+    // 2026-05-17 (per user request to drop Zapier-style fan-out).
     try {
       await ghlUpsertContact({
         email,
