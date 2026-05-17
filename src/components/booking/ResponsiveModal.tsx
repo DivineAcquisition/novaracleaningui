@@ -12,6 +12,7 @@
 
 import * as React from "react";
 import { RiCloseLine } from "@remixicon/react";
+import { Drawer as DrawerPrimitive } from "vaul";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Drawer,
   DrawerContent,
   DrawerDescription,
   DrawerHeader,
@@ -62,7 +62,19 @@ export function ResponsiveModal({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      // handleOnly: drag-to-close gesture is limited to the visible drag
+      // handle bar at the top. Without this, vaul intercepts every
+      // vertical swipe inside the body — meaning a customer trying to
+      // scroll the calendar / tap a date / open a Select dropdown often
+      // accidentally closed the sheet.
+      // shouldScaleBackground=false: stops the body scale animation
+      // that breaks nested transformed elements (Radix Select portal).
+      <DrawerPrimitive.Root
+        open={open}
+        onOpenChange={onOpenChange}
+        handleOnly
+        shouldScaleBackground={false}
+      >
         <DrawerContent className={cn("flex flex-col", mobileMaxHeightClass)}>
           {/* Sticky header — title + GIANT close button. The drag handle
               that vaul prepends to DrawerContent is also visible above
@@ -93,7 +105,7 @@ export function ResponsiveModal({
             </div>
           ) : null}
         </DrawerContent>
-      </Drawer>
+      </DrawerPrimitive.Root>
     );
   }
 
