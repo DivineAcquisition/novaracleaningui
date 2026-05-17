@@ -4,7 +4,7 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
-import { syncBookingLifecycle, fmtMoney, ynBool } from '../_shared/ghl-client.ts';
+import { syncBookingLifecycle } from '../_shared/ghl-client.ts';
 import { sendSms, formatServiceDate, formatTimeSlot } from '../_shared/sms.ts';
 import { decideRescheduleFee, SUPPORT_PHONE_DISPLAY, smsActionTail } from '../_shared/booking-policy.ts';
 import { mirrorToLeadConnector } from '../_shared/leadconnector-mirror.ts';
@@ -242,16 +242,12 @@ serve(async (req) => {
       console.error('GHL webhook failed (non-critical):', ghlError);
     }
 
-    // Push reschedule update to GHL via Private Integration (PIT).
-    // Now uses syncBookingLifecycle which UPDATES the existing
-    // opportunity for the contact rather than creating a duplicate,
-    // and pushes the fresh service date + reschedule fee into the
-    // custom field map.
+    // GHL: tag the contact as rescheduled but DON'T overwrite the
+    // financial / scheduling fields here — send-zapier-webhook (fired
+    // below) owns the authoritative refresh via buildGhlCustomFields,
+    // which keeps the contact's state consistent across the many
+    // bookings a single email can have.
     try {
-      const remainingBalanceCents = Math.max(
-        0,
-        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-      );
       await syncBookingLifecycle({
         contact: {
           email: booking.email,
@@ -269,27 +265,15 @@ serve(async (req) => {
             booking.zip_code ? `zip-${booking.zip_code}` : "",
             feeDecision.feeCents > 0 ? "short-notice-reschedule" : "",
           ].filter(Boolean) as string[],
-          customFieldsByKey: {
-            cleaning_type: booking.service_type,
-            market: booking.city,
-            quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
-            remaining_balance: fmtMoney(remainingBalanceCents + feeDecision.feeCents),
-            deposit_paid: ynBool(true),
-          },
         },
         opportunity: {
           name: `NOV-${String(booking.booking_number).padStart(5, '0')} — ${booking.first_name} ${booking.last_name}`,
           status: 'open',
           monetaryValue: Math.round(((booking.total_estimate_cents || 0) + feeDecision.feeCents) / 100),
           source: "Novara Reschedule",
-          customFieldsByKey: {
-            cleaning_type: booking.service_type,
-            quoted_price_pretaxfees: fmtMoney(booking.total_estimate_cents),
-            remaining_balance: fmtMoney(remainingBalanceCents + feeDecision.feeCents),
-          },
         },
       });
-      console.log('[reschedule-booking] GHL PIT lifecycle sync ok');
+      console.log('[reschedule-booking] GHL contact + opportunity tagged');
     } catch (ghlPitErr) {
       console.error('[reschedule-booking] GHL PIT sync failed (non-blocking):', ghlPitErr);
     }

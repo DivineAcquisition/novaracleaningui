@@ -274,7 +274,7 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
 
     const text = await res.text();
     if (!res.ok) {
-      log("upsertContact failed", { status: res.status, bodyPreview: text.slice(0, 200) });
+      log("upsertContact failed", { status: res.status, bodyPreview: text.slice(0, 500) });
       return null;
     }
 
@@ -282,7 +282,16 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
     try { parsed = JSON.parse(text); } catch { /* ignore */ }
     const contact = (parsed.contact as Json | undefined) ?? parsed;
     const id = (contact?.id as string | undefined) || (parsed.id as string | undefined) || null;
-    log("upsertContact ok", { id, isNew: parsed.new });
+    // Log how many custom fields actually came back so we can spot a
+    // GHL-side drop (e.g. validation errors that silently strip MONETORY
+    // values that have a "$" prefix when GHL expects raw numbers).
+    const returnedFields = Array.isArray((contact as any)?.customFields) ? (contact as any).customFields.length : 0;
+    log("upsertContact ok", {
+      id,
+      isNew: parsed.new,
+      sent: customFields.length,
+      returned: returnedFields,
+    });
     return id;
   } catch (err) {
     log("upsertContact error", { message: err instanceof Error ? err.message : String(err) });

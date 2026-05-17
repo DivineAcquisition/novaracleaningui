@@ -337,11 +337,16 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const totalChargedCents = booking.final_charge_cents || booking.total_estimate_cents;
     const companyNetCents = totalChargedCents - totalTeamPayoutCents;
 
-    // Calculate total discounts
-    const newCustomerDiscount = booking.booking_number === 1 ? 3000 : 0; // $30 for first booking
-    const creditDiscount = booking.uses_credit ? booking.base_price_cents : 0;
+    // Calculate total discounts — single source of truth: base price
+    // minus the discounted total. Catches the 50%-off promo, credit,
+    // and any full-payment discount in one calculation. The old
+    // separate-buckets math returned 0 for booking_number > 1 + non-
+    // credit customers (the common case) which then propagated into
+    // the legacy GHL inbound workflow and stomped on `discounted_amount_`.
+    const baseForDiscount = booking.base_price_cents || 0;
+    const totalForDiscount = booking.total_estimate_cents || 0;
+    const totalDiscountCents = Math.max(0, baseForDiscount - totalForDiscount);
     const fullPaymentDiscount = booking.full_payment_discount || 0;
-    const totalDiscountCents = newCustomerDiscount + creditDiscount + fullPaymentDiscount;
 
     // Fetch Stripe receipt URL for paid-in-full customers
     let paymentReceiptUrl = "";
@@ -516,32 +521,31 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       ? Math.max(0, totalChargedCentsForGhl - depositCentsForGhl)
       : 0;
 
-    // Attribution backfill — when the booking row predates UTM column
-    // population, pull from the latest abandoned_cart row keyed by
-    // email. We mutate the booking object so the centralized mapper
-    // sees a complete set of columns regardless.
-    if (!booking.utm_campaign && !booking.utm_content && !booking.utm_medium && !booking.landing_page) {
-      try {
-        const { data: cart } = await supabase
-          .from('abandoned_carts')
-          .select('utm_content, utm_medium, utm_campaign, utm_source, utm_term, landing_page, referrer, fbclid, gclid')
-          .eq('email', booking.email)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (cart) {
-          booking.utm_content  = booking.utm_content  || (cart as any).utm_content  || null;
-          booking.utm_medium   = booking.utm_medium   || (cart as any).utm_medium   || null;
-          booking.utm_campaign = booking.utm_campaign || (cart as any).utm_campaign || null;
-          booking.utm_source   = booking.utm_source   || (cart as any).utm_source   || null;
-          booking.utm_term     = booking.utm_term     || (cart as any).utm_term     || null;
-          booking.landing_page = booking.landing_page || (cart as any).landing_page || null;
-          booking.referrer     = booking.referrer     || (cart as any).referrer     || null;
-          booking.fbclid       = booking.fbclid       || (cart as any).fbclid       || null;
-          booking.gclid        = booking.gclid        || (cart as any).gclid        || null;
-        }
-      } catch (_) { /* tables may not exist yet — that's fine */ }
-    }
+    // Attribution backfill — pull missing UTM fields from the latest
+    // abandoned_cart row keyed by email. Per-field merge so a booking
+    // with `utm_source` set but `utm_campaign` empty still gets the
+    // campaign backfilled (the old all-or-nothing guard prevented this
+    // and is the reason the user kept seeing UTM_* unmapped in GHL).
+    try {
+      const { data: cart } = await supabase
+        .from('abandoned_carts')
+        .select('utm_content, utm_medium, utm_campaign, utm_source, utm_term, landing_page, referrer, fbclid, gclid')
+        .eq('email', booking.email)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cart) {
+        booking.utm_content  = booking.utm_content  || (cart as any).utm_content  || null;
+        booking.utm_medium   = booking.utm_medium   || (cart as any).utm_medium   || null;
+        booking.utm_campaign = booking.utm_campaign || (cart as any).utm_campaign || null;
+        booking.utm_source   = booking.utm_source   || (cart as any).utm_source   || null;
+        booking.utm_term     = booking.utm_term     || (cart as any).utm_term     || null;
+        booking.landing_page = booking.landing_page || (cart as any).landing_page || null;
+        booking.referrer     = booking.referrer     || (cart as any).referrer     || null;
+        booking.fbclid       = booking.fbclid       || (cart as any).fbclid       || null;
+        booking.gclid        = booking.gclid        || (cart as any).gclid        || null;
+      }
+    } catch (_) { /* tables may not exist yet — that's fine */ }
 
     // ── Pull Stripe + lifetime context for the mapper ────────────
     // Default payment method, last payment, failed-payment count,
@@ -623,6 +627,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       referralLink: referralLinkForGhl,
       publicOrigin: 'https://try.novaracleaning.com',
     });
+    logStep("GHL custom fields built", { keys: Object.keys(ghlCustomFields).length });
 
     // Defensive split of the booking address — guarantees that
     // GHL's `address1` only contains the street even if a legacy row
@@ -721,12 +726,24 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     });
   }
 
-  // Send to all configured booking webhooks in parallel
+  // Send to all configured booking webhooks in parallel.
+  // GHL_BOOKING_WEBHOOK_URL is INTENTIONALLY EXCLUDED — the GHL
+  // workflow attached to that inbound URL was mapping legacy Zapier
+  // payload fields to `final_cost_` / `deposit_amount_` custom fields
+  // with the WRONG values (e.g. "Remaining Balance" → `final_cost_`),
+  // clobbering what the PIT API + buildGhlCustomFields had just set
+  // correctly. The PIT lifecycle sync above is now the single
+  // authoritative source for every GHL custom field. The
+  // user-supplied LeadConnector inbound webhook (mirrorToLeadConnector)
+  // continues to fire as an always-on backup for downstream
+  // automations.
   const webhookUrls = [
     { url: ZAPIER_BOOKING_WEBHOOK_URL, name: 'Zapier Primary' },
-    { url: GHL_BOOKING_WEBHOOK_URL, name: 'GoHighLevel' },
-    { url: ZAPIER_BOOKING_WEBHOOK_URL_2, name: 'Zapier Secondary' }
-  ].filter(w => w.url); // Only include configured webhooks
+    { url: ZAPIER_BOOKING_WEBHOOK_URL_2, name: 'Zapier Secondary' },
+  ].filter(w => w.url);
+  // Reference kept so the unused-var lint stays quiet — we deliberately
+  // do NOT use GHL_BOOKING_WEBHOOK_URL anymore.
+  void GHL_BOOKING_WEBHOOK_URL;
 
   logStep("Sending to multiple webhooks", { count: webhookUrls.length, targets: webhookUrls.map(w => w.name) });
 
@@ -739,16 +756,22 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
 
   logStep("Webhook results", { successful, failed, total: webhookUrls.length });
 
+  // Always 200 — the authoritative work (GHL PIT lifecycle sync +
+  // LeadConnector mirror) already ran above. The remaining
+  // webhookUrls are legacy Zapier targets that are optional. Returning
+  // 500 here used to mislead callers into retrying when GHL was
+  // actually already up-to-date.
   return new Response(
-    JSON.stringify({ 
-      success: successful > 0, 
-      bookingId, 
+    JSON.stringify({
+      success: true,
+      bookingId,
+      ghl_sync: "ok",
       webhooksAttempted: webhookUrls.length,
       webhooksSuccessful: successful,
       webhooksFailed: failed,
-      payload 
+      payload,
     }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: successful > 0 ? 200 : 500 }
+    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
   );
 }
 

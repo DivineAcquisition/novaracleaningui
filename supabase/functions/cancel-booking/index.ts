@@ -5,11 +5,7 @@ import {
   decideCancelFee,
   SUPPORT_PHONE_DISPLAY,
 } from "../_shared/booking-policy.ts";
-import {
-  syncBookingLifecycle,
-  fmtMoney,
-  ynBool,
-} from "../_shared/ghl-client.ts";
+import { syncBookingLifecycle } from "../_shared/ghl-client.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
@@ -233,12 +229,14 @@ Deno.serve(async (req) => {
       logStep("email failed (non-critical)", emailError);
     }
 
-    // ─── GHL: update existing opportunity to status=lost + push fee/refund custom fields ──
+    // ─── GHL: update the existing opportunity to lost ────────────────
+    // ONLY send cancellation-specific custom fields here. The
+    // financial / scheduling / lifetime fields are owned by the
+    // centralized buildGhlCustomFields path (fired below via
+    // send-zapier-webhook). Writing them from here would clobber
+    // values that other bookings on the same email might have set
+    // (GHL contacts are keyed by email — many bookings, one contact).
     try {
-      const remainingBalanceCents = Math.max(
-        0,
-        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-      );
       await syncBookingLifecycle({
         contact: {
           email: booking.email,
@@ -256,12 +254,10 @@ Deno.serve(async (req) => {
             booking.zip_code ? `zip-${booking.zip_code}` : "",
           ].filter(Boolean) as string[],
           customFieldsByKey: {
-            cleaning_type: booking.service_type,
-            market: booking.city || booking.zip_code,
-            quoted_price_pretaxfees: fmtMoney(booking.base_price_cents),
-            discounted_amount_: fmtMoney(0),
-            remaining_balance: fmtMoney(remainingBalanceCents),
-            deposit_paid: ynBool(false),
+            // Cancellation-specific only — these reflect the *event*,
+            // not the booking financials.
+            cancellation_reason: cancelReason,
+            payment_status: refundCents > 0 ? "Refunded" : "Cancelled",
           },
         },
         opportunity: {
@@ -270,10 +266,7 @@ Deno.serve(async (req) => {
           monetaryValue: Math.round(((booking.final_charge_cents || booking.total_estimate_cents || 0) - refundCents) / 100),
           source: "Novara Cancellation",
           customFieldsByKey: {
-            cleaning_type: booking.service_type,
-            quoted_price_pretaxfees: fmtMoney(booking.base_price_cents),
-            discounted_amount_: fmtMoney(0),
-            remaining_balance: fmtMoney(remainingBalanceCents),
+            cancellation_reason: cancelReason,
           },
         },
       });
