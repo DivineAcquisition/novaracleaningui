@@ -114,6 +114,9 @@ verify_jwt = false
 [functions.google-calendar-health]
 verify_jwt = false
 
+[functions.google-calendar-provision]
+verify_jwt = false
+
 [functions.respond-to-offer]
 verify_jwt = false
 
