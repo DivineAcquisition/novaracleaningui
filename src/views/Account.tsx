@@ -27,6 +27,10 @@ import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 
+// Booking funnel lives on the try.* subdomain. The customer portal (this
+// view) is served from app.novaracleaning.com — sending the user across
+// subdomains is intentional so the booking funnel doesn't accidentally
+// inherit authenticated portal state.
 const BOOKING_URL = "https://try.novaracleaning.com/book/zip";
 const goToBooking = () => { window.location.href = BOOKING_URL; };
 
@@ -204,6 +208,11 @@ export default function Account() {
     const configs: Record<string, { color: string; bg: string; label: string; dot: string }> = {
       confirmed: { color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800", label: "Confirmed", dot: "bg-emerald-500" },
       pending_payment: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", label: "Pending Payment", dot: "bg-amber-500" },
+      // pending_details — payment cleared but the home-detail step was
+      // skipped. The booking is NOT confirmed yet (no dispatch, no
+      // confirmation email). Surface it just like pending_payment so the
+      // customer is nudged back into /book/details to finish the job.
+      pending_details: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", label: "Details Needed", dot: "bg-amber-500" },
       cancelled: { color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800", label: "Cancelled", dot: "bg-red-500" },
       completed: { color: "text-primary", bg: "bg-primary/5 border-primary/20", label: "Completed", dot: "bg-primary" },
     };
@@ -228,12 +237,17 @@ export default function Account() {
   const pastBookings = bookings.filter(b =>
     (isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled') && b.status !== 'pending_payment'
   );
+  // Surface bookings that paid but never finished the home-detail step
+  // (pending_details) as well as bookings that never finished payment
+  // (pending_payment). The dashboard "Complete Your Booking" hero turns
+  // into a one-tap path back into /book/details when the customer has
+  // already paid but skipped the property questionnaire.
   const incompleteBookings = bookings
     .filter(b => {
-      if (b.status !== 'pending_payment') return false;
+      if (b.status !== 'pending_payment' && b.status !== 'pending_details') return false;
       const bookingCreatedAt = new Date(b.created_at);
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      return bookingCreatedAt > twentyFourHoursAgo;
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      return bookingCreatedAt > sevenDaysAgo;
     })
     .slice(0, 1);
 
@@ -296,36 +310,52 @@ export default function Account() {
         {/* Incomplete Booking Alert */}
         {incompleteBookings.length > 0 && (
           <div className="animate-fade-in-up">
-            {incompleteBookings.map(booking => (
-              <Card key={booking.id} className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20 shadow-md">
-                <CardContent className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
-                        <RiAlertLine className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            {incompleteBookings.map(booking => {
+              // pending_details = paid but the home-detail questionnaire
+              // is missing → push the customer back into /book/details
+              // (the booking can't be confirmed without it).
+              // pending_payment = payment never cleared → /book/checkout
+              // remains the right next step.
+              const isDetailsStep = booking.status === 'pending_details';
+              const ctaLabel = isDetailsStep ? 'Complete Details' : 'Complete Payment';
+              const ctaHref = isDetailsStep
+                ? `/book/details?booking_id=${booking.id}`
+                : `/book/checkout?booking_id=${booking.id}`;
+              const headerLine = isDetailsStep
+                ? 'Finish Your Booking Details'
+                : 'Complete Your Booking';
+              const subLine = isDetailsStep
+                ? 'Payment received — share your home details so we can confirm and dispatch your cleaner.'
+                : `${format(new Date(booking.service_date), 'MMMM d')} · ${booking.service_type} · $${(booking.total_estimate_cents / 100).toFixed(2)}`;
+              return (
+                <Card key={booking.id} className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20 shadow-md">
+                  <CardContent className="p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                          <RiAlertLine className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">{headerLine}</p>
+                          <p className="text-xs text-muted-foreground">{subLine}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-sm">Complete Your Booking</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(booking.service_date), "MMMM d")} &middot; {booking.service_type} &middot; ${(booking.total_estimate_cents / 100).toFixed(2)}
-                        </p>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <Button size="sm" className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                          onClick={() => router.push(ctaHref)}>
+                          {ctaLabel} <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleCancel(booking)}>
+                          <RiCloseLine className="w-4 h-4" />
+                          <span className="sr-only">Discard incomplete booking</span>
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <Button size="sm" className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                        onClick={() => router.push(`/book/checkout?booking_id=${booking.id}`)}>
-                        Complete Payment <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleCancel(booking)}>
-                        <RiCloseLine className="w-4 h-4" />
-                        <span className="sr-only">Discard incomplete booking</span>
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 
