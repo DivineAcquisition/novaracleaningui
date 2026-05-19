@@ -17,20 +17,15 @@
 //      last 12 hours. Caps at 6 reminders so a customer who ghosted
 //      stops getting nudged after ~3 days.
 //
-// All SMS is sent through the existing _shared/sms.ts helper, which
-// routes through Telnyx and honors the existing opt-out + retry queue.
-// All email is sent through Resend so it inherits the new green-branded
-// EmailLayout (with the Novara logo at the top).
+// All SMS routes through Telnyx via the existing _shared/sms.ts helper.
+// All email goes out through Resend with the green-branded inline HTML
+// below (kept inline so this function has zero React-email runtime deps
+// and ships as a single small bundle).
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import React from "https://esm.sh/react@18.3.1";
-import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { sendSms } from "../_shared/sms.ts";
-import { BRAND } from "../_shared/email-templates/brand.ts";
-import { EmailLayout } from "../_shared/email-templates/components/EmailLayout.tsx";
-import { Button } from "../_shared/email-templates/components/Button.tsx";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,74 +46,72 @@ const COMPLETE_DETAILS_URL = (bookingId: string) =>
   `https://app.novaracleaning.com/book/details?booking_id=${bookingId}`;
 
 const MAX_REMINDERS = 6;
-const MIN_GAP_MS_PAYMENT = 30 * 60 * 1000;       // 30 minutes after first send
-const MIN_GAP_MS_CRON = 12 * 60 * 60 * 1000;     // 12 hours between cron reminders
+const MIN_GAP_MS_PAYMENT = 30 * 60 * 1000;       // 30 minutes
+const MIN_GAP_MS_CRON = 12 * 60 * 60 * 1000;     // 12 hours
 
-const DetailsReminderEmail = ({
-  firstName,
-  url,
-  serviceDate,
-}: {
+// Green brand palette mirrors supabase/functions/_shared/email-templates/brand.ts.
+const BRAND = {
+  name: "NovaraCleaning",
+  primary: "#16A34A",
+  primaryDark: "#0E7C3A",
+  gradient: "linear-gradient(135deg, #16A34A 0%, #0E7C3A 100%)",
+  gray700: "#374151",
+  gray600: "#6B7280",
+  gray200: "#E5E7EB",
+  logoUrl: "https://app.novaracleaning.com/novara-logo.png",
+  supportPhone: "+1 (844) 735-2070",
+  supportEmail: "support@novaracleaning.com",
+};
+
+function renderDetailsReminderEmail(args: {
   firstName: string;
   url: string;
   serviceDate?: string;
-}) => {
-  return React.createElement(
-    EmailLayout,
-    {
-      title: "One quick step left",
-      subtitle: "Tell us about your home and we'll lock it in",
-      previewText: "Finish your booking — share your home details",
-      footerNote: "This link is unique to your booking and expires when complete.",
-    },
-    React.createElement(
-      "div",
-      null,
-      React.createElement(
-        "p",
-        { style: { fontSize: "16px", lineHeight: "1.6", color: BRAND.colors.gray[700] } },
-        `Hi ${firstName || "there"},`,
-      ),
-      React.createElement(
-        "p",
-        { style: { fontSize: "16px", lineHeight: "1.6", color: BRAND.colors.gray[700] } },
-        `Your payment cleared — thank you! Before we can confirm your cleaning${
-          serviceDate ? ` on ${serviceDate}` : ""
-        } and dispatch a cleaner, we need a few quick details about your home (bedrooms, bathrooms, access notes, etc.).`,
-      ),
-      React.createElement(
-        "p",
-        {
-          style: {
-            fontSize: "16px",
-            lineHeight: "1.6",
-            color: BRAND.colors.gray[700],
-            fontWeight: 600,
-          },
-        },
-        "Your booking is NOT confirmed until this step is complete.",
-      ),
-      React.createElement(
-        "div",
-        { style: { textAlign: "center", margin: "24px 0" } },
-        React.createElement(Button, { href: url }, "Complete Home Details"),
-      ),
-      React.createElement(
-        "p",
-        {
-          style: {
-            fontSize: "14px",
-            lineHeight: "1.6",
-            color: BRAND.colors.gray[600],
-          },
-        },
-        "It takes under a minute. If you need help, reply to this email or text us at ",
-        BRAND.contact.phone,
-        " and the Novara team will finish it with you.",
-      ),
-    ),
-  );
-};
+}) {
+  const name = args.firstName || "there";
+  const datePhrase = args.serviceDate ? ` on ${args.serviceDate}` : "";
+  return `<!doctype html>
+<html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" />
+<title>Finish your Novara booking</title></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${BRAND.gray700};">
+<div style="max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#fff;padding:20px 20px 12px;text-align:center;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;">
+    <img src="${BRAND.logoUrl}" width="140" height="48" alt="${BRAND.name} logo" style="display:block;margin:0 auto 8px;"/>
+    <div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:${BRAND.primary};text-transform:uppercase;">${BRAND.name}</div>
+  </div>
+  <div style="background:${BRAND.gradient};color:#fff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
+    <div style="font-size:24px;font-weight:bold;">One quick step left</div>
+    <div style="font-size:16px;opacity:0.95;margin-top:8px;">Tell us about your home and we'll lock it in</div>
+  </div>
+  <div style="background:#fff;padding:30px;border:1px solid ${BRAND.gray200};border-top:none;">
+    <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(name)},</p>
+    <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Your payment cleared — thank you! Before we can confirm your cleaning${escapeHtml(datePhrase)} and dispatch a cleaner, we need a few quick details about your home (bedrooms, bathrooms, access notes, etc.).</p>
+    <p style="font-size:16px;line-height:1.6;margin:0 0 24px;font-weight:600;">Your booking is NOT confirmed until this step is complete.</p>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${args.url}" style="display:inline-block;background:${BRAND.gradient};color:#fff;padding:16px 40px;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;">Complete Home Details</a>
+    </div>
+    <p style="font-size:14px;line-height:1.6;color:${BRAND.gray600};margin:24px 0 0;">It takes under a minute. If you need help, reply to this email or text us at ${BRAND.supportPhone} and the Novara team will finish it with you.</p>
+  </div>
+  <div style="background:#fff;text-align:center;padding:20px;border:1px solid ${BRAND.gray200};border-top:none;border-radius:0 0 8px 8px;font-size:14px;color:${BRAND.gray600};">
+    <div style="margin:8px 0;">© ${new Date().getFullYear()} ${BRAND.name}. All rights reserved.</div>
+    <div style="margin:12px 0;">
+      <a href="https://novaracleaning.com" style="color:${BRAND.primary};text-decoration:none;">Website</a> ·
+      <a href="https://app.novaracleaning.com/account" style="color:${BRAND.primary};text-decoration:none;">My Account</a> ·
+      <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">Contact</a>
+    </div>
+  </div>
+</div></body></html>`;
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[c]!);
+}
 
 async function sendReminderEmail(opts: {
   to: string;
@@ -132,13 +125,11 @@ async function sendReminderEmail(opts: {
     return;
   }
   const resend = new Resend(resendKey);
-  const html = await renderAsync(
-    React.createElement(DetailsReminderEmail, {
-      firstName: opts.firstName,
-      url: COMPLETE_DETAILS_URL(opts.bookingId),
-      serviceDate: opts.serviceDate,
-    }),
-  );
+  const html = renderDetailsReminderEmail({
+    firstName: opts.firstName,
+    url: COMPLETE_DETAILS_URL(opts.bookingId),
+    serviceDate: opts.serviceDate,
+  });
   await resend.emails.send({
     from: "Novara Cleaning <hello@novaracleaning.com>",
     to: [opts.to],
@@ -148,7 +139,8 @@ async function sendReminderEmail(opts: {
 }
 
 async function processBooking(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   bookingId: string,
   trigger: ReminderRequest["trigger"],
 ) {
@@ -162,8 +154,6 @@ async function processBooking(
     return { ok: false, reason: "not_found" };
   }
 
-  // Skip if booking is already past pending_details (e.g. finalized,
-  // cancelled, or details since saved).
   if (booking.status !== "pending_details") {
     logStep("Booking no longer pending_details — skip", {
       bookingId,
@@ -172,14 +162,12 @@ async function processBooking(
     return { ok: false, reason: "wrong_status" };
   }
 
-  // Cap reminders.
   const sentCount = booking.details_reminder_count || 0;
   if (sentCount >= MAX_REMINDERS) {
     logStep("Reminder cap reached", { bookingId, sentCount });
     return { ok: false, reason: "cap" };
   }
 
-  // Throttle on trigger type.
   const lastSent = booking.details_reminder_sent_at
     ? new Date(booking.details_reminder_sent_at).getTime()
     : 0;
@@ -187,15 +175,10 @@ async function processBooking(
   const elapsed = now - lastSent;
   const gap = trigger === "cron" ? MIN_GAP_MS_CRON : MIN_GAP_MS_PAYMENT;
   if (lastSent && elapsed < gap) {
-    logStep("Throttled — within minimum gap", {
-      bookingId,
-      elapsedMs: elapsed,
-      gapMs: gap,
-    });
+    logStep("Throttled", { bookingId, elapsedMs: elapsed, gapMs: gap });
     return { ok: false, reason: "throttle" };
   }
 
-  // Compose a friendly SMS — short enough to fit in a single segment.
   const url = COMPLETE_DETAILS_URL(bookingId);
   const dateLabel = booking.service_date
     ? new Date(booking.service_date as string).toLocaleDateString("en-US", {
@@ -208,7 +191,6 @@ async function processBooking(
     `Your ${dateLabel ? `${dateLabel} ` : ""}cleaning isn't confirmed yet — we need 60 sec of home details. ` +
     `Finish here: ${url}`;
 
-  // Send SMS via Telnyx (sendSms handles opt-out + retry queue).
   try {
     if (booking.phone) {
       await sendSms(supabase, {
@@ -219,13 +201,12 @@ async function processBooking(
       logStep("Reminder SMS sent", { bookingId });
     }
   } catch (smsErr) {
-    logStep("Reminder SMS failed (non-blocking)", {
+    logStep("Reminder SMS failed", {
       bookingId,
       error: smsErr instanceof Error ? smsErr.message : String(smsErr),
     });
   }
 
-  // Send email.
   try {
     if (booking.email) {
       const formattedDate = booking.service_date
@@ -244,13 +225,12 @@ async function processBooking(
       logStep("Reminder email sent", { bookingId });
     }
   } catch (emailErr) {
-    logStep("Reminder email failed (non-blocking)", {
+    logStep("Reminder email failed", {
       bookingId,
       error: emailErr instanceof Error ? emailErr.message : String(emailErr),
     });
   }
 
-  // Bump counters.
   await supabase
     .from("bookings")
     .update({
@@ -289,8 +269,6 @@ serve(async (req) => {
       });
     }
 
-    // Cron path — find every booking that's stuck on pending_details
-    // for at least 30 minutes and process them.
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: rows, error } = await supabase
       .from("bookings")
