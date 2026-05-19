@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { smsActionTail } from "../_shared/booking-policy.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,12 +20,24 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+  // Read Stripe credentials through the DB override layer first so we
+  // can rotate keys via SQL (public.app_secrets) without redeploying
+  // every Stripe-using Edge Function. The webhook secret MUST match
+  // whatever endpoint Stripe is firing from — when you point the
+  // NovaraCleaning account's webhook at this URL, drop the new whsec_
+  // into app_secrets and signature verification picks it up on the
+  // next cold start.
+  const supabaseTmp = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+  const stripeKey = await resolveSecret(supabaseTmp, "STRIPE_SECRET_KEY");
+  const stripe = new Stripe(stripeKey, {
     apiVersion: "2025-08-27.basil",
   });
 
   const signature = req.headers.get("stripe-signature");
-  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  const webhookSecret = await resolveSecret(supabaseTmp, "STRIPE_WEBHOOK_SECRET");
 
   if (!webhookSecret) {
     logStep("ERROR: No webhook secret configured");

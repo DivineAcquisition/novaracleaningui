@@ -6,6 +6,7 @@ import {
   calculateCleanerPayout,
   DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -114,14 +115,20 @@ serve(async (req) => {
       );
     }
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
-
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    // Read STRIPE_SECRET_KEY through the DB override layer first
+    // (public.app_secrets.STRIPE_SECRET_KEY) and fall back to the env
+    // var. This is what routes brand-new charges to the correct
+    // Stripe account (NovaraCleaning) without needing dashboard
+    // access to rotate Edge Function secrets.
+    const stripeKey = await resolveSecret(supabaseClient, "STRIPE_SECRET_KEY");
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2025-08-27.basil",
+    });
 
     // Calculate pricing to match frontend logic (values in cents)
     // v2.0: Deep = Standard × 1.5, Move-In/Out = Standard × 2.0
