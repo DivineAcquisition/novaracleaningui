@@ -59,16 +59,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const openCustomerPortal = async () => {
+    // Cross-browser popup-blocker workaround. Safari + several Chrome
+    // configurations refuse to honor `window.open(url, '_blank')` when
+    // it's called AFTER an `await` because the call is no longer
+    // considered "user-initiated". We work around it by opening a
+    // placeholder tab synchronously inside the click handler and then
+    // rewriting its location once the Edge Function returns. If the
+    // browser refuses to open the placeholder (popup-blocked entirely)
+    // we fall back to a same-tab redirect so the customer still lands
+    // in the Stripe Billing Portal.
+    const placeholder = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     try {
       const { data, error } = await supabase.functions.invoke('customer-portal');
-      
       if (error) throw error;
-      
-      if (data?.url) {
-        window.open(data.url, '_blank');
+      const url = data?.url as string | undefined;
+      if (!url) throw new Error('No portal URL returned from customer-portal');
+
+      if (placeholder && !placeholder.closed) {
+        placeholder.location.href = url;
+      } else {
+        // Popup was blocked or we're on a runtime without window.open
+        // — fall back to same-tab redirect so the customer is never
+        // stranded on a click that did nothing.
+        window.location.href = url;
       }
     } catch (error: any) {
       console.error('Customer portal error:', error);
+      // Clean up the empty popup so the user isn't left with a blank tab
+      if (placeholder && !placeholder.closed) {
+        try { placeholder.close(); } catch (_) { /* ignore */ }
+      }
       throw error;
     }
   };
@@ -137,8 +157,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
+    // ALWAYS send the password-reset link to the app subdomain. If we
+    // used `window.location.origin` blindly the link would point back
+    // at try.novaracleaning.com whenever the customer initiated the
+    // reset from the marketing host — which the middleware then
+    // bounces and the supabase auth callback fails because the URL
+    // they verify the recovery token at must match the redirect URL
+    // Supabase signed into the email. Pinning it to app.* removes that
+    // whole class of "password reset doesn't work" failures.
+    const APP_ORIGIN = 'https://app.novaracleaning.com';
+    const isLocalhost = typeof window !== 'undefined' && /^(localhost|127\.|::1)/.test(window.location.hostname);
+    const redirectTo = isLocalhost
+      ? `${window.location.origin}/update-password`
+      : `${APP_ORIGIN}/update-password`;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/update-password`,
+      redirectTo,
     });
     return { error };
   };
