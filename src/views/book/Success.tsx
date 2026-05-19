@@ -31,6 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
 import { trackPurchase } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +66,8 @@ export default function BookingSuccess() {
   const [bookingValidated, setBookingValidated] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [bookingStatus, setBookingStatus] = useState<string>("pending_payment");
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralLink, setReferralLink] = useState<string>('');
 
@@ -144,14 +147,18 @@ export default function BookingSuccess() {
           return;
         }
 
-        // Check if all required post-payment details are filled. If the
-        // booking is missing any of them we MUST route the customer
-        // back into /book/details — the booking will stay in
-        // pending_details on the server until they finish.
+        // Gate ONLY on the actual detail fields — never on the status
+        // text. If details are filled the booking belongs on the
+        // confirmation page; the page will poll status and flip to the
+        // "finalizing" state until finalize-booking promotes the row.
+        // Previously we bounced back to /book/details whenever
+        // status === 'pending_details', which caused a redirect loop
+        // when finalize-booking hadn't yet been called (cold start,
+        // brief client/server race, etc.).
         const requiredFields = ['address', 'city', 'state', 'bedrooms', 'bathrooms', 'dwelling_type'];
         const missingFields = requiredFields.filter(field => !booking[field]);
-        
-        if (missingFields.length > 0 || booking.status === 'pending_details') {
+
+        if (missingFields.length > 0) {
           logStep("Missing required fields - redirecting to property details", { missingFields, status: booking.status });
           toast.info("Payment received — finish your home details to confirm the booking.");
           router.push(`/book/details?booking_id=${bookingId}`);
@@ -166,10 +173,27 @@ export default function BookingSuccess() {
         }
 
         // All validations passed
-        logStep("Booking validated successfully");
+        logStep("Booking validated successfully", { status: booking.status });
         setBookingId(bookingId);
+        setBookingStatus(booking.status);
         setBookingValidated(true);
-        
+
+        // Safety net: if the row is still pending_details after our
+        // gate above (details filled but status hasn't flipped yet),
+        // kick finalize-booking ourselves and start polling for the
+        // confirmed status. This handles the case where the
+        // PropertyDetails save invoked finalize-booking but the call
+        // didn't land before navigation (cold start, brief network
+        // hiccup, etc.) — without this safety net we'd permanently
+        // show the wrong status to a paid customer.
+        if (booking.status === 'pending_details' || booking.status === 'pending_payment') {
+          setIsFinalizing(true);
+          // Fire-and-forget; the polling loop below picks up the
+          // status flip whether we triggered it or the cron did.
+          supabase.functions.invoke('finalize-booking', {
+            body: { bookingId, trigger: 'success_page_safety_net' },
+          }).catch((err) => logStep('finalize-booking safety-net failed', err));
+        }
       } catch (error) {
         console.error("Error validating booking:", error);
         toast.error("Error validating booking. Please contact support.");
@@ -188,6 +212,49 @@ export default function BookingSuccess() {
       setCanShare(true);
     }
   }, []);
+
+  // Poll booking status while it's still finalizing. Once finalize-
+  // booking promotes the row to 'confirmed' (typically within 1-3s),
+  // the hero card flips from "Booking finalizing" → "Booking confirmed"
+  // without the customer having to reload. Bails out after 30 attempts
+  // (~60s) so a stuck booking doesn't poll forever.
+  useEffect(() => {
+    if (!bookingId || !bookingValidated) return;
+    if (bookingStatus === 'confirmed' || bookingStatus === 'completed') return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      attempts++;
+      try {
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('status')
+          .eq('id', bookingId)
+          .single();
+        if (error || cancelled) return;
+        if (data?.status && data.status !== bookingStatus) {
+          setBookingStatus(data.status);
+        }
+        if (data?.status === 'confirmed' || data?.status === 'completed') {
+          setIsFinalizing(false);
+          clearInterval(interval);
+        }
+      } catch (e) {
+        logStep('Status poll error', e);
+      }
+      if (attempts >= 30) {
+        // Stop polling but leave the UI in its current state so the
+        // user can still navigate; the cron will finalize within
+        // minutes if there's a backend hiccup.
+        setIsFinalizing(false);
+        clearInterval(interval);
+      }
+    }, 2000);
+
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [bookingId, bookingValidated, bookingStatus]);
 
   useEffect(() => {
     const verifyPayment = async () => {
@@ -372,6 +439,29 @@ export default function BookingSuccess() {
     return null;
   }
 
+  // Derive the live status pill + headline copy from `bookingStatus`.
+  // We're rendering a single hero across three states:
+  //   • pending_details / pending_payment + isFinalizing → "Finalizing"
+  //     (animated pulse, amber dot)
+  //   • confirmed → "Booking confirmed" (green dot, check icon)
+  //   • completed → "Service complete" (primary dot)
+  const isConfirmed = bookingStatus === 'confirmed' || bookingStatus === 'completed';
+  const heroTone = isConfirmed
+    ? { bg: 'bg-success/10', icon: 'text-success', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Confirmed' }
+    : { bg: 'bg-amber-100', icon: 'text-amber-600', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Finalizing' };
+  const heroTitle = isConfirmed
+    ? (bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!')
+    : 'Locking In Your Booking…';
+  const heroSubtitle = isConfirmed
+    ? (bookingData.membershipPlan !== 'none'
+        ? 'Your membership is active and your first credit is ready to use.'
+        : bookingData.useCredit
+        ? 'Your booking is confirmed with your membership credit.'
+        : bookingData.paymentOption === 'full'
+        ? 'Your payment is complete — you saved 10% by paying in full!'
+        : 'Thank you for choosing NovaraCleaning. We can\'t wait to make your home sparkle.')
+    : 'Your payment cleared and your home details are in. We\'re assigning your team and writing your confirmation email right now — usually under a minute.';
+
   return (
     <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 pb-24 md:pb-12">
       <SEO title="Booking Confirmed" description="Your cleaning is confirmed! Check your email for details." noindex />
@@ -391,23 +481,54 @@ export default function BookingSuccess() {
             </CardContent>
           </Card>
         )}
-        
-        <Card className="shadow-xl border-success/20 animate-fade-in">
-          <CardHeader className="text-center space-y-3 md:space-y-4 pb-4 md:pb-8">
-            <div className="mx-auto w-14 h-14 md:w-20 md:h-20 bg-success/10 rounded-full flex items-center justify-center mb-2 md:mb-4 animate-in zoom-in duration-500">
-              <RiCheckboxCircleLine className="w-8 h-8 md:w-12 md:h-12 text-success" />
+
+        {/* Live finalize banner — collapses once finalize-booking flips
+            the row to 'confirmed'. The bookingStatus poll keeps this
+            in sync without a page reload. */}
+        {isFinalizing && !isConfirmed && (
+          <Card className="mb-4 border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/20 shadow-md animate-fade-in">
+            <CardContent className="py-3 px-4 flex items-center gap-3">
+              <div className="relative flex-shrink-0">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+              </div>
+              <div className="flex-1 text-sm">
+                <p className="font-semibold text-amber-900 dark:text-amber-100">Finalizing your booking…</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">Confirmation email + cleaner assignment in progress. This page will refresh automatically.</p>
+              </div>
+              <RiLoader4Line className="w-4 h-4 text-amber-600 animate-spin flex-shrink-0" />
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="shadow-xl border-primary/10 overflow-hidden animate-fade-in">
+          {/* Brand gradient strip — keeps the hero feeling on-brand */}
+          <div className="h-1.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+          <CardHeader className="text-center space-y-3 md:space-y-4 pb-4 md:pb-8 pt-6 md:pt-8">
+            <div className={cn(
+              "mx-auto w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center mb-2 md:mb-4 animate-in zoom-in duration-500 shadow-md",
+              heroTone.bg,
+            )}>
+              {isConfirmed ? (
+                <RiCheckboxCircleLine className={cn("w-9 h-9 md:w-12 md:h-12", heroTone.icon)} />
+              ) : (
+                <RiLoader4Line className={cn("w-9 h-9 md:w-12 md:h-12 animate-spin", heroTone.icon)} />
+              )}
             </div>
-            <CardTitle className="text-lg md:text-3xl font-bold">
-              {bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!'}
+            <div className="flex justify-center">
+              <span className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] border rounded-full px-3 py-1",
+                heroTone.pill,
+              )}>
+                <span className={cn("w-1.5 h-1.5 rounded-full", heroTone.dot)} />
+                {heroTone.label}
+              </span>
+            </div>
+            <CardTitle className="text-xl md:text-3xl font-bold tracking-tight">
+              {heroTitle}
             </CardTitle>
-            <CardDescription className="text-xs md:text-lg">
-              {bookingData.membershipPlan !== 'none' 
-                ? 'Your membership is active and your first credit is ready to use'
-                : bookingData.useCredit
-                ? 'Your booking is confirmed with your membership credit'
-                : bookingData.paymentOption === 'full'
-                ? 'Your payment is complete - you saved 10% by paying in full!'
-                : 'Thank you for choosing Novara Cleaning Service'}
+            <CardDescription className="text-xs md:text-base max-w-md mx-auto">
+              {heroSubtitle}
             </CardDescription>
           </CardHeader>
           

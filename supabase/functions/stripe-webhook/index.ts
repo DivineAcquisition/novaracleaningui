@@ -135,23 +135,15 @@ serve(async (req) => {
             .eq('id', booking.id)
             .in('status', ['pending_payment', 'pending_details', 'booked']);
 
-          // Fire a Telnyx SMS + Resend email asking the customer to
-          // finish the questionnaire. This function is idempotent and
-          // throttles itself so retries / duplicate webhooks won't
-          // pepper the customer with reminders.
-          try {
-            await supabase.functions.invoke('send-details-reminder', {
-              body: {
-                bookingId: booking.id,
-                trigger: 'payment_succeeded',
-              },
-            });
-            logStep("Details-reminder fired", { bookingId: booking.id });
-          } catch (reminderErr) {
-            logStep("Details-reminder failed (non-blocking)", {
-              error: reminderErr instanceof Error ? reminderErr.message : String(reminderErr),
-            });
-          }
+          // INTENTIONALLY do NOT fire send-details-reminder here. The
+          // customer is typically still in the browser tab on
+          // /book/details right after payment — sending them an SMS +
+          // email immediately is noisy and annoying. The pg_cron job
+          // 'send-details-reminder-every-5min' picks up bookings whose
+          // payment_received_at is at least 5 minutes old AND still
+          // in pending_details, so they only get a nudge if they've
+          // actually walked away from the funnel.
+          logStep("Reminder deferred to cron (5-min grace window)", { bookingId: booking.id });
           break;
         } else {
           logStep("Processing booking confirmation", { bookingId: booking.id, currentStatus: booking.status });

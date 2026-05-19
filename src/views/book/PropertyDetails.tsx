@@ -21,6 +21,7 @@ import { useBooking } from "@/contexts/BookingContext";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { SEO } from "@/components/SEO";
 import { US_STATES, parseAddressString } from "@/lib/address-formatter";
+import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
 
 // Customer-facing arrival windows. Mirrors the windows offered on
 // /book/offer's SchedulePicker so the second-visit slot uses the same
@@ -66,12 +67,24 @@ export default function PropertyDetails() {
   
   // Address fields. We pre-seed City / State / ZIP from BookingContext
   // so the customer doesn't have to re-type what they already gave us
-  // on the ZIP step (chain awareness). State defaults to MD since the
-  // primary service area is Maryland.
+  // on the ZIP step. State is auto-derived from the ZIP via the local
+  // USPS prefix table the moment we have one — that way the field is
+  // never blank for an MD/VA/PA/etc. customer who entered a ZIP on the
+  // first step.
+  const seededState =
+    bookingData.state ||
+    (bookingData.zipCode ? stateFromZip(bookingData.zipCode) : "") ||
+    "MD";
   const [address, setAddress] = useState<string>("");
   const [city, setCity] = useState<string>(bookingData.city || "");
-  const [state, setState] = useState<string>(bookingData.state || "MD");
+  const [state, setState] = useState<string>(seededState);
   const [zipCode, setZipCode] = useState<string>(bookingData.zipCode || "");
+  // Cities returned by the Zippopotam.us lookup for the current ZIP.
+  // When the list is non-empty we render City as a dropdown of those
+  // candidates plus a "Type my own..." escape hatch; when empty we
+  // fall back to a freeform Input so the user is never blocked.
+  const [zipCities, setZipCities] = useState<string[]>([]);
+  const [cityIsCustom, setCityIsCustom] = useState<boolean>(false);
   const [bedrooms, setBedrooms] = useState<string>("");
   const [bathrooms, setBathrooms] = useState<string>("");
   const [dwellingType, setDwellingType] = useState<string>("");
@@ -112,6 +125,37 @@ export default function PropertyDetails() {
     if (bookingData.state && !state) setState(bookingData.state);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingData.zipCode, bookingData.city, bookingData.state]);
+
+  // Whenever the ZIP becomes a complete 5-digit value, run the lookup:
+  //   • State is locked to the USPS-derived code instantly (offline),
+  //     so customers in MD/VA/PA/etc. don't see the wrong default.
+  //   • City list is fetched from the Zippopotam.us API. If we get one
+  //     city back, auto-select it. If we get several, render the
+  //     dropdown so the customer picks the right neighborhood/town.
+  useEffect(() => {
+    const digits = zipCode.replace(/\D/g, "");
+    if (digits.length !== 5) return;
+
+    const localState = stateFromZip(digits);
+    if (localState && localState !== state) setState(localState);
+
+    let cancelled = false;
+    (async () => {
+      const result = await lookupZip(digits);
+      if (cancelled) return;
+      if (result.state && result.state !== state) setState(result.state);
+      setZipCities(result.cities);
+      // If the customer hasn't yet picked a city or typed a custom one
+      // AND the API returned exactly one candidate, auto-select it so
+      // the form is one tap closer to "done". If they have multiple
+      // matches we leave it for them to pick.
+      if (!cityIsCustom && (!city || result.cities.includes(city))) {
+        if (result.cities.length === 1) setCity(result.cities[0]);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zipCode]);
 
   // Pull the booking row so we know whether to surface the second-visit
   // picker (combo only) and what the deep-clean date is so we can bound
@@ -248,24 +292,20 @@ export default function PropertyDetails() {
 
       if (error) throw error;
 
-      // Booking is now eligible for confirmation. Ask finalize-booking
-      // to flip status from pending_details → confirmed and fire the
-      // confirmation email, payment receipt, Telnyx SMS, auto-dispatch,
-      // and Google Calendar event. The function is idempotent — it'll
-      // no-op if the booking is already confirmed (e.g. payment landed
-      // AFTER details were saved and the webhook already finalized).
-      try {
-        await supabase.functions.invoke("finalize-booking", {
-          body: { bookingId, trigger: "property_details_save" },
-        });
-      } catch (finalizeErr) {
-        // Non-blocking. If finalize fails (e.g. payment hasn't cleared
-        // yet) the customer still gets to the confirmation screen and
-        // the stripe-webhook will finalize once payment lands.
-        console.warn("[PropertyDetails] finalize-booking invoke failed", finalizeErr);
-      }
+      // Kick finalize-booking FIRE-AND-FORGET so navigation never
+      // blocks on a cold-start Edge Function. Previously we awaited
+      // this call which sometimes caused the browser to send the
+      // CORS preflight but never the POST (the user navigated before
+      // the function responded). finalize-booking is idempotent and a
+      // backstop DB trigger + the confirmation page's polling + cron
+      // all converge on the same end state, so it's safe to not block.
+      supabase.functions.invoke("finalize-booking", {
+        body: { bookingId, trigger: "property_details_save" },
+      }).catch((finalizeErr) => {
+        console.warn("[PropertyDetails] finalize-booking invoke failed (non-blocking)", finalizeErr);
+      });
 
-      toast.success("Details saved successfully!");
+      toast.success("Details saved! Finalizing your booking…");
       router.push("/book/confirmation?booking_id=" + bookingId);
     } catch (error) {
       console.error("Error saving details:", error);
@@ -278,14 +318,50 @@ export default function PropertyDetails() {
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
       <SEO title="Property Details" description="Provide details about your home for a customized cleaning experience." noindex />
-      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in">
-        <CardHeader className="text-center space-y-4 pb-6">
-          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            <RiCheckboxCircleLine className="w-10 h-10 text-primary" />
+      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in overflow-hidden">
+        {/* Brand gradient strip — visually ties the details step to the
+            rest of the funnel (zip → offer → checkout → THIS → confirm). */}
+        <div className="h-1.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+
+        {/* 5-step funnel progress indicator — gives the customer a clear
+            sense of "almost done" and reduces drop-off on this screen. */}
+        <div className="px-5 md:px-6 pt-5">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            {[
+              { id: 'zip', label: 'ZIP' },
+              { id: 'offer', label: 'Offer' },
+              { id: 'pay', label: 'Pay' },
+              { id: 'details', label: 'Details' },
+              { id: 'done', label: 'Confirm' },
+            ].map((step, idx) => {
+              const isCurrent = step.id === 'details';
+              const isComplete = idx < 3; // zip / offer / pay already done by definition
+              return (
+                <div key={step.id} className="flex-1 flex flex-col items-center gap-1">
+                  <div className={`w-full h-1 rounded-full ${
+                    isComplete ? 'bg-primary' :
+                    isCurrent ? 'bg-gradient-to-r from-primary to-primary/40' :
+                    'bg-muted'
+                  }`} />
+                  <span className={`text-[10px] uppercase tracking-wider ${
+                    isCurrent ? 'text-primary font-semibold' :
+                    isComplete ? 'text-foreground/70' :
+                    'text-muted-foreground'
+                  }`}>{step.label}</span>
+                </div>
+              );
+            })}
           </div>
-          <CardTitle className="text-lg md:text-xl font-semibold">Property & Address Details</CardTitle>
-          <CardDescription className="text-sm">
-            Complete your booking with property and address information
+          <p className="text-[10px] text-muted-foreground text-center mt-1">Step 4 of 5 — almost done</p>
+        </div>
+
+        <CardHeader className="text-center space-y-3 pb-4 pt-4">
+          <div className="mx-auto w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center shadow-sm">
+            <RiCheckboxCircleLine className="w-7 h-7 text-primary" />
+          </div>
+          <CardTitle className="text-lg md:text-xl font-semibold tracking-tight">Tell us about your home</CardTitle>
+          <CardDescription className="text-sm max-w-sm mx-auto">
+            Your payment is held. Add a few quick details and we'll lock in your booking — usually under 60 seconds.
           </CardDescription>
         </CardHeader>
 
@@ -307,14 +383,47 @@ export default function PropertyDetails() {
                   <Label htmlFor="city">
                     City <span className="text-destructive">*</span>
                   </Label>
-                  <Input
-                    id="city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="h-12"
-                    placeholder="City"
-                    required
-                  />
+                  {zipCities.length > 0 && !cityIsCustom ? (
+                    <Select
+                      value={zipCities.includes(city) ? city : ""}
+                      onValueChange={(v) => {
+                        if (v === "__custom__") {
+                          setCityIsCustom(true);
+                          setCity("");
+                        } else {
+                          setCity(v);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="city" className="h-12">
+                        <SelectValue placeholder={`Select city for ${zipCode}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {zipCities.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                        <SelectItem value="__custom__">Type my own…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="city"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="h-12"
+                      placeholder={zipCode ? `City for ${zipCode}` : "City"}
+                      required
+                    />
+                  )}
+                  {zipCities.length > 0 && cityIsCustom && (
+                    <button
+                      type="button"
+                      onClick={() => { setCityIsCustom(false); setCity(zipCities[0] || ""); }}
+                      className="text-[11px] text-primary underline underline-offset-2 hover:opacity-80"
+                    >
+                      ← Pick from {zipCities.length} known {zipCities.length === 1 ? "city" : "cities"} for {zipCode}
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2">
