@@ -131,21 +131,29 @@ export default function BookingSuccess() {
 
         logStep("Booking found", { booking });
 
-        // Check if booking status is valid (must be confirmed or pending_payment)
-        if (booking.status !== 'confirmed' && booking.status !== 'pending_payment') {
+        // Check if booking status is valid (must be confirmed,
+        // pending_payment, or pending_details).
+        if (
+          booking.status !== 'confirmed' &&
+          booking.status !== 'pending_payment' &&
+          booking.status !== 'pending_details'
+        ) {
           logStep("Invalid booking status", { status: booking.status });
           toast.error("Invalid booking status. Please contact support.");
           router.push("/");
           return;
         }
 
-        // Check if all required post-payment details are filled
+        // Check if all required post-payment details are filled. If the
+        // booking is missing any of them we MUST route the customer
+        // back into /book/details — the booking will stay in
+        // pending_details on the server until they finish.
         const requiredFields = ['address', 'city', 'state', 'bedrooms', 'bathrooms', 'dwelling_type'];
         const missingFields = requiredFields.filter(field => !booking[field]);
         
-        if (missingFields.length > 0) {
-          logStep("Missing required fields - redirecting to property details", { missingFields });
-          toast.info("Please complete your booking details");
+        if (missingFields.length > 0 || booking.status === 'pending_details') {
+          logStep("Missing required fields - redirecting to property details", { missingFields, status: booking.status });
+          toast.info("Payment received — finish your home details to confirm the booking.");
           router.push(`/book/details?booking_id=${bookingId}`);
           return;
         }

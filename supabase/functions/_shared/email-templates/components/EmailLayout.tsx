@@ -33,8 +33,10 @@ export const EmailLayout = ({
       <Preview>{previewText}</Preview>
       <Body style={main}>
         <Container style={container}>
-          {/* Header */}
-          <Section style={header}>
+          {/* Logo bar — sits in a white pre-header so the Novara mark
+              stays legible regardless of inbox dark-mode handling. The
+              gradient title bar below picks up the brand color cue. */}
+          <Section style={logoBar}>
             {BRAND.logo.url && (
               <Img
                 src={BRAND.logo.url}
@@ -44,6 +46,11 @@ export const EmailLayout = ({
                 style={logo}
               />
             )}
+            <Text style={logoWordmark}>{BRAND.name}</Text>
+          </Section>
+
+          {/* Title bar — brand-gradient strip above the body content. */}
+          <Section style={header}>
             <Text style={headerTitle}>{title}</Text>
             {subtitle && <Text style={headerSubtitle}>{subtitle}</Text>}
           </Section>
@@ -109,15 +116,34 @@ const container = {
 
 const logo = {
   display: 'block',
-  margin: '0 auto 12px',
+  margin: '0 auto 8px',
+};
+
+const logoBar = {
+  backgroundColor: '#ffffff',
+  padding: '20px 20px 12px',
+  textAlign: 'center' as const,
+  borderRadius: '8px 8px 0 0',
+  border: `1px solid ${BRAND.colors.gray[200]}`,
+  borderBottom: 'none',
+};
+
+const logoWordmark = {
+  margin: '0',
+  fontSize: '14px',
+  fontWeight: '700',
+  letterSpacing: '0.04em',
+  color: BRAND.colors.primary,
+  textTransform: 'uppercase' as const,
 };
 
 const header = {
   background: BRAND.gradient.primary,
   color: 'white',
-  padding: '30px',
+  padding: '26px 30px',
   textAlign: 'center' as const,
-  borderRadius: '8px 8px 0 0',
+  borderLeft: `1px solid ${BRAND.colors.gray[200]}`,
+  borderRight: `1px solid ${BRAND.colors.gray[200]}`,
 };
 
 const headerTitle = {

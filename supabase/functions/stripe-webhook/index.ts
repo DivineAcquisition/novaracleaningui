@@ -67,6 +67,18 @@ serve(async (req) => {
       }
     };
 
+    // Whether the booking row has the home-detail questionnaire
+    // answered. Mirrors REQUIRED_DETAIL_FIELDS in finalize-booking.
+    const hasHomeDetails = (b: Record<string, unknown>) => {
+      const reqd = ["address", "city", "state", "bedrooms", "bathrooms", "dwelling_type"];
+      return reqd.every((f) => {
+        const v = b[f];
+        if (v === null || v === undefined) return false;
+        if (typeof v === "string" && v.trim() === "") return false;
+        return true;
+      });
+    };
+
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -91,16 +103,63 @@ serve(async (req) => {
 
         // Idempotency: skip status update if already confirmed, but ALWAYS run downstream actions
         const alreadyConfirmed = booking.status === 'confirmed';
-        
+
+        // Stamp the payment-cleared milestone. finalize-booking gates on
+        // this column (payment_received_at) instead of the looser
+        // status text, so it stays accurate even if a future change
+        // adds new intermediate statuses.
+        if (!booking.payment_received_at) {
+          await supabase
+            .from('bookings')
+            .update({ payment_received_at: new Date().toISOString() })
+            .eq('id', booking.id);
+        }
+
+        // Home-detail gate. Booking is only "confirmed" (and therefore
+        // eligible for the confirmation email / SMS / auto-dispatch /
+        // calendar event) when the customer ALSO answered the property
+        // questionnaire on /book/details. If they haven't, we mark the
+        // row as 'pending_details' and fire a Telnyx SMS + email asking
+        // them to come back and finish.
+        const detailsComplete = hasHomeDetails(booking);
+
         if (alreadyConfirmed) {
           logStep("Booking already confirmed - skipping status update but running downstream actions", { bookingId: booking.id });
+        } else if (!detailsComplete) {
+          logStep("Payment cleared but home details missing — holding at pending_details", {
+            bookingId: booking.id,
+          });
+          await supabase
+            .from('bookings')
+            .update({ status: 'pending_details' })
+            .eq('id', booking.id)
+            .in('status', ['pending_payment', 'pending_details', 'booked']);
+
+          // Fire a Telnyx SMS + Resend email asking the customer to
+          // finish the questionnaire. This function is idempotent and
+          // throttles itself so retries / duplicate webhooks won't
+          // pepper the customer with reminders.
+          try {
+            await supabase.functions.invoke('send-details-reminder', {
+              body: {
+                bookingId: booking.id,
+                trigger: 'payment_succeeded',
+              },
+            });
+            logStep("Details-reminder fired", { bookingId: booking.id });
+          } catch (reminderErr) {
+            logStep("Details-reminder failed (non-blocking)", {
+              error: reminderErr instanceof Error ? reminderErr.message : String(reminderErr),
+            });
+          }
+          break;
         } else {
           logStep("Processing booking confirmation", { bookingId: booking.id, currentStatus: booking.status });
 
           // Update booking status to confirmed with optimistic locking
           const { error: updateError } = await supabase
             .from('bookings')
-            .update({ status: 'confirmed' })
+            .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
             .eq('id', booking.id)
             .eq('status', booking.status); // Only update if status hasn't changed
 

@@ -248,19 +248,21 @@ export default function PropertyDetails() {
 
       if (error) throw error;
 
-      // Re-fire the GHL / webhook sync now that the booking row has a
-      // real Street / City / State / ZIP. The initial sync (fired from
-      // stripe-webhook → payment_intent.succeeded) ran BEFORE this
-      // page captured the address, so the GHL contact was created with
-      // empty address fields. Firing again here updates the existing
-      // contact with the address and adds/updates the opportunity.
-      // Fire-and-forget — failures don't block the customer.
+      // Booking is now eligible for confirmation. Ask finalize-booking
+      // to flip status from pending_details → confirmed and fire the
+      // confirmation email, payment receipt, Telnyx SMS, auto-dispatch,
+      // and Google Calendar event. The function is idempotent — it'll
+      // no-op if the booking is already confirmed (e.g. payment landed
+      // AFTER details were saved and the webhook already finalized).
       try {
-        await supabase.functions.invoke("send-zapier-webhook", {
-          body: { bookingId },
+        await supabase.functions.invoke("finalize-booking", {
+          body: { bookingId, trigger: "property_details_save" },
         });
-      } catch (resyncErr) {
-        console.warn("[PropertyDetails] post-save webhook resync failed", resyncErr);
+      } catch (finalizeErr) {
+        // Non-blocking. If finalize fails (e.g. payment hasn't cleared
+        // yet) the customer still gets to the confirmation screen and
+        // the stripe-webhook will finalize once payment lands.
+        console.warn("[PropertyDetails] finalize-booking invoke failed", finalizeErr);
       }
 
       toast.success("Details saved successfully!");

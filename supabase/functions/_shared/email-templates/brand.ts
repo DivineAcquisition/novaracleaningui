@@ -1,12 +1,25 @@
-// Brand configuration for email templates
+// Brand configuration for email templates.
+//
+// Colors mirror the in-app Tailwind theme (green primary) so emails feel
+// like a natural extension of the customer portal at app.novaracleaning.com
+// instead of a third-party transactional template. URLs use the *real*
+// subdomains the marketing + portal sites run on:
+//   • try.novaracleaning.com   → booking funnel
+//   • app.novaracleaning.com   → customer portal (account / billing)
+//   • novaracleaning.com       → marketing + policy pages
+//
+// Logo is served from the customer portal so it stays available even if
+// the marketing site changes; /novara-logo.png is committed to /public/.
 
 export const BRAND = {
-  name: 'Novara Cleaning',
+  name: 'NovaraCleaning',
   colors: {
-    primary: '#8B5CF6',
-    primaryDark: '#7C3AED',
-    secondary: '#EC4899',
-    success: '#10B981',
+    // Primary green — matches Tailwind `hsl(142 76% 36%)` from
+    // src/config/brand-config.ts so in-app + email look identical.
+    primary: '#16A34A',
+    primaryDark: '#15803D',
+    secondary: '#0EA371',
+    success: '#16A34A',
     warning: '#F59E0B',
     danger: '#EF4444',
     gray: {
@@ -20,7 +33,7 @@ export const BRAND = {
     },
   },
   gradient: {
-    primary: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+    primary: 'linear-gradient(135deg, #16A34A 0%, #0E7C3A 100%)',
   },
   spacing: {
     xs: '8px',
@@ -40,18 +53,25 @@ export const BRAND = {
   },
   urls: {
     website: 'https://novaracleaning.com',
-    account: 'https://book.novaracleaning.com/account',
-    booking: 'https://book.novaracleaning.com/book/home',
-    membership: 'https://book.novaracleaning.com/membership',
+    // Customer portal lives on app.* — never the try.* (booking-only)
+    // subdomain. Use this for "View Booking", "Manage Card", "Reschedule"
+    // and any other links that drop the customer into authenticated UI.
+    account: 'https://app.novaracleaning.com/account',
+    portal: 'https://app.novaracleaning.com/account',
+    // Booking funnel lives on try.* — public, no auth required.
+    booking: 'https://try.novaracleaning.com/book/zip',
+    membership: 'https://try.novaracleaning.com/membership',
     terms: 'https://novaracleaning.com/terms',
     privacy: 'https://novaracleaning.com/privacy',
     cancellation: 'https://novaracleaning.com/cancellation-policy',
     membershipPolicy: 'https://novaracleaning.com/membership-policy',
   },
-  // Logo as base64 or URL - Update this with actual logo
+  // Public logo URL. Served from the customer portal subdomain so it's
+  // guaranteed to exist (file lives at /public/novara-logo.png in the
+  // Next.js bundle that powers app.novaracleaning.com).
   logo: {
-    url: 'https://sxdraeptzuamsgjcvfeg.supabase.co/storage/v1/object/public/assets/novara-logo.png',
-    width: '120',
-    height: '40',
+    url: 'https://app.novaracleaning.com/novara-logo.png',
+    width: '140',
+    height: '48',
   },
 };
