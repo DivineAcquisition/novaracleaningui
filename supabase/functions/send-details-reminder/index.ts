@@ -46,8 +46,13 @@ const COMPLETE_DETAILS_URL = (bookingId: string) =>
   `https://app.novaracleaning.com/book/details?booking_id=${bookingId}`;
 
 const MAX_REMINDERS = 6;
-const MIN_GAP_MS_PAYMENT = 30 * 60 * 1000;       // 30 minutes
-const MIN_GAP_MS_CRON = 12 * 60 * 60 * 1000;     // 12 hours
+// Minimum grace window after payment before the FIRST reminder fires.
+// Customers are usually still in the browser tab finishing the home-
+// detail questionnaire for the first few minutes; firing immediately
+// just generates noise. After this window, the cron picks them up.
+const MIN_AGE_MS_FIRST_REMINDER = 5 * 60 * 1000; // 5 minutes
+const MIN_GAP_MS_PAYMENT = 5 * 60 * 1000;        // 5 minutes between manual triggers
+const MIN_GAP_MS_CRON = 12 * 60 * 60 * 1000;     // 12 hours between cron-issued reminders
 
 // Green brand palette mirrors supabase/functions/_shared/email-templates/brand.ts.
 const BRAND = {
@@ -168,10 +173,24 @@ async function processBooking(
     return { ok: false, reason: "cap" };
   }
 
+  // Enforce the 5-minute grace window for the very first reminder so
+  // customers who are still actively completing /book/details don't
+  // get a "you forgot!" SMS while they're literally typing in it.
+  const paymentReceivedAt = booking.payment_received_at
+    ? new Date(booking.payment_received_at).getTime()
+    : 0;
+  const now = Date.now();
+  if (sentCount === 0 && paymentReceivedAt && now - paymentReceivedAt < MIN_AGE_MS_FIRST_REMINDER) {
+    logStep("Within 5-minute grace window — skip first reminder", {
+      bookingId,
+      ageMs: now - paymentReceivedAt,
+    });
+    return { ok: false, reason: "grace_window" };
+  }
+
   const lastSent = booking.details_reminder_sent_at
     ? new Date(booking.details_reminder_sent_at).getTime()
     : 0;
-  const now = Date.now();
   const elapsed = now - lastSent;
   const gap = trigger === "cron" ? MIN_GAP_MS_CRON : MIN_GAP_MS_PAYMENT;
   if (lastSent && elapsed < gap) {
@@ -269,7 +288,11 @@ serve(async (req) => {
       });
     }
 
-    const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    // 5-minute floor mirrors MIN_AGE_MS_FIRST_REMINDER so we never
+    // surface a booking that's still inside the customer's active
+    // session. Customers who actually wandered off will land in this
+    // query on the next 5-minute tick.
+    const cutoff = new Date(Date.now() - MIN_AGE_MS_FIRST_REMINDER).toISOString();
     const { data: rows, error } = await supabase
       .from("bookings")
       .select("id")
