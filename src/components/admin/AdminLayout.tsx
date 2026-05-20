@@ -4,9 +4,11 @@ import {
   RiBarChartBoxLine,
   RiCalendarCheckLine,
   RiDashboardLine,
+  RiFileChartLine,
   RiGroupLine,
   RiLogoutBoxRLine,
   RiMapPinLine,
+  RiPulseLine,
   RiShieldLine,
   RiToolsLine,
   RiTruckLine,
@@ -41,6 +43,9 @@ const navItems = [
   { title: "Directory", url: "/admin/directory", icon: RiMapPinLine },
   { title: "Dispatch", url: "/admin/dispatch", icon: RiTruckLine },
   { title: "Pipeline", url: "/admin/pipeline", icon: RiBarChartBoxLine },
+  { title: "Activity", url: "/admin/activity", icon: RiPulseLine },
+  { title: "Map", url: "/admin/map", icon: RiMapPinLine },
+  { title: "Reports", url: "/admin/reports", icon: RiFileChartLine },
   { title: "Webhooks", url: "/admin/webhooks", icon: RiWebhookLine },
 ];
 
