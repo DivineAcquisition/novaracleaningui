@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,16 +71,34 @@ serve(async (req) => {
     if (body.mode === 'subscription' && body.membershipPlan && body.homeSizeId) {
       logStep("Standalone subscription path", { plan: body.membershipPlan, homeSize: body.homeSizeId });
       
-      const { membershipPlan, homeSizeId, email: bodyEmail } = body;
+      const {
+        membershipPlan,
+        homeSizeId,
+        email: bodyEmail,
+        // Optional scheduling preferences captured during signup so the
+        // first booking can be scheduled immediately after checkout.
+        preferredDayOfWeek,
+        preferredTimeWindow,
+        firstName: bodyFirstName,
+        lastName: bodyLastName,
+        phone: bodyPhone,
+        address: bodyAddress,
+        city: bodyCity,
+        state: bodyState,
+        zipCode: bodyZip,
+      } = body;
       
-      const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-        apiVersion: "2025-08-27.basil",
-      });
-
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       );
+
+      // Resolve Stripe key via the DB-override layer so SQL key
+      // rotations propagate on next cold start.
+      const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, {
+        apiVersion: "2025-08-27.basil",
+      });
 
       // Get user email from auth token
       let email = bodyEmail;
@@ -153,6 +172,28 @@ serve(async (req) => {
         },
       ];
 
+      // Push the schedule + customer hints into both the Checkout
+      // Session metadata AND the resulting Subscription metadata. The
+      // subscription metadata is what the `customer.subscription.*`
+      // webhook handler reads — without it the handler has no way to
+      // tell `monthly` from `weekly` once the new Stripe account has
+      // no hard-coded price IDs.
+      const sharedMetadata: Record<string, string> = {
+        membership_plan: membershipPlan,
+        home_size_id: homeSizeId,
+        is_membership_signup: 'true',
+        monthly_price_cents: String(monthlyPriceDollars * 100),
+        preferred_day_of_week: preferredDayOfWeek ? String(preferredDayOfWeek) : '',
+        preferred_time_window: preferredTimeWindow ? String(preferredTimeWindow) : '',
+        first_name: bodyFirstName ? String(bodyFirstName) : '',
+        last_name: bodyLastName ? String(bodyLastName) : '',
+        phone: bodyPhone ? String(bodyPhone) : '',
+        address: bodyAddress ? String(bodyAddress) : '',
+        city: bodyCity ? String(bodyCity) : '',
+        state: bodyState ? String(bodyState) : '',
+        zip_code: bodyZip ? String(bodyZip) : '',
+      };
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         customer_email: customerId ? undefined : email,
@@ -160,11 +201,13 @@ serve(async (req) => {
         mode: 'subscription',
         success_url: `${req.headers.get("origin")}/membership/success?session_id={CHECKOUT_SESSION_ID}&plan=${membershipPlan}`,
         cancel_url: `${req.headers.get("origin")}/membership/${membershipPlan}`,
-        metadata: {
-          membership_plan: membershipPlan,
-          home_size_id: homeSizeId,
-          is_membership_signup: 'true',
-          monthly_price_cents: String(monthlyPriceDollars * 100),
+        // Surface phone collection if the customer hasn't provided one
+        // — GHL custom fields can't update what we never captured.
+        phone_number_collection: bodyPhone ? undefined : { enabled: true },
+        metadata: sharedMetadata,
+        subscription_data: {
+          metadata: sharedMetadata,
+          description: `Novara ${planLabel} — ${homeSizeId.replace('_', '-')} sqft`,
         },
       });
 
@@ -230,14 +273,15 @@ serve(async (req) => {
     
     logStep("Validation passed");
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2025-08-27.basil",
+    });
 
     const isMemberUsingCredit = useCredit === true;
     

@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { resolveSecret } from "../_shared/app-secrets.ts";
+import { upsertContact } from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,15 +22,15 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-    logStep("Stripe key verified");
-
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
     );
+
+    const stripeKey = await resolveSecret(supabaseClient, "STRIPE_SECRET_KEY");
+    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
+    logStep("Stripe key verified");
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
@@ -87,6 +89,44 @@ serve(async (req) => {
       pausedAt: new Date().toISOString(),
       resumesAt: resumeAt || 'indefinite'
     });
+
+    // Push the pause status to GHL so the contact / opportunity row
+    // reflects the new state. Never throws — fire-and-forget.
+    try {
+      await upsertContact({
+        email: user.email,
+        tags: ["membership-paused"],
+        source: "Novara Portal",
+        customFieldsByKey: {
+          membership_status: "paused",
+          membership_resumes_at: resumeAt ? new Date(resumeAt).toISOString() : "",
+          stripe_customer_id: customerId,
+        },
+      });
+      // Also notify the customer via SMS so they don't wonder whether
+      // the click registered. Non-blocking.
+      try {
+        const { sendSms } = await import("../_shared/sms.ts");
+        const dateLabel = resumeAt
+          ? new Date(resumeAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : null;
+        const message = dateLabel
+          ? `Novara: Your membership is paused until ${dateLabel}. We'll resume billing automatically. Reply HELP for help.`
+          : `Novara: Your membership is paused. Resume anytime from your account portal. Reply HELP for help.`;
+        const { data: cust } = await supabaseClient
+          .from("customers")
+          .select("phone")
+          .eq("email", user.email)
+          .maybeSingle();
+        if (cust?.phone) {
+          await sendSms(supabaseClient, { toPhone: cust.phone, message, type: "confirmation" });
+        }
+      } catch (smsErr) {
+        logStep("Pause SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
+      }
+    } catch (ghlErr) {
+      logStep("GHL pause sync failed (non-blocking)", { error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr) });
+    }
 
     return new Response(JSON.stringify({
       success: true,

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -166,7 +167,8 @@ serve(async (req) => {
 
     // If price increased, create Stripe checkout for difference
     if (priceDifferenceCents > 0) {
-      const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+      const stripeKey = await resolveSecret(supabaseAdmin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, {
         apiVersion: "2025-08-27.basil",
       });
 

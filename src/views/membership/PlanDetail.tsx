@@ -77,6 +77,20 @@ const PLAN_META = {
 
 type PlanId = keyof typeof PLAN_META;
 
+const DAYS_OF_WEEK = [
+  { id: "monday", label: "Mon" },
+  { id: "tuesday", label: "Tue" },
+  { id: "wednesday", label: "Wed" },
+  { id: "thursday", label: "Thu" },
+  { id: "friday", label: "Fri" },
+] as const;
+
+const TIME_WINDOWS = [
+  { id: "morning", label: "Morning", hint: "8 AM – 12 PM" },
+  { id: "afternoon", label: "Afternoon", hint: "12 PM – 4 PM" },
+  { id: "evening", label: "Evening", hint: "4 PM – 6 PM" },
+] as const;
+
 export default function PlanDetail() {
   const { planId } = useParams<{ planId: string }>();
   const router = useRouter();
@@ -85,6 +99,11 @@ export default function PlanDetail() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Day-of-week / time-window preferences captured at signup so the
+  // post-checkout webhook can pre-fill GHL custom fields and the
+  // /portal/book flow can hint the customer's preferred slot.
+  const [preferredDay, setPreferredDay] = useState<string>("");
+  const [preferredWindow, setPreferredWindow] = useState<string>("");
 
   const plan = PLAN_META[planId as PlanId];
   if (!plan) {
@@ -115,10 +134,21 @@ export default function PlanDetail() {
       return;
     }
 
+    if (!preferredDay || !preferredWindow) {
+      toast.error("Pick a preferred day & time window for your cleanings");
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { mode: "subscription", membershipPlan: planId, homeSizeId: selectedHomeSize },
+        body: {
+          mode: "subscription",
+          membershipPlan: planId,
+          homeSizeId: selectedHomeSize,
+          preferredDayOfWeek: preferredDay,
+          preferredTimeWindow: preferredWindow,
+        },
       });
       if (error) throw error;
       if (data?.url) window.location.href = data.url;
@@ -243,6 +273,74 @@ export default function PlanDetail() {
 
         <Separator />
 
+        {/* Preferred Schedule */}
+        <section className="space-y-5 animate-fade-in-up stagger-3">
+          <div className="text-center">
+            <h2 className="text-xl md:text-2xl font-bold font-jakarta">Pick Your Preferred Schedule</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              We&apos;ll use this to prefer the same day &amp; time slot for every recurring clean. You can change it any time.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preferred day of the week</p>
+            <div className="grid grid-cols-5 gap-2">
+              {DAYS_OF_WEEK.map((d) => {
+                const isSelected = preferredDay === d.id;
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setPreferredDay(d.id)}
+                    className={cn(
+                      "rounded-xl border-2 py-3 text-sm font-semibold transition-all",
+                      isSelected
+                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                        : "border-border hover:border-primary/30 text-foreground/80"
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preferred arrival window</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {TIME_WINDOWS.map((w) => {
+                const isSelected = preferredWindow === w.id;
+                return (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => setPreferredWindow(w.id)}
+                    className={cn(
+                      "rounded-xl border-2 p-3 text-left transition-all",
+                      isSelected
+                        ? "border-primary bg-primary/10 shadow-sm"
+                        : "border-border hover:border-primary/30"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={cn("font-semibold text-sm", isSelected && "text-primary")}>{w.label}</span>
+                      <RiTimeLine className={cn("w-4 h-4", isSelected ? "text-primary" : "text-muted-foreground")} />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">{w.hint}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground text-center">
+            We honor your preference whenever scheduling allows. You&apos;ll pick the exact date for your first clean right after checkout.
+          </p>
+        </section>
+
+        <Separator />
+
         {/* How It Works */}
         <section className="space-y-5 animate-fade-in-up stagger-3">
           <h2 className="text-xl md:text-2xl font-bold font-jakarta text-center">How It Works</h2>
@@ -314,7 +412,7 @@ export default function PlanDetail() {
 
             <Button
               onClick={handleSubscribe}
-              disabled={loading || !agreedToTerms}
+              disabled={loading || !agreedToTerms || !preferredDay || !preferredWindow}
               className="w-full h-13 text-base bg-gradient-primary shadow-lg rounded-xl"
             >
               {loading ? (

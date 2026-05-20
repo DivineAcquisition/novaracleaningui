@@ -34,6 +34,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CleanerSelector } from '@/components/portal/CleanerSelector';
 import { SchedulePicker } from '@/components/booking/SchedulePicker';
+import { AddressAutocomplete } from '@/components/booking/AddressAutocomplete';
 import { HOME_SIZE_RANGES } from '@/lib/pricing-system';
 import { SEO } from "@/components/SEO";
 
@@ -305,6 +306,45 @@ export default function MemberBooking() {
         });
       }
 
+      // ── GHL sync: every portal booking pushes a fresh contact +
+      //    opportunity into GoHighLevel so the team sees the new job
+      //    in the pipeline immediately. Best-effort — never blocks
+      //    the confirmation flow.
+      try {
+        await supabase.functions.invoke('sync-to-ghl', {
+          body: {
+            kind: 'booking',
+            payload: {
+              firstName: customer.first_name,
+              lastName: customer.last_name,
+              email: user.email,
+              phone: phoneDigits,
+              address: bookingData.address,
+              city: bookingData.city,
+              state: bookingData.state,
+              zipCode: bookingData.zip_code,
+              bookingId: booking.id,
+              bookingNumber: (booking as any).booking_number,
+              serviceType,
+              cleaningType: serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean',
+              serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
+              timeSlot: selectedTimeSlot,
+              homeSize: addressData.sqft_tier,
+              membershipPlan: credits.membership_plan,
+              frequency: 'recurring',
+              quotedPriceCents: upsellAmount,
+              totalCents: upsellAmount,
+              depositPaid: upsellAmount === 0,
+              customerSource: 'Member Portal',
+              market: bookingData.state,
+              tags: ['portal-booking', `member-${credits.membership_plan}`],
+            },
+          },
+        });
+      } catch (ghlErr) {
+        console.error('GHL sync failed (non-blocking):', ghlErr);
+      }
+
       if (serviceType === 'deep') {
         toast.success('Booking created! Redirecting to payment...');
         router.push(`/book/checkout?booking_id=${booking.id}&upsell=deep`);
@@ -543,17 +583,29 @@ export default function MemberBooking() {
                       </Button>
                     )}
                     <div className="grid gap-4">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="col-span-2">
-                          <Label htmlFor="street">Street Address</Label>
-                          <Input id="street" placeholder="123 Main St" value={addressForm.street} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, street: e.target.value })} />
-                        </div>
+                      <AddressAutocomplete
+                        label="Street Address *"
+                        placeholder="Start typing — Google will validate"
+                        initialValue={addressForm.street}
+                        onAddressSelect={(addr) => setAddressForm((prev) => ({
+                          ...prev,
+                          street: addr.street || prev.street,
+                          city: addr.city || prev.city,
+                          state: addr.state || prev.state,
+                          zip: addr.zipCode || prev.zip,
+                        }))}
+                      />
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="unit">Unit/Apt</Label>
                           <Input id="unit" placeholder="Apt 4B" value={addressForm.unit} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, unit: e.target.value })} />
                         </div>
+                        <div>
+                          <Label htmlFor="zip">ZIP Code</Label>
+                          <Input id="zip" placeholder="75001" maxLength={5} value={addressForm.zip} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, zip: e.target.value })} />
+                        </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="city">City</Label>
                           <Input id="city" placeholder="Dallas" value={addressForm.city} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} />
@@ -561,10 +613,6 @@ export default function MemberBooking() {
                         <div>
                           <Label htmlFor="state">State</Label>
                           <Input id="state" placeholder="TX" maxLength={2} value={addressForm.state} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value.toUpperCase() })} />
-                        </div>
-                        <div>
-                          <Label htmlFor="zip">ZIP Code</Label>
-                          <Input id="zip" placeholder="75001" maxLength={5} value={addressForm.zip} className="rounded-lg" onChange={(e) => setAddressForm({ ...addressForm, zip: e.target.value })} />
                         </div>
                       </div>
                       <div>

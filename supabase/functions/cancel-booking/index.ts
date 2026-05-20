@@ -7,6 +7,7 @@ import {
 } from "../_shared/booking-policy.ts";
 import { syncBookingLifecycle } from "../_shared/ghl-client.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,8 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
-  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+  const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
+  const stripe = new Stripe(stripeKey, {
     // deno-lint-ignore no-explicit-any
     apiVersion: "2025-08-27.basil" as any,
   });

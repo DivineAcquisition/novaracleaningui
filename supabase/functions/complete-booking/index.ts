@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,7 +126,7 @@ serve(async (req) => {
         balanceChargeStatus = "already_charged";
         logStep("Balance already charged on a previous call");
       } else {
-        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
         if (!stripeKey) {
           throw new Error("STRIPE_SECRET_KEY not configured");
         }

@@ -24,6 +24,7 @@ import {
   type AddressHistoryItem,
 } from "@/lib/address-history";
 import { formatAddress, parseAddressString, mergeAddressParts } from "@/lib/address-formatter";
+import { loadGooglePlaces, parsePlaceResult } from "@/lib/google-places-loader";
 
 interface AddressComponents {
   street: string;
@@ -50,14 +51,67 @@ export function AddressAutocomplete({
   error,
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [geocodedLocation, setGeocodedLocation] = useState<string | null>(null);
+  const [googleLoaded, setGoogleLoaded] = useState(false);
 
   // Load address history
   useEffect(() => {
     setAddressHistory(getAddressHistory());
+  }, []);
+
+  // Wire up Google Places Autocomplete. Falls back silently to the
+  // Nominatim onBlur path when the API key isn't configured.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const places = await loadGooglePlaces();
+      if (cancelled) return;
+      if (!places || !inputRef.current) {
+        setGoogleLoaded(false);
+        return;
+      }
+      try {
+        const ac = new places.Autocomplete(inputRef.current, {
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "geometry", "formatted_address"],
+          types: ["address"],
+        });
+        autocompleteRef.current = ac;
+        ac.addListener("place_changed", () => {
+          const place = ac.getPlace();
+          if (!place || !place.address_components) {
+            setValidationError("Pick an address from the list to validate");
+            return;
+          }
+          const parsed = parsePlaceResult(place);
+          setValidationError(null);
+          setGeocodedLocation(parsed.formattedAddress || null);
+          if (inputRef.current && parsed.street) {
+            inputRef.current.value = parsed.street;
+          }
+          onAddressSelect({
+            street: parsed.street,
+            city: parsed.city,
+            state: parsed.state,
+            zipCode: parsed.zipCode,
+            lat: parsed.lat,
+            lng: parsed.lng,
+          });
+        });
+        setGoogleLoaded(true);
+      } catch (err) {
+        console.warn("[AddressAutocomplete] Google Places init failed", err);
+        setGoogleLoaded(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleHistorySelect = (item: AddressHistoryItem) => {
@@ -87,6 +141,10 @@ export function AddressAutocomplete({
   };
 
   const handleInputBlur = async () => {
+    // When Google Places is active, place_changed already pushed
+    // the validated address. Skip the legacy onBlur geocode so we
+    // don't clobber the canonical street with a partial parse.
+    if (googleLoaded) return;
     const value = inputRef.current?.value?.trim();
     if (!value) return;
 

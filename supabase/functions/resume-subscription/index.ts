@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { resolveSecret } from "../_shared/app-secrets.ts";
+import { upsertContact } from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,15 +22,15 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-    logStep("Stripe key verified");
-
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
     );
+
+    const stripeKey = await resolveSecret(supabaseClient, "STRIPE_SECRET_KEY");
+    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
+    logStep("Stripe key verified");
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
@@ -75,6 +77,40 @@ serve(async (req) => {
       subscriptionId: updatedSubscription.id,
       resumedAt: new Date().toISOString()
     });
+
+    // Push the resumed state to GHL and notify the customer by SMS so
+    // every portal action is mirrored. Best-effort — never throw.
+    try {
+      await upsertContact({
+        email: user.email,
+        tags: ["membership-resumed"],
+        source: "Novara Portal",
+        customFieldsByKey: {
+          membership_status: "active",
+          membership_resumes_at: "",
+          stripe_customer_id: customerId,
+        },
+      });
+      try {
+        const { sendSms } = await import("../_shared/sms.ts");
+        const { data: cust } = await supabaseClient
+          .from("customers")
+          .select("phone")
+          .eq("email", user.email)
+          .maybeSingle();
+        if (cust?.phone) {
+          await sendSms(supabaseClient, {
+            toPhone: cust.phone,
+            message: "Novara: Your membership is active again. Credits are available — book your next clean in the portal. Reply HELP for help.",
+            type: "confirmation",
+          });
+        }
+      } catch (smsErr) {
+        logStep("Resume SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
+      }
+    } catch (ghlErr) {
+      logStep("GHL resume sync failed (non-blocking)", { error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr) });
+    }
 
     return new Response(JSON.stringify({
       success: true,
