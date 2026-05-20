@@ -53,7 +53,7 @@ const logStep = (step: string, details?: any) => {
 export default function BookingSuccess() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { bookingData, resetBookingData } = useBooking();
+  const { bookingData, updateBookingData, resetBookingData } = useBooking();
   const { user, openCustomerPortal } = useAuth();
   const sessionId = searchParams.get("session_id");
   const paymentIntent = searchParams.get("payment_intent");
@@ -177,6 +177,35 @@ export default function BookingSuccess() {
         setBookingId(bookingId);
         setBookingStatus(booking.status);
         setBookingValidated(true);
+
+        // Hydrate the BookingContext from the persisted booking row.
+        // Without this, customers who land here from an SMS / email
+        // link with only `?booking_id=…` (i.e. no in-memory context)
+        // see "Location: , , 21230" because the in-context address /
+        // city / state were never populated. The DB always has the
+        // truth — copy from there so the confirmation matches what
+        // was actually saved.
+        updateBookingData({
+          address: booking.address || bookingData.address || "",
+          city: booking.city || bookingData.city || "",
+          state: booking.state || bookingData.state || "",
+          zipCode: booking.zip_code || bookingData.zipCode || "",
+          firstName: booking.first_name || bookingData.firstName || "",
+          lastName: booking.last_name || bookingData.lastName || "",
+          email: booking.email || bookingData.email || "",
+          phone: booking.phone || bookingData.phone || "",
+          homeSizeId: booking.home_size_id || bookingData.homeSizeId || "",
+          serviceType: booking.service_type || bookingData.serviceType || "",
+          serviceDate: booking.service_date || bookingData.serviceDate || "",
+          timeSlot: booking.time_slot || bookingData.timeSlot || "",
+          addOns: Array.isArray(booking.add_ons) ? booking.add_ons : (bookingData.addOns || []),
+          membershipPlan: booking.membership_plan || bookingData.membershipPlan || "none",
+          useCredit: typeof booking.uses_credit === "boolean" ? booking.uses_credit : (bookingData.useCredit || false),
+          bedrooms: booking.bedrooms ?? bookingData.bedrooms,
+          bathrooms: booking.bathrooms ?? bookingData.bathrooms,
+          dwellingType: booking.dwelling_type || bookingData.dwellingType,
+          bookingId,
+        });
 
         // Safety net: if the row is still pending_details after our
         // gate above (details filled but status hasn't flipped yet),

@@ -63,7 +63,7 @@ export default function PropertyDetails() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
-  const { bookingData } = useBooking();
+  const { bookingData, updateBookingData } = useBooking();
   
   // Address fields. We pre-seed City / State / ZIP from BookingContext
   // so the customer doesn't have to re-type what they already gave us
@@ -291,6 +291,21 @@ export default function PropertyDetails() {
         .eq("id", bookingId);
 
       if (error) throw error;
+
+      // Mirror the freshly-saved fields into the BookingContext so the
+      // confirmation page shows the right address immediately (instead
+      // of having to wait for the DB hydration round-trip on /book/
+      // confirmation). The Success page also re-hydrates from the row
+      // as a safety net for deep-linked landings.
+      updateBookingData({
+        address,
+        city,
+        state,
+        zipCode: zipCode || bookingData.zipCode,
+        bedrooms: parseInt(bedrooms),
+        bathrooms: parseFloat(bathrooms),
+        dwellingType,
+      });
 
       // Kick finalize-booking FIRE-AND-FORGET so navigation never
       // blocks on a cold-start Edge Function. Previously we awaited
