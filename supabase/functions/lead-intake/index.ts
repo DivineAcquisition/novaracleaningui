@@ -81,6 +81,29 @@ function digitsOnly(s: string | undefined | null): string {
   return String(s).replace(/[^0-9]/g, "").replace(/^1/, "");
 }
 
+// E.164 normalizer — GHL expects '+1XXXXXXXXXX' and rejects loose
+// formats. Mirrors the helper in send-ghl-sms.
+function toE164(input: string | undefined | null): string | null {
+  if (!input) return null;
+  const raw = String(input).trim();
+  if (!raw) return null;
+  if (raw.startsWith("+")) {
+    const d = raw.slice(1).replace(/[^0-9]/g, "");
+    return d ? `+${d}` : null;
+  }
+  const d = raw.replace(/[^0-9]/g, "");
+  if (d.length === 11 && d.startsWith("1")) return `+${d}`;
+  if (d.length === 10) return `+1${d}`;
+  if (d.length === 7) return null;
+  return d ? `+${d}` : null;
+}
+
+// Pipelines whose names match this regex are NEVER auto-selected for
+// new sales leads. The Hiring / Cleaner Onboarding / Team / Recruit
+// pipelines must be opt-in via explicit env vars, never the fallback.
+const NON_SALES_PIPELINE_RE =
+  /\b(hir|recruit|cleaner|team|onboard|driver|contractor|applicant|interview)\b/i;
+
 function defaultLeadScore(source: string): "hot" | "warm" | "cold" {
   const s = source.toLowerCase();
   if (s.includes("fb") || s.includes("lsa") || s.includes("local_service_ads")) {
@@ -90,11 +113,22 @@ function defaultLeadScore(source: string): "hot" | "warm" | "cold" {
   return "cold";
 }
 
+async function resolveSecret(supabase: any, name: string): Promise<string> {
+  let value = "";
+  try {
+    const { data } = await supabase.from("app_secrets").select("value").eq("key", name).maybeSingle();
+    if (data?.value && typeof data.value === "string") value = data.value.trim();
+  } catch (_) { /* ignore */ }
+  if (!value) value = (Deno.env.get(name) || "").trim();
+  return value;
+}
+
 async function ghlUpsertContactAndOpportunity(
   payload: LeadPayload,
   leadId: string,
   token: string,
   locationId: string,
+  supabase: any,
 ): Promise<{ contactId: string | null; opportunityId: string | null }> {
   if (!token || !locationId) return { contactId: null, opportunityId: null };
   const tags = [
@@ -104,10 +138,14 @@ async function ghlUpsertContactAndOpportunity(
     payload.leadScore || defaultLeadScore(payload.source || ""),
   ].filter(Boolean) as string[];
 
+  // Normalize phone to E.164 — GHL otherwise silently drops the phone
+  // field and the contact never gets SMS'd.
+  const normalizedPhone = toE164(payload.phone);
+
   const contactBody = {
     locationId,
     email: payload.email || undefined,
-    phone: payload.phone || undefined,
+    phone: normalizedPhone || undefined,
     firstName: payload.firstName || undefined,
     lastName: payload.lastName || undefined,
     address1: payload.address || undefined,
@@ -138,34 +176,71 @@ async function ghlUpsertContactAndOpportunity(
   } catch (_) { /* ignore */ }
   if (!contactId) return { contactId: null, opportunityId: null };
 
-  // Open opportunity at first pipeline / first stage (auto-discovery)
+  // Pipeline resolution. Priority:
+  //   1. explicit GHL_SALES_PIPELINE_ID (+ optional stage) — never the
+  //      Hiring pipeline, regardless of GHL's listing order.
+  //   2. legacy GHL_PIPELINE_ID for back-compat with the booking flow.
+  //   3. auto-discovery — but SKIP pipelines whose names match
+  //      hire/recruit/cleaner/team/onboard so we never funnel a
+  //      customer lead into the hiring board.
   let pipelineId = "";
   let pipelineStageId = "";
-  try {
-    const r = await fetch(
-      `${GHL_BASE}/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Version: GHL_VERSION,
-          Accept: "application/json",
+  const salesPipelineId = await resolveSecret(supabase, "GHL_SALES_PIPELINE_ID");
+  const salesPipelineStageId = await resolveSecret(supabase, "GHL_SALES_PIPELINE_STAGE_ID");
+  const legacyPipelineId = (Deno.env.get("GHL_PIPELINE_ID") || "").trim();
+  const legacyStageId = (Deno.env.get("GHL_PIPELINE_STAGE_ID") || "").trim();
+  if (salesPipelineId) {
+    pipelineId = salesPipelineId;
+    if (salesPipelineStageId) pipelineStageId = salesPipelineStageId;
+  } else if (legacyPipelineId) {
+    pipelineId = legacyPipelineId;
+    if (legacyStageId) pipelineStageId = legacyStageId;
+  }
+
+  if (!pipelineId || !pipelineStageId) {
+    try {
+      const r = await fetch(
+        `${GHL_BASE}/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Version: GHL_VERSION,
+            Accept: "application/json",
+          },
         },
-      },
-    );
-    if (r.ok) {
-      const j = await r.json();
-      const p = (j.pipelines || [])[0];
-      if (p?.id) {
-        pipelineId = p.id;
-        const stage = (p.stages || [])
-          .slice()
-          .sort((a: { position?: number }, b: { position?: number }) =>
-            (a.position ?? 0) - (b.position ?? 0)
-          )[0];
-        if (stage?.id) pipelineStageId = stage.id;
+      );
+      if (r.ok) {
+        const j = await r.json();
+        const all = (j.pipelines || []) as Array<{
+          id?: string;
+          name?: string;
+          stages?: Array<{ id?: string; name?: string; position?: number }>;
+        }>;
+        let chosen = pipelineId
+          ? all.find((p) => p.id === pipelineId)
+          : null;
+        if (!chosen) {
+          chosen = all.find((p) =>
+            p.id && !NON_SALES_PIPELINE_RE.test(p.name || "")
+          ) || null;
+        }
+        if (chosen?.id) {
+          pipelineId = chosen.id;
+          if (!pipelineStageId) {
+            const stage = (chosen.stages || [])
+              .slice()
+              .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0];
+            if (stage?.id) pipelineStageId = stage.id;
+          }
+          logStep("pipeline resolved", {
+            pipelineId,
+            pipelineName: chosen.name,
+            stageId: pipelineStageId,
+          });
+        }
       }
-    }
-  } catch (_) { /* ignore */ }
+    } catch (_) { /* ignore */ }
+  }
   if (!pipelineId) return { contactId, opportunityId: null };
 
   let opportunityId: string | null = null;
@@ -318,6 +393,7 @@ serve(async (req) => {
       leadId,
       ghlToken,
       ghlLocation,
+      supabase,
     );
     if (contactId || opportunityId) {
       await supabase
