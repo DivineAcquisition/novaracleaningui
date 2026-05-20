@@ -301,7 +301,11 @@ serve(async (req: Request) => {
           .insert({
             booking_id: body.data?.bookingId || body.bookingData?.bookingId || null,
             email_type: body.type,
-            email_address: body.email,
+            // Column on the table is `recipient_email`. Sending
+            // `email_address` here used to silently fail (which
+            // also broke the retry loop because no row landed) so
+            // failed emails never got retried.
+            recipient_email: body.email,
             email_data: body.data || body.bookingData || {},
             status: 'pending',
             retry_count: 0,

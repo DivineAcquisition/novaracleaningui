@@ -207,6 +207,116 @@ export default function BookingSuccess() {
           bookingId,
         });
 
+        // ─── Safety net: confirmation + receipt emails ──────────
+        // The backend (stripe-webhook / finalize-booking) is
+        // supposed to fire these when the row flips to
+        // 'confirmed'. We've seen cases where the backend hits an
+        // unhandled error inside its email try/catch and the row
+        // ends up `confirmation_email_sent=false`. Dispatching
+        // here on the client (only when the flag is false AND the
+        // row is confirmed) makes the email send a hard guarantee
+        // tied to the customer actually reaching this page. The
+        // edge function is idempotent and we mark the row sent
+        // immediately so a second tab open doesn't double-email.
+        if (booking.status === "confirmed" && !booking.confirmation_email_sent) {
+          (async () => {
+            try {
+              const balanceCents =
+                booking.payment_option === "full"
+                  ? 0
+                  : Math.max(
+                      0,
+                      (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+                    );
+
+              await supabase.functions.invoke("send-booking-email", {
+                body: {
+                  type: "confirmation",
+                  email: booking.email,
+                  data: {
+                    firstName: booking.first_name,
+                    lastName: booking.last_name,
+                    bookingId: booking.id,
+                    serviceDate: booking.service_date,
+                    timeSlot: booking.time_slot,
+                    serviceType: booking.service_type,
+                    homeSize: booking.home_size_id,
+                    address: booking.address,
+                    city: booking.city,
+                    state: booking.state,
+                    zipCode: booking.zip_code,
+                    totalAmount: booking.total_estimate_cents,
+                    depositAmount: booking.deposit_cents,
+                    balanceAmount: balanceCents,
+                    paymentOption: booking.payment_option,
+                    useCredit: booking.uses_credit,
+                    addOns: Array.isArray(booking.add_ons) ? booking.add_ons : [],
+                  },
+                },
+              });
+
+              await supabase.functions.invoke("send-booking-email", {
+                body: {
+                  type: "payment_receipt",
+                  email: booking.email,
+                  data: {
+                    firstName: booking.first_name,
+                    lastName: booking.last_name,
+                    bookingId: booking.id,
+                    serviceDate: booking.service_date,
+                    timeSlot: booking.time_slot,
+                    serviceType: booking.service_type,
+                    totalAmount:
+                      booking.payment_option === "full"
+                        ? booking.total_estimate_cents -
+                          (booking.full_payment_discount || 0)
+                        : booking.deposit_cents,
+                    balanceAmount: balanceCents,
+                    paymentOption: booking.payment_option,
+                  },
+                },
+              });
+
+              await supabase
+                .from("bookings")
+                .update({
+                  confirmation_email_sent: true,
+                  confirmation_email_sent_at: new Date().toISOString(),
+                })
+                .eq("id", booking.id)
+                .eq("confirmation_email_sent", false);
+
+              setEmailSent(true);
+              logStep("Confirmation + receipt emails dispatched from client safety net");
+            } catch (emailErr) {
+              console.warn("[BookingSuccess] safety-net email send failed", emailErr);
+            }
+          })();
+        }
+
+        // ─── Safety net: remaining-balance invoice ──────────────
+        // Deposit-paid bookings need a hosted Stripe invoice for
+        // the second half of the bill. The new flow auto-charges
+        // the saved card when the cleaner marks complete, but
+        // many customers prefer a click-to-pay link in their
+        // inbox up-front. Firing the new edge function here
+        // ensures the invoice is created (idempotently — it
+        // short-circuits when `stripe_invoice_id` is already
+        // populated).
+        if (
+          booking.status === "confirmed" &&
+          booking.payment_option === "deposit" &&
+          !booking.uses_credit &&
+          !booking.stripe_invoice_id &&
+          (booking.total_estimate_cents || 0) > (booking.deposit_cents || 0)
+        ) {
+          supabase.functions.invoke("send-remaining-balance-invoice", {
+            body: { bookingId: booking.id },
+          }).catch((invErr) => {
+            console.warn("[BookingSuccess] remaining-balance invoice failed", invErr);
+          });
+        }
+
         // Safety net: if the row is still pending_details after our
         // gate above (details filled but status hasn't flipped yet),
         // kick finalize-booking ourselves and start polling for the
