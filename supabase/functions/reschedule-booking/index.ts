@@ -184,6 +184,17 @@ serve(async (req) => {
       console.error('Google Calendar update failed (non-critical):', calendarError);
     }
 
+    // Patch the GHL appointment to the new date/time so the contact's
+    // calendar in GHL is in lockstep with the booking row.
+    try {
+      await supabase.functions.invoke('book-ghl-appointment', {
+        body: { bookingId }
+      });
+      console.log('GHL appointment patched for rescheduled booking');
+    } catch (ghlApptErr) {
+      console.error('GHL appointment patch failed (non-critical):', ghlApptErr);
+    }
+
     // Send reschedule data to GHL webhook
     try {
       const fmtDate = (d: string) => {

@@ -506,6 +506,29 @@ serve(async (req) => {
     const { contactId: ghlContactId, opportunityId: ghlOpportunityId } =
       await ghlPushBooking(supabase, booking, totalCents, ghlToken, ghlLocation);
 
+    // 5b. Book the appointment in the GHL Calendar so the contact's
+    // calendar block shows the visit. Idempotent — book-ghl-appointment
+    // updates an existing GHL appointment if one is already on the row.
+    let ghlAppointmentId: string | null = null;
+    try {
+      const r = await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/book-ghl-appointment`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+          },
+          body: JSON.stringify({ bookingId }),
+        },
+      );
+      const j = await r.json();
+      if (j?.success) ghlAppointmentId = j.appointmentId || null;
+      else logStep("GHL appointment failed (non-blocking)", j);
+    } catch (apptErr) {
+      logStep("GHL appointment call errored (non-blocking)", apptErr);
+    }
+
     // 6. Stripe invoices (deposit_plus_remaining / full_now / none)
     let depositInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
     let remainingInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
@@ -727,6 +750,7 @@ serve(async (req) => {
         customerId,
         ghlContactId,
         ghlOpportunityId,
+        ghlAppointmentId,
         invoiceMode,
         totals: {
           totalCents,

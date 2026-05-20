@@ -213,6 +213,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── GHL Calendar ──────────────────────────────────────────────
+    // Mirror the cancellation into the GHL Cleaning Calendar so the
+    // contact's GHL appointment block flips to 'cancelled' too.
+    if (booking.ghl_appointment_id) {
+      try {
+        await supabase.functions.invoke("book-ghl-appointment", {
+          body: { bookingId, action: "cancel" },
+        });
+      } catch (ghlApptErr) {
+        logStep("GHL appointment cancel failed (non-critical)", ghlApptErr);
+      }
+    }
+
     // ─── Email ─────────────────────────────────────────────────────
     try {
       await supabase.functions.invoke("send-booking-email", {

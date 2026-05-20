@@ -374,6 +374,22 @@ serve(async (req) => {
       });
     }
 
+    // Book the appointment into the GHL Cleaning Calendar so the
+    // contact's calendar shows the visit slot. Non-blocking — the
+    // booking is already saved + confirmed; if this fails the row
+    // carries a ghl_appointment_sync_error and a cron reconciler can
+    // retry later.
+    try {
+      await supabase.functions.invoke("book-ghl-appointment", {
+        body: { bookingId },
+      });
+      logStep("book-ghl-appointment triggered");
+    } catch (aErr) {
+      logStep("book-ghl-appointment failed (non-blocking)", {
+        error: aErr instanceof Error ? aErr.message : String(aErr),
+      });
+    }
+
     return new Response(
       JSON.stringify({ success: true, status: "confirmed", bookingId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
