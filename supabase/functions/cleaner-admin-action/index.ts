@@ -73,7 +73,7 @@ async function markFutureAssignmentsForReassignment(
   const { data: openAssignments } = await adminClient
     .from("job_assignments").select("id, job_id, status")
     .eq("cleaner_id", cleanerId)
-    .in("status", ["assigned", "accepted"]);
+    .in("status", ["Offered", "Accepted", "Confirmed"]);
 
   if (!openAssignments || openAssignments.length === 0) return [];
 
@@ -88,12 +88,12 @@ async function markFutureAssignmentsForReassignment(
 
   const ids = targets.map((t: any) => t.id);
   await adminClient.from("job_assignments")
-    .update({ status: "needs_reassignment" })
+    .update({ status: "Needs Reassignment" })
     .in("id", ids);
 
   for (const t of targets) {
     await adminClient.from("job_status_history").insert({
-      job_id: t.job_id, from_status: t.status, to_status: "needs_reassignment",
+      job_id: t.job_id, from_status: t.status, to_status: "Needs Reassignment",
       changed_by: callerId,
       metadata: { reason, source: "cleaner-admin-action", cleaner_id: cleanerId },
     });

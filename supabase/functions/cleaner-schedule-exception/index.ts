@@ -105,7 +105,7 @@ serve(async (req) => {
       .select("id, job_id, status")
       .eq("cleaner_id", cleanerId)
       .in("job_id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"])
-      .in("status", ["assigned", "accepted"]);
+      .in("status", ["Offered", "Accepted", "Confirmed"]);
 
     const conflicts = (bookings || []).filter((b: any) =>
       (assignments || []).some((a: any) => a.job_id === b.job_id)
@@ -116,7 +116,7 @@ serve(async (req) => {
 
     if (isUrgent && assignments) {
       await adminClient.from("job_assignments")
-        .update({ status: "needs_reassignment" })
+        .update({ status: "Needs Reassignment" })
         .in("id", assignments.map((a: any) => a.id));
     }
 

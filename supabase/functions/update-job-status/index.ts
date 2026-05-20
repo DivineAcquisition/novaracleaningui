@@ -148,7 +148,7 @@ serve(async (req) => {
   if (toStatus === "no_show" && noShowBy === "cleaner" && booking.job_id) {
     const { data: assignment } = await adminClient
       .from("job_assignments").select("cleaner_id").eq("job_id", booking.job_id)
-      .in("status", ["assigned", "accepted", "en_route", "in_progress"]).maybeSingle();
+      .in("status", ["Offered", "Accepted", "Confirmed", "In Progress"]).maybeSingle();
     if (assignment?.cleaner_id) {
       const { data: c } = await adminClient.from("cleaners").select("no_show_count").eq("id", assignment.cleaner_id).maybeSingle();
       await adminClient.from("cleaners").update({ no_show_count: (c?.no_show_count ?? 0) + 1 }).eq("id", assignment.cleaner_id);
@@ -163,9 +163,9 @@ serve(async (req) => {
   if (toStatus === "cancelled" && cancelledBy === "cleaner" && booking.job_id) {
     await adminClient
       .from("job_assignments")
-      .update({ status: "needs_reassignment" })
+      .update({ status: "Needs Reassignment" })
       .eq("job_id", booking.job_id)
-      .in("status", ["assigned", "accepted"]);
+      .in("status", ["Offered", "Accepted", "Confirmed"]);
   }
 
   await adminClient.from("events").insert({
