@@ -1,0 +1,416 @@
+// ─── lead-intake ─────────────────────────────────────────────────────────
+//
+// Single entry point for new leads landing in the system from any source
+// (FB Lead Ads, LSA, website forms, manual admin, AI booking assistant).
+// Wires the full speed-to-lead workflow:
+//
+//   1. Upsert public.leads with the canonical fields + source tags
+//   2. Upsert the matching GHL contact + open opportunity (using existing
+//      sync-to-ghl plumbing, but called directly so we can capture the
+//      contact/opportunity ids on the leads row).
+//   3. Round-robin assign to the next on-shift VA (public.va_assignments)
+//   4. Fire the "calling you in 2 minutes" auto-SMS via send-ghl-sms so the
+//      lead is expecting the call.
+//   5. Schedule an escalation marker so a separate cron can flag stale
+//      leads (no call within 10 minutes).
+//   6. (Optional) push an internal SMS to the assigned VA's phone.
+//
+// Body shape (all optional except phone OR email):
+//   {
+//     source: 'fb_lead_ads' | 'lsa' | 'website' | 'manual' | 'recycled',
+//     firstName, lastName, email, phone,
+//     zipCode, city, state, address?,
+//     serviceType?, propertyType?, bedrooms?, bathrooms?, sqft?,
+//     frequency?, urgency?, preferredDate?, preferredTime?,
+//     specialRequests?, notes?,
+//     utmSource?, utmMedium?, utmCampaign?,
+//     leadScore? 'hot' | 'warm' | 'cold',  // defaults to 'hot' for fb/lsa
+//   }
+//
+// Response: { leadId, ghlContactId, ghlOpportunityId, assignedVaUserId }
+//
+// Idempotent: matches existing lead on (phone OR email) within last
+// 24 hours; only one auto-SMS goes out per lead.
+
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+const GHL_BASE = "https://services.leadconnectorhq.com";
+const GHL_VERSION = "2021-07-28";
+
+const logStep = (step: string, details?: unknown) => {
+  const tail = details ? ` - ${JSON.stringify(details)}` : "";
+  console.log(`[LEAD-INTAKE] ${step}${tail}`);
+};
+
+interface LeadPayload {
+  source?: "fb_lead_ads" | "lsa" | "website" | "manual" | "recycled" | string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  zipCode?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  serviceType?: string;
+  propertyType?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  sqft?: number;
+  frequency?: string;
+  urgency?: string;
+  preferredDate?: string;
+  preferredTime?: string;
+  specialRequests?: string;
+  notes?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  leadScore?: "hot" | "warm" | "cold";
+}
+
+function digitsOnly(s: string | undefined | null): string {
+  if (!s) return "";
+  return String(s).replace(/[^0-9]/g, "").replace(/^1/, "");
+}
+
+function defaultLeadScore(source: string): "hot" | "warm" | "cold" {
+  const s = source.toLowerCase();
+  if (s.includes("fb") || s.includes("lsa") || s.includes("local_service_ads")) {
+    return "hot";
+  }
+  if (s.includes("website") || s.includes("manual")) return "warm";
+  return "cold";
+}
+
+async function ghlUpsertContactAndOpportunity(
+  payload: LeadPayload,
+  leadId: string,
+  token: string,
+  locationId: string,
+): Promise<{ contactId: string | null; opportunityId: string | null }> {
+  if (!token || !locationId) return { contactId: null, opportunityId: null };
+  const tags = [
+    "lead",
+    payload.source ? `source-${payload.source}` : null,
+    payload.zipCode ? `zip-${payload.zipCode}` : null,
+    payload.leadScore || defaultLeadScore(payload.source || ""),
+  ].filter(Boolean) as string[];
+
+  const contactBody = {
+    locationId,
+    email: payload.email || undefined,
+    phone: payload.phone || undefined,
+    firstName: payload.firstName || undefined,
+    lastName: payload.lastName || undefined,
+    address1: payload.address || undefined,
+    city: payload.city || undefined,
+    state: payload.state || undefined,
+    postalCode: payload.zipCode || undefined,
+    country: "US",
+    source: payload.source ? `Novara ${payload.source}` : "Novara Lead",
+    tags,
+  };
+  let contactId: string | null = null;
+  try {
+    const res = await fetch(`${GHL_BASE}/contacts/upsert`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: GHL_VERSION,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(contactBody),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      contactId = (json?.contact?.id as string | undefined) ||
+        (json?.id as string | undefined) || null;
+    }
+  } catch (_) { /* ignore */ }
+  if (!contactId) return { contactId: null, opportunityId: null };
+
+  // Open opportunity at first pipeline / first stage (auto-discovery)
+  let pipelineId = "";
+  let pipelineStageId = "";
+  try {
+    const r = await fetch(
+      `${GHL_BASE}/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Version: GHL_VERSION,
+          Accept: "application/json",
+        },
+      },
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const p = (j.pipelines || [])[0];
+      if (p?.id) {
+        pipelineId = p.id;
+        const stage = (p.stages || [])
+          .slice()
+          .sort((a: { position?: number }, b: { position?: number }) =>
+            (a.position ?? 0) - (b.position ?? 0)
+          )[0];
+        if (stage?.id) pipelineStageId = stage.id;
+      }
+    }
+  } catch (_) { /* ignore */ }
+  if (!pipelineId) return { contactId, opportunityId: null };
+
+  let opportunityId: string | null = null;
+  try {
+    const oppBody = {
+      locationId,
+      contactId,
+      pipelineId,
+      pipelineStageId: pipelineStageId || undefined,
+      name: `Novara Lead — ${payload.firstName || ""} ${payload.lastName || ""}`.trim() ||
+        `Novara Lead — ${payload.phone || payload.email || leadId}`,
+      status: "open",
+      source: payload.source || "Novara Lead",
+    };
+    const res = await fetch(`${GHL_BASE}/opportunities/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: GHL_VERSION,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(oppBody),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      opportunityId = (json?.opportunity?.id as string | undefined) ||
+        (json?.id as string | undefined) || null;
+    }
+  } catch (_) { /* ignore */ }
+
+  return { contactId, opportunityId };
+}
+
+async function roundRobinAssignVa(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+): Promise<{ userId: string | null; displayName: string | null }> {
+  const { data: vas } = await supabase
+    .from("va_assignments")
+    .select("va_user_id, display_name, last_assigned_at, total_leads_assigned, on_shift")
+    .eq("is_active", true)
+    .eq("on_shift", true)
+    .order("last_assigned_at", { ascending: true, nullsFirst: true })
+    .limit(1);
+  const va = vas?.[0];
+  if (!va) return { userId: null, displayName: null };
+  await supabase
+    .from("va_assignments")
+    .update({
+      last_assigned_at: new Date().toISOString(),
+      total_leads_assigned: (va.total_leads_assigned || 0) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("va_user_id", va.va_user_id);
+  return { userId: va.va_user_id, displayName: va.display_name };
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+  try {
+    const payload: LeadPayload = await req.json();
+    if (!payload.phone && !payload.email) {
+      return new Response(
+        JSON.stringify({ error: "phone or email required" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+
+    const phoneDigits = digitsOnly(payload.phone);
+    const source = (payload.source || "manual").toLowerCase();
+    const leadScore = payload.leadScore || defaultLeadScore(source);
+
+    // 1. Look for a recent duplicate lead from the same phone/email so we
+    // don't double-text + double-assign on a webhook retry.
+    let leadId: string | null = null;
+    let isNew = true;
+    if (phoneDigits || payload.email) {
+      const orFilter = [
+        phoneDigits ? `phone.ilike.%${phoneDigits}%` : null,
+        payload.email ? `email.ilike.${payload.email}` : null,
+      ].filter(Boolean).join(",");
+      const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("id")
+        .or(orFilter)
+        .gte("created_at", sinceIso)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        leadId = existing.id;
+        isNew = false;
+      }
+    }
+
+    if (isNew) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("leads")
+        .insert({
+          first_name: payload.firstName || null,
+          last_name: payload.lastName || null,
+          email: payload.email || null,
+          phone: phoneDigits || null,
+          source,
+          status: "new",
+          property_type: payload.propertyType || null,
+          bedrooms: payload.bedrooms ?? null,
+          bathrooms: payload.bathrooms ?? null,
+          sqft: payload.sqft ?? null,
+          zip_code: payload.zipCode || null,
+          service_type: payload.serviceType || null,
+          frequency: payload.frequency || null,
+          preferred_date: payload.preferredDate || null,
+          preferred_time: payload.preferredTime || null,
+          special_requests: payload.specialRequests || null,
+          urgency: payload.urgency || (leadScore === "hot" ? "urgent" : null),
+          notes: payload.notes || null,
+          lead_score: leadScore,
+          next_action_at: leadScore === "hot"
+            ? new Date(Date.now() + 2 * 60 * 1000).toISOString()
+            : null,
+        })
+        .select("id")
+        .single();
+      if (insertErr) {
+        logStep("insert error", insertErr);
+        throw insertErr;
+      }
+      leadId = inserted.id;
+    }
+    if (!leadId) throw new Error("could not resolve leadId");
+
+    // 2. GHL upsert
+    const ghlToken = (Deno.env.get("GHL_PIT_TOKEN") || "").trim();
+    const ghlLocation = (Deno.env.get("GHL_LOCATION_ID") || "").trim();
+    const { contactId, opportunityId } = await ghlUpsertContactAndOpportunity(
+      payload,
+      leadId,
+      ghlToken,
+      ghlLocation,
+    );
+    if (contactId || opportunityId) {
+      await supabase
+        .from("leads")
+        .update({
+          ghl_contact_id: contactId,
+          ghl_opportunity_id: opportunityId,
+        })
+        .eq("id", leadId);
+    }
+
+    // 3. Round-robin VA assignment (only when new + hot)
+    let assignedVa: { userId: string | null; displayName: string | null } = {
+      userId: null,
+      displayName: null,
+    };
+    if (isNew && leadScore === "hot") {
+      assignedVa = await roundRobinAssignVa(supabase);
+      if (assignedVa.userId) {
+        await supabase
+          .from("leads")
+          .update({ assigned_va_user_id: assignedVa.userId })
+          .eq("id", leadId);
+      }
+    }
+
+    // 4. Speed-to-lead auto-SMS via GHL conversations (only on new hot leads)
+    if (isNew && leadScore === "hot" && payload.phone && contactId) {
+      try {
+        const fname = payload.firstName || "there";
+        const vaName = assignedVa.displayName || "Novara";
+        const msg =
+          `Hi ${fname}, this is ${vaName} with Novara Cleaning. ` +
+          `Just got your request — calling you from this number in about 2 minutes ` +
+          `to get a quick quote together. Text STOP to opt out.`;
+        await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+            },
+            body: JSON.stringify({
+              contactId,
+              phone: payload.phone,
+              email: payload.email,
+              firstName: payload.firstName,
+              lastName: payload.lastName,
+              message: msg,
+            }),
+          },
+        );
+        await supabase
+          .from("leads")
+          .update({ speed_to_lead_sms_sent_at: new Date().toISOString() })
+          .eq("id", leadId);
+      } catch (smsErr) {
+        logStep("speed-to-lead SMS failed (non-blocking)", smsErr);
+      }
+    }
+
+    logStep("lead processed", {
+      leadId,
+      isNew,
+      leadScore,
+      assignedVa: assignedVa.userId,
+      ghlContactId: contactId,
+      ghlOpportunityId: opportunityId,
+    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        leadId,
+        isNew,
+        leadScore,
+        ghlContactId: contactId,
+        ghlOpportunityId: opportunityId,
+        assignedVaUserId: assignedVa.userId,
+        assignedVaName: assignedVa.displayName,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[lead-intake] error", message);
+    return new Response(JSON.stringify({ error: message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+});
