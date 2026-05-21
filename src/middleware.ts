@@ -6,15 +6,20 @@ import { updateSession } from "@/integrations/supabase/middleware";
 // Each subdomain owns an exact allowlist of path prefixes. Any request
 // arriving on the wrong subdomain is 308-redirected to the owning host.
 //
-//   admin.novaracleaning.com  — admin portal + sign-in only
-//   hiring.novaracleaning.com — hiring landing + role pages + cleaner
-//                                onboarding application flow
-//   try.novaracleaning.com    — public marketing, booking funnel,
-//                                membership browse, demo, pricing
-//   app.novaracleaning.com    — authenticated customer portal
-//                                (account, manage-booking, membership
-//                                 success, billing returns, auth flows)
-//   contractor.novaracleaning.com — cleaner mobile portal (post-onboarding)
+//   admin.novaracleaning.com      — admin portal + sign-in only
+//   try.novaracleaning.com        — public marketing, booking funnel,
+//                                    membership browse, demo, pricing
+//   app.novaracleaning.com        — authenticated customer portal
+//                                    (account, manage-booking, membership
+//                                     success, billing returns, auth flows)
+//   contractor.novaracleaning.com — the entire cleaner journey:
+//                                    application onboarding (email
+//                                    verification → ob-portal → ID/W-9/etc),
+//                                    sign-in, dashboard, mobile-dashboard,
+//                                    jobs, password reset
+//
+// hiring.novaracleaning.com is NOT served by this Next.js app — it is
+// hosted on Framer. DNS for hiring.* points away from this project.
 //
 // Apex novaracleaning.com / www.* are treated as `try` (marketing root).
 // localhost / *.lovableproject.com / *.vercel.app / preview hosts skip
@@ -25,7 +30,6 @@ import { updateSession } from "@/integrations/supabase/middleware";
 
 const HOSTS = {
   admin: "admin.novaracleaning.com",
-  hiring: "hiring.novaracleaning.com",
   try: "try.novaracleaning.com",
   app: "app.novaracleaning.com",
   contractor: "contractor.novaracleaning.com",
@@ -39,15 +43,12 @@ type SubdomainKey = keyof typeof HOSTS;
 const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/admin", "admin"],
 
-  // Hiring microsite — marketing landing only. Role detail pages with
-  // the actual application form live on contractor.* (see below).
-  ["/hiring", "hiring"],
-
-  // Contractor portal: role application slugs at root level, plus the
-  // cleaner onboarding + dashboard funnel.
-  ["/field-cleaner", "contractor"],
-  ["/ops-coordinator", "contractor"],
-  ["/executive-assistant", "contractor"],
+  // Contractor portal: the entire cleaner journey lives here.
+  // - /cleaner/onboarding, /cleaner/ob-portal, /ob-portal: application
+  //   funnel (post-Framer hand-off from hiring.novaracleaning.com)
+  // - /cleaner/auth, /cleaner/dashboard, /cleaner/mobile-dashboard,
+  //   /cleaner/reset-password: signed-in cleaner portal
+  // - /contractor/*: legacy contractor routes
   ["/cleaner", "contractor"],
   ["/contractor", "contractor"],
   ["/ob-portal", "contractor"],
@@ -72,7 +73,6 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
 const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   admin: "/admin/auth",
-  hiring: "/hiring",
   try: "/",
   app: "/auth",
   contractor: "/cleaner/auth",
@@ -100,10 +100,12 @@ function ownerOf(pathname: string): SubdomainKey {
 function subdomainOf(hostname: string): SubdomainKey | null {
   const h = hostname.toLowerCase();
   if (h.startsWith("admin.")) return "admin";
-  if (h.startsWith("hiring.")) return "hiring";
   if (h.startsWith("try.")) return "try";
   if (h.startsWith("app.")) return "app";
   if (h.startsWith("contractor.")) return "contractor";
+  // hiring.* is hosted on Framer — if DNS still points here for any
+  // reason, fall through to `try` (marketing) so we never serve broken
+  // content on the hiring subdomain.
   return null;
 }
 
