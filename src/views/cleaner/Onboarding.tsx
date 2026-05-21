@@ -254,27 +254,34 @@ export default function CleanerOnboarding() {
         }
       }
 
-      // Create cleaner record
+      // Create cleaner record. We persist phone_verified directly so
+      // the GHL sync downstream stamps the contact with the
+      // `phone-verified` tag, and we now include the address/city
+      // fields the audit found were being dropped silently.
+      const insertPayload: Record<string, unknown> = {
+        user_id: userId,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        phone: formData.phone,
+        email: userEmail,
+        state: formData.state,
+        home_zip: formData.homeZip,
+        max_travel_miles: formData.maxTravelMiles,
+        preferred_work_days: formData.preferredWorkDays,
+        avatar_url: avatarUrl,
+        skillset: formData.skillset,
+        pay_rate_hr: 18.00,
+        status: "active",
+        approved: true,
+        onboarding_complete: true,
+        activated_at: new Date().toISOString(),
+        phone_verified: phoneVerified === true,
+      };
+      if (formData.homeAddress) insertPayload.home_address = formData.homeAddress;
+      if (formData.homeCity) insertPayload.home_city = formData.homeCity;
       const { error: insertError } = await supabase
         .from("cleaners")
-        .insert({
-          user_id: userId,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formData.phone,
-          email: userEmail,
-          state: formData.state,
-          home_zip: formData.homeZip,
-          max_travel_miles: formData.maxTravelMiles,
-          preferred_work_days: formData.preferredWorkDays,
-          avatar_url: avatarUrl,
-          skillset: formData.skillset,
-          pay_rate_hr: 18.00,
-          status: "active",
-          approved: true,
-          onboarding_complete: true,
-          activated_at: new Date().toISOString(),
-        });
+        .insert(insertPayload as any);
 
       if (insertError) {
         if (insertError.code === '23505') {
@@ -309,7 +316,28 @@ export default function CleanerOnboarding() {
 
       // Initiate Stripe Connect
       toast.success("Profile created! Setting up payments...");
-      
+
+      // Sync the new contractor profile to GHL: create/upsert contact,
+      // stamp custom fields (status, tier, location, preferred days,
+      // skillset, etc.), apply lifecycle tags (contractor, tier-foundation,
+      // onboarding-complete, phone-verified, etc.), and create an
+      // opportunity in the contractor pipeline if one is configured.
+      // Fire and forget — the cleaner can still proceed if GHL is down.
+      try {
+        const { data: newCleaner } = await supabase
+          .from("cleaners")
+          .select("id")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (newCleaner?.id) {
+          supabase.functions.invoke("sync-cleaner-to-ghl", {
+            body: { cleanerId: newCleaner.id },
+          }).catch((e) => console.warn("[Onboarding] GHL sync failed (non-blocking):", e));
+        }
+      } catch (ghlErr) {
+        console.warn("[Onboarding] sync-cleaner-to-ghl lookup failed", ghlErr);
+      }
+
       const { data: stripeData, error: stripeError } = await supabase.functions.invoke(
         "initiate-cleaner-stripe-connect"
       );

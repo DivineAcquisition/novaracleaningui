@@ -65,6 +65,20 @@ serve(async (req) => {
 
     logStep("Updated cleaner status");
 
+    // Mirror the new payouts_enabled / onboarding_complete state into
+    // the contractor's GHL contact so tags like `payouts-enabled` and
+    // `onboarding-complete` reflect reality. Non-blocking.
+    try {
+      await supabase.functions.invoke("sync-cleaner-to-ghl", {
+        body: { cleanerId },
+      });
+      logStep("sync-cleaner-to-ghl triggered");
+    } catch (ghlErr) {
+      logStep("sync-cleaner-to-ghl failed (non-blocking)", {
+        error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),
+      });
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

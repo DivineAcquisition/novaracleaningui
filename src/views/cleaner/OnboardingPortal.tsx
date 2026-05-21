@@ -297,6 +297,14 @@ export default function OnboardingPortal() {
 
       toast.success("Step completed!");
 
+      // Mirror the milestone into the contractor's GHL contact (tags +
+      // custom fields). Fire-and-forget — portal still advances if GHL
+      // is down. send-post-booking-sms / send-ghl-sms patterns mean
+      // sync-cleaner-to-ghl will retry gracefully on a future event.
+      supabase.functions.invoke("sync-cleaner-to-ghl", {
+        body: { cleanerId: profile.id },
+      }).catch((e) => console.warn("[OnboardingPortal] GHL sync failed (non-blocking):", e));
+
       // Auto-advance to next step
       const nextStep =
         activeStep !== null && activeStep < 4 ? activeStep + 1 : null;
