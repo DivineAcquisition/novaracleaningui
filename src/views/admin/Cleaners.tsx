@@ -31,6 +31,8 @@ import { toast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { US_STATES } from "@/lib/us-states";
 import { SEO } from "@/components/SEO";
+import CleanerScorecard from "@/components/admin/CleanerScorecard";
+import { RiTrophyLine } from "@remixicon/react";
 
 interface Cleaner {
   id: string;
@@ -67,6 +69,7 @@ export default function AdminCleaners() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editCleaner, setEditCleaner] = useState<Cleaner | null>(null);
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18", maxTravelMiles: "20" });
+  const [scorecardCleanerId, setScorecardCleanerId] = useState<string | null>(null);
   const [newCleaner, setNewCleaner] = useState({
     email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18",
   });
@@ -372,6 +375,7 @@ export default function AdminCleaners() {
                           {cleaner.stripe_account_id && !cleaner.payouts_enabled && (
                             <Button size="sm" variant="outline" onClick={() => handleCheckStatus(cleaner.id)}>Check</Button>
                           )}
+                          <Button size="sm" variant="ghost" title="Scorecard" onClick={() => setScorecardCleanerId(cleaner.id)}><RiTrophyLine className="w-3 h-3 text-amber-500" /></Button>
                           <Button size="sm" variant="ghost" onClick={() => router.push(`/admin/directory?cleaner=${cleaner.id}`)}><RiEyeLine className="w-3 h-3" /></Button>
                         </>
                       )}
@@ -421,6 +425,14 @@ export default function AdminCleaners() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {scorecardCleanerId && (
+        <CleanerScorecard
+          cleanerId={scorecardCleanerId}
+          onClose={() => setScorecardCleanerId(null)}
+          onChanged={fetchCleaners}
+        />
+      )}
     </div>
   );
 }
