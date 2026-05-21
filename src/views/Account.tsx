@@ -17,6 +17,7 @@ import {
   RiGiftLine, RiShieldCheckLine, RiCoupon3Line, RiExternalLinkLine, RiStarFill
 } from "@remixicon/react";
 import { ReferralSection } from "@/components/ReferralSection";
+import { CreditWallet } from "@/components/CreditWallet";
 import { toast } from "sonner";
 import { format, isPast, isFuture, differenceInDays, differenceInHours } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -552,7 +553,8 @@ export default function Account() {
         </div>
 
         {/* Referral */}
-        <div className="animate-fade-in-up stagger-3">
+        <div className="animate-fade-in-up stagger-3 space-y-4">
+          {user?.email && <CreditWallet email={user.email} />}
           {user?.email && <ReferralSection email={user.email} />}
         </div>
 

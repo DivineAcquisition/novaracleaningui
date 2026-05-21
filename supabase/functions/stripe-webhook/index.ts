@@ -128,6 +128,37 @@ serve(async (req) => {
             .eq('id', booking.id);
         }
 
+        // ── Apply wallet credit ledger deduction ──────────────────────
+        // If the booking reserved customer_credits at quote time
+        // (create-payment-intent set bookings.applied_credit_cents), now
+        // that the payment cleared we atomically deduct those credits
+        // from the ledger. Idempotent: if the rows are already marked
+        // 'applied' the RPC is a no-op on the spent rows.
+        try {
+          const reserved = Number((booking as any).applied_credit_cents || 0);
+          const custId = (booking as any).customer_id;
+          if (reserved > 0 && custId) {
+            // Only spend the credit if no consumed row already exists
+            // for this booking (cheap idempotency check).
+            const { data: alreadyApplied } = await supabase
+              .from('customer_credits')
+              .select('id', { count: 'exact', head: false })
+              .eq('applied_to_booking_id', booking.id)
+              .eq('status', 'applied');
+            if (!alreadyApplied || alreadyApplied.length === 0) {
+              const { data: applyResult } = await supabase.rpc(
+                'apply_customer_credit_to_booking',
+                { _customer_id: custId, _booking_id: booking.id, _max_cents: reserved },
+              );
+              logStep('Wallet credit applied to booking', { bookingId: booking.id, applyResult });
+            }
+          }
+        } catch (creditErr) {
+          logStep('Wallet credit ledger deduction failed (non-blocking)', {
+            error: creditErr instanceof Error ? creditErr.message : String(creditErr),
+          });
+        }
+
         // Home-detail gate. Booking is only "confirmed" (and therefore
         // eligible for the confirmation email / SMS / auto-dispatch /
         // calendar event) when the customer ALSO answered the property
@@ -422,6 +453,20 @@ serve(async (req) => {
                 });
               }
 
+              // Also fire the post-booking GHL SMS (account + referral
+              // links). Idempotent on bookings.post_confirm_ghl_sms_sent
+              // so it won't double-text if finalize-booking also runs.
+              try {
+                await supabase.functions.invoke("send-post-booking-sms", {
+                  body: { bookingId: confirmedBooking.id },
+                });
+                logStep("Post-booking GHL SMS triggered");
+              } catch (ghlSmsErr) {
+                logStep("Post-booking GHL SMS failed (non-blocking)", {
+                  error: ghlSmsErr instanceof Error ? ghlSmsErr.message : String(ghlSmsErr),
+                });
+              }
+
               // Mark confirmation email as sent to prevent duplicates on webhook retries
               await supabase
                 .from('bookings')
@@ -556,34 +601,40 @@ serve(async (req) => {
             logStep("Error syncing to Anything (non-blocking)", { error: anythingError });
           }
 
-          // Track referral if referral code was used
-          if (confirmedBooking.metadata && (confirmedBooking.metadata as any).referral_code) {
+          // Track referral if a referral code was applied to this
+          // booking. Reads from the canonical bookings.referral_code
+          // column (added in 20260521 migration) instead of the
+          // nonexistent metadata path used previously.
+          const appliedReferralCode = (confirmedBooking as any).referral_code as string | null;
+          if (appliedReferralCode) {
             try {
-              const referralCode = (confirmedBooking.metadata as any).referral_code;
-              logStep("Processing referral", { code: referralCode });
-
-              // Find the referrer
+              logStep("Processing referral attribution", { code: appliedReferralCode });
               const { data: referrer } = await supabase
                 .from('customers')
-                .select('id')
-                .eq('referral_code', referralCode)
-                .single();
+                .select('id, email')
+                .eq('referral_code', appliedReferralCode)
+                .maybeSingle();
 
-              if (referrer && referrer.id) {
-                // Create referral record
-                const { error: referralError } = await supabase
+              if (referrer?.id && referrer.email !== confirmedBooking.email) {
+                // Idempotency: only insert one referrals row per booking.
+                const { data: existingReferral } = await supabase
                   .from('referrals')
-                  .insert({
-                    customer_id: referrer.id,
-                    code: referralCode,
-                    status: 'pending',
-                    credit_cents: 5000, // $50 credit
-                  });
-
-                if (referralError) {
-                  logStep("Error creating referral record", referralError);
-                } else {
-                  logStep("Referral tracked successfully", { referrerId: referrer.id });
+                  .select('id, status')
+                  .eq('referred_booking_id', confirmedBooking.id)
+                  .maybeSingle();
+                if (!existingReferral) {
+                  await supabase
+                    .from('referrals')
+                    .insert({
+                      customer_id: referrer.id,
+                      code: appliedReferralCode,
+                      referrer_email: referrer.email,
+                      referred_email: confirmedBooking.email,
+                      referred_booking_id: confirmedBooking.id,
+                      status: 'pending',
+                      credit_cents: 5000,
+                    });
+                  logStep("Referral event recorded", { referrerId: referrer.id, bookingId: confirmedBooking.id });
                 }
               }
             } catch (referralError) {

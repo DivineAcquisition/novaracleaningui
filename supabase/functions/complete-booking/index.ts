@@ -104,6 +104,51 @@ serve(async (req) => {
 
     logStep("Booking marked complete, charging remaining balance");
 
+    // ─── Referral reward grant ────────────────────────────────────────
+    // If this booking used a referral_code, grant the REFERRER a $50
+    // wallet credit (customer_credits) now that the referred booking
+    // actually completed. Atomic + idempotent: we mark the referrals
+    // row 'redeemed' first, and only grant if it was previously 'pending'.
+    try {
+      const refCode = (booking as any).referral_code as string | null;
+      if (refCode) {
+        const { data: referrer } = await supabase
+          .from("customers")
+          .select("id, email, first_name")
+          .eq("referral_code", refCode)
+          .maybeSingle();
+        if (referrer?.id && referrer.email !== booking.email) {
+          const { data: refRow } = await supabase
+            .from("referrals")
+            .select("id, status, credit_cents")
+            .eq("referred_booking_id", bookingId)
+            .maybeSingle();
+          const rewardCents = (refRow?.credit_cents as number | null) || 5000;
+          if (refRow && refRow.status === "pending") {
+            await supabase
+              .from("referrals")
+              .update({ status: "redeemed", redeemed_at: new Date().toISOString() })
+              .eq("id", refRow.id);
+            await supabase.rpc("grant_customer_credit", {
+              _customer_id: referrer.id,
+              _amount_cents: rewardCents,
+              _source: "referral",
+              _reason: `Referral reward for ${booking.first_name || "guest"} completing booking ${(booking as any).booking_number || bookingId}`,
+              _granted_by: null,
+              _expires_at: null,
+              _referral_id: refRow.id,
+              _booking_id: bookingId,
+            });
+            logStep("Referral reward granted", { referrerId: referrer.id, rewardCents });
+          }
+        }
+      }
+    } catch (referralErr) {
+      logStep("Referral reward grant failed (non-blocking)", {
+        error: referralErr instanceof Error ? referralErr.message : String(referralErr),
+      });
+    }
+
     // ─── Auto-charge remaining balance off-session ──────────────────────
     // For deposit bookings, charge the remaining 50% to the saved card.
     // For paid-in-full bookings, this is a no-op. Idempotent: if we've
