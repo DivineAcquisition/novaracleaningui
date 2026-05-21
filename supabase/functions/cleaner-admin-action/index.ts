@@ -152,6 +152,8 @@ serve(async (req) => {
           summary: `Cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""} deactivated — ${reason}`,
           data: { reason, by: callerId, reassigned_jobs: reassigned.length },
         });
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
         return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
       }
 
@@ -177,6 +179,8 @@ serve(async (req) => {
           summary: `Cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""} terminated — ${reason}`,
           data: { reason, by: callerId, reassigned_jobs: reassigned.length },
         });
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
         return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
       }
 
@@ -206,6 +210,8 @@ serve(async (req) => {
           summary: `Cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""} reactivated`,
           data: { by: callerId },
         });
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
         return json({ ok: true, cleaner: updated });
       }
 
@@ -277,6 +283,10 @@ serve(async (req) => {
           summary: `Compliance updated for ${cleaner.first_name || ""} ${cleaner.last_name || ""}`,
           data: { patch, by: callerId },
         });
+        // Push compliance tag changes (bg-check-passed / -expiring,
+        // insurance-on-file, etc.) into the contractor's GHL contact.
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
         return json({ ok: true, cleaner: updated });
       }
 

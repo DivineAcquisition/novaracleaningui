@@ -267,8 +267,20 @@ serve(async (req) => {
     // 4. Send the message — include phoneNumberId only when we have one
     // so the location-default still works for ops that haven't picked a
     // verified number yet.
+    //
+    // IMPORTANT: GHL's /conversations/messages endpoint enforces a strict
+    // enum on `type` (SMS | MMS | Email | …). Our callers pass internal
+    // category labels in body.type (e.g. "verification",
+    // "confirmation", "post_booking_confirmation") for logging only.
+    // Map ANYTHING that isn't a known GHL message channel to "SMS" so a
+    // caller's internal label can never cause a 422 from GHL.
+    const GHL_MESSAGE_TYPES = new Set([
+      "SMS", "MMS", "Email", "Live_Chat", "GMB", "FB", "IG", "WhatsApp",
+    ]);
+    const requestedType = String(body.type || "SMS");
+    const ghlType = GHL_MESSAGE_TYPES.has(requestedType) ? requestedType : "SMS";
     const messagePayload: Record<string, unknown> = {
-      type: body.type || "SMS",
+      type: ghlType,
       contactId,
       message: body.message,
     };
