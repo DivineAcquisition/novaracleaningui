@@ -38,18 +38,21 @@ export default function CleanerResetPassword() {
     }
     
     setIsLoading(true);
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/update-password`,
+
+    // Route through send-auth-email so cleaners get a branded green
+    // Novara email even if Supabase Auth's default SMTP is broken.
+    // The function pins the redirectTo to contractor.novaracleaning.com.
+    const { error } = await supabase.functions.invoke("send-auth-email", {
+      body: { kind: "password_reset_cleaner", email },
     });
-    
+
     if (error) {
       toast.error(error.message || "Failed to send reset email");
     } else {
       setEmailSent(true);
       toast.success("Password reset link sent! Check your email.");
     }
-    
+
     setIsLoading(false);
   };
 

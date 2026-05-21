@@ -89,52 +89,52 @@ function renderHtml(opts: { firstName: string }): string {
   const checklistHtml = STANDARD_CHECKLIST
     .map(
       (group) => `
-    <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#2D1B69">${group.room}</h3>
-    <ul style="margin:0;padding-left:20px;color:#3F3D56;font-size:14px;line-height:1.6">
+    <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#111827">${group.room}</h3>
+    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.6">
       ${group.tasks.map((t) => `<li>${t}</li>`).join("")}
     </ul>`,
     )
     .join("");
 
   const notIncluded = `
-    <ul style="margin:0;padding-left:20px;color:#3F3D56;font-size:14px;line-height:1.6">
+    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.6">
       ${NOT_INCLUDED.map((t) => `<li>${t}</li>`).join("")}
     </ul>`;
 
   const prepTips = `
-    <ul style="margin:0;padding-left:20px;color:#3F3D56;font-size:14px;line-height:1.6">
+    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.6">
       ${PREP_TIPS.map((t) => `<li>${t}</li>`).join("")}
     </ul>`;
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Your Standard Clean Checklist</title></head>
-<body style="margin:0;padding:0;background:#F8F6FF;font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;color:#3F3D56">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F8F6FF;padding:32px 16px">
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;color:#374151">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F9FAFB;padding:32px 16px">
     <tr><td align="center">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(45,27,105,0.08)">
-        <tr><td style="background:linear-gradient(135deg,#7B5DE8 0%,#A77DFF 100%);padding:32px 32px 24px;color:#ffffff">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(22,163,74,0.10)">
+        <tr><td style="background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);padding:32px 32px 24px;color:#ffffff">
           <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">Your Standard Clean — what to expect</h1>
           <p style="margin:0;font-size:14px;opacity:0.95">Hi ${
     opts.firstName || "there"
   } — here's exactly what the Novara team will do on your visit. Save this email so you know what's included (and what's an add-on).</p>
         </td></tr>
         <tr><td style="padding:24px 32px">
-          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#2D1B69">What's included</h2>
-          <p style="margin:0 0 8px;font-size:13px;color:#7C7993">Every standard cleaning covers the following, top to bottom.</p>
+          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#111827">What's included</h2>
+          <p style="margin:0 0 8px;font-size:13px;color:#6B7280">Every standard cleaning covers the following, top to bottom.</p>
           ${checklistHtml}
 
-          <hr style="border:none;border-top:1px solid #EDE9FE;margin:32px 0" />
+          <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
 
-          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#2D1B69">Not included on Standard</h2>
-          <p style="margin:0 0 8px;font-size:13px;color:#7C7993">These need an upgrade to Deep Clean or a specific add-on — reply to this email or text us at +1 (844) 735-2070 and we'll add it.</p>
+          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#111827">Not included on Standard</h2>
+          <p style="margin:0 0 8px;font-size:13px;color:#6B7280">These need an upgrade to Deep Clean or a specific add-on — reply to this email or text us at +1 (844) 735-2070 and we'll add it.</p>
           ${notIncluded}
 
-          <hr style="border:none;border-top:1px solid #EDE9FE;margin:32px 0" />
+          <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
 
-          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#2D1B69">Day-of prep tips</h2>
+          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#111827">Day-of prep tips</h2>
           ${prepTips}
         </td></tr>
-        <tr><td style="background:#F8F6FF;padding:20px 32px;text-align:center;font-size:12px;color:#7C7993">
+        <tr><td style="background:#F9FAFB;padding:20px 32px;text-align:center;font-size:12px;color:#6B7280">
           Novara Cleaning &middot; hello@novaracleaning.com &middot; +1 (844) 735-2070<br/>
           Reply to this email any time — we love hearing from members.
         </td></tr>
