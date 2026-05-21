@@ -78,23 +78,18 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInputs()) return;
-    
+
     setIsLoading(true);
-    const { data, error } = await signUp(email, password);
-    
+    // signUp() now routes through our send-auth-email function so the
+    // confirmation always arrives in the brand template. The function
+    // never reveals whether the email already exists (no enumeration),
+    // so the UX is a uniform "check your email" regardless.
+    const { error } = await signUp(email, password);
+
     if (error) {
-      if (error.message.includes("already registered")) {
-        toast.error("This email is already registered. Please sign in instead.");
-      } else {
-        toast.error(error.message || "Failed to sign up");
-      }
-    } else if (data?.user?.identities?.length === 0) {
-      toast.error("This email is already registered. Please sign in or reset your password.");
-    } else if (data?.user && !data?.session) {
-      toast.success("Account created! Please check your email to verify your account.");
-    } else if (data?.session) {
-      toast.success("Account created successfully!");
-      router.push("/account");
+      toast.error(error.message || "Failed to sign up");
+    } else {
+      toast.success("Check your email — we've sent a confirmation link.");
     }
     setIsLoading(false);
   };

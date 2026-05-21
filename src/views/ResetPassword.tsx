@@ -15,19 +15,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { SEO } from "@/components/SEO";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 
 export default function ResetPassword() {
+  const { resetPassword } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(email);
     } catch (error) {
@@ -36,12 +37,12 @@ export default function ResetPassword() {
         return;
       }
     }
-    
+
     setIsLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/update-password`,
-    });
-    
+    // Routes through send-auth-email so the link arrives in our brand
+    // template even if Supabase Auth's default SMTP is misconfigured.
+    const { error } = await resetPassword(email);
+
     if (error) {
       toast.error(error.message || "Failed to send reset email");
     } else {

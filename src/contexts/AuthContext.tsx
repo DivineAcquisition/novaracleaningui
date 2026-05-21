@@ -134,16 +134,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/auth/callback`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
-    });
-    return { data, error };
+    // Route every signup through our `send-auth-email` edge function so
+    // (a) the user gets a branded green-themed Novara email (Supabase's
+    // default mailer is rate-limited and unbranded) and (b) the function
+    // uses admin.generateLink({type:'signup'}) which both creates the
+    // user AND returns the confirmation link in one call — no second
+    // round-trip to Supabase's default SMTP. The function never reveals
+    // whether the email exists (returns {ok:true} regardless) so the UI
+    // simply shows "check your email" either way.
+    try {
+      const { error } = await supabase.functions.invoke("send-auth-email", {
+        body: { kind: "signup_customer", email, password },
+      });
+      if (error) {
+        return { data: null, error: { message: error.message || "Failed to start signup" } as any };
+      }
+      return { data: { user: null, session: null }, error: null };
+    } catch (e) {
+      return { data: null, error: { message: (e as Error).message } as any };
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -157,23 +166,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    // ALWAYS send the password-reset link to the app subdomain. If we
-    // used `window.location.origin` blindly the link would point back
-    // at try.novaracleaning.com whenever the customer initiated the
-    // reset from the marketing host — which the middleware then
-    // bounces and the supabase auth callback fails because the URL
-    // they verify the recovery token at must match the redirect URL
-    // Supabase signed into the email. Pinning it to app.* removes that
-    // whole class of "password reset doesn't work" failures.
-    const APP_ORIGIN = 'https://app.novaracleaning.com';
-    const isLocalhost = typeof window !== 'undefined' && /^(localhost|127\.|::1)/.test(window.location.hostname);
-    const redirectTo = isLocalhost
-      ? `${window.location.origin}/update-password`
-      : `${APP_ORIGIN}/update-password`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo,
-    });
-    return { error };
+    // Bypass Supabase Auth's default mailer entirely and send the recovery
+    // link through our own `send-auth-email` edge function. That function
+    // (a) generates the recovery link via admin.generateLink, (b) renders
+    // a brand-styled green email matching the rest of our transactional
+    // mail, and (c) returns {ok:true} regardless of whether the email is
+    // on file (no enumeration). The redirect URL is pinned to
+    // app.novaracleaning.com/update-password by the edge function.
+    try {
+      const { error } = await supabase.functions.invoke("send-auth-email", {
+        body: { kind: "password_reset_customer", email },
+      });
+      if (error) return { error: { message: error.message || "Failed to send reset email" } as any };
+      return { error: null };
+    } catch (e) {
+      return { error: { message: (e as Error).message } as any };
+    }
   };
 
   const signOut = async () => {

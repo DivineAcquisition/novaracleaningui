@@ -124,35 +124,32 @@ export default function CleanerAuth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInputs()) return;
-    
+
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/cleaner/auth/callback`,
-          data: { is_cleaner: true },
+      // Route signup through send-auth-email so the confirmation email is
+      // branded (green Novara theme) and reliably delivered via Resend.
+      // The function calls admin.generateLink({type:'signup'}) which both
+      // creates the auth user AND returns the confirmation link in one
+      // call. The link's redirectTo is pinned to
+      // contractor.novaracleaning.com/cleaner/auth/callback. We never get
+      // back whether the email was already on file (no enumeration), so
+      // the UX is "we sent you an email — check your inbox" regardless.
+      const { error } = await supabase.functions.invoke("send-auth-email", {
+        body: {
+          kind: "signup_contractor",
+          email,
+          password,
+          metadata: { is_cleaner: true },
         },
       });
-      
+
       if (error) {
-        if (error.message.includes("already registered")) {
-          toast.error("This email is already registered. Please sign in instead.");
-        } else {
-          toast.error(error.message || "Failed to sign up");
-        }
+        toast.error(error.message || "Failed to start signup");
         return;
       }
 
-      if (data?.user?.identities?.length === 0) {
-        toast.error("This email is already registered. Please sign in or reset your password.");
-      } else if (data?.user && !data?.session) {
-        toast.success("Account created! Please check your email to verify your account.");
-      } else if (data?.session) {
-        toast.success("Account created! Complete your profile to get started.");
-        router.replace("/cleaner/onboarding");
-      }
+      toast.success("Check your email — we've sent a confirmation link.");
     } catch (error: any) {
       toast.error(error.message || "An error occurred");
     } finally {
