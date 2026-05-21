@@ -39,15 +39,18 @@ type SubdomainKey = keyof typeof HOSTS;
 const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/admin", "admin"],
 
-  // Hiring microsite + cleaner application start
+  // Hiring microsite — marketing landing only. Role detail pages with
+  // the actual application form live on contractor.* (see below).
   ["/hiring", "hiring"],
-  ["/cleaner/onboarding", "hiring"],
-  ["/cleaner/ob-portal", "hiring"],
-  ["/ob-portal", "hiring"],
 
-  // Cleaner portal (post-onboarding) lives on contractor.*
+  // Contractor portal: role application slugs at root level, plus the
+  // cleaner onboarding + dashboard funnel.
+  ["/field-cleaner", "contractor"],
+  ["/ops-coordinator", "contractor"],
+  ["/executive-assistant", "contractor"],
   ["/cleaner", "contractor"],
   ["/contractor", "contractor"],
+  ["/ob-portal", "contractor"],
 
   // Customer portal (authenticated)
   ["/account", "app"],
