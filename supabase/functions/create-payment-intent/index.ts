@@ -315,9 +315,43 @@ serve(async (req) => {
       promoDiscountCents 
     });
 
-    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents;
+    // ── Account-credit (wallet) ledger lookup ──────────────────────────
+    // If the customer is signed in and asked to apply wallet credit, look
+    // up their available balance and deduct up to the post-promo total.
+    // The credit ledger lives in public.customer_credits and is created
+    // via the admin-grant-credit endpoint or referral redemption flow.
+    // Capture-time deduction (status → 'applied') happens after
+    // payment succeeds; here we only RESERVE a quote so the customer
+    // sees the right total at checkout.
+    let walletCreditCents = 0;
+    let walletCustomerId: string | null = null;
+    try {
+      const requestedWallet = Math.max(0, Math.round(Number(bookingData.applyWalletCents || 0)));
+      if (requestedWallet > 0 && bookingData.email) {
+        const { data: walletCustomer } = await supabaseClient
+          .from("customers")
+          .select("id")
+          .eq("email", String(bookingData.email).toLowerCase())
+          .maybeSingle();
+        if (walletCustomer?.id) {
+          walletCustomerId = walletCustomer.id;
+          const { data: balanceData } = await supabaseClient.rpc(
+            "get_customer_credit_balance",
+            { _customer_id: walletCustomer.id },
+          );
+          const available = Number((balanceData as { balance_cents?: number })?.balance_cents || 0);
+          const pricedSoFar = Math.max(0, subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents);
+          walletCreditCents = Math.min(requestedWallet, available, pricedSoFar);
+          logStep("Wallet credit reserved", { requested: requestedWallet, available, applied: walletCreditCents });
+        }
+      }
+    } catch (walletErr) {
+      logStep("Wallet credit lookup failed (non-blocking)", { error: walletErr instanceof Error ? walletErr.message : String(walletErr) });
+    }
+
+    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents - walletCreditCents;
     if (totalAmount < 0) totalAmount = 0;
-    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, promoDiscountCents, totalAmount });
+    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, promoDiscountCents, walletCreditCents, totalAmount });
 
     const platformFeeCents = totalAmount - cleanerPayoutCents;
     
@@ -489,8 +523,16 @@ serve(async (req) => {
         estimated_duration_hours: estimatedHours,
         cleaner_hourly_rate_cents: cleanerHourlyRateCents,
         team_notes: referralCode 
-          ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}`
-          : (promoCode ? `Promo code: PROMO:${promoCode}` : null),
+          ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}${walletCreditCents > 0 ? ` | Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : ''}`
+          : (promoCode ? `Promo code: PROMO:${promoCode}${walletCreditCents > 0 ? ` | Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : ''}` : (walletCreditCents > 0 ? `Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : null)),
+        // Canonical referral attribution column (replaces metadata trick
+        // used in stripe-webhook which never worked because bookings has
+        // no metadata column).
+        referral_code: referralCode || null,
+        // How much wallet credit was reserved for this booking. The
+        // actual ledger deduction happens in stripe-webhook on
+        // payment_intent.succeeded via apply_customer_credit_to_booking.
+        applied_credit_cents: walletCreditCents,
 
         // ─── Attribution tracking (AlphaLux-style) ──────────────────
         // The client captures UTM / landing / referrer in localStorage

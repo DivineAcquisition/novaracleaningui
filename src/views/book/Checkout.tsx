@@ -114,6 +114,37 @@ export default function BookingCheckout() {
   const [appliedReferralCode, setAppliedReferralCode] = useState<string | null>(null);
   const [referralDiscount, setReferralDiscount] = useState(0);
 
+  // Wallet credit (customer_credits ledger) state — let the customer
+  // optionally apply their account credit balance toward this booking.
+  const [walletBalanceCents, setWalletBalanceCents] = useState(0);
+  const [applyWallet, setApplyWallet] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadBalance() {
+      const email = bookingData.email?.trim();
+      if (!email) return;
+      try {
+        const { data: cust } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("email", email)
+          .maybeSingle();
+        if (!cust?.id) return;
+        const { data: bal } = await (supabase.rpc as any)(
+          "get_customer_credit_balance",
+          { _customer_id: cust.id },
+        );
+        if (cancelled) return;
+        const cents = Number((bal as { balance_cents?: number } | null)?.balance_cents || 0);
+        setWalletBalanceCents(cents);
+      } catch (e) {
+        console.warn("[Checkout] wallet balance lookup failed", e);
+      }
+    }
+    loadBalance();
+    return () => { cancelled = true; };
+  }, [bookingData.email]);
+
   // Auto-apply referral code from BookingContext (set on Zip page)
   useEffect(() => {
     if (bookingData.referralCode && !appliedReferralCode) {
@@ -422,6 +453,11 @@ export default function BookingCheckout() {
       fbclid: tracking.fbclid || undefined,
       gclid: tracking.gclid || undefined,
       firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
+      // Apply wallet credit (capped server-side to balance + post-promo
+      // total). create-payment-intent reserves the credit at quote time
+      // and a DB trigger deducts it from the customer_credits ledger
+      // when the payment confirms.
+      applyWalletCents: applyWallet ? walletBalanceCents : 0,
     };
     const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/create-payment-intent`;
     const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
@@ -862,6 +898,35 @@ export default function BookingCheckout() {
                   </div>
 
                   <Separator />
+
+                  {/* Account Credit (customer_credits ledger) */}
+                  {walletBalanceCents > 0 && (
+                    <>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          <RiSparklingLine className="w-4 h-4 text-emerald-600" />
+                          Account Credit
+                        </p>
+                        <label className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-3 cursor-pointer">
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                              Apply ${(walletBalanceCents / 100).toFixed(2)} from your wallet
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              We'll use as much as the booking allows. Unused credit stays on your account.
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={applyWallet}
+                            onChange={(e) => setApplyWallet(e.target.checked)}
+                            className="h-5 w-5 accent-emerald-600"
+                          />
+                        </label>
+                      </div>
+                      <Separator />
+                    </>
+                  )}
 
                   {/* Promo Code */}
                   <div className="space-y-2">

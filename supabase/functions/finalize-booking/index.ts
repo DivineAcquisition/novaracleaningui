@@ -390,6 +390,21 @@ serve(async (req) => {
       });
     }
 
+    // Fire the post-booking GHL SMS — single message containing the
+    // account-management link + a referral link with the customer's
+    // unique code. Idempotent via bookings.post_confirm_ghl_sms_sent
+    // so we don't double-text if finalize-booking is re-invoked.
+    try {
+      await supabase.functions.invoke("send-post-booking-sms", {
+        body: { bookingId },
+      });
+      logStep("send-post-booking-sms triggered");
+    } catch (sErr) {
+      logStep("send-post-booking-sms failed (non-blocking)", {
+        error: sErr instanceof Error ? sErr.message : String(sErr),
+      });
+    }
+
     return new Response(
       JSON.stringify({ success: true, status: "confirmed", bookingId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
