@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     url: "https://novaracleaning.com",
     images: [
       {
-        url: "https://sxdraeptzuamsgjcvfeg.supabase.co/storage/v1/object/public/assets/novara-og-image.png",
+        url: "https://api.novaracleaning.com/storage/v1/object/public/assets/novara-og-image.png",
         width: 1200,
         height: 630,
       },
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
     description:
       "Book top-rated home cleaning in the DMV area. Google Guaranteed, transparent pricing, and 100% satisfaction guarantee.",
     images: [
-      "https://sxdraeptzuamsgjcvfeg.supabase.co/storage/v1/object/public/assets/novara-og-image.png",
+      "https://api.novaracleaning.com/storage/v1/object/public/assets/novara-og-image.png",
     ],
   },
   icons: {

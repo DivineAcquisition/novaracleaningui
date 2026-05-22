@@ -37,7 +37,7 @@ interface HealthResponse {
   checked_at?: string;
 }
 
-const HEALTH_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/google-calendar-health";
+const HEALTH_URL = "https://api.novaracleaning.com/functions/v1/google-calendar-health";
 
 export default function GoogleCalendarStatus() {
   const [health, setHealth] = useState<HealthResponse | null>(null);

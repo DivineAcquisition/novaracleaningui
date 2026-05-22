@@ -364,9 +364,13 @@ export default function OnboardingPortal() {
   };
 
   // ─── Training Portal Handler ──────────────────────────
+  // The actual training URL is stored in app_secrets.CONTRACTOR_TRAINING_DRIVE_URL
+  // so operations can swap the Google Drive folder without redeploy. We
+  // route through /cleaner/training which fetches that secret + handles
+  // the embed-or-redirect logic and stamps ob_training_accessed for us.
   const handleAccessTraining = async () => {
     await updateStep("ob_training_accessed", "ob_training_accessed_at");
-    window.open("https://training.novaracleaning.com", "_blank");
+    router.push("/cleaner/training");
   };
 
   const handleSignOut = async () => {

@@ -212,7 +212,7 @@ export default function BookingCheckout() {
           error
         } = await supabase.functions.invoke('get-stripe-publishable-key');
         if (error || !data?.key) {
-          const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co';
+          const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://api.novaracleaning.com';
           const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
           const response = await fetch(`${sbUrl}/functions/v1/get-stripe-publishable-key`, {
             method: 'POST',
@@ -459,7 +459,7 @@ export default function BookingCheckout() {
       // when the payment confirms.
       applyWalletCents: applyWallet ? walletBalanceCents : 0,
     };
-    const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/create-payment-intent`;
+    const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://api.novaracleaning.com'}/functions/v1/create-payment-intent`;
     const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
     try {
       console.log(`[Checkout] Initializing payment intent (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);

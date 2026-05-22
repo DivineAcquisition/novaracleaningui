@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://sxdraeptzuamsgjcvfeg.supabase.co";
+// Default to the custom Supabase domain (api.novaracleaning.com) so a
+// missing build-time env doesn't accidentally pin clients to the raw
+// project subdomain. The original sxdraeptzuamsgjcvfeg.supabase.co host
+// keeps working — Supabase serves both — this just makes the custom
+// domain the canonical one for cookies + CORS.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://api.novaracleaning.com";
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I";
 
 // IMPORTANT: do NOT add custom global headers here.

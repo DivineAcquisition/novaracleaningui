@@ -132,29 +132,64 @@ const Index = () => {
       phone: formattedPhone,
     });
 
-    // Send lead capture webhook with client-side duplicate guard
+    // Send lead capture webhook with client-side duplicate guard.
+    // We send BOTH send-lead-capture-webhook (the legacy GHL contact
+    // path) AND lead-intake so the leads table + Sales pipeline get
+    // populated with full attribution. Both are fire-and-forget.
     const capturedEmails: string[] = JSON.parse(localStorage.getItem('lead_captured_emails') || '[]');
     if (!capturedEmails.includes(email.toLowerCase())) {
-      supabase.functions
-        .invoke("send-lead-capture-webhook", {
-          body: {
-            firstName,
-            lastName,
-            email,
-            phone: formattedPhone,
-            zipCode,
-            city: cityState.split(", ")[0] || "",
-            state: cityState.split(", ")[1] || "",
-            source: "Website",
-            landingPage: "/",
-            fbclid: fbclid || undefined,
-          },
-        })
-        .then(() => {
-          const updated = [...capturedEmails, email.toLowerCase()];
-          localStorage.setItem('lead_captured_emails', JSON.stringify(updated));
-        })
-        .catch((err) => console.error("Lead webhook error:", err));
+      // Read attribution from localStorage (captured by UTMTracker on
+      // first visit). When someone clicks a Facebook ad and lands on
+      // novaracleaning.com, fbclid + utm_source=facebook are written
+      // to localStorage and now travel with every lead-intake call.
+      const tracking = (() => {
+        try {
+          const read = (k: string) => localStorage.getItem(k) || undefined;
+          return {
+            utm_source: read("utm_source"),
+            utm_medium: read("utm_medium"),
+            utm_campaign: read("utm_campaign"),
+            utm_content: read("utm_content"),
+            utm_term: read("utm_term"),
+            landing_page: read("landing_page"),
+            referrer: read("referrer"),
+            fbclid: read("fbclid") || fbclid || undefined,
+            gclid: read("gclid"),
+            first_visit_timestamp: read("first_visit_timestamp"),
+          };
+        } catch {
+          return { fbclid: fbclid || undefined };
+        }
+      })();
+
+      const sharedBody = {
+        firstName,
+        lastName,
+        email,
+        phone: formattedPhone,
+        zipCode,
+        city: cityState.split(", ")[0] || "",
+        state: cityState.split(", ")[1] || "",
+        source: "Website",
+        landingPage: tracking.landing_page || "/",
+        fbclid: tracking.fbclid,
+        gclid: tracking.gclid,
+        utmSource: tracking.utm_source,
+        utmMedium: tracking.utm_medium,
+        utmCampaign: tracking.utm_campaign,
+        utmContent: tracking.utm_content,
+        utmTerm: tracking.utm_term,
+        referrer: tracking.referrer,
+        firstVisitTimestamp: tracking.first_visit_timestamp,
+      };
+
+      Promise.allSettled([
+        supabase.functions.invoke("send-lead-capture-webhook", { body: sharedBody }),
+        supabase.functions.invoke("lead-intake", { body: sharedBody }),
+      ]).then(() => {
+        const updated = [...capturedEmails, email.toLowerCase()];
+        localStorage.setItem('lead_captured_emails', JSON.stringify(updated));
+      }).catch((err) => console.error("Lead webhook error:", err));
     }
     router.push("/book/sqft");
   };

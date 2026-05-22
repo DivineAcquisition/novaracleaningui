@@ -890,6 +890,23 @@ export default function CleanerDashboard() {
                 <RiExternalLinkLine className="w-3 h-3 ml-1" />
               </Button>
             </div>
+            <div className="flex items-center gap-3 p-3 bg-emerald-50/60 rounded-lg border border-emerald-200/60 mt-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <RiExternalLinkLine className="w-5 h-5 text-emerald-700" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">Training Library</p>
+                <p className="text-xs text-muted-foreground">
+                  Videos, SOPs, and the 40-point checklist (Google Drive)
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => router.push("/cleaner/training")}
+              >
+                Open
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

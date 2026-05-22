@@ -70,9 +70,19 @@ interface LeadPayload {
   preferredTime?: string;
   specialRequests?: string;
   notes?: string;
+  // ─── Attribution (passed through to GHL custom fields) ───
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  landingPage?: string;
+  referrer?: string;
+  fbclid?: string;
+  gclid?: string;
+  fbp?: string;
+  fbc?: string;
+  firstVisitTimestamp?: string;
   leadScore?: "hot" | "warm" | "cold";
 }
 
@@ -123,6 +133,56 @@ async function resolveSecret(supabase: any, name: string): Promise<string> {
   return value;
 }
 
+// Map a lead payload to the GHL custom-field bag using bare fieldKeys.
+// The ghl-client (when called via /functions/v1/sync-to-ghl) resolves
+// these to UUIDs by hitting GHL's customFields endpoint. Doing the
+// resolution here keeps lead-intake self-contained and avoids pulling
+// the full ghl-client into this bundle.
+async function loadFieldKeyMap(token: string, locationId: string): Promise<Record<string, string>> {
+  try {
+    const r = await fetch(
+      `${GHL_BASE}/locations/${encodeURIComponent(locationId)}/customFields`,
+      { headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION, Accept: "application/json" } },
+    );
+    if (!r.ok) return {};
+    const j = await r.json();
+    const map: Record<string, string> = {};
+    for (const f of (j.customFields ?? []) as Array<any>) {
+      if (!f?.id) continue;
+      const raw = (f.fieldKey || f.key || "") as string;
+      const bare = raw.split(".").pop() || raw;
+      if (bare) map[bare] = f.id;
+      if (raw)  map[raw]  = f.id;
+      if (f.name) map[f.name] = f.id;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// Inferred lead-source rollup the existing GHL setup expects.
+function inferLeadSourceLabel(p: LeadPayload): string {
+  const s = (p.utmSource || "").toLowerCase();
+  if (p.fbclid || s === "facebook" || s === "fb" || s === "instagram" || s === "ig") return "Facebook Ads";
+  if (p.gclid || s === "google" || s === "googleads") return "Google Ads";
+  if (s.includes("lsa") || s.includes("local_service_ads")) return "Google LSA";
+  const src = (p.source || "").toLowerCase();
+  if (src.includes("fb")) return "Facebook Ads";
+  if (src.includes("lsa")) return "Google LSA";
+  if (src === "website" || src === "manual") return "Website";
+  return "Website";
+}
+
+function inferCustomerSourceLabel(p: LeadPayload): string {
+  const s = (p.utmSource || "").toLowerCase();
+  if (p.fbclid || s === "facebook" || s === "fb") return "Facebook";
+  if (s === "instagram" || s === "ig") return "Instagram";
+  if (p.gclid || s === "google") return "Google";
+  if (s.includes("lsa")) return "Google LSA";
+  return "Website";
+}
+
 async function ghlUpsertContactAndOpportunity(
   payload: LeadPayload,
   leadId: string,
@@ -136,11 +196,45 @@ async function ghlUpsertContactAndOpportunity(
     payload.source ? `source-${payload.source}` : null,
     payload.zipCode ? `zip-${payload.zipCode}` : null,
     payload.leadScore || defaultLeadScore(payload.source || ""),
+    // Channel + campaign tags so the user can segment in GHL.
+    payload.fbclid ? "channel-facebook" : null,
+    payload.gclid ? "channel-google" : null,
+    payload.utmSource ? `utm-${payload.utmSource}`.toLowerCase().slice(0, 40) : null,
+    payload.utmCampaign ? `cmp-${payload.utmCampaign}`.toLowerCase().slice(0, 40) : null,
   ].filter(Boolean) as string[];
 
   // Normalize phone to E.164 — GHL otherwise silently drops the phone
   // field and the contact never gets SMS'd.
   const normalizedPhone = toE164(payload.phone);
+
+  // Resolve GHL custom field UUIDs by fieldKey. If a key isn't present
+  // on the location we silently skip that field (GHL would 400 anyway).
+  const fieldMap = await loadFieldKeyMap(token, locationId);
+  const desiredFields: Record<string, string | undefined> = {
+    utm_source: payload.utmSource,
+    utm_medium: payload.utmMedium,
+    utm_campaign: payload.utmCampaign,
+    utm_content: payload.utmContent,
+    utm_term: payload.utmTerm,
+    landing_page_source: payload.landingPage,
+    attribution: payload.referrer || payload.landingPage,
+    fb_lead_id: payload.fbclid,
+    fbclid: payload.fbclid,
+    gclid: payload.gclid,
+    fbp: payload.fbp,
+    fbc: payload.fbc,
+    first_visit_at: payload.firstVisitTimestamp,
+    lead_source: inferLeadSourceLabel(payload),
+    customer_source: inferCustomerSourceLabel(payload),
+    market: payload.zipCode || undefined,
+  };
+  const customFields: Array<{ id: string; field_value: string }> = [];
+  for (const [key, raw] of Object.entries(desiredFields)) {
+    if (!raw) continue;
+    const id = fieldMap[key] ?? fieldMap[`contact.${key}`];
+    if (!id) continue;
+    customFields.push({ id, field_value: String(raw) });
+  }
 
   const contactBody = {
     locationId,
@@ -155,6 +249,7 @@ async function ghlUpsertContactAndOpportunity(
     country: "US",
     source: payload.source ? `Novara ${payload.source}` : "Novara Lead",
     tags,
+    customFields: customFields.length > 0 ? customFields : undefined,
   };
   let contactId: string | null = null;
   try {
@@ -374,6 +469,17 @@ serve(async (req) => {
           next_action_at: leadScore === "hot"
             ? new Date(Date.now() + 2 * 60 * 1000).toISOString()
             : null,
+          // ─── Attribution (also pushed into GHL custom fields) ───
+          utm_source: payload.utmSource || null,
+          utm_medium: payload.utmMedium || null,
+          utm_campaign: payload.utmCampaign || null,
+          utm_content: payload.utmContent || null,
+          utm_term: payload.utmTerm || null,
+          landing_page: payload.landingPage || null,
+          referrer: payload.referrer || null,
+          fbclid: payload.fbclid || null,
+          gclid: payload.gclid || null,
+          first_visit_at: payload.firstVisitTimestamp || null,
         })
         .select("id")
         .single();
@@ -382,6 +488,24 @@ serve(async (req) => {
         throw insertErr;
       }
       leadId = inserted.id;
+    } else if (leadId && (payload.fbclid || payload.utmSource || payload.utmCampaign)) {
+      // Existing lead row — backfill attribution if the original capture
+      // was missing it (e.g., the contact filled out a different form
+      // first and only the second submission carried the fbclid).
+      await supabase
+        .from("leads")
+        .update({
+          utm_source: payload.utmSource ?? undefined,
+          utm_medium: payload.utmMedium ?? undefined,
+          utm_campaign: payload.utmCampaign ?? undefined,
+          utm_content: payload.utmContent ?? undefined,
+          utm_term: payload.utmTerm ?? undefined,
+          landing_page: payload.landingPage ?? undefined,
+          referrer: payload.referrer ?? undefined,
+          fbclid: payload.fbclid ?? undefined,
+          gclid: payload.gclid ?? undefined,
+        })
+        .eq("id", leadId);
     }
     if (!leadId) throw new Error("could not resolve leadId");
 
