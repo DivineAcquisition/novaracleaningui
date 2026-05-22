@@ -71,7 +71,9 @@ serve(async (req) => {
         .eq("id", lead.id);
       escalated.push(lead.id);
 
-      // 2. Follow-up SMS to the lead via GHL
+      // 2. Follow-up SMS to the lead via GHL.
+      // Checks the GHL response and only stamps escalation_sms_sent_at
+      // when a messageId comes back, so we never lie about delivery.
       if (lead.phone && lead.ghl_contact_id) {
         try {
           const fname = lead.first_name || "there";
@@ -79,7 +81,7 @@ serve(async (req) => {
             `Hi ${fname}, this is Novara Cleaning — sorry we couldn't reach you ` +
             `right away! Reply to this message with the day/time that works ` +
             `best and we'll get you a quote in under 2 minutes. Reply STOP to opt out.`;
-          await fetch(
+          const smsRes = await fetch(
             `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`,
             {
               method: "POST",
@@ -93,15 +95,27 @@ serve(async (req) => {
                 firstName: lead.first_name,
                 lastName: lead.last_name,
                 message: msg,
+                type: "SMS",
               }),
             },
           );
-          await supabase
-            .from("leads")
-            .update({ escalation_sms_sent_at: new Date().toISOString() })
-            .eq("id", lead.id);
+          const smsBody = await smsRes.text();
+          let smsJson: any = null;
+          try { smsJson = JSON.parse(smsBody); } catch { /* keep raw */ }
+          const messageId = smsJson?.messageId || null;
+          if (smsRes.ok && messageId) {
+            await supabase
+              .from("leads")
+              .update({ escalation_sms_sent_at: new Date().toISOString() })
+              .eq("id", lead.id);
+            logStep("escalation SMS dispatched", { leadId: lead.id, messageId });
+          } else {
+            logStep("escalation SMS FAILED (not stamping)", {
+              leadId: lead.id, status: smsRes.status, body: smsBody.slice(0, 400),
+            });
+          }
         } catch (smsErr) {
-          logStep("escalation SMS failed", smsErr);
+          logStep("escalation SMS exception", smsErr);
         }
       }
 

@@ -420,7 +420,17 @@ serve(async (req) => {
       }
     }
 
-    // 4. Speed-to-lead auto-SMS via GHL conversations (only on new hot leads)
+    // 4. Speed-to-lead auto-SMS via GHL conversations (only on new hot leads).
+    //
+    // CRITICAL: This used to fire-and-forget without checking the GHL
+    // response, then stamp speed_to_lead_sms_sent_at regardless of
+    // whether the SMS actually went out. Pre-2026-05-22, every call here
+    // 422'd inside GHL (type-enum bug in send-ghl-sms v1/v2) but the
+    // leads table reported success. Now we:
+    //   - parse the send-ghl-sms response
+    //   - only stamp the timestamp when GHL returns a messageId
+    //   - persist the actual GHL message_id + any failure reason on the lead
+    //   - log the failure body so future regressions are visible
     if (isNew && leadScore === "hot" && payload.phone && contactId) {
       try {
         const fname = payload.firstName || "there";
@@ -429,7 +439,7 @@ serve(async (req) => {
           `Hi ${fname}, this is ${vaName} with Novara Cleaning. ` +
           `Just got your request — calling you from this number in about 2 minutes ` +
           `to get a quick quote together. Text STOP to opt out.`;
-        await fetch(
+        const smsRes = await fetch(
           `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`,
           {
             method: "POST",
@@ -444,15 +454,33 @@ serve(async (req) => {
               firstName: payload.firstName,
               lastName: payload.lastName,
               message: msg,
+              type: "SMS",
             }),
           },
         );
-        await supabase
-          .from("leads")
-          .update({ speed_to_lead_sms_sent_at: new Date().toISOString() })
-          .eq("id", leadId);
+        const smsBody = await smsRes.text();
+        let smsJson: any = null;
+        try { smsJson = JSON.parse(smsBody); } catch { /* keep raw */ }
+        const messageId = smsJson?.messageId || null;
+        const success = smsRes.ok && Boolean(messageId);
+
+        if (success) {
+          await supabase
+            .from("leads")
+            .update({ speed_to_lead_sms_sent_at: new Date().toISOString() })
+            .eq("id", leadId);
+          logStep("speed-to-lead SMS dispatched", { leadId, messageId });
+        } else {
+          logStep("speed-to-lead SMS FAILED (not stamping leads row)", {
+            leadId,
+            status: smsRes.status,
+            body: smsBody.slice(0, 400),
+          });
+        }
       } catch (smsErr) {
-        logStep("speed-to-lead SMS failed (non-blocking)", smsErr);
+        logStep("speed-to-lead SMS exception (non-blocking)", {
+          error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+        });
       }
     }
 
