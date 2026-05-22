@@ -1,17 +1,28 @@
 // ─── send-cleaning-checklist ─────────────────────────────────────────────
 //
-// Drops a standardized "what's included in your clean" email into the
-// customer's inbox so they know exactly what the Novara team will and
-// won't do on the visit. Two flavors:
+// Drops the official NovaraCleaning Maintenance Cleaning Checklist into
+// the customer's inbox. This is the canonical scope-of-work for every
+// recurring (weekly / biweekly / monthly) Standard cleaning, so the
+// customer knows exactly what's covered and what's an add-on.
 //
-//   POST { email, firstName?, serviceType: "standard" | "deep" | "moveInOut" }
+// Two ways to invoke:
 //
-// The function builds the HTML inline (no template repo dependency) and
-// hands the payload to Resend with our standard sender identity. It's
-// safe to call from any other edge function or directly from the admin
-// tooling.
+//   POST { bookingId }                — looks up the booking, sends to
+//                                       booking.email with first-name
+//                                       personalization. Skips silently
+//                                       if service_type is not 'standard'
+//                                       (deep / move-in/out have their
+//                                       own scope docs).
+//
+//   POST { email, firstName?, serviceType?: "standard" }
+//                                     — direct send (admin tooling).
+//
+// Idempotent: writes a booking_emails_sent row keyed on
+// (booking_id, kind='maintenance_checklist') so the same booking can't
+// double-fire even if the auto-trigger retries.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 
 const corsHeaders = {
@@ -20,123 +31,150 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const STANDARD_CHECKLIST: Array<{ room: string; tasks: string[] }> = [
-  {
-    room: "Whole Home",
-    tasks: [
-      "Dust + wipe all reachable horizontal surfaces (counters, dressers, shelves, picture frames, baseboards within reach)",
-      "Vacuum carpets, area rugs, and upholstered furniture cushions",
-      "Sweep + damp-mop hard floors (tile, hardwood, laminate, LVP)",
-      "Empty trash bins and replace liners (we bring fresh bags)",
-      "Spot-clean fingerprints from light switches, door frames, and door handles",
-      "Wipe mirrors and interior glass with streak-free cleaner",
-    ],
-  },
-  {
-    room: "Kitchen",
-    tasks: [
-      "Wipe down all countertops, backsplash, and table surfaces",
-      "Clean exterior of all appliances (fridge, oven, microwave, dishwasher)",
-      "Wipe inside microwave",
-      "Clean stovetop + drip pans (no heavy degrease — add-on for that)",
-      "Wipe + sanitize sink and faucet",
-      "Wipe outside of cabinet doors (no inside-cabinet detailing on Standard)",
-      "Sweep + mop floor",
-    ],
-  },
-  {
-    room: "Bathrooms",
-    tasks: [
-      "Scrub + sanitize toilets (bowl, seat, lid, base)",
-      "Scrub showers, tubs, and surrounding tile",
-      "Wipe + polish sinks and vanity counters",
-      "Polish faucets and chrome fixtures",
-      "Clean mirrors",
-      "Wipe outside of cabinets and drawers",
-      "Sweep + mop floor",
-      "Empty bathroom trash",
-    ],
-  },
-  {
-    room: "Bedrooms + Living Areas",
-    tasks: [
-      "Make beds (with linens already on; we don't change sheets unless requested)",
-      "Dust nightstands, dressers, headboards, and TV stands",
-      "Wipe inside windowsills",
-      "Vacuum carpets + under reachable furniture",
-      "Tidy visible clutter onto a flat surface (we don't reorganize personal items)",
-    ],
-  },
+// ─── OFFICIAL CHECKLIST (verbatim from NovaraCleaning Maintenance Cleaning Checklist PDF) ──
+//
+// DO NOT edit lightly — this is the contractual scope-of-work the
+// customer signed up for. If you change it, also update the printable
+// PDF in marketing collateral so the two stay in sync.
+
+const KITCHEN = [
+  "Dust and spot clean cabinet fronts",
+  "Clean counter tops",
+  "Clean sink and polish faucet",
+  "Wipe microwave interior and exterior",
+  "Dust small appliances & items on counter tops",
+  "Clean microwave (inside and out)",
+  "Clean/polish oven and refrigerator exterior",
+  "Clean/polish stove top and vent hood",
+  "Vacuum and mop kitchen floor",
+  "Remove trash, replace bag, wipe exterior",
 ];
 
-const NOT_INCLUDED = [
-  "Inside oven, inside fridge, inside cabinets, inside windows (these are add-ons — let us know in advance!)",
-  "Heavy-grease degreasing, mold remediation, or biohazard cleanup",
-  "Laundry, dishes, ironing, pet waste",
-  "Moving heavy furniture (we clean around large pieces — please move first if you want under them)",
-  "Exterior windows, balconies, or anything outdoors",
-  "Wall washing, ceiling fans above 10 ft, or any task requiring a ladder taller than a 2-step",
+const BATHROOMS = [
+  "Clean mirrors (streak-free)",
+  "Dust light fixtures",
+  "Spot clean cabinet fronts",
+  "Scrub the shower and tub",
+  "Clean counters, sinks and polish fixtures",
+  "Disinfect toilet and toilet area",
+  "Vacuum bathroom rugs",
+  "Remove trash, replace bag, wipe exterior",
+  "Clean and disinfect bathroom floors",
 ];
 
-const PREP_TIPS = [
-  "Pick up any small valuables, breakables, or jewelry you'd rather we not handle.",
-  "If you have pets, please secure them in a safe area while the team is working.",
-  "Let us know about any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.",
-  "Make sure the cleaners can park nearby — most homes have a 60-minute window from arrival to start.",
+const ALL_ROOMS = [
+  "Remove cob webs and dust ceiling fans",
+  "Dust reachable light fixtures and ceiling fans",
+  "Dust wall art and AC/heating vents",
+  "Disinfect light switches and door knobs",
+  "Dust and spot clean doors and door frames",
+  "Dust window sills and window ledges",
+  "Dust baseboards and blinds",
+  "Dust TVs, electronics, knick-knacks, book tops, picture frames, lamps, etc.",
+  "Dust all furniture — polish as needed",
+  "Dust banister and handrails",
+  "Vacuum all floors/stairs and mop hard surface floors",
+  "Vacuum all furniture (if possible)",
+  "Change linen and/or make all beds",
+  "Clean front/back door glass",
 ];
 
-function renderHtml(opts: { firstName: string }): string {
-  const checklistHtml = STANDARD_CHECKLIST
-    .map(
-      (group) => `
-    <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#111827">${group.room}</h3>
-    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.6">
-      ${group.tasks.map((t) => `<li>${t}</li>`).join("")}
+const EXTRAS = [
+  "Hand wash baseboards",
+  "Clean oven (interior)",
+  "Clean refrigerator/freezer",
+  "Wash interior window (must be reachable with a 2-step stool)",
+  "Hand wash wood blinds or shutters",
+];
+
+const SECTIONS: Array<{ title: string; items: string[] }> = [
+  { title: "Kitchen", items: KITCHEN },
+  { title: "Bathrooms", items: BATHROOMS },
+  { title: "All Rooms", items: ALL_ROOMS },
+];
+
+// ─── HTML renderer ───────────────────────────────────────────────────
+function renderHtml(opts: {
+  firstName: string;
+  bookingNumber?: number | null;
+  serviceDate?: string | null;
+  timeSlot?: string | null;
+  serviceAddress?: string | null;
+}): string {
+  const sectionHtml = SECTIONS.map(
+    (g) => `
+    <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#111827">${g.title}</h3>
+    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
+      ${g.items.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`,
-    )
-    .join("");
+  ).join("");
 
-  const notIncluded = `
-    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.6">
-      ${NOT_INCLUDED.map((t) => `<li>${t}</li>`).join("")}
+  const extrasHtml = `
+    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
+      ${EXTRAS.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`;
 
-  const prepTips = `
-    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.6">
-      ${PREP_TIPS.map((t) => `<li>${t}</li>`).join("")}
-    </ul>`;
+  const bookingMetaRows: string[] = [];
+  if (opts.bookingNumber) {
+    bookingMetaRows.push(
+      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Booking #</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">NOV-${String(opts.bookingNumber).padStart(5, "0")}</td></tr>`,
+    );
+  }
+  if (opts.serviceDate) {
+    bookingMetaRows.push(
+      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Service date</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">${opts.serviceDate}</td></tr>`,
+    );
+  }
+  if (opts.timeSlot) {
+    bookingMetaRows.push(
+      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Arrival window</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">${opts.timeSlot}</td></tr>`,
+    );
+  }
+  if (opts.serviceAddress) {
+    bookingMetaRows.push(
+      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Service address</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">${opts.serviceAddress}</td></tr>`,
+    );
+  }
+
+  const bookingMetaTable = bookingMetaRows.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F9FAFB;border-radius:10px;padding:14px 16px;margin:0 0 20px">
+         ${bookingMetaRows.join("")}
+       </table>`
+    : "";
 
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Your Standard Clean Checklist</title></head>
+<html><head><meta charset="utf-8"><title>Your Maintenance Cleaning Checklist</title></head>
 <body style="margin:0;padding:0;background:#F9FAFB;font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;color:#374151">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F9FAFB;padding:32px 16px">
     <tr><td align="center">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(22,163,74,0.10)">
-        <tr><td style="background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);padding:32px 32px 24px;color:#ffffff">
-          <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">Your Standard Clean — what to expect</h1>
-          <p style="margin:0;font-size:14px;opacity:0.95">Hi ${
-    opts.firstName || "there"
-  } — here's exactly what the Novara team will do on your visit. Save this email so you know what's included (and what's an add-on).</p>
+        <tr><td style="background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);padding:32px 32px 28px;color:#ffffff">
+          <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85">NovaraCleaning</p>
+          <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">Maintenance Cleaning Checklist</h1>
+          <p style="margin:0;font-size:14px;line-height:1.5;opacity:0.95">Hi ${opts.firstName || "there"} — here's exactly what the Novara team will do on every visit. Save this email so you always know what's included and what's an add-on.</p>
         </td></tr>
-        <tr><td style="padding:24px 32px">
-          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#111827">What's included</h2>
-          <p style="margin:0 0 8px;font-size:13px;color:#6B7280">Every standard cleaning covers the following, top to bottom.</p>
-          ${checklistHtml}
+        <tr><td style="padding:28px 32px">
+          ${bookingMetaTable}
+          <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6">
+            All recurring cleanings (weekly, biweekly and monthly) are what we call <strong>maintenance cleans</strong> because the goal is to <em>maintain the cleanliness</em> of the home. These are thorough, efficient cleanings, covering every area of the house every single time.
+          </p>
+
+          ${sectionHtml}
 
           <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
 
-          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#111827">Not included on Standard</h2>
-          <p style="margin:0 0 8px;font-size:13px;color:#6B7280">These need an upgrade to Deep Clean or a specific add-on — reply to this email or text us at +1 (844) 735-2070 and we'll add it.</p>
-          ${notIncluded}
+          <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:0 0 8px;color:#111827">Extras (additional charges apply)</h3>
+          <p style="margin:0 0 8px;font-size:13px;color:#6B7280">Want any of these on your next visit? Just reply to this email or text us — we'll add them and send an updated total.</p>
+          ${extrasHtml}
 
           <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
 
-          <h2 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:18px;margin:0 0 4px;color:#111827">Day-of prep tips</h2>
-          ${prepTips}
+          <p style="margin:0 0 8px;font-size:13px;color:#6B7280;line-height:1.6"><strong style="color:#111827">Day-of prep tips:</strong> tidy small valuables, secure pets, and flag any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.</p>
+          <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.5">© NovaraCleaning · All Rights Reserved. This document is the exclusive property of NovaraCleaning and intended solely for use by authorized employees, contractors, and the recipient customer.</p>
         </td></tr>
         <tr><td style="background:#F9FAFB;padding:20px 32px;text-align:center;font-size:12px;color:#6B7280">
           Novara Cleaning &middot; hello@novaracleaning.com &middot; +1 (844) 735-2070<br/>
-          Reply to this email any time — we love hearing from members.
+          Reply to this email any time — we love hearing from our customers.
         </td></tr>
       </table>
     </td></tr>
@@ -144,24 +182,106 @@ function renderHtml(opts: { firstName: string }): string {
 </body></html>`;
 }
 
+function plainText(opts: { firstName: string }): string {
+  const lines = [
+    `Hi ${opts.firstName || "there"},`,
+    "",
+    "Here is the official NovaraCleaning Maintenance Cleaning Checklist — exactly what our team will do on every recurring visit.",
+    "",
+    ...SECTIONS.flatMap((g) => [
+      `--- ${g.title.toUpperCase()} ---`,
+      ...g.items.map((t) => `  • ${t}`),
+      "",
+    ]),
+    "--- EXTRAS (additional charges apply) ---",
+    ...EXTRAS.map((t) => `  • ${t}`),
+    "",
+    "Reply to this email or text us at +1 (844) 735-2070 to add an extra.",
+    "",
+    "— The Novara team",
+  ];
+  return lines.join("\n");
+}
+
+// ─── Handler ─────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
   try {
-    const { email, firstName, serviceType = "standard" } = await req.json();
+    const payload = await req.json().catch(() => ({}));
+    const {
+      bookingId,
+      email: directEmail,
+      firstName: directFirstName,
+      serviceType: directServiceType,
+    } = payload as {
+      bookingId?: string;
+      email?: string;
+      firstName?: string;
+      serviceType?: string;
+    };
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+        Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    );
+
+    // Resolve recipient + booking-level personalization.
+    let email = directEmail || "";
+    let firstName = directFirstName || "";
+    let serviceType = (directServiceType || "standard").toLowerCase();
+    let bookingNumber: number | null = null;
+    let serviceDate: string | null = null;
+    let timeSlot: string | null = null;
+    let serviceAddress: string | null = null;
+    let resolvedBookingId: string | null = bookingId || null;
+
+    if (bookingId) {
+      const { data: booking, error: bookingError } = await supabase
+        .from("bookings")
+        .select(
+          "id, booking_number, email, first_name, service_type, service_date, time_slot, address, city, state, zip_code",
+        )
+        .eq("id", bookingId)
+        .maybeSingle();
+      if (bookingError) {
+        console.warn("[send-cleaning-checklist] booking lookup failed", bookingError.message);
+      }
+      if (booking) {
+        email = email || booking.email || "";
+        firstName = firstName || booking.first_name || "";
+        serviceType = (booking.service_type || serviceType || "standard").toLowerCase();
+        bookingNumber = booking.booking_number ?? null;
+        serviceDate = booking.service_date
+          ? new Date(booking.service_date + "T00:00:00").toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })
+          : null;
+        timeSlot = booking.time_slot || null;
+        serviceAddress = [booking.address, booking.city, booking.state, booking.zip_code]
+          .filter(Boolean)
+          .join(", ") || null;
+        resolvedBookingId = booking.id;
+      }
+    }
+
     if (!email) {
-      return new Response(JSON.stringify({ error: "email required" }), {
+      return new Response(JSON.stringify({ error: "email required (pass email or bookingId)" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
       });
     }
-    if (serviceType !== "standard") {
-      // V1 ships the standard-clean checklist. Deep + move-in/out
-      // checklists can be added later without touching the rest of
-      // the wiring.
+
+    // Only standard cleanings are in scope for the Maintenance Checklist.
+    // Deep / move-in/out are quoted separately with their own scope docs.
+    if (serviceType && serviceType !== "standard") {
       return new Response(
-        JSON.stringify({ skipped: true, reason: "only-standard-supported" }),
+        JSON.stringify({ skipped: true, reason: "non-standard-service-type", serviceType }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 200,
@@ -169,17 +289,78 @@ serve(async (req) => {
       );
     }
 
+    // Idempotency: skip if we already sent the checklist for this booking.
+    if (resolvedBookingId) {
+      const { data: prior } = await supabase
+        .from("booking_emails_sent")
+        .select("id, sent_at")
+        .eq("booking_id", resolvedBookingId)
+        .eq("kind", "maintenance_checklist")
+        .maybeSingle();
+      if (prior?.id) {
+        console.log("[send-cleaning-checklist] already sent — skipping", {
+          bookingId: resolvedBookingId,
+          priorSentAt: prior.sent_at,
+        });
+        return new Response(
+          JSON.stringify({ skipped: true, reason: "already-sent", priorSentAt: prior.sent_at }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+    }
+
     const resend = new Resend(Deno.env.get("RESEND_API_KEY") || "");
-    const html = renderHtml({ firstName: firstName || "" });
+    const html = renderHtml({
+      firstName,
+      bookingNumber,
+      serviceDate,
+      timeSlot,
+      serviceAddress,
+    });
+    const text = plainText({ firstName });
+
     const result = await resend.emails.send({
       from: "Novara Cleaning <hello@novaracleaning.com>",
       to: [email],
-      subject: "Your Novara Standard Clean — what's included ✨",
+      subject: "Your Maintenance Cleaning Checklist — what's included ✨",
       html,
+      text,
     });
 
+    if (result?.error) {
+      console.error("[send-cleaning-checklist] resend error", result.error);
+      return new Response(
+        JSON.stringify({ error: "resend send failed", detail: result.error }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502,
+        },
+      );
+    }
+
+    // Idempotency stamp — best-effort, doesn't block the response.
+    if (resolvedBookingId) {
+      try {
+        await supabase.from("booking_emails_sent").insert({
+          booking_id: resolvedBookingId,
+          kind: "maintenance_checklist",
+          recipient_email: email,
+          provider_message_id: (result?.data?.id as string | undefined) || null,
+        });
+      } catch (logErr) {
+        console.warn("[send-cleaning-checklist] booking_emails_sent insert failed", logErr);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, messageId: result }),
+      JSON.stringify({
+        success: true,
+        bookingId: resolvedBookingId,
+        messageId: (result?.data?.id as string | undefined) || null,
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,

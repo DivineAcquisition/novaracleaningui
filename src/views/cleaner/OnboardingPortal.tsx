@@ -364,9 +364,14 @@ export default function OnboardingPortal() {
   };
 
   // ─── Training Portal Handler ──────────────────────────
+  // Open the in-app training page (auth-gated, /cleaner/training).
+  // The training page itself auto-stamps ob_training_accessed on mount,
+  // but we also stamp it here so the checklist advances immediately
+  // even if the cleaner doesn't actually load the page (e.g. they
+  // close the tab right after the redirect).
   const handleAccessTraining = async () => {
     await updateStep("ob_training_accessed", "ob_training_accessed_at");
-    window.open("https://training.novaracleaning.com", "_blank");
+    router.push("/cleaner/training");
   };
 
   const handleSignOut = async () => {
