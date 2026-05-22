@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { useCapacitor } from "@/hooks/use-capacitor";
+import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
 
 interface CleanerProfile {
   id: string;
@@ -341,30 +342,44 @@ export default function CleanerDashboard() {
 
   const checkAuthAndLoadProfile = useCallback(async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      // Use the shared cleaner-auth resolver so admin-invited cleaners
+      // (cleaner row exists but user_id IS NULL) get auto-linked by
+      // email, and rows with onboarding basics filled but the
+      // onboarding_complete flag stuck on false get auto-promoted —
+      // both of which were producing the
+      // dashboard → onboarding → dashboard loop.
+      const { cleaner, routing } = await resolveCleanerAuth();
 
-      if (!session) {
+      if (routing === "auth") {
+        router.replace("/cleaner/auth");
+        return;
+      }
+      if (routing === "onboarding" || !cleaner) {
+        router.replace("/cleaner/onboarding");
+        return;
+      }
+      if (isBlockedCleanerStatus(cleaner.status)) {
+        toast.error("Your account is not currently active. Contact support.");
         router.replace("/cleaner/auth");
         return;
       }
 
-      const { data: cleaner, error } = await supabase
+      // Re-fetch the FULL cleaner row (resolver only returns a subset).
+      // The resolver guarantees user_id is now linked, so the standard
+      // RLS-gated query works.
+      const { data: full, error } = await supabase
         .from("cleaners")
         .select("*")
-        .eq("user_id", session.user.id)
+        .eq("id", cleaner.id)
         .maybeSingle();
-
       if (error) throw error;
-
-      if (!cleaner || !cleaner.onboarding_complete) {
+      if (!full) {
         router.replace("/cleaner/onboarding");
         return;
       }
 
-      setProfile(cleaner as CleanerProfile);
-      await fetchJobs(cleaner.id);
+      setProfile(full as CleanerProfile);
+      await fetchJobs(full.id);
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("Failed to load profile");

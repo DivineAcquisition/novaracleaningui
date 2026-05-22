@@ -33,6 +33,7 @@ import { formatPhoneNumber } from "@/lib/input-formatters";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
+import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -102,25 +103,25 @@ export default function CleanerOnboarding() {
 
   const checkAuth = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
+      // Use the shared resolver so an existing-but-unlinked cleaner row
+      // (admin-invited cleaners commonly have user_id IS NULL) gets
+      // auto-linked by email instead of dropping the user into a fresh
+      // wizard whose INSERT would then 23505 on the unique email index.
+      const { cleaner, routing, sessionUserId, sessionEmail } =
+        await resolveCleanerAuth();
+
+      if (routing === "auth" || !sessionUserId) {
         toast.error("Please sign in to continue");
         router.replace("/cleaner/auth");
         return;
       }
-      
-      setUserId(session.user.id);
-      setUserEmail(session.user.email || "");
-      
-      // Check if already onboarded
-      const { data: existingCleaner } = await supabase
-        .from("cleaners")
-        .select("id, onboarding_complete")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
 
-      if (existingCleaner?.onboarding_complete) {
+      setUserId(sessionUserId);
+      setUserEmail(sessionEmail || "");
+
+      // Resolver auto-promotes onboarding_complete when the row already
+      // looks done — so we ALWAYS forward to dashboard in that case.
+      if (cleaner && cleaner.onboarding_complete) {
         router.replace("/cleaner/dashboard");
         return;
       }
@@ -279,17 +280,30 @@ export default function CleanerOnboarding() {
       };
       if (formData.homeAddress) insertPayload.home_address = formData.homeAddress;
       if (formData.homeCity) insertPayload.home_city = formData.homeCity;
-      const { error: insertError } = await supabase
-        .from("cleaners")
-        .insert(insertPayload as any);
 
-      if (insertError) {
-        if (insertError.code === '23505') {
-          toast.info("Profile already exists. Redirecting...");
-          router.replace("/cleaner/dashboard");
+      // UPSERT on user_id (the unique index that already exists) so that
+      // a cleaner who already has a row — e.g. admin invite back-filled
+      // by the link-by-email RPC, or a prior wizard attempt — gets their
+      // row UPDATED with the new wizard data instead of triggering a
+      // 23505 unique-constraint failure. The wizard is the canonical
+      // source of truth for the profile, so we don't merge with NULL
+      // intent: any field the wizard sets is the new value.
+      const { error: upsertError } = await supabase
+        .from("cleaners")
+        .upsert(insertPayload as any, { onConflict: "user_id" });
+
+      if (upsertError) {
+        // Last-resort handler: if the unique conflict is on email (not
+        // user_id) — meaning a cleaner row exists with the same email
+        // but a DIFFERENT user_id — surface a clear error so the
+        // operator can resolve manually rather than silently looping.
+        if (upsertError.code === "23505") {
+          toast.error(
+            "A profile already exists for this email under a different account. Please contact support@novaracleaning.com.",
+          );
           return;
         }
-        throw insertError;
+        throw upsertError;
       }
 
       // Populate home_lat/home_lng for dispatch eligibility

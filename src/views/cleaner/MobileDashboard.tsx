@@ -14,6 +14,8 @@ import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useCapacitor } from "@/hooks/use-capacitor";
+import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import { toast } from "sonner";
 
 export default function MobileDashboard() {
   const router = useRouter();
@@ -32,8 +34,22 @@ export default function MobileDashboard() {
 
   const fetchData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Shared resolver auto-links admin-invited cleaner rows and
+      // auto-promotes onboarding_complete when the wizard fields are
+      // populated, so cleaners don't get bounced back to onboarding.
+      const { cleaner, routing } = await resolveCleanerAuth();
+
+      if (routing === "auth" || !cleaner) {
+        if (routing === "onboarding") {
+          router.replace("/cleaner/onboarding");
+        } else {
+          router.replace("/cleaner/auth");
+        }
+        return;
+      }
+
+      if (isBlockedCleanerStatus(cleaner.status)) {
+        toast.error("Your account is not currently active. Contact support.");
         router.replace("/cleaner/auth");
         return;
       }
@@ -41,7 +57,7 @@ export default function MobileDashboard() {
       const { data: cleanerData } = await supabase
         .from("cleaners")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("id", cleaner.id)
         .single();
 
       if (cleanerData) {

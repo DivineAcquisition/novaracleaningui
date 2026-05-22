@@ -2063,6 +2063,27 @@ export type Database = {
         Args: { _date: string; _end_time: string; _start_time: string }
         Returns: boolean
       }
+      resolve_or_link_cleaner_for_user: {
+        Args: { p_email: string }
+        Returns: {
+          id: string
+          user_id: string | null
+          first_name: string | null
+          last_name: string | null
+          email: string | null
+          phone: string | null
+          home_zip: string | null
+          onboarding_complete: boolean | null
+          approved: boolean | null
+          status: string | null
+          stripe_account_id: string | null
+          payouts_enabled: boolean | null
+          phone_verified: boolean | null
+          pay_rate_hr: number | null
+          was_linked: boolean | null
+          was_auto_promoted: boolean | null
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "customer"

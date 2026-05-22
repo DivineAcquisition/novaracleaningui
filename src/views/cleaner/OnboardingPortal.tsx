@@ -38,6 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { resolveCleanerAuth, isBlockedCleanerStatus, BLOCKED_CLEANER_STATUSES } from "@/lib/cleaner-auth";
 const logo = "/novara-logo.png";
 
 // ─── Types ──────────────────────────────────────────────
@@ -175,13 +176,7 @@ export default function OnboardingPortal() {
   const [savingStep, setSavingStep] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
 
-  const BLOCKED_STATUSES = [
-    "suspended",
-    "terminated",
-    "fired",
-    "inactive",
-    "deactivated",
-  ];
+  const BLOCKED_STATUSES = BLOCKED_CLEANER_STATUSES;
 
   useEffect(() => {
     checkAuthAndLoad();
@@ -189,36 +184,41 @@ export default function OnboardingPortal() {
 
   const checkAuthAndLoad = async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      // resolveCleanerAuth() handles session lookup + auto-link by email
+      // + auto-promote of onboarding_complete in a single round trip.
+      const { cleaner: resolved, routing } = await resolveCleanerAuth();
 
-      if (!session) {
+      if (routing === "auth") {
         toast.error("Please sign in to access the onboarding portal");
         router.replace("/cleaner/auth");
         return;
       }
 
-      // Fetch cleaner profile
-      const { data: cleaner, error } = await supabase
-        .from("cleaners")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (!cleaner) {
+      if (!resolved) {
         toast.info("Please complete your profile first");
         router.replace("/cleaner/onboarding");
         return;
       }
 
       // Security check: block fired/suspended cleaners
-      if (BLOCKED_STATUSES.includes(cleaner.status?.toLowerCase())) {
+      if (isBlockedCleanerStatus(resolved.status)) {
         setIsBlocked(true);
-        setBlockedStatus(cleaner.status);
+        setBlockedStatus(resolved.status || "blocked");
         setLoading(false);
+        return;
+      }
+
+      // Re-fetch the FULL row (resolver only returns a typed subset).
+      const { data: cleaner, error } = await supabase
+        .from("cleaners")
+        .select("*")
+        .eq("id", resolved.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!cleaner) {
+        toast.info("Please complete your profile first");
+        router.replace("/cleaner/onboarding");
         return;
       }
 
@@ -364,14 +364,9 @@ export default function OnboardingPortal() {
   };
 
   // ─── Training Portal Handler ──────────────────────────
-  // Open the in-app training page (auth-gated, /cleaner/training).
-  // The training page itself auto-stamps ob_training_accessed on mount,
-  // but we also stamp it here so the checklist advances immediately
-  // even if the cleaner doesn't actually load the page (e.g. they
-  // close the tab right after the redirect).
   const handleAccessTraining = async () => {
     await updateStep("ob_training_accessed", "ob_training_accessed_at");
-    router.push("/cleaner/training");
+    window.open("https://training.novaracleaning.com", "_blank");
   };
 
   const handleSignOut = async () => {
