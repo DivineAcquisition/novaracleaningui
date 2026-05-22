@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import SalesToolPage from "@/views/admin/SalesTool";
+import CleanerJobOfferPage from "@/views/cleaner/JobOffer";
 
 export default function Page() {
   return (
     <Suspense>
-      <SalesToolPage />
+      <CleanerJobOfferPage />
     </Suspense>
   );
 }

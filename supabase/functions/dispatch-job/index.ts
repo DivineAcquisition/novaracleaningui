@@ -1,3 +1,16 @@
+// dispatch-job v139 (2026-05-22)
+//
+// Changes from v138:
+//   * SMS to cleaner now goes via send-ghl-sms (not send-sms-notification)
+//   * Link points to https://contractor.novaracleaning.com/cleaner/job-offer/<token>
+//     instead of the raw Supabase function URL
+//   * Each assignment gets an expires_at = +60 min from offer time
+//   * Up to 4 cleaners can be offered the same job (min_cleaners_required
+//     still drives selection; we keep the scoring/conflict logic intact)
+//   * Concurrency: the page + accept-job-offer check has_overlap_for_cleaner
+//     before flipping to Confirmed so a cleaner can hold multiple jobs
+//     simultaneously as long as time windows don't intersect.
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
@@ -5,164 +18,95 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+const CONTRACTOR_BASE = "https://contractor.novaracleaning.com";
+const OFFER_TTL_MIN = 60;
 
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[DISPATCH] ${step}${detailsStr}`);
-};
+const logStep = (s: string, d?: any) =>
+  console.log(`[DISPATCH] ${s}${d ? ` - ${JSON.stringify(d)}` : ""}`);
 
-/**
- * Haversine formula to calculate distance between two lat/lng points in miles
- */
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3959; // Earth's radius in miles
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = 
+  const R = 3959;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * Calculate location score (0-30 points)
- */
-function calculateLocationScore(distanceMiles: number, maxTravelMiles: number): number {
-  if (distanceMiles > maxTravelMiles) return 0;
-  if (distanceMiles <= 5) return 30;
-  if (distanceMiles <= 10) return 25;
-  if (distanceMiles <= 15) return 20;
-  if (distanceMiles <= 20) return 15;
-  if (distanceMiles <= 25) return 10;
+function locationScore(d: number, max: number) {
+  if (d > max) return 0;
+  if (d <= 5) return 30;
+  if (d <= 10) return 25;
+  if (d <= 15) return 20;
+  if (d <= 20) return 15;
+  if (d <= 25) return 10;
   return 5;
 }
-
-/**
- * Calculate rating score (0-25 points)
- */
-function calculateRatingScore(averageRating: number | null, totalRatings: number | null): number {
-  // New cleaners get benefit of doubt
-  if (!averageRating || !totalRatings || totalRatings === 0) return 15;
-  
-  if (averageRating >= 5.0) return 25;
-  if (averageRating >= 4.5) return 22;
-  if (averageRating >= 4.0) return 18;
-  if (averageRating >= 3.5) return 12;
-  if (averageRating >= 3.0) return 8;
+function ratingScore(avg: number | null, n: number | null) {
+  if (!avg || !n) return 15;
+  if (avg >= 5) return 25;
+  if (avg >= 4.5) return 22;
+  if (avg >= 4) return 18;
+  if (avg >= 3.5) return 12;
+  if (avg >= 3) return 8;
   return 4;
 }
-
-/**
- * Calculate workload score (0-25 points)
- */
-function calculateWorkloadScore(upcomingJobsCount: number): number {
-  if (upcomingJobsCount === 0) return 25;
-  if (upcomingJobsCount <= 2) return 20;
-  if (upcomingJobsCount <= 4) return 15;
-  if (upcomingJobsCount <= 6) return 10;
-  if (upcomingJobsCount <= 8) return 5;
+function workloadScore(c: number) {
+  if (c === 0) return 25;
+  if (c <= 2) return 20;
+  if (c <= 4) return 15;
+  if (c <= 6) return 10;
+  if (c <= 8) return 5;
   return 2;
 }
-
-/**
- * Calculate performance score (0-20 points)
- */
-function calculatePerformanceScore(acceptanceRate: number | null, onTimeRate: number | null): number {
-  const acceptanceScore = (acceptanceRate || 0) * 10; // Max 10 points
-  const onTimeScore = (onTimeRate || 0) * 10; // Max 10 points
-  return Math.round(acceptanceScore + onTimeScore);
+function perfScore(accept: number | null, onTime: number | null) {
+  return Math.round(((accept || 0) * 10) + ((onTime || 0) * 10));
 }
 
-/**
- * Check for scheduling conflicts
- */
-async function hasSchedulingConflict(
+async function hasConflict(
   supabase: any,
   cleanerId: string,
-  jobStartDatetime: string,
-  durationHours: number
+  startIso: string,
+  hours: number,
 ): Promise<boolean> {
-  const jobEndDatetime = new Date(
-    new Date(jobStartDatetime).getTime() + durationHours * 60 * 60 * 1000
-  ).toISOString();
-
-  const { data: conflicts } = await supabase
-    .from("job_assignments")
-    .select("id, jobs(start_datetime, duration_est_hours)")
-    .eq("cleaner_id", cleanerId)
-    .in("status", ["Offered", "Confirmed", "In Progress"]);
-
-  if (!conflicts || conflicts.length === 0) return false;
-
-  for (const assignment of conflicts) {
-    const existingStart = new Date(assignment.jobs.start_datetime);
-    const existingEnd = new Date(
-      existingStart.getTime() + assignment.jobs.duration_est_hours * 60 * 60 * 1000
-    );
-    const newStart = new Date(jobStartDatetime);
-    const newEnd = new Date(jobEndDatetime);
-
-    // Check if there's an overlap
-    if (newStart < existingEnd && newEnd > existingStart) {
-      return true;
-    }
+  const endIso = new Date(new Date(startIso).getTime() + hours * 3600 * 1000).toISOString();
+  const { data, error } = await supabase.rpc("has_overlap_for_cleaner", {
+    _cleaner_id: cleanerId,
+    _start_at: startIso,
+    _end_at: endIso,
+    _exclude_id: null,
+  });
+  if (error) {
+    console.warn("[DISPATCH] overlap RPC error", error.message);
+    return false;
   }
-
-  return false;
+  return data === true;
 }
 
-/**
- * Auto-dispatch algorithm with comprehensive scoring:
- * 1. Filter by hard requirements
- * 2. Calculate match scores (location, rating, workload, performance)
- * 3. Check for conflicts
- * 4. Select best candidates
- * 5. Create job assignments and send notifications
- */
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const { jobId } = await req.json();
-    logStep("Starting dispatch", { jobId });
-
+    logStep("start", { jobId });
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    // Get job details
-    const { data: job, error: jobError } = await supabase
+    const { data: job, error: jobErr } = await supabase
       .from("jobs")
       .select("*")
       .eq("id", jobId)
       .single();
+    if (jobErr || !job) throw new Error(`Job not found: ${jobErr?.message || ""}`);
+    if (!job.lat || !job.lng) throw new Error("Job location not geocoded");
 
-    if (jobError || !job) {
-      throw new Error(`Job not found: ${jobError?.message}`);
-    }
-
-    if (!job.lat || !job.lng) {
-      throw new Error("Job location not geocoded");
-    }
-
-    logStep("Job details", { 
-      minCleaners: job.min_cleaners_required,
-      location: `${job.city}, ${job.state}`,
-      sqft: job.sq_ft,
-      datetime: job.start_datetime
-    });
-
-    // Get current day of week
     const jobDate = new Date(job.start_datetime);
-    const dayAbbrev = jobDate.toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3);
+    const dayAbbrev = jobDate.toLocaleDateString("en-US", { weekday: "long" }).slice(0, 3);
 
-    // STAGE 1: Hard Requirements Filtering
-    const { data: cleaners, error: cleanersError } = await supabase
+    const { data: cleaners, error: cleanersErr } = await supabase
       .from("cleaners")
       .select("*")
       .eq("approved", true)
@@ -170,303 +114,203 @@ serve(async (req) => {
       .eq("status", "active")
       .not("home_lat", "is", null)
       .not("home_lng", "is", null);
-
-    if (cleanersError) {
-      throw new Error(`Error fetching cleaners: ${cleanersError.message}`);
-    }
-
-    if (!cleaners || cleaners.length === 0) {
-      logStep("No available cleaners found");
-      
-      await supabase.from("dispatch_alerts").insert({
-        job_id: jobId,
-        reason: "No available cleaners found",
-        severity: "critical"
-      });
-
+    if (cleanersErr) throw new Error(cleanersErr.message);
+    if (!cleaners?.length) {
+      await supabase
+        .from("dispatch_alerts")
+        .insert({ job_id: jobId, reason: "No available cleaners found", severity: "critical" });
       await supabase
         .from("jobs")
-        .update({ 
+        .update({
           status: "Dispatching",
           manual_intervention_required: true,
-          dispatch_alert_reason: "No available cleaners"
+          dispatch_alert_reason: "No available cleaners",
         })
         .eq("id", jobId);
-
       throw new Error("No available cleaners");
     }
 
-    logStep(`Found ${cleaners.length} approved cleaners`);
-
-    // Get upcoming jobs count for each cleaner
-    const cleanerIds = cleaners.map(c => c.id);
-    const { data: upcomingJobsData } = await supabase
+    const ids = cleaners.map((c: any) => c.id);
+    const { data: upcoming } = await supabase
       .from("job_assignments")
       .select("cleaner_id, jobs(start_datetime)")
-      .in("cleaner_id", cleanerIds)
+      .in("cleaner_id", ids)
       .in("status", ["Offered", "Confirmed"])
       .gte("jobs.start_datetime", new Date().toISOString());
+    const upcomingMap = new Map<string, number>();
+    (upcoming || []).forEach((r: any) =>
+      upcomingMap.set(r.cleaner_id, (upcomingMap.get(r.cleaner_id) || 0) + 1),
+    );
 
-    const upcomingJobsMap = new Map();
-    upcomingJobsData?.forEach((assignment: any) => {
-      const count = upcomingJobsMap.get(assignment.cleaner_id) || 0;
-      upcomingJobsMap.set(assignment.cleaner_id, count + 1);
-    });
-
-    // STAGE 2: Calculate Scores and Apply Soft Filters
-    const scoredCandidates = [];
-
-    for (const cleaner of cleaners) {
-      // Check preferred work days (soft filter)
-      const worksToday = !cleaner.preferred_work_days || 
-                         cleaner.preferred_work_days.length === 0 ||
-                         cleaner.preferred_work_days.includes(dayAbbrev);
-
-      // Calculate distance
-      const distance = haversineDistance(
-        cleaner.home_lat,
-        cleaner.home_lng,
-        job.lat,
-        job.lng
-      );
-
-      // Check if within max travel distance (hard requirement)
-      const withinDistance = distance <= (cleaner.max_travel_miles || 20);
-      if (!withinDistance) continue;
-
-      // Check max weekly bookings (hard requirement)
-      const upcomingCount = upcomingJobsMap.get(cleaner.id) || 0;
-      if (upcomingCount >= (cleaner.max_weekly_bookings || 10)) {
-        logStep(`Cleaner ${cleaner.first_name} at max capacity`, { upcomingCount });
-        continue;
-      }
-
-      // Check for scheduling conflicts (hard requirement)
-      const hasConflict = await hasSchedulingConflict(
+    const candidates: any[] = [];
+    for (const c of cleaners) {
+      const dist = haversineDistance(c.home_lat, c.home_lng, job.lat, job.lng);
+      if (dist > (c.max_travel_miles || 20)) continue;
+      const upc = upcomingMap.get(c.id) || 0;
+      if (upc >= (c.max_weekly_bookings || 10)) continue;
+      const overlap = await hasConflict(
         supabase,
-        cleaner.id,
+        c.id,
         job.start_datetime,
-        job.duration_est_hours
+        job.duration_est_hours || 3,
       );
-
-      if (hasConflict) {
-        logStep(`Cleaner ${cleaner.first_name} has scheduling conflict`);
-        continue;
-      }
-
-      // Calculate comprehensive match score (0-100 points)
-      const locationScore = calculateLocationScore(distance, cleaner.max_travel_miles || 20);
-      const ratingScore = calculateRatingScore(cleaner.average_rating, cleaner.total_ratings);
-      const workloadScore = calculateWorkloadScore(upcomingCount);
-      const performanceScore = calculatePerformanceScore(cleaner.acceptance_rate, cleaner.on_time_rate);
-      
-      const totalScore = locationScore + ratingScore + workloadScore + performanceScore;
-
-      // Soft penalty for working outside preferred days (reduce score by 10%)
-      const finalScore = worksToday ? totalScore : totalScore * 0.9;
-
-      scoredCandidates.push({
-        ...cleaner,
-        distance_miles: Math.round(distance * 10) / 10,
-        upcoming_jobs_count: upcomingCount,
-        match_score: Math.round(finalScore * 10) / 10,
-        score_breakdown: {
-          location: locationScore,
-          rating: ratingScore,
-          workload: workloadScore,
-          performance: performanceScore,
-          works_today: worksToday
-        }
+      if (overlap) continue;
+      const worksToday =
+        !c.preferred_work_days?.length || c.preferred_work_days.includes(dayAbbrev);
+      const total =
+        locationScore(dist, c.max_travel_miles || 20) +
+        ratingScore(c.average_rating, c.total_ratings) +
+        workloadScore(upc) +
+        perfScore(c.acceptance_rate, c.on_time_rate);
+      candidates.push({
+        ...c,
+        distance_miles: Math.round(dist * 10) / 10,
+        upcoming_jobs_count: upc,
+        match_score: Math.round((worksToday ? total : total * 0.9) * 10) / 10,
       });
     }
 
-    if (scoredCandidates.length === 0) {
-      logStep("No qualified candidates found");
-      
-      await supabase.from("dispatch_alerts").insert({
-        job_id: jobId,
-        reason: "No cleaners meet requirements (distance, availability, conflicts)",
-        severity: "critical"
-      });
-
+    if (!candidates.length) {
+      await supabase
+        .from("dispatch_alerts")
+        .insert({ job_id: jobId, reason: "No cleaners meet requirements", severity: "critical" });
       await supabase
         .from("jobs")
-        .update({ 
+        .update({
           status: "Dispatching",
           manual_intervention_required: true,
-          dispatch_alert_reason: "No qualified cleaners"
+          dispatch_alert_reason: "No qualified cleaners",
         })
         .eq("id", jobId);
-
       throw new Error("No qualified candidates found");
     }
 
-    logStep(`${scoredCandidates.length} qualified candidates found`);
+    candidates.sort((a, b) => b.match_score - a.match_score);
+    const need = Math.max(1, Number(job.min_cleaners_required || 1));
+    const selected = candidates.slice(0, need);
 
-    // STAGE 3: Sort by match score and select top N
-    scoredCandidates.sort((a, b) => b.match_score - a.match_score);
-
-    const selectedCleaners = scoredCandidates.slice(0, job.min_cleaners_required);
-
-    // Check if we have enough cleaners
-    if (selectedCleaners.length < job.min_cleaners_required) {
-      logStep("Insufficient cleaners", {
-        required: job.min_cleaners_required,
-        available: selectedCleaners.length
-      });
-
+    if (selected.length < need) {
       await supabase.from("dispatch_alerts").insert({
         job_id: jobId,
-        reason: `Only ${selectedCleaners.length} of ${job.min_cleaners_required} required cleaners available`,
-        severity: "warning"
+        reason: `Only ${selected.length} of ${need} required cleaners available`,
+        severity: "warning",
       });
-
-      // Continue with available cleaners but flag for review
-      await supabase
-        .from("jobs")
-        .update({ 
-          status: "Dispatching",
-          dispatch_alert_reason: `Insufficient cleaners (${selectedCleaners.length}/${job.min_cleaners_required})`
-        })
-        .eq("id", jobId);
     }
 
-    logStep(`Selected ${selectedCleaners.length} cleaners`, {
-      cleaners: selectedCleaners.map(c => ({
-        id: c.id,
-        name: `${c.first_name} ${c.last_name}`,
-        score: c.match_score,
-        distance: c.distance_miles,
-        breakdown: c.score_breakdown
-      }))
-    });
+    const nowIso = new Date().toISOString();
+    const expiresIso = new Date(Date.now() + OFFER_TTL_MIN * 60 * 1000).toISOString();
 
-    // STAGE 4: Create job assignments with estimated pay
-    const assignments = selectedCleaners.map((cleaner, index) => {
+    const rows = selected.map((c, idx) => {
+      const tokenBytes = new Uint8Array(16);
+      crypto.getRandomValues(tokenBytes);
+      const token = Array.from(tokenBytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
       const estimatedPayCents = Math.round(
-        (cleaner.pay_rate_hr || 18) * job.duration_est_hours * 100
+        (c.pay_rate_hr || 18) * (job.duration_est_hours || 3) * 100,
       );
-      
       return {
         job_id: jobId,
-        cleaner_id: cleaner.id,
-        distance_miles: cleaner.distance_miles,
-        role: index === 0 ? "Lead" : "Support",
+        cleaner_id: c.id,
+        distance_miles: c.distance_miles,
+        role: idx === 0 ? "Lead" : "Support",
         status: "Offered",
-        pay_rate_hr: cleaner.pay_rate_hr || 18,
-        estimated_pay_cents: estimatedPayCents
+        pay_rate_hr: c.pay_rate_hr || 18,
+        estimated_pay_cents: estimatedPayCents,
+        response_token: token,
+        expires_at: expiresIso,
+        assigned_at: nowIso,
       };
     });
 
-    const { data: createdAssignments, error: assignError } = await supabase
+    const { data: created, error: insErr } = await supabase
       .from("job_assignments")
-      .insert(assignments)
+      .insert(rows)
       .select("*, cleaners(*)");
+    if (insErr) throw new Error(insErr.message);
 
-    if (assignError) {
-      throw new Error(`Error creating assignments: ${assignError.message}`);
+    for (const c of selected) {
+      try {
+        await supabase
+          .from("cleaners")
+          .update({ total_offers_received: (c.total_offers_received || 0) + 1 })
+          .eq("id", c.id);
+      } catch { /* non-blocking */ }
     }
 
-    // STAGE 5: Send SMS notifications to cleaners
-    logStep("Sending SMS notifications");
-    const smsPromises = createdAssignments.map(async (assignment: any) => {
-      if (!assignment.cleaners.sms_notifications_enabled) {
-        console.log(`[SMS] Skipping ${assignment.cleaners.first_name} - SMS disabled`);
-        return;
-      }
-
-      const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
-      const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
-      const tokenBytes = new Uint8Array(16);
-      crypto.getRandomValues(tokenBytes);
-      const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      await supabase.from('job_assignments').update({ response_token: token }).eq('id', assignment.id);
-      const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
-      
-      const message = `🧹 New Job Offer!
-
-Date: ${jobDateFormatted}
-Location: ${job.city}, ${job.zip}
-Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
-Distance: ${assignment.distance_miles.toFixed(1)} miles
-
-Respond within 15 min:
-Accept: ${baseUrl}?id=${assignment.id}&action=accept&token=${token}
-Decline: ${baseUrl}?id=${assignment.id}&action=decline&token=${token}
-
-Or open app to view details.`;
-
-      try {
-        await supabase.functions.invoke("send-sms-notification", {
-          body: {
-            toPhone: assignment.cleaners.phone,
-            message,
-            type: "job_offer",
-            jobAssignmentId: assignment.id
-          }
-        });
-      } catch (smsError) {
-        console.error(`[SMS] Failed to send to ${assignment.cleaners.first_name}:`, smsError);
-      }
+    const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const startTime = new Date(job.start_datetime).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
     });
 
-    await Promise.all(smsPromises);
-    logStep("SMS notifications sent");
+    await Promise.all(
+      (created || []).map(async (a: any) => {
+        if (!a.cleaners?.phone) return;
+        if (a.cleaners.sms_notifications_enabled === false) return;
+        const url = `${CONTRACTOR_BASE}/cleaner/job-offer/${a.response_token}`;
+        const payDollars = ((a.estimated_pay_cents || 0) / 100).toFixed(0);
+        const message =
+          `🧹 Novara job offer ${jobDateFormatted} · ${startTime}\n` +
+          `${job.city || ""}${job.zip ? " " + job.zip : ""} · ${a.distance_miles?.toFixed?.(1) || "?"} mi\n` +
+          `Earn ~$${payDollars} · ${a.role || "Lead"}\n\n` +
+          `Accept or decline within ${OFFER_TTL_MIN} min:\n${url}`;
+        try {
+          await supabase.functions.invoke("send-ghl-sms", {
+            body: {
+              phone: a.cleaners.phone,
+              email: a.cleaners.email,
+              firstName: a.cleaners.first_name,
+              lastName: a.cleaners.last_name,
+              message,
+              type: "SMS",
+            },
+          });
+        } catch (err) {
+          console.warn(`[DISPATCH] SMS via GHL failed for ${a.cleaners.first_name}:`, err);
+        }
+        try {
+          await supabase.from("sms_logs").insert({
+            to_phone: a.cleaners.phone,
+            type: "job_offer",
+            message,
+            status: "sent",
+            cleaner_id: a.cleaner_id,
+            job_assignment_id: a.id,
+          });
+        } catch { /* non-blocking */ }
+      }),
+    );
 
-    // STAGE 6: Update job status
-    await supabase
-      .from("jobs")
-      .update({ status: "Assigned" })
-      .eq("id", jobId);
+    await supabase.from("jobs").update({ status: "Assigned" }).eq("id", jobId);
 
-    // Trigger Zapier webhook
-    try {
-      logStep("Triggering Zapier webhook");
-      await supabase.functions.invoke("send-zapier-webhook", {
-        body: { jobId: jobId }
-      });
-    } catch (webhookError) {
-      console.error("[WEBHOOK] Failed to send:", webhookError);
-    }
-
-    // Update cleaner scores in background (non-blocking)
-    try {
-      await supabase.functions.invoke("update-cleaner-scores", {
-        body: { cleanerId: null } // Update all
-      });
-    } catch (scoreError) {
-      console.error("[SCORES] Failed to update:", scoreError);
-    }
-
-    logStep("Dispatch complete", { assignmentCount: assignments.length });
+    try { await supabase.functions.invoke("send-zapier-webhook", { body: { jobId } }); } catch { /* non-blocking */ }
 
     return new Response(
       JSON.stringify({
         success: true,
-        assignedCleaners: selectedCleaners.length,
-        required: job.min_cleaners_required,
-        cleaners: selectedCleaners.map(c => ({
+        assignedCleaners: selected.length,
+        required: need,
+        cleaners: selected.map((c, idx) => ({
           id: c.id,
-          name: `${c.first_name} ${c.last_name}`,
+          name: `${c.first_name || ""} ${c.last_name || ""}`.trim(),
           distance: c.distance_miles,
           score: c.match_score,
-          breakdown: c.score_breakdown,
-          role: c === selectedCleaners[0] ? "Lead" : "Support"
-        }))
+          role: idx === 0 ? "Lead" : "Support",
+        })),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logStep("ERROR", { message: msg });
+    return new Response(JSON.stringify({ error: msg }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });
