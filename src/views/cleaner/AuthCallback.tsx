@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
+import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 /**
  * Handles OAuth callback specifically for cleaner/contractor authentication.
@@ -49,9 +50,9 @@ export default function CleanerAuthCallback() {
           return;
         }
         
-        await processUser(retrySession.user.id);
+        await processUser();
       } else {
-        await processUser(session.user.id);
+        await processUser();
       }
     } catch (error) {
       console.error("Callback error:", error);
@@ -60,39 +61,37 @@ export default function CleanerAuthCallback() {
     }
   };
 
-  const processUser = async (userId: string) => {
+  const processUser = async () => {
     setStatus("Checking cleaner profile...");
 
     try {
-      // Check if user has a cleaner profile
-      const { data: cleaner, error } = await supabase
-        .from("cleaners")
-        .select("id, onboarding_complete, first_name")
-        .eq("user_id", userId)
-        .maybeSingle();
+      // resolveCleanerAuth() centralizes the user_id lookup, the email
+      // fallback that links pre-existing cleaner rows to the new auth
+      // user, and the onboarding_complete auto-promote — so cleaners
+      // who already filled the wizard in a previous session don't get
+      // looped back to /cleaner/onboarding.
+      const { cleaner, routing } = await resolveCleanerAuth();
 
-      if (error) {
-        console.error("Error checking cleaner profile:", error);
-        // Continue to onboarding even if check fails
+      if (routing === "auth") {
+        router.replace("/cleaner/auth");
+        return;
       }
 
+      if (routing === "dashboard") {
+        toast.success(`Welcome back${cleaner?.first_name ? `, ${cleaner.first_name}` : ""}!`);
+        router.replace("/cleaner/dashboard");
+        return;
+      }
+
+      // routing === "onboarding"
       if (cleaner) {
-        // Has cleaner profile
-        if (cleaner.onboarding_complete) {
-          toast.success(`Welcome back${cleaner.first_name ? `, ${cleaner.first_name}` : ''}!`);
-          router.replace("/cleaner/dashboard");
-        } else {
-          toast.info("Please complete your profile to continue.");
-          router.replace("/cleaner/onboarding");
-        }
+        toast.info("Please complete your profile to continue.");
       } else {
-        // No cleaner profile - redirect to onboarding to create one
         toast.success("Account connected! Complete your profile to get started.");
-        router.replace("/cleaner/onboarding");
       }
+      router.replace("/cleaner/onboarding");
     } catch (error) {
       console.error("Process user error:", error);
-      // Default to onboarding if anything fails
       router.replace("/cleaner/onboarding");
     }
   };

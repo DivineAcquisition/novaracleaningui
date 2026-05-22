@@ -54,6 +54,7 @@ import { SEO } from "@/components/SEO";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
 
 const logo = "/novara-logo.png";
 
@@ -241,22 +242,33 @@ export default function CleanerTrainingPage() {
 
   const initialize = async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      // resolveCleanerAuth() handles session + auto-link by email
+      // + onboarding_complete auto-promote in a single round trip.
+      const { cleaner: resolved, routing } = await resolveCleanerAuth();
 
-      if (!session) {
+      if (routing === "auth") {
         toast.error("Please sign in to access training");
         router.replace("/cleaner/auth");
         return;
       }
+      if (!resolved) {
+        toast.info("Please complete your profile first");
+        router.replace("/cleaner/onboarding");
+        return;
+      }
+      if (isBlockedCleanerStatus(resolved.status)) {
+        toast.error("Your account is not currently active. Contact support.");
+        router.replace("/cleaner/auth");
+        return;
+      }
 
+      // Resolver only returns a subset; pull the ob_* milestone fields.
       const { data: cleanerRow, error } = await supabase
         .from("cleaners")
         .select(
           "id, first_name, ob_training_accessed, ob_payouts_setup, ob_agreement_signed, ob_google_chat_joined, ob_supplies_checklist_viewed",
         )
-        .eq("user_id", session.user.id)
+        .eq("id", resolved.id)
         .maybeSingle();
 
       if (error) throw error;

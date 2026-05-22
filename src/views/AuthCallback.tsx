@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SEO } from "@/components/SEO";
+import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -43,22 +44,18 @@ export default function AuthCallback() {
           // Password reset flow - redirect to update password
           router.push("/update-password");
         } else if (provider === 'google') {
-          // Google OAuth authentication
-          // Check if user has a cleaner profile
-          const { data: cleanerData } = await supabase
-            .from('cleaners')
-            .select('id, onboarding_complete')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
+          // Google OAuth authentication — use the shared cleaner-auth
+          // resolver so admin-invited cleaners (whose cleaner row exists
+          // with user_id IS NULL) get auto-linked by email.
+          const { cleaner, routing } = await resolveCleanerAuth();
 
-          if (cleanerData) {
-            // User is a cleaner
-            if (!cleanerData.onboarding_complete) {
-              toast.success("Welcome! Complete your profile.");
-              router.push("/cleaner/onboarding");
-            } else {
+          if (cleaner) {
+            if (routing === "dashboard") {
               toast.success("Welcome back!");
               router.push("/cleaner/dashboard");
+            } else {
+              toast.success("Welcome! Complete your profile.");
+              router.push("/cleaner/onboarding");
             }
           } else {
             // Regular customer

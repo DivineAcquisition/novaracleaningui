@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import { z } from "zod";
 import { SEO } from "@/components/SEO";
+import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -37,10 +38,7 @@ export default function CleanerAuth() {
 
   const checkExistingSession = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await handlePostAuth(session.user.id);
-      }
+      await handlePostAuth();
     } catch (error) {
       console.error("Session check error:", error);
     } finally {
@@ -48,25 +46,16 @@ export default function CleanerAuth() {
     }
   };
 
-  const handlePostAuth = async (userId: string) => {
+  // Use the shared cleaner-auth resolver so admin-invited cleaners
+  // (whose cleaner row exists but has user_id IS NULL) get auto-linked
+  // by email on first sign-in instead of being looped back to
+  // /cleaner/onboarding.
+  const handlePostAuth = async () => {
     try {
-      const { data: cleaner, error } = await supabase
-        .from("cleaners")
-        .select("id, onboarding_complete")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error checking cleaner profile:", error);
-        return;
-      }
-
-      if (cleaner) {
-        if (cleaner.onboarding_complete) {
-          router.replace("/cleaner/dashboard");
-        } else {
-          router.replace("/cleaner/onboarding");
-        }
+      const { routing } = await resolveCleanerAuth();
+      if (routing === "auth") return;
+      if (routing === "dashboard") {
+        router.replace("/cleaner/dashboard");
       } else {
         router.replace("/cleaner/onboarding");
       }
@@ -112,7 +101,7 @@ export default function CleanerAuth() {
 
       if (data.user) {
         toast.success("Welcome back!");
-        await handlePostAuth(data.user.id);
+        await handlePostAuth();
       }
     } catch (error: any) {
       toast.error(error.message || "An error occurred");
