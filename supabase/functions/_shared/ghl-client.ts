@@ -53,6 +53,14 @@ interface GhlConfig {
   pipelineStageId?: string;
 }
 
+// Pipelines whose names look like Hiring / Cleaner Onboarding / Team /
+// Recruit are NEVER auto-selected for customer-facing opportunities.
+// Customer leads + bookings belong in the SALES pipeline only; the
+// Hiring board is reserved for contractor recruiting and is owned by
+// sync-cleaner-to-ghl (which uses GHL_CONTRACTOR_PIPELINE_ID).
+const NON_SALES_PIPELINE_RE =
+  /\b(hir|recruit|cleaner|team|onboard|driver|contractor|applicant|interview)\b/i;
+
 function readConfig(): GhlConfig | null {
   // deno-lint-ignore no-explicit-any
   const env = (globalThis as any).Deno?.env;
@@ -66,6 +74,55 @@ function readConfig(): GhlConfig | null {
     pipelineId: (env.get("GHL_PIPELINE_ID") || "").trim() || undefined,
     pipelineStageId: (env.get("GHL_PIPELINE_STAGE_ID") || "").trim() || undefined,
   };
+}
+
+// Pull the canonical sales pipeline + stage out of public.app_secrets.
+// The Supabase service-role key is available in every edge-function
+// runtime, and app_secrets is the source of truth that admins update
+// (e.g. via ghl-discover) so we read from there rather than relying on
+// platform env vars that may drift.
+let salesPipelineCache: { pipelineId: string; pipelineStageId: string } | null = null;
+let salesPipelinePromise: Promise<{ pipelineId: string; pipelineStageId: string } | null> | null = null;
+async function loadSalesPipelineFromSecrets():
+  Promise<{ pipelineId: string; pipelineStageId: string } | null>
+{
+  if (salesPipelineCache) return salesPipelineCache;
+  if (salesPipelinePromise) return await salesPipelinePromise;
+  // deno-lint-ignore no-explicit-any
+  const env = (globalThis as any).Deno?.env;
+  const sbUrl = (env?.get("SUPABASE_URL") || "").trim();
+  const sbKey = (env?.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+  if (!sbUrl || !sbKey) return null;
+  salesPipelinePromise = (async () => {
+    try {
+      const res = await fetch(
+        `${sbUrl}/rest/v1/app_secrets?select=key,value&key=in.(GHL_SALES_PIPELINE_ID,GHL_SALES_PIPELINE_STAGE_ID)`,
+        {
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (!res.ok) {
+        log("sales-pipeline secret fetch failed", { status: res.status });
+        return null;
+      }
+      const rows = await res.json() as Array<{ key: string; value: string }>;
+      const pipelineId = rows.find((r) => r.key === "GHL_SALES_PIPELINE_ID")?.value?.trim() || "";
+      const pipelineStageId = rows.find((r) => r.key === "GHL_SALES_PIPELINE_STAGE_ID")?.value?.trim() || "";
+      if (!pipelineId) return null;
+      const result = { pipelineId, pipelineStageId };
+      salesPipelineCache = result;
+      log("sales-pipeline secret loaded", { pipelineId, hasStage: Boolean(pipelineStageId) });
+      return result;
+    } catch (err) {
+      log("sales-pipeline secret error", { message: err instanceof Error ? err.message : String(err) });
+      return null;
+    }
+  })();
+  return await salesPipelinePromise;
 }
 
 function log(step: string, details?: unknown) {
@@ -162,7 +219,20 @@ async function autoDiscoverPipeline(
         log("auto-pipeline — no pipelines on location");
         return null;
       }
-      const p = pipelines[0];
+      // CRITICAL: never auto-select a contractor / hiring / onboarding
+      // pipeline for customer-facing opportunities. Those are reserved
+      // for sync-cleaner-to-ghl + the GHL_CONTRACTOR_PIPELINE_ID flow.
+      const salesOnly = pipelines.filter((p) =>
+        p.id && !NON_SALES_PIPELINE_RE.test(p.name || "")
+      );
+      const candidatePool = salesOnly.length > 0 ? salesOnly : [];
+      if (candidatePool.length === 0) {
+        log("auto-pipeline — no SALES pipelines on location (refusing to fall back to Hiring)", {
+          allNames: pipelines.map((p) => p.name).filter(Boolean),
+        });
+        return null;
+      }
+      const p = candidatePool[0];
       const stages = p.stages ?? [];
       const stage = stages.length > 0
         ? stages.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0]
@@ -348,12 +418,29 @@ export async function createOpportunity(
     return null;
   }
 
-  // Resolve pipeline + stage: explicit input wins, env-var second,
-  // auto-discover (first pipeline / first stage) third. This stops
-  // opportunity creation from silently being skipped when the env
-  // vars aren't set.
-  let pipelineId = input.pipelineId || cfg.pipelineId;
-  let pipelineStageId = input.pipelineStageId || cfg.pipelineStageId;
+  // Resolve pipeline + stage in this priority order:
+  //   1. Explicit input from the caller (always wins).
+  //   2. GHL_SALES_PIPELINE_ID + GHL_SALES_PIPELINE_STAGE_ID from
+  //      public.app_secrets — the canonical sales pipeline.
+  //   3. Legacy GHL_PIPELINE_ID / GHL_PIPELINE_STAGE_ID env vars (for
+  //      back-compat with deployments that haven't migrated yet).
+  //   4. Auto-discover the FIRST NON-CONTRACTOR pipeline on the
+  //      location (Hiring / Recruit / Cleaner are filtered out by
+  //      autoDiscoverPipeline so customer-facing opportunities never
+  //      bleed into the hiring board).
+  let pipelineId = input.pipelineId;
+  let pipelineStageId = input.pipelineStageId;
+  if (!pipelineId || !pipelineStageId) {
+    const sales = await loadSalesPipelineFromSecrets();
+    if (sales) {
+      pipelineId = pipelineId || sales.pipelineId;
+      pipelineStageId = pipelineStageId || sales.pipelineStageId;
+    }
+  }
+  if (!pipelineId || !pipelineStageId) {
+    pipelineId = pipelineId || cfg.pipelineId;
+    pipelineStageId = pipelineStageId || cfg.pipelineStageId;
+  }
   if (!pipelineId || !pipelineStageId) {
     const discovered = await autoDiscoverPipeline(cfg);
     if (discovered) {
@@ -365,6 +452,7 @@ export async function createOpportunity(
     log("createOpportunity skipped — could not resolve pipelineId");
     return null;
   }
+  log("createOpportunity pipeline resolved", { pipelineId, pipelineStageId });
 
   try {
     const fieldMap = await loadCustomFieldMap(cfg);
