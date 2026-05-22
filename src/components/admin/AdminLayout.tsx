@@ -20,6 +20,8 @@ import {
   RiToolsLine,
   RiMapPin2Line,
   RiFileEditLine,
+  RiBankCardLine,
+  RiLineChartLine,
   RiLogoutBoxRLine,
   RiMenuLine,
   RiCloseLine,
@@ -70,6 +72,18 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/map",
     icon: RiMapPin2Line,
     description: "Coverage × booking heatmap",
+  },
+  {
+    title: "Payroll",
+    url: "/admin/payroll",
+    icon: RiBankCardLine,
+    description: "Cleaner payouts via Stripe Connect",
+  },
+  {
+    title: "Sales",
+    url: "/admin/sales-tracker",
+    icon: RiLineChartLine,
+    description: "Per-VA leads, bookings, revenue",
   },
 ];
 
