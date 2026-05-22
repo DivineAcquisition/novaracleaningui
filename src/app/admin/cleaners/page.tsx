@@ -1,12 +1,16 @@
 import { Suspense } from "react";
-
-import AdminCleanersPage from "@/views/admin/Cleaners";
+import AdminLayout from "@/components/admin/AdminLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import AdminCleaners from "@/views/admin/Cleaners";
 
 export default function Page() {
   return (
     <ProtectedRoute requiredRole="admin">
-      <AdminCleanersPage />
+      <AdminLayout>
+        <Suspense>
+          <AdminCleaners />
+        </Suspense>
+      </AdminLayout>
     </ProtectedRoute>
   );
 }

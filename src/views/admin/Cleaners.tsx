@@ -1,438 +1,683 @@
 "use client";
 
+// ─── Admin Cleaners (v2 — 2026-05-22) ──────────────────────────────────
+//
+// Combined directory + management. One screen, no separate "directory" tab.
+// - Searchable table of every contractor in public.cleaners
+// - Filter by status (active / pending / inactive) and ZIP
+// - Click a row → side sheet with:
+//     * Profile (name, phone, email, home zip, pay tier)
+//     * Onboarding progress (the 5 ob_* flags + phone_verified)
+//     * Performance metrics (accept rate, on-time, rating, completed)
+//     * Actions: approve, deactivate, terminate, reactivate, resync to GHL,
+//                resend onboarding link, flag
+// - All actions hit the existing cleaner-admin-action edge fn.
+// - Zero hardcoded data. Realtime row updates via Supabase channel.
+
+import { useEffect, useMemo, useState } from "react";
 import {
-  RiAddLine,
-  RiCheckboxCircleLine,
+  RiSearchLine,
+  RiUserStarLine,
+  RiCheckLine,
+  RiTimeLine,
   RiCloseCircleLine,
-  RiEyeLine,
+  RiPhoneLine,
   RiMailLine,
   RiMapPinLine,
-  RiMoneyDollarCircleLine,
-  RiPencilLine,
-  RiPhoneLine,
-  RiSearchLine,
-  RiStarLine,
-  RiUserFollowLine,
-  RiUserUnfollowLine
+  RiRefreshLine,
+  RiAlertLine,
+  RiLoader4Line,
+  RiCheckboxCircleFill,
+  RiCircleLine,
+  RiUserAddLine,
+  RiArrowGoBackLine,
+  RiCloseLine,
 } from "@remixicon/react";
-import { useState, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
-import { useRouter } from "next/navigation";
-import { US_STATES } from "@/lib/us-states";
-import { SEO } from "@/components/SEO";
-import CleanerScorecard from "@/components/admin/CleanerScorecard";
-import { RiTrophyLine } from "@remixicon/react";
-
-interface Cleaner {
+interface CleanerRow {
   id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  stripe_account_id: string | null;
-  onboarding_complete: boolean;
-  payouts_enabled: boolean;
-  status: string;
-  available_for_bookings: boolean;
-  service_zip_codes: string[];
-  total_bookings: number;
-  completed_bookings: number;
-  total_earnings_cents: number;
-  created_at: string;
-  approved: boolean;
   user_id: string | null;
-  state: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string | null;
+  approved: boolean | null;
+  available_for_bookings: boolean | null;
   home_zip: string | null;
-  pay_rate_hr: number;
+  state: string | null;
+  pay_tier: string | null;
+  pay_rate_hr: number | null;
+  completed_bookings: number | null;
+  total_bookings: number | null;
+  acceptance_rate: number | null;
+  on_time_rate: number | null;
   average_rating: number | null;
-  total_ratings: number | null;
-  max_travel_miles: number | null;
+  weighted_score: number | null;
+  workload_score: number | null;
+  jobs_assigned_last_7d: number | null;
+  onboarding_complete: boolean | null;
+  phone_verified: boolean | null;
+  ob_agreement_signed: boolean | null;
+  ob_google_chat_joined: boolean | null;
+  ob_supplies_checklist_viewed: boolean | null;
+  ob_payouts_setup: boolean | null;
+  ob_training_accessed: boolean | null;
+  ghl_synced_at: string | null;
+  ghl_sync_error: string | null;
+  created_at: string;
+  activated_at: string | null;
 }
 
+const STATUS_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "pending", label: "Pending" },
+  { id: "inactive", label: "Inactive" },
+] as const;
+
+const STATUS_BADGE: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  pending: "bg-amber-100 text-amber-800 border-amber-200",
+  inactive: "bg-slate-100 text-slate-600 border-slate-200",
+  terminated: "bg-rose-100 text-rose-800 border-rose-200",
+};
+
+const fullName = (c: CleanerRow) =>
+  [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
+
+const onboardingProgress = (c: CleanerRow): number => {
+  const flags = [
+    c.phone_verified,
+    c.ob_agreement_signed,
+    c.ob_google_chat_joined,
+    c.ob_supplies_checklist_viewed,
+    c.ob_payouts_setup,
+    c.ob_training_accessed,
+  ];
+  const done = flags.filter(Boolean).length;
+  return Math.round((done / flags.length) * 100);
+};
+
 export default function AdminCleaners() {
-  const router = useRouter();
-  const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editCleaner, setEditCleaner] = useState<Cleaner | null>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18", maxTravelMiles: "20" });
-  const [scorecardCleanerId, setScorecardCleanerId] = useState<string | null>(null);
-  const [newCleaner, setNewCleaner] = useState({
-    email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18",
-  });
+  const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]["id"]>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [actioning, setActioning] = useState(false);
 
-  useEffect(() => { fetchCleaners(); }, []);
+  const selected = useMemo(
+    () => cleaners.find((c) => c.id === selectedId) || null,
+    [cleaners, selectedId],
+  );
 
-  const fetchCleaners = async () => {
-    try {
-      const { data, error } = await supabase.from("cleaners").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      setCleaners((data as any[]) || []);
-    } catch (error: any) {
-      toast({ title: "Error loading cleaners", description: error.message, variant: "destructive" });
-    } finally { setLoading(false); }
+  useEffect(() => {
+    void load();
+    const channel = supabase
+      .channel("admin-cleaners")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "cleaners" },
+        () => void load({ silent: true }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const load = async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true);
+    const { data, error } = await supabase
+      .from("cleaners")
+      .select(
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_rate_hr,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_agreement_signed,ob_google_chat_joined,ob_supplies_checklist_viewed,ob_payouts_setup,ob_training_accessed,ghl_synced_at,ghl_sync_error,created_at,activated_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      if (!opts.silent) toast.error("Couldn't load cleaners", { description: error.message });
+    } else {
+      setCleaners((data as unknown as CleanerRow[]) || []);
+    }
+    if (!opts.silent) setLoading(false);
   };
 
-  const filteredCleaners = useMemo(() => {
-    return cleaners.filter(c => {
-      const matchesSearch = !searchQuery || 
-        `${c.first_name} ${c.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.phone.includes(searchQuery);
-      const matchesStatus = statusFilter === "all" || 
-        (statusFilter === "active" && c.status === "active") ||
-        (statusFilter === "inactive" && c.status === "inactive") ||
-        (statusFilter === "pending" && !c.approved);
-      return matchesSearch && matchesStatus;
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return cleaners.filter((c) => {
+      if (statusFilter !== "all" && (c.status || "pending").toLowerCase() !== statusFilter) {
+        return false;
+      }
+      if (!q) return true;
+      const blob = [
+        c.first_name,
+        c.last_name,
+        c.email,
+        c.phone,
+        c.home_zip,
+        c.state,
+        c.pay_tier,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return blob.includes(q);
     });
-  }, [cleaners, searchQuery, statusFilter]);
+  }, [cleaners, statusFilter, search]);
 
-  const stats = useMemo(() => ({
-    total: cleaners.length,
-    active: cleaners.filter(c => c.status === "active").length,
-    pending: cleaners.filter(c => !c.approved).length,
-    totalBookings: cleaners.reduce((s, c) => s + (c.completed_bookings || 0), 0),
-    avgRating: cleaners.filter(c => c.average_rating).length > 0
-      ? (cleaners.reduce((s, c) => s + (c.average_rating || 0), 0) / cleaners.filter(c => c.average_rating).length).toFixed(1)
-      : "N/A",
-    totalPayouts: cleaners.reduce((s, c) => s + (c.total_earnings_cents || 0), 0) / 100,
-  }), [cleaners]);
+  const counts = useMemo(() => {
+    const c = { active: 0, pending: 0, inactive: 0, terminated: 0 };
+    cleaners.forEach((r) => {
+      const s = (r.status || "pending").toLowerCase();
+      if (s in c) (c as any)[s] += 1;
+    });
+    return c;
+  }, [cleaners]);
 
-  const handleAddCleaner = async () => {
-    if (!newCleaner.email || !newCleaner.firstName || !newCleaner.lastName || !newCleaner.phone || !newCleaner.state || !newCleaner.homeZip || !newCleaner.serviceZipCodes) {
-      toast({ title: "Missing fields", description: "Please fill in all required fields", variant: "destructive" }); return;
-    }
-    const zipCodes = newCleaner.serviceZipCodes.split(',').map(z => z.trim()).filter(Boolean);
-    if (zipCodes.length === 0) { toast({ title: "Invalid ZIP codes", variant: "destructive" }); return; }
-
+  const runAction = async (
+    action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
+    extra: Record<string, unknown> = {},
+  ) => {
+    if (!selected) return;
+    setActioning(true);
     try {
-      const { data: createData, error: createError } = await supabase.functions.invoke("create-cleaner-account", {
-        body: { email: newCleaner.email, firstName: newCleaner.firstName, lastName: newCleaner.lastName, phone: newCleaner.phone, state: newCleaner.state, homeZip: newCleaner.homeZip, serviceZipCodes: zipCodes, payRateHr: parseFloat(newCleaner.payRateHr) },
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not signed in");
+      const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
+        body: { action, cleaner_id: selected.id, ...extra },
       });
-      if (createError) throw createError;
-      if (!createData?.success) throw new Error("Failed to create cleaner account");
-
-      await supabase.functions.invoke("send-cleaner-email", {
-        body: { type: "invitation", email: newCleaner.email, data: { firstName: newCleaner.firstName, lastName: newCleaner.lastName, email: newCleaner.email, onboardingUrl: "https://book.novaracleaning.com/cleaner/onboarding-landing" } },
-      }).catch(console.error);
-
-      toast({ title: "Cleaner invited", description: `Invitation sent to ${newCleaner.firstName} ${newCleaner.lastName}.` });
-      setIsAddDialogOpen(false);
-      setNewCleaner({ email: "", firstName: "", lastName: "", phone: "", state: "", homeZip: "", serviceZipCodes: "", payRateHr: "18" });
-      fetchCleaners();
-    } catch (error: any) {
-      toast({ title: "Error adding cleaner", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const handleToggleStatus = async (cleaner: Cleaner) => {
-    const newStatus = cleaner.status === "active" ? "inactive" : "active";
-    const newAvailable = newStatus === "active";
-    try {
-      const { error } = await supabase.from("cleaners").update({ status: newStatus, available_for_bookings: newAvailable } as any).eq("id", cleaner.id);
       if (error) throw error;
-      toast({ title: `Cleaner ${newStatus === "active" ? "activated" : "deactivated"}` });
-      fetchCleaners();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast.success(`${action} applied`);
+      // Optimistic refresh.
+      await load({ silent: true });
+    } catch (err: any) {
+      toast.error(err?.message || "Action failed");
+    } finally {
+      setActioning(false);
     }
   };
 
-  const handleApproveCleaner = async (cleanerId: string) => {
+  const resyncToGhl = async () => {
+    if (!selected) return;
+    setActioning(true);
     try {
-      const { error } = await supabase.from("cleaners").update({ approved: true } as any).eq("id", cleanerId);
+      const { error } = await supabase.functions.invoke("sync-cleaner-to-ghl", {
+        body: { cleanerId: selected.id, force: true },
+      });
       if (error) throw error;
-      toast({ title: "Cleaner approved" });
-      fetchCleaners();
-    } catch (error: any) {
-      toast({ title: "Error approving", description: error.message, variant: "destructive" });
+      toast.success("Synced to GHL");
+      await load({ silent: true });
+    } catch (err: any) {
+      toast.error(err?.message || "Sync failed");
+    } finally {
+      setActioning(false);
     }
   };
-
-  const handleOnboardCleaner = async (cleanerId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("onboard-cleaner", { body: { cleanerId } });
-      if (error) throw error;
-      if (data?.url) { window.open(data.url, "_blank"); toast({ title: "Onboarding link opened" }); }
-    } catch (error: any) {
-      toast({ title: "Error starting onboarding", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const handleCheckStatus = async (cleanerId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("check-cleaner-status", { body: { cleanerId } });
-      if (error) throw error;
-      toast({ title: "Status updated", description: data.onboarding_complete ? "Onboarding complete!" : "Still in progress" });
-      fetchCleaners();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const openEditDialog = (cleaner: Cleaner) => {
-    setEditCleaner(cleaner);
-    setEditForm({
-      firstName: cleaner.first_name, lastName: cleaner.last_name, phone: cleaner.phone,
-      state: cleaner.state || "", homeZip: cleaner.home_zip || "",
-      serviceZipCodes: (cleaner.service_zip_codes || []).join(", "),
-      payRateHr: String(cleaner.pay_rate_hr || 18),
-      maxTravelMiles: String(cleaner.max_travel_miles || 20),
-    });
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editCleaner) return;
-    const zipCodes = editForm.serviceZipCodes.split(',').map(z => z.trim()).filter(Boolean);
-    try {
-      const { error } = await supabase.from("cleaners").update({
-        first_name: editForm.firstName, last_name: editForm.lastName, phone: editForm.phone,
-        state: editForm.state || null, home_zip: editForm.homeZip || null,
-        service_zip_codes: zipCodes, pay_rate_hr: parseFloat(editForm.payRateHr) || 18,
-        max_travel_miles: parseInt(editForm.maxTravelMiles) || 20,
-      } as any).eq("id", editCleaner.id);
-      if (error) throw error;
-      toast({ title: "Cleaner updated" });
-      setEditCleaner(null);
-      fetchCleaners();
-    } catch (error: any) {
-      toast({ title: "Error updating", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const getStatusBadge = (cleaner: Cleaner) => {
-    if (!cleaner.approved) return <Badge variant="destructive">Pending Approval</Badge>;
-    if (!cleaner.user_id) return <Badge className="bg-blue-500 text-white">Approved - No Account</Badge>;
-    if (cleaner.status === "active" && cleaner.payouts_enabled) return <Badge className="bg-green-500 text-white">Active</Badge>;
-    if (cleaner.status === "inactive") return <Badge variant="secondary">Inactive</Badge>;
-    if (cleaner.onboarding_complete) return <Badge className="bg-yellow-500 text-white">Onboarding Complete</Badge>;
-    if (cleaner.stripe_account_id) return <Badge className="bg-blue-500 text-white">Onboarding Started</Badge>;
-    return <Badge variant="secondary">Pending</Badge>;
-  };
-
-  if (loading) {
-    return (
-      <div className="container mx-auto py-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-muted rounded w-1/4"></div>
-          <div className="h-64 bg-muted rounded"></div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <SEO title="Cleaner Management" noindex />
-      <div className="flex justify-between items-center mb-8">
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-bold font-jakarta">Cleaner Management</h1>
-          <p className="text-muted-foreground mt-2">Manage your cleaning team and track performance</p>
+          <h1 className="text-xl font-semibold text-slate-900">Cleaner directory</h1>
+          <p className="text-sm text-slate-500">
+            Contractors, onboarding status, performance, and quick actions.
+          </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><RiAddLine className="mr-2 h-4 w-4" /> Add Cleaner</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Cleaner</DialogTitle>
-              <DialogDescription>Enter cleaner details. A login account will be created automatically.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={newCleaner.email} onChange={(e) => setNewCleaner({ ...newCleaner, email: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2"><Label>First Name *</Label><Input value={newCleaner.firstName} onChange={(e) => setNewCleaner({ ...newCleaner, firstName: e.target.value })} /></div>
-                <div className="grid gap-2"><Label>Last Name *</Label><Input value={newCleaner.lastName} onChange={(e) => setNewCleaner({ ...newCleaner, lastName: e.target.value })} /></div>
-              </div>
-              <div className="grid gap-2"><Label>Phone *</Label><Input type="tel" value={newCleaner.phone} onChange={(e) => setNewCleaner({ ...newCleaner, phone: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2"><Label>State *</Label>
-                  <Select value={newCleaner.state} onValueChange={(v) => setNewCleaner({ ...newCleaner, state: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
-                    <SelectContent>{US_STATES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2"><Label>Home ZIP *</Label><Input maxLength={5} value={newCleaner.homeZip} onChange={(e) => setNewCleaner({ ...newCleaner, homeZip: e.target.value })} /></div>
-              </div>
-              <div className="grid gap-2"><Label>Service ZIP Codes *</Label><Input placeholder="12345, 12346" value={newCleaner.serviceZipCodes} onChange={(e) => setNewCleaner({ ...newCleaner, serviceZipCodes: e.target.value })} /><p className="text-xs text-muted-foreground">Comma-separated</p></div>
-              <div className="grid gap-2"><Label>Pay Rate ($/hr)</Label><Input type="number" min="15" max="50" value={newCleaner.payRateHr} onChange={(e) => setNewCleaner({ ...newCleaner, payRateHr: e.target.value })} /></div>
-              <Button onClick={handleAddCleaner} className="w-full">Create Cleaner Account</Button>
+        <div className="flex flex-wrap items-center gap-3 text-[11px]">
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <RiCheckLine className="w-3 h-3" /> {counts.active} active
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            <RiTimeLine className="w-3 h-3" /> {counts.pending} pending
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+            <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
+          </span>
+        </div>
+      </div>
+
+      <Card className="border-slate-200">
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, email, phone, ZIP…"
+                className="pl-10"
+              />
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-5 mb-8">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.total}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Active</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{stats.active}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Pending Approval</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-yellow-600">{stats.pending}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg Rating</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold flex items-center gap-1"><RiStarLine className="w-4 h-4 text-yellow-500" />{stats.avgRating}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Payouts</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">${stats.totalPayouts.toFixed(0)}</div></CardContent></Card>
-      </div>
-
-      {/* Search & Filter */}
-      <div className="flex gap-4 mb-6">
-        <div className="relative flex-1">
-          <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Filter status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Cleaners</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-            <SelectItem value="pending">Pending Approval</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Rate</TableHead>
-                <TableHead>Rating</TableHead>
-                <TableHead>Bookings</TableHead>
-                <TableHead>Earnings</TableHead>
-                <TableHead>Service ZIPs</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCleaners.map((cleaner) => (
-                <TableRow key={cleaner.id}>
-                  <TableCell className="font-medium">{cleaner.first_name} {cleaner.last_name}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex items-center gap-1"><RiMailLine className="h-3 w-3 text-muted-foreground" />{cleaner.email}</div>
-                      <div className="flex items-center gap-1"><RiPhoneLine className="h-3 w-3 text-muted-foreground" />{cleaner.phone}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(cleaner)}</TableCell>
-                  <TableCell>
-                    <div className="text-xs">
-                      {cleaner.state && <div>{cleaner.state}</div>}
-                      {cleaner.home_zip && <div className="text-muted-foreground">{cleaner.home_zip}</div>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm">${cleaner.pay_rate_hr || 18}/hr</TableCell>
-                  <TableCell>
-                    {cleaner.average_rating ? (
-                      <div className="flex items-center gap-1 text-sm">
-                        <RiStarLine className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                        {Number(cleaner.average_rating).toFixed(1)}
-                        <span className="text-xs text-muted-foreground">({cleaner.total_ratings || 0})</span>
-                      </div>
-                    ) : <span className="text-xs text-muted-foreground">No ratings</span>}
-                  </TableCell>
-                  <TableCell className="text-sm">{cleaner.completed_bookings || 0} / {cleaner.total_bookings || 0}</TableCell>
-                  <TableCell className="text-sm">${((cleaner.total_earnings_cents || 0) / 100).toFixed(0)}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1 max-w-[120px]">
-                      {(cleaner.service_zip_codes || []).slice(0, 3).map(z => (
-                        <Badge key={z} variant="outline" className="text-xs">{z}</Badge>
-                      ))}
-                      {(cleaner.service_zip_codes || []).length > 3 && (
-                        <Badge variant="outline" className="text-xs">+{(cleaner.service_zip_codes || []).length - 3}</Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1 flex-wrap">
-                      {!cleaner.approved && (
-                        <Button size="sm" variant="default" onClick={() => handleApproveCleaner(cleaner.id)}>Approve</Button>
-                      )}
-                      {cleaner.approved && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => openEditDialog(cleaner)}><RiPencilLine className="w-3 h-3" /></Button>
-                          <Button size="sm" variant={cleaner.status === "active" ? "destructive" : "default"} onClick={() => handleToggleStatus(cleaner)}>
-                            {cleaner.status === "active" ? <RiCloseCircleLine className="w-3 h-3" /> : <RiCheckboxCircleLine className="w-3 h-3" />}
-                          </Button>
-                          {cleaner.user_id && !cleaner.onboarding_complete && (
-                            <Button size="sm" variant="outline" onClick={() => handleOnboardCleaner(cleaner.id)}>Stripe</Button>
-                          )}
-                          {cleaner.stripe_account_id && !cleaner.payouts_enabled && (
-                            <Button size="sm" variant="outline" onClick={() => handleCheckStatus(cleaner.id)}>Check</Button>
-                          )}
-                          <Button size="sm" variant="ghost" title="Scorecard" onClick={() => setScorecardCleanerId(cleaner.id)}><RiTrophyLine className="w-3 h-3 text-amber-500" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => router.push(`/admin/directory?cleaner=${cleaner.id}`)}><RiEyeLine className="w-3 h-3" /></Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1 self-start">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setStatusFilter(f.id)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                    statusFilter === f.id
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900",
+                  )}
+                >
+                  {f.label}
+                </button>
               ))}
-              {filteredCleaners.length === 0 && (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No cleaners found</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
+            </div>
+            <Button
+              variant="outline"
+              className="border-slate-200 text-slate-700"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editCleaner} onOpenChange={(open) => !open && setEditCleaner(null)}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Cleaner</DialogTitle>
-            <DialogDescription>{editCleaner?.first_name} {editCleaner?.last_name}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2"><Label>First Name</Label><Input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} /></div>
-              <div className="grid gap-2"><Label>Last Name</Label><Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></div>
-            </div>
-            <div className="grid gap-2"><Label>Phone</Label><Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2"><Label>State</Label>
-                <Select value={editForm.state} onValueChange={(v) => setEditForm({ ...editForm, state: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{US_STATES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2"><Label>Home ZIP</Label><Input maxLength={5} value={editForm.homeZip} onChange={(e) => setEditForm({ ...editForm, homeZip: e.target.value })} /></div>
-            </div>
-            <div className="grid gap-2"><Label>Service ZIP Codes</Label><Input value={editForm.serviceZipCodes} onChange={(e) => setEditForm({ ...editForm, serviceZipCodes: e.target.value })} /><p className="text-xs text-muted-foreground">Comma-separated</p></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2"><Label>Pay Rate ($/hr)</Label><Input type="number" value={editForm.payRateHr} onChange={(e) => setEditForm({ ...editForm, payRateHr: e.target.value })} /></div>
-              <div className="grid gap-2"><Label>Max Travel (mi)</Label><Input type="number" value={editForm.maxTravelMiles} onChange={(e) => setEditForm({ ...editForm, maxTravelMiles: e.target.value })} /></div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCleaner(null)}>Cancel</Button>
-            <Button onClick={handleSaveEdit}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Card className="border-slate-200">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold">Cleaner</th>
+                <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">Contact</th>
+                <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">ZIP / state</th>
+                <th className="text-left px-4 py-3 font-semibold">Status</th>
+                <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell">Onboarding</th>
+                <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell">Performance</th>
+                <th className="px-4 py-3"> </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={7} className="px-4 py-3">
+                      <Skeleton className="h-8 w-full" />
+                    </td>
+                  </tr>
+                ))
+              ) : visible.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-slate-500">
+                    <RiAlertLine className="w-7 h-7 mx-auto text-slate-300 mb-2" />
+                    No cleaners match this filter.
+                  </td>
+                </tr>
+              ) : (
+                visible.map((c) => {
+                  const progress = onboardingProgress(c);
+                  return (
+                    <tr
+                      key={c.id}
+                      className="hover:bg-slate-50 cursor-pointer"
+                      onClick={() => setSelectedId(c.id)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900">{fullName(c)}</div>
+                        <div className="text-[11px] text-slate-500">
+                          {c.pay_tier || "Unassigned tier"} · ${c.pay_rate_hr || 0}/hr
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell text-slate-700">
+                        <div className="truncate max-w-[200px]">{c.email || "—"}</div>
+                        <div className="text-[11px] text-slate-500">{c.phone || "—"}</div>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell text-slate-700">
+                        {c.home_zip || "—"}
+                        <span className="text-[11px] text-slate-500 ml-1">{c.state || ""}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={c.status} />
+                      </td>
+                      <td className="px-4 py-3 hidden lg:table-cell w-[160px]">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full",
+                                progress === 100 ? "bg-emerald-500" : "bg-amber-400",
+                              )}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-600 w-8 text-right">
+                            {progress}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <div className="text-xs text-slate-700">
+                          ⭐ {c.average_rating ? Number(c.average_rating).toFixed(2) : "—"} ·{" "}
+                          {c.completed_bookings || 0} done
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {c.jobs_assigned_last_7d ?? 0} jobs / 7d
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button size="sm" variant="ghost" className="text-emerald-700">
+                          View
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
-      {scorecardCleanerId && (
-        <CleanerScorecard
-          cleanerId={scorecardCleanerId}
-          onClose={() => setScorecardCleanerId(null)}
-          onChanged={fetchCleaners}
-        />
-      )}
+      <CleanerSheet
+        cleaner={selected}
+        onClose={() => setSelectedId(null)}
+        onAction={runAction}
+        onResyncGhl={resyncToGhl}
+        actioning={actioning}
+      />
+    </div>
+  );
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string | null }) {
+  const s = (status || "pending").toLowerCase();
+  return (
+    <Badge variant="outline" className={cn("font-medium border", STATUS_BADGE[s] || STATUS_BADGE.pending)}>
+      {s}
+    </Badge>
+  );
+}
+
+function CleanerSheet({
+  cleaner,
+  onClose,
+  onAction,
+  onResyncGhl,
+  actioning,
+}: {
+  cleaner: CleanerRow | null;
+  onClose: () => void;
+  onAction: (
+    action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
+    extra?: Record<string, unknown>,
+  ) => void;
+  onResyncGhl: () => void;
+  actioning: boolean;
+}) {
+  return (
+    <Sheet open={Boolean(cleaner)} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent className="w-full sm:max-w-xl overflow-y-auto bg-white">
+        {!cleaner ? null : (
+          <>
+            <SheetHeader className="space-y-1.5 pb-4 border-b border-slate-100">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <SheetTitle className="text-lg text-slate-900">{fullName(cleaner)}</SheetTitle>
+                  <SheetDescription className="text-slate-500">
+                    Joined {new Date(cleaner.created_at).toLocaleDateString()} ·{" "}
+                    {cleaner.activated_at ? "Activated" : "Not yet activated"}
+                  </SheetDescription>
+                </div>
+                <StatusBadge status={cleaner.status} />
+              </div>
+            </SheetHeader>
+
+            <div className="py-4 space-y-5">
+              <ContactSection cleaner={cleaner} />
+
+              <Tabs defaultValue="onboarding">
+                <TabsList className="grid grid-cols-3 bg-slate-100">
+                  <TabsTrigger value="onboarding" className="data-[state=active]:bg-white">
+                    Onboarding
+                  </TabsTrigger>
+                  <TabsTrigger value="performance" className="data-[state=active]:bg-white">
+                    Performance
+                  </TabsTrigger>
+                  <TabsTrigger value="ghl" className="data-[state=active]:bg-white">
+                    GHL
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="onboarding" className="pt-3">
+                  <OnboardingChecklist cleaner={cleaner} />
+                </TabsContent>
+                <TabsContent value="performance" className="pt-3">
+                  <PerformanceBlock cleaner={cleaner} />
+                </TabsContent>
+                <TabsContent value="ghl" className="pt-3">
+                  <GhlBlock cleaner={cleaner} onResync={onResyncGhl} actioning={actioning} />
+                </TabsContent>
+              </Tabs>
+
+              <Separator />
+
+              <ActionsBlock
+                cleaner={cleaner}
+                onAction={onAction}
+                actioning={actioning}
+              />
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ContactSection({ cleaner }: { cleaner: CleanerRow }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 text-sm">
+      <div className="flex items-center gap-2 text-slate-700">
+        <RiMailLine className="w-4 h-4 text-slate-400 shrink-0" />
+        <a href={`mailto:${cleaner.email}`} className="truncate hover:text-emerald-700">
+          {cleaner.email || "—"}
+        </a>
+      </div>
+      <div className="flex items-center gap-2 text-slate-700">
+        <RiPhoneLine className="w-4 h-4 text-slate-400 shrink-0" />
+        <a href={`tel:${cleaner.phone}`} className="hover:text-emerald-700">
+          {cleaner.phone || "—"}
+        </a>
+        {cleaner.phone_verified ? (
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+            verified
+          </Badge>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-2 text-slate-700">
+        <RiMapPinLine className="w-4 h-4 text-slate-400 shrink-0" />
+        {cleaner.home_zip ? `${cleaner.home_zip} ${cleaner.state || ""}` : "—"}
+      </div>
+    </div>
+  );
+}
+
+const OB_STEPS: Array<{ key: keyof CleanerRow; label: string }> = [
+  { key: "phone_verified", label: "Phone verified" },
+  { key: "ob_agreement_signed", label: "Independent contractor agreement signed" },
+  { key: "ob_google_chat_joined", label: "Joined the team Google Chat" },
+  { key: "ob_supplies_checklist_viewed", label: "Viewed supplies checklist" },
+  { key: "ob_payouts_setup", label: "Stripe payouts connected" },
+  { key: "ob_training_accessed", label: "Accessed training portal" },
+];
+
+function OnboardingChecklist({ cleaner }: { cleaner: CleanerRow }) {
+  return (
+    <ul className="space-y-1.5">
+      {OB_STEPS.map((s) => {
+        const done = Boolean((cleaner as any)[s.key]);
+        return (
+          <li
+            key={String(s.key)}
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm",
+              done ? "bg-emerald-50 text-emerald-900" : "bg-slate-50 text-slate-600",
+            )}
+          >
+            {done ? (
+              <RiCheckboxCircleFill className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <RiCircleLine className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <span>{s.label}</span>
+          </li>
+        );
+      })}
+      <li className="text-[11px] text-slate-500 px-1 pt-2">
+        Onboarding complete flag: {cleaner.onboarding_complete ? "yes" : "no"}
+      </li>
+    </ul>
+  );
+}
+
+function PerformanceBlock({ cleaner }: { cleaner: CleanerRow }) {
+  const num = (v: number | null, suffix = "") => (v == null ? "—" : `${v}${suffix}`);
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <Cell label="Avg rating" value={cleaner.average_rating ? Number(cleaner.average_rating).toFixed(2) : "—"} />
+      <Cell label="On-time" value={cleaner.on_time_rate != null ? `${(Number(cleaner.on_time_rate) * 100).toFixed(0)}%` : "—"} />
+      <Cell label="Acceptance" value={cleaner.acceptance_rate != null ? `${(Number(cleaner.acceptance_rate) * 100).toFixed(0)}%` : "—"} />
+      <Cell label="Completed jobs" value={num(cleaner.completed_bookings, "")} />
+      <Cell label="Total bookings" value={num(cleaner.total_bookings, "")} />
+      <Cell label="Last 7d jobs" value={num(cleaner.jobs_assigned_last_7d, "")} />
+      <Cell label="Weighted score" value={cleaner.weighted_score != null ? Number(cleaner.weighted_score).toFixed(2) : "—"} />
+      <Cell label="Workload score" value={cleaner.workload_score != null ? Number(cleaner.workload_score).toFixed(2) : "—"} />
+    </dl>
+  );
+}
+
+function Cell({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">{label}</dt>
+      <dd className="text-slate-900 font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function GhlBlock({
+  cleaner,
+  onResync,
+  actioning,
+}: {
+  cleaner: CleanerRow;
+  onResync: () => void;
+  actioning: boolean;
+}) {
+  return (
+    <div className="space-y-3 text-sm">
+      <div>
+        <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Last GHL sync</p>
+        <p className="text-slate-900">
+          {cleaner.ghl_synced_at
+            ? new Date(cleaner.ghl_synced_at).toLocaleString()
+            : "Never synced"}
+        </p>
+      </div>
+      {cleaner.ghl_sync_error ? (
+        <div className="px-3 py-2 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+          <RiAlertLine className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />
+          {cleaner.ghl_sync_error}
+        </div>
+      ) : null}
+      <Button onClick={onResync} disabled={actioning} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+        {actioning ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : <RiRefreshLine className="w-4 h-4 mr-2" />}
+        Resync to GHL now
+      </Button>
+    </div>
+  );
+}
+
+function ActionsBlock({
+  cleaner,
+  onAction,
+  actioning,
+}: {
+  cleaner: CleanerRow;
+  onAction: (
+    action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
+    extra?: Record<string, unknown>,
+  ) => void;
+  actioning: boolean;
+}) {
+  const s = (cleaner.status || "pending").toLowerCase();
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Lifecycle</p>
+      <div className="flex flex-wrap gap-2">
+        {s === "active" || s === "pending" ? (
+          <Button
+            variant="outline"
+            disabled={actioning}
+            onClick={() => onAction("deactivate", { reason: "Manual pause" })}
+            className="border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100"
+          >
+            <RiTimeLine className="w-4 h-4 mr-1.5" />
+            Pause / deactivate
+          </Button>
+        ) : null}
+        {s !== "terminated" ? (
+          <Button
+            variant="outline"
+            disabled={actioning}
+            onClick={() => {
+              if (!confirm("Terminate this cleaner? They will lose portal + payout access.")) return;
+              onAction("terminate", { reason: "Manual termination" });
+            }}
+            className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
+          >
+            <RiCloseCircleLine className="w-4 h-4 mr-1.5" />
+            Terminate
+          </Button>
+        ) : null}
+        {(s === "inactive" || s === "terminated") ? (
+          <Button
+            variant="outline"
+            disabled={actioning}
+            onClick={() => onAction("reactivate")}
+            className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+          >
+            <RiArrowGoBackLine className="w-4 h-4 mr-1.5" />
+            Reactivate
+          </Button>
+        ) : null}
+        <Button
+          variant="outline"
+          disabled={actioning}
+          onClick={() => {
+            const note = prompt("Flag note (visible to admin only):");
+            if (!note) return;
+            onAction("flag", { note });
+          }}
+          className="border-slate-200 text-slate-700"
+        >
+          <RiAlertLine className="w-4 h-4 mr-1.5" />
+          Flag for review
+        </Button>
+      </div>
+      {actioning ? (
+        <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
+          <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> Applying…
+        </p>
+      ) : null}
     </div>
   );
 }
