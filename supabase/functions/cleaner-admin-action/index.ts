@@ -181,6 +181,10 @@ serve(async (req) => {
         });
         adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
           .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
+        // Fire-and-forget termination email.
+        adminClient.functions.invoke("send-cleaner-lifecycle-email", {
+          body: { cleanerId, kind: "terminated", context: { reason } },
+        }).catch((e: any) => console.warn("[cleaner-admin-action] lifecycle email failed", e?.message || e));
         return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
       }
 
@@ -212,7 +216,43 @@ serve(async (req) => {
         });
         adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
           .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
+        // Welcome / re-activation email.
+        adminClient.functions.invoke("send-cleaner-lifecycle-email", {
+          body: {
+            cleanerId,
+            kind: "activated",
+            context: { previouslyInactive: cleaner.status === "inactive" },
+          },
+        }).catch((e: any) => console.warn("[cleaner-admin-action] lifecycle email failed", e?.message || e));
         return json({ ok: true, cleaner: updated });
+      }
+
+      case "late_warning": {
+        const lastJobDate = body.lastJobDate ? String(body.lastJobDate) : null;
+        const newCount = Number(cleaner.late_arrival_count || 0) + 1;
+        const { data: updated } = await adminClient
+          .from("cleaners")
+          .update({
+            late_arrival_count: newCount,
+            last_late_warning_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", cleanerId).select().maybeSingle();
+        await adminClient.from("events").insert({
+          event_type: "cleaner.late_warning",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary: `Late-arrival warning #${newCount} sent to ${cleaner.first_name || ""} ${cleaner.last_name || ""}`,
+          data: { count: newCount, by: callerId, lastJobDate },
+        });
+        adminClient.functions.invoke("send-cleaner-lifecycle-email", {
+          body: {
+            cleanerId,
+            kind: "late_warning",
+            context: { lateArrivalCount: newCount, lastJobDate },
+          },
+        }).catch((e: any) => console.warn("[cleaner-admin-action] lifecycle email failed", e?.message || e));
+        return json({ ok: true, cleaner: updated, count: newCount });
       }
 
       case "flag": {
