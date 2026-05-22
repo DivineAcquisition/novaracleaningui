@@ -1,10 +1,11 @@
 import { Suspense } from "react";
-import SalesToolPage from "@/views/admin/SalesTool";
+
+import AdminAuthCallback from "@/views/admin/AuthCallback";
 
 export default function Page() {
   return (
     <Suspense>
-      <SalesToolPage />
+      <AdminAuthCallback />
     </Suspense>
   );
 }

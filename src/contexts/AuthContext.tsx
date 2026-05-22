@@ -24,7 +24,7 @@ interface AuthContextType {
   subscription: SubscriptionData | null;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string) => Promise<{ data: any; error: any }>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (redirectPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
   checkSubscription: () => Promise<void>;
   openCustomerPortal: () => Promise<void>;
@@ -155,12 +155,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signInWithGoogle = async () => {
-    const redirectUrl = `${window.location.origin}/auth/callback`;
+  // Per-portal Google OAuth. Each portal MUST pass its own callback path
+  // (`/auth/callback` for customer, `/admin/auth/callback` for admin,
+  //  `/cleaner/auth/callback` for cleaner) so a Google sign-in started
+  //  on one subdomain can NEVER land on another portal's dashboard.
+  //  The default '/auth/callback' is the customer fallback — the admin
+  //  and cleaner views always pass their explicit path.
+  const signInWithGoogle = async (redirectPath: string = "/auth/callback") => {
+    const safePath = redirectPath.startsWith("/") ? redirectPath : `/${redirectPath}`;
+    const redirectUrl = `${window.location.origin}${safePath}`;
     await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider: "google",
       options: {
         redirectTo: redirectUrl,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
       },
     });
   };

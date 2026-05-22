@@ -1,14 +1,16 @@
 import { Suspense } from "react";
-
-import AdminMapPage from "@/views/admin/Map";
+import AdminLayout from "@/components/admin/AdminLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import AdminMap from "@/views/admin/Map";
 
 export default function Page() {
   return (
     <ProtectedRoute requiredRole="admin">
-      <Suspense>
-        <AdminMapPage />
-      </Suspense>
+      <AdminLayout>
+        <Suspense>
+          <AdminMap />
+        </Suspense>
+      </AdminLayout>
     </ProtectedRoute>
   );
 }

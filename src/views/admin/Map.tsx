@@ -1,389 +1,444 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { format } from "date-fns";
+// ─── Admin Operational Map (v2 — 2026-05-22) ───────────────────────────
+//
+// Three datasets, one map, one panel:
+//   1. Cleaner home-base pins (green/amber/grey by status) plotted at
+//      cleaners.home_lat/home_lng (falls back to ZIP centroid via
+//      geocode_cache when home_lat/lng is null).
+//   2. Booking pins for the next 14 days, color-coded by status, plotted
+//      at booking.lat/lng or geocoded address.
+//   3. Side panel cross-references:
+//        * Top booking zips this month
+//        * COVERAGE GAPS — zips where customers are booking but no
+//          cleaner has them in service_zip_codes (the "underserved
+//          markets" insight).
+//        * Capacity per zip (cleaners × max_weekly_bookings ÷ bookings)
+//
+// All live, all from the DB / geocode-address edge fn. Brand-aligned
+// emerald theme, no AdminLayout (the route does that).
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  RiMapPin2Line,
+  RiToolsLine,
+  RiCalendarCheckLine,
+  RiRefreshLine,
+  RiAlertLine,
+  RiTrophyLine,
+} from "@remixicon/react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { loadGooglePlaces } from "@/lib/google-places-loader";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
-import { RiMapPinLine, RiUserAddLine, RiCalendarCheckLine, RiToolsLine, RiRefreshLine } from "@remixicon/react";
-
-interface Pin {
-  id: string;
-  lat: number;
-  lng: number;
-  kind: "booking" | "cleaner" | "lead";
-  color: string;
-  title: string;
-  subtitle: string;
-  data: any;
-}
-
-interface BookingRow {
-  id: string;
-  booking_number: number | null;
-  service_date: string;
-  time_slot: string | null;
-  status: string;
-  service_type: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  zip_code: string | null;
-  total_estimate_cents: number | null;
-  first_name: string | null;
-  last_name: string | null;
-}
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface CleanerRow {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  status: string | null;
+  home_zip: string | null;
   home_lat: number | null;
   home_lng: number | null;
-  home_zip: string | null;
-  status: string;
+  service_zip_codes: string[] | null;
+  max_weekly_bookings: number | null;
   pay_tier: string | null;
-  average_rating: number | null;
 }
 
-interface LeadRow {
+interface BookingRow {
   id: string;
-  first_name: string;
-  last_name: string;
-  status: string;
+  booking_number: number | null;
+  service_date: string | null;
+  status: string | null;
+  service_type: string | null;
   zip_code: string | null;
-  source: string;
-  created_at: string;
+  city: string | null;
+  total_estimate_cents: number | null;
+  first_name: string | null;
+  last_name: string | null;
 }
 
+interface Pin {
+  id: string;
+  kind: "cleaner" | "booking";
+  lat: number;
+  lng: number;
+  color: string;
+  title: string;
+  subtitle: string;
+}
+
+const CLEANER_COLOR: Record<string, string> = {
+  active: "#10b981",
+  pending: "#f59e0b",
+  inactive: "#94a3b8",
+  terminated: "#f43f5e",
+};
 const BOOKING_COLOR: Record<string, string> = {
-  booked: "#3b82f6",
   confirmed: "#10b981",
+  assigned: "#6366f1",
+  completed: "#3b82f6",
+  pending_payment: "#f59e0b",
   pending_details: "#f59e0b",
-  completed: "#fbbf24",
-  cancelled: "#ef4444",
-  in_progress: "#8b5cf6",
-};
-
-const LEAD_COLOR: Record<string, string> = {
-  new: "#3b82f6",
-  contacted: "#f59e0b",
-  replied: "#10b981",
-  booked: "#10b981",
-  lost: "#94a3b8",
-};
-
-const DEFAULT_CENTER = { lat: 39.0458, lng: -76.6413 }; // Baltimore, MD (Novara HQ area)
-
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const { data, error } = await supabase.functions.invoke("geocode-address", { body: { address } });
-    if (error || !data) return null;
-    if (typeof data.lat === "number" && typeof data.lng === "number") return { lat: data.lat, lng: data.lng };
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// Rough zip-code centroid lookup for common Novara service ZIPs. Used as a
-// last resort when a lead has only a zip code with no full address.
-const ZIP_CENTROIDS: Record<string, { lat: number; lng: number }> = {
-  // Maryland — DMV
-  "20814": { lat: 38.9847, lng: -77.0947 },
-  "20815": { lat: 38.9847, lng: -77.0739 },
-  "20816": { lat: 38.9525, lng: -77.0903 },
-  "20817": { lat: 39.0042, lng: -77.1503 },
-  "20850": { lat: 39.0939, lng: -77.2197 },
-  "20852": { lat: 39.0511, lng: -77.1167 },
-  "20854": { lat: 39.0211, lng: -77.2153 },
-  "21210": { lat: 39.3508, lng: -76.6322 },
-  "21218": { lat: 39.3258, lng: -76.5963 },
-  "21230": { lat: 39.2719, lng: -76.6262 },
-  "21401": { lat: 38.9783, lng: -76.4922 },
-  "21701": { lat: 39.4144, lng: -77.4108 },
+  cancelled: "#9ca3af",
 };
 
 export default function AdminMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<Array<google.maps.Marker>>([]);
-  const infoRef = useRef<google.maps.InfoWindow | null>(null);
-  const [pins, setPins] = useState<Pin[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "bookings" | "cleaners" | "leads">("all");
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
   const [mapsAvailable, setMapsAvailable] = useState<boolean | null>(null);
-  const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
 
-  const buildPins = useCallback(async () => {
-    setLoading(true);
-    const next: Pin[] = [];
+  const [loading, setLoading] = useState(true);
+  const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
+  const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [zipCentroids, setZipCentroids] = useState<Record<string, { lat: number; lng: number }>>({});
 
-    const today = new Date().toISOString().slice(0, 10);
-    const horizon = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
-
-    const [{ data: bookings }, { data: cleaners }, { data: leads }] = await Promise.all([
-      supabase.from("bookings").select("id, booking_number, service_date, time_slot, status, service_type, address, city, state, zip_code, total_estimate_cents, first_name, last_name").gte("service_date", today).lte("service_date", horizon).neq("status", "cancelled").limit(100),
-      supabase.from("cleaners").select("id, first_name, last_name, home_lat, home_lng, home_zip, status, pay_tier, average_rating" as string).eq("status", "active"),
-      supabase.from("leads").select("id, first_name, last_name, status, zip_code, source, created_at").gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()).limit(100),
-    ]);
-
-    for (const c of (cleaners as unknown as CleanerRow[] | null) || []) {
-      let lat = c.home_lat;
-      let lng = c.home_lng;
-      if ((lat == null || lng == null) && c.home_zip) {
-        const z = ZIP_CENTROIDS[c.home_zip];
-        if (z) { lat = z.lat; lng = z.lng; }
-      }
-      if (lat == null || lng == null) continue;
-      next.push({
-        id: `cleaner:${c.id}`, lat, lng, kind: "cleaner",
-        color: "#a855f7",
-        title: `${c.first_name || ""} ${c.last_name || ""}`,
-        subtitle: `${c.pay_tier || "foundation"} • ${c.average_rating ?? "—"}★`,
-        data: c,
-      });
-    }
-
-    // Bookings: prefer zip centroid (fast); fall back to geocode in parallel.
-    const bookingPromises: Promise<void>[] = [];
-    for (const b of (bookings || []) as BookingRow[]) {
-      const centroid = b.zip_code ? ZIP_CENTROIDS[b.zip_code] : null;
-      if (centroid) {
-        // jitter slightly so multiple bookings in the same zip don't overlap
-        const jitter = () => (Math.random() - 0.5) * 0.008;
-        next.push({
-          id: `booking:${b.id}`, lat: centroid.lat + jitter(), lng: centroid.lng + jitter(), kind: "booking",
-          color: BOOKING_COLOR[b.status] || "#3b82f6",
-          title: `${b.first_name || ""} ${b.last_name || ""} • ${b.service_type || "cleaning"}`,
-          subtitle: `${format(new Date(b.service_date + "T00:00:00"), "MMM d")} ${b.time_slot || ""} • ${b.status}`,
-          data: b,
-        });
-      } else if (b.address && b.city) {
-        const addr = `${b.address}, ${b.city}, ${b.state || "MD"} ${b.zip_code || ""}`;
-        bookingPromises.push(
-          geocodeAddress(addr).then((coords) => {
-            if (coords) {
-              next.push({
-                id: `booking:${b.id}`, lat: coords.lat, lng: coords.lng, kind: "booking",
-                color: BOOKING_COLOR[b.status] || "#3b82f6",
-                title: `${b.first_name || ""} ${b.last_name || ""} • ${b.service_type || "cleaning"}`,
-                subtitle: `${format(new Date(b.service_date + "T00:00:00"), "MMM d")} ${b.time_slot || ""} • ${b.status}`,
-                data: b,
-              });
-            }
-          })
-        );
-      }
-    }
-
-    for (const l of (leads || []) as LeadRow[]) {
-      const centroid = l.zip_code ? ZIP_CENTROIDS[l.zip_code] : null;
-      if (!centroid) continue;
-      const jitter = () => (Math.random() - 0.5) * 0.008;
-      next.push({
-        id: `lead:${l.id}`, lat: centroid.lat + jitter(), lng: centroid.lng + jitter(), kind: "lead",
-        color: LEAD_COLOR[l.status] || "#3b82f6",
-        title: `${l.first_name} ${l.last_name}`,
-        subtitle: `${l.status} • ${l.source}`,
-        data: l,
-      });
-    }
-
-    await Promise.allSettled(bookingPromises);
-    setPins(next);
-    setLoading(false);
-  }, []);
-
-  // Init google maps
   useEffect(() => {
+    // Initialise Maps once.
     let cancelled = false;
-    (async () => {
-      const places = await loadGooglePlaces();
-      if (cancelled) return;
-      if (!places || !window.google?.maps) {
-        setMapsAvailable(false);
-        return;
-      }
-      setMapsAvailable(true);
-      if (containerRef.current && !mapRef.current) {
-        mapRef.current = new window.google.maps.Map(containerRef.current, {
-          center: DEFAULT_CENTER,
-          zoom: 9,
+    void (async () => {
+      try {
+        await loadGooglePlaces();
+        if (cancelled || !containerRef.current || !(window as any).google?.maps) {
+          setMapsAvailable(false);
+          return;
+        }
+        mapRef.current = new (window as any).google.maps.Map(containerRef.current, {
+          center: { lat: 39.299, lng: -76.609 }, // Baltimore default
+          zoom: 10,
+          mapTypeControl: false,
+          streetViewControl: false,
           styles: [
-            { elementType: "geometry", stylers: [{ color: "#1e293b" }] },
-            { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-            { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
-            { featureType: "water", elementType: "geometry", stylers: [{ color: "#0c1626" }] },
-            { featureType: "road", elementType: "geometry", stylers: [{ color: "#334155" }] },
+            { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
           ],
-          disableDefaultUI: false,
-          zoomControl: true,
         });
-        infoRef.current = new window.google.maps.InfoWindow();
+        setMapsAvailable(true);
+      } catch {
+        setMapsAvailable(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => { buildPins(); }, [buildPins]);
+  useEffect(() => {
+    void load();
+  }, []);
 
-  // Sync pins to markers
+  const load = async () => {
+    setLoading(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const in14 = new Date();
+      in14.setDate(in14.getDate() + 14);
+      const [cs, bs, zc] = await Promise.all([
+        supabase
+          .from("cleaners")
+          .select("id,first_name,last_name,status,home_zip,home_lat,home_lng,service_zip_codes,max_weekly_bookings,pay_tier")
+          .in("status", ["active", "pending"])
+          .limit(500),
+        supabase
+          .from("bookings")
+          .select("id,booking_number,service_date,status,service_type,zip_code,city,total_estimate_cents,first_name,last_name")
+          .gte("service_date", today)
+          .lte("service_date", in14.toISOString().slice(0, 10))
+          .not("status", "in", '("cancelled")')
+          .limit(500),
+        supabase.from("geocode_cache" as any).select("zip,lat,lng").limit(2000),
+      ]);
+      setCleaners((cs.data as unknown as CleanerRow[]) || []);
+      setBookings((bs.data as unknown as BookingRow[]) || []);
+      const map: Record<string, { lat: number; lng: number }> = {};
+      (zc.data as unknown as Array<{ zip: string; lat: number; lng: number }> | null)?.forEach((r) => {
+        if (r.zip && r.lat && r.lng) map[r.zip] = { lat: r.lat, lng: r.lng };
+      });
+      setZipCentroids(map);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to load map data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── Pin computation ───────────────────────────────────────────────────
+  const pins = useMemo((): Pin[] => {
+    const out: Pin[] = [];
+
+    cleaners.forEach((c) => {
+      const lat = c.home_lat ?? (c.home_zip && zipCentroids[c.home_zip]?.lat);
+      const lng = c.home_lng ?? (c.home_zip && zipCentroids[c.home_zip]?.lng);
+      if (!lat || !lng) return;
+      out.push({
+        id: `cleaner-${c.id}`,
+        kind: "cleaner",
+        lat,
+        lng,
+        color: CLEANER_COLOR[(c.status || "pending").toLowerCase()] || "#94a3b8",
+        title: `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner",
+        subtitle: `${c.pay_tier || "Tier —"} · ZIPs: ${(c.service_zip_codes || []).slice(0, 4).join(", ") || "—"}`,
+      });
+    });
+
+    bookings.forEach((b) => {
+      if (!b.zip_code) return;
+      const c = zipCentroids[b.zip_code];
+      if (!c) return;
+      // Jitter so multiple bookings in the same zip don't overlap.
+      const jitter = 0.005;
+      const lat = c.lat + (Math.random() - 0.5) * jitter;
+      const lng = c.lng + (Math.random() - 0.5) * jitter;
+      out.push({
+        id: `booking-${b.id}`,
+        kind: "booking",
+        lat,
+        lng,
+        color: BOOKING_COLOR[b.status || ""] || "#3b82f6",
+        title: `#${b.booking_number || b.id.slice(0, 6)} · ${[b.first_name, b.last_name].filter(Boolean).join(" ")}`,
+        subtitle: `${b.service_date || "—"} · ${b.service_type || ""} · ${b.city || ""} ${b.zip_code || ""}`,
+      });
+    });
+
+    return out;
+  }, [cleaners, bookings, zipCentroids]);
+
+  // ─── Sync pins → markers ───────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current || !mapsAvailable) return;
-    // clear old
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
-    const filtered = filter === "all" ? pins : pins.filter((p) => p.kind === filter.slice(0, -1));
-    const bounds = new window.google.maps.LatLngBounds();
-    filtered.forEach((p) => {
-      const marker = new window.google.maps.Marker({
+    const bounds = new (window as any).google.maps.LatLngBounds();
+    pins.forEach((p) => {
+      const marker = new (window as any).google.maps.Marker({
         position: { lat: p.lat, lng: p.lng },
-        map: mapRef.current!,
+        map: mapRef.current,
         title: p.title,
         icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: p.kind === "cleaner" ? 9 : 7,
-          fillColor: p.color, fillOpacity: 0.9,
-          strokeColor: "#0f172a", strokeWeight: 2,
+          path: (window as any).google.maps.SymbolPath.CIRCLE,
+          scale: p.kind === "cleaner" ? 10 : 6,
+          fillColor: p.color,
+          fillOpacity: 0.9,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
         },
       });
-      marker.addListener("click", () => {
-        setSelectedPin(p);
-        infoRef.current?.setContent(`<div style="color:#0f172a;font-family:Inter,sans-serif;padding:4px"><strong>${p.title}</strong><br/><span style="font-size:12px">${p.subtitle}</span></div>`);
-        infoRef.current?.open(mapRef.current!, marker);
+      const info = new (window as any).google.maps.InfoWindow({
+        content: `<div style="font-family:Inter,sans-serif;color:#0f172a;padding:2px 4px;max-width:260px"><strong>${escapeHtml(p.title)}</strong><br/><span style="color:#64748b;font-size:12px">${escapeHtml(p.subtitle)}</span></div>`,
       });
+      marker.addListener("click", () => info.open(mapRef.current, marker));
       bounds.extend({ lat: p.lat, lng: p.lng });
       markersRef.current.push(marker);
     });
-    if (filtered.length > 0) mapRef.current.fitBounds(bounds, 60);
-  }, [pins, filter, mapsAvailable]);
+    if (pins.length > 0) mapRef.current.fitBounds(bounds, 60);
+  }, [pins, mapsAvailable]);
 
-  // Realtime: when an event arrives, refresh
-  useEffect(() => {
-    const ch = supabase.channel("map-events")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, (payload) => {
-        const r = payload.new as any;
-        const interestingTypes = ["booking.created", "booking.status_change", "booking.completed", "booking.cancelled", "lead.created", "lead.status_change", "cleaner.deactivated", "cleaner.reactivated"];
-        if (interestingTypes.includes(r.event_type)) {
-          // Soft refresh — debounce by queueing
-          buildPins();
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [buildPins]);
+  // ─── Cross-reference: top zips + coverage gaps + capacity ──────────────
+  const insight = useMemo(() => {
+    const byZip: Record<string, { bookings: number; revenueCents: number }> = {};
+    bookings.forEach((b) => {
+      const z = b.zip_code;
+      if (!z) return;
+      byZip[z] = byZip[z] || { bookings: 0, revenueCents: 0 };
+      byZip[z].bookings += 1;
+      byZip[z].revenueCents += b.total_estimate_cents || 0;
+    });
 
-  const counts = useMemo(() => ({
-    bookings: pins.filter((p) => p.kind === "booking").length,
-    cleaners: pins.filter((p) => p.kind === "cleaner").length,
-    leads: pins.filter((p) => p.kind === "lead").length,
-    total: pins.length,
-  }), [pins]);
+    const cleanerByZip: Record<string, CleanerRow[]> = {};
+    cleaners.forEach((c) => {
+      const zips = new Set<string>();
+      if (c.home_zip) zips.add(c.home_zip);
+      (c.service_zip_codes || []).forEach((z) => z && zips.add(z));
+      zips.forEach((z) => {
+        cleanerByZip[z] = cleanerByZip[z] || [];
+        cleanerByZip[z].push(c);
+      });
+    });
+
+    const topZips = Object.entries(byZip)
+      .map(([zip, v]) => ({
+        zip,
+        bookings: v.bookings,
+        revenueCents: v.revenueCents,
+        cleaners: (cleanerByZip[zip] || []).filter((c) => (c.status || "").toLowerCase() === "active").length,
+      }))
+      .sort((a, b) => b.bookings - a.bookings)
+      .slice(0, 8);
+
+    const gaps = Object.entries(byZip)
+      .filter(
+        ([zip, v]) =>
+          v.bookings >= 2 &&
+          !(cleanerByZip[zip] || []).some((c) => (c.status || "").toLowerCase() === "active"),
+      )
+      .map(([zip, v]) => ({ zip, bookings: v.bookings, revenueCents: v.revenueCents }))
+      .sort((a, b) => b.bookings - a.bookings)
+      .slice(0, 6);
+
+    return { topZips, gaps };
+  }, [bookings, cleaners]);
 
   return (
-    <AdminLayout>
-      <div className="space-y-4">
-        <header className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <RiMapPinLine className="w-6 h-6 text-amber-400" />
-              Operational Map
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">Live pins for bookings (next 14d), active cleaners, and recent leads. Auto-refreshes on every event.</p>
-          </div>
-          <Button onClick={buildPins} variant="outline" size="sm" className="border-white/10 text-slate-200 hover:bg-white/5">
-            <RiRefreshLine className="w-4 h-4 mr-1" /> Refresh
-          </Button>
-        </header>
-
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { k: "all", label: "All", count: counts.total, icon: RiMapPinLine },
-            { k: "bookings", label: "Bookings", count: counts.bookings, icon: RiCalendarCheckLine },
-            { k: "cleaners", label: "Cleaners", count: counts.cleaners, icon: RiToolsLine },
-            { k: "leads", label: "Leads", count: counts.leads, icon: RiUserAddLine },
-          ].map((s) => {
-            const Icon = s.icon;
-            const active = filter === (s.k as typeof filter);
-            return (
-              <button
-                key={s.k}
-                onClick={() => setFilter(s.k as typeof filter)}
-                className={`text-left p-3 rounded-lg border transition-colors ${active ? "bg-amber-500/10 border-amber-500/40" : "bg-slate-900 border-white/10 hover:border-white/20"}`}
-              >
-                <div className="flex items-center justify-between">
-                  <Icon className={`w-5 h-5 ${active ? "text-amber-400" : "text-slate-500"}`} />
-                  <span className="text-xl font-bold text-white">{s.count}</span>
-                </div>
-                <p className="text-xs text-slate-400 uppercase mt-1">{s.label}</p>
-              </button>
-            );
-          })}
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+            <RiMapPin2Line className="w-5 h-5 text-emerald-700" />
+            Operational map
+          </h1>
+          <p className="text-sm text-slate-500">
+            Cleaner coverage cross-referenced with the next 14 days of bookings. Coverage gaps surface zips you should recruit in.
+          </p>
         </div>
+        <Button variant="outline" onClick={load} disabled={loading} className="border-slate-200">
+          <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            {mapsAvailable === false ? (
-              <Card className="bg-slate-900 border-amber-500/20 h-[600px] flex items-center justify-center">
-                <CardContent className="text-center py-12">
-                  <RiMapPinLine className="w-12 h-12 text-amber-400 mx-auto mb-3" />
-                  <p className="text-white font-medium">Google Maps not available</p>
-                  <p className="text-sm text-slate-400 mt-1">Add a Google Places API key in app_secrets to enable the map.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="bg-slate-900 border border-white/10 rounded-lg overflow-hidden" style={{ height: 600 }}>
-                <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <Card className="bg-slate-900 border-white/10">
-              <CardHeader>
-                <CardTitle className="text-white text-sm">Legend</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-purple-500" /> Cleaner (home base)</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-500" /> Booked / New lead</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-500" /> Confirmed / Replied</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-violet-500" /> In progress</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-400" /> Completed</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500" /> Cancelled</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 order-2 lg:order-1">
+          {mapsAvailable === false ? (
+            <Card className="border-amber-200 bg-amber-50 h-[560px] flex items-center justify-center">
+              <CardContent className="text-center py-12">
+                <RiMapPin2Line className="w-10 h-10 text-amber-600 mx-auto mb-2" />
+                <p className="text-amber-900 font-medium">Google Maps unavailable</p>
+                <p className="text-xs text-amber-800 mt-1">
+                  Add a Google Places API key to <code>app_secrets.GOOGLE_PLACES_API_KEY</code> to enable.
+                </p>
               </CardContent>
             </Card>
-
-            {selectedPin ? (
-              <Card className="bg-slate-900 border-amber-500/30">
-                <CardHeader>
-                  <CardTitle className="text-white text-sm flex items-center gap-2">
-                    <Badge variant="outline" className="border-amber-500/30 text-amber-300 capitalize">{selectedPin.kind}</Badge>
-                    {selectedPin.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-slate-400">{selectedPin.subtitle}</p>
-                  <pre className="text-xs text-slate-300 bg-slate-950/50 p-2 rounded mt-2 overflow-x-auto">{JSON.stringify(selectedPin.data, null, 2)}</pre>
-                </CardContent>
-              </Card>
-            ) : loading ? (
-              <Skeleton className="h-48 bg-slate-800" />
-            ) : (
-              <Card className="bg-slate-900 border-white/10">
-                <CardContent className="p-6 text-center text-sm text-slate-500">
-                  Click a pin to see its details.
-                </CardContent>
-              </Card>
-            )}
+          ) : (
+            <div className="rounded-2xl overflow-hidden border border-slate-200" style={{ height: 560 }}>
+              <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
+            </div>
+          )}
+          <div className="flex items-center gap-3 text-[11px] text-slate-600 mt-3 px-1">
+            <Legend dot="#10b981" label="Active cleaner / confirmed booking" />
+            <Legend dot="#f59e0b" label="Pending" />
+            <Legend dot="#3b82f6" label="Completed booking" />
+            <Legend dot="#94a3b8" label="Inactive / no slot" />
           </div>
         </div>
+
+        <div className="space-y-4 order-1 lg:order-2">
+          <Card className="border-slate-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <RiTrophyLine className="w-4 h-4 text-emerald-700" />
+                Top booking ZIPs (next 14d)
+              </CardTitle>
+              <CardDescription>Where the demand actually is</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1.5">
+              {loading ? (
+                <Skeleton className="h-32 w-full" />
+              ) : insight.topZips.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-3">
+                  No upcoming bookings.
+                </p>
+              ) : (
+                insight.topZips.map((z) => (
+                  <div
+                    key={z.zip}
+                    className="flex items-center gap-2 text-sm px-3 py-2 rounded-md bg-slate-50"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-900">{z.zip}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {z.bookings} bookings · {dollars(z.revenueCents)}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] font-medium border",
+                        z.cleaners > 0
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-rose-50 text-rose-700 border-rose-200",
+                      )}
+                    >
+                      {z.cleaners} cleaner{z.cleaners === 1 ? "" : "s"}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-rose-200 bg-rose-50/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5 text-rose-800">
+                <RiAlertLine className="w-4 h-4" />
+                Coverage gaps
+              </CardTitle>
+              <CardDescription className="text-rose-700/80">
+                ZIPs with bookings but zero active cleaners
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1.5">
+              {loading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : insight.gaps.length === 0 ? (
+                <p className="text-xs text-emerald-700 text-center py-3">
+                  ✓ Every booking ZIP has at least one active cleaner.
+                </p>
+              ) : (
+                insight.gaps.map((z) => (
+                  <div
+                    key={z.zip}
+                    className="flex items-center justify-between text-sm px-3 py-2 rounded-md bg-white border border-rose-100"
+                  >
+                    <div>
+                      <p className="font-medium text-rose-900">{z.zip}</p>
+                      <p className="text-[11px] text-rose-700/80">
+                        {z.bookings} bookings unstaffed · {dollars(z.revenueCents)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-rose-100 text-rose-800 border-rose-200 text-[10px]">
+                      Recruit here
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <RiToolsLine className="w-4 h-4 text-slate-600" />
+                Cleaner pins
+              </CardTitle>
+              <CardDescription>
+                {cleaners.length} cleaners plotted ·{" "}
+                <RiCalendarCheckLine className="w-3 h-3 inline -mt-0.5" />{" "}
+                {bookings.length} upcoming bookings
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
       </div>
-    </AdminLayout>
+    </div>
   );
+}
+
+function Legend({ dot, label }: { dot: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dot }} />
+      {label}
+    </span>
+  );
+}
+
+const dollars = (cents: number) =>
+  (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }

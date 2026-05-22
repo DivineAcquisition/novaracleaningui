@@ -80,6 +80,14 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
 
 // Paths that ALL subdomains may serve (system / OAuth callbacks /
 // long-lived deep links). Never redirect or rewrite these.
+//
+// Strict separation note — each portal has its OWN OAuth callback so
+// a Google sign-in started on one subdomain can NEVER land on
+// another portal's dashboard:
+//
+//   app.novaracleaning.com/auth/callback         → customer (/account)
+//   contractor.novaracleaning.com/cleaner/auth/callback → cleaner
+//   admin.novaracleaning.com/admin/auth/callback → admin (has_role gate)
 const GLOBAL_ALLOWLIST = [
   "/api",
   "/_next",
@@ -88,6 +96,7 @@ const GLOBAL_ALLOWLIST = [
   "/sitemap.xml",
   "/auth/callback",
   "/cleaner/auth/callback",
+  "/admin/auth/callback",
 ];
 
 function ownerOf(pathname: string): SubdomainKey {

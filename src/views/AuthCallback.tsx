@@ -1,15 +1,26 @@
 "use client";
 
-import {
-  RiLoader4Line
-} from "@remixicon/react";
+// ─── Customer-portal auth callback ─────────────────────────────────────
+// Strictly customer-only. Lives at /auth/callback on app.novaracleaning.com.
+//
+// Hard rules (per the strict-portal-separation contract):
+//   * NEVER inspect `cleaners` or `admin_users` here.
+//   * NEVER redirect to /cleaner/* or /admin/*.
+//   * On a customer auth event, ensure a `customers` row exists for the
+//     authenticated email and route to /account.
+//   * On password recovery → /update-password.
+//
+// Cleaner Google OAuth uses /cleaner/auth/callback (contractor.*).
+// Admin Google OAuth uses /admin/auth/callback (admin.*).
+// Those two callback pages handle their own portal — not this one.
+
+import { RiLoader4Line } from "@remixicon/react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SEO } from "@/components/SEO";
-import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -17,7 +28,6 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        // Get the session from the URL hash
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
@@ -33,67 +43,54 @@ export default function AuthCallback() {
           return;
         }
 
-        // Check if this is a password recovery flow
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const type = hashParams.get('type');
+        // Password recovery is the only branch — everything else is
+        // routed to /account. Cleaner/admin paths are intentionally
+        // NOT inspected here; users who hit this callback are treated
+        // as customers regardless of what other roles they hold.
+        const hashParams = new URLSearchParams(
+          window.location.hash.substring(1),
+        );
+        const type = hashParams.get("type");
 
-        // Check if this is a Google OAuth sign-in
-        const provider = session.user.app_metadata?.provider;
-        
-        if (type === 'recovery') {
-          // Password reset flow - redirect to update password
+        if (type === "recovery") {
           router.push("/update-password");
-        } else if (provider === 'google') {
-          // Google OAuth authentication — use the shared cleaner-auth
-          // resolver so admin-invited cleaners (whose cleaner row exists
-          // with user_id IS NULL) get auto-linked by email.
-          const { cleaner, routing } = await resolveCleanerAuth();
-
-          if (cleaner) {
-            if (routing === "dashboard") {
-              toast.success("Welcome back!");
-              router.push("/cleaner/dashboard");
-            } else {
-              toast.success("Welcome! Complete your profile.");
-              router.push("/cleaner/onboarding");
-            }
-          } else {
-            // Regular customer
-            // Create customer record if doesn't exist
-            const { data: customerData } = await supabase
-              .from('customers')
-              .select('id')
-              .eq('email', session.user.email)
-              .maybeSingle();
-
-            if (!customerData) {
-              await supabase.from('customers').insert({
-                email: session.user.email || '',
-                first_name: session.user.user_metadata?.full_name?.split(' ')[0] || '',
-                last_name: session.user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
-              });
-            }
-
-            toast.success("Welcome!");
-            router.push("/account");
-          }
-        } else if (type === 'magiclink') {
-          // Magic link authentication - check if it's cleaner onboarding
-          const isCleanerOnboarding = session.user.user_metadata?.onboarding || 
-                                       session.user.user_metadata?.is_cleaner;
-          
-          if (isCleanerOnboarding) {
-            toast.success("Email verified! Complete your profile.");
-            router.push("/cleaner/onboarding");
-          } else {
-            toast.success("Email verified successfully!");
-            router.push("/account");
-          }
-        } else {
-          // Email verification or other auth flow
-          toast.success("Email verified successfully!");
-          router.push("/account");
+          return;
         }
+
+        // Ensure a customers row exists for this email (Google OAuth
+        // newcomers, magic-link first-timers). This used to be wrapped
+        // in a cleaner-branch detector — that's gone for strict
+        // separation. The cleaners and admin_users tables are NOT
+        // touched from this callback.
+        const email = session.user.email || "";
+        if (email) {
+          const { data: customerData } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("email", email)
+            .maybeSingle();
+
+          if (!customerData) {
+            const fullName =
+              (session.user.user_metadata as Record<string, unknown> | null)
+                ?.full_name;
+            const [firstName = "", ...rest] =
+              typeof fullName === "string" ? fullName.split(" ") : [""];
+            await supabase
+              .from("customers")
+              .insert({
+                email,
+                first_name: firstName || "",
+                last_name: rest.join(" ") || "",
+              })
+              .then(() => null, (err) => {
+                console.warn("[AuthCallback] customer insert (non-blocking)", err);
+              });
+          }
+        }
+
+        toast.success("Welcome!");
+        router.push("/account");
       } catch (error) {
         console.error("Unexpected error in auth callback:", error);
         toast.error("Something went wrong. Please try again.");

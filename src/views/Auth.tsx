@@ -170,7 +170,7 @@ export default function Auth() {
                 type="button"
                 variant="outline"
                 className="w-full h-11 mb-5 font-medium rounded-xl border-border/80 hover:bg-muted/50"
-                onClick={signInWithGoogle}
+                onClick={() => signInWithGoogle("/auth/callback")}
                 disabled={isLoading}
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
