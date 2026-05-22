@@ -349,11 +349,23 @@ serve(async (req) => {
     }
 
     if (isNew) {
+      // public.leads has NOT NULL constraints on first_name + last_name
+      // (without DB-level defaults). For an email-only lead (e.g.
+      // exit-intent capture form) we used to blow up with a 23502 NOT
+      // NULL violation that the catch block then turned into a useless
+      // `{ error: "[object Object]" }`. Derive both names from whatever
+      // the form gave us so the insert always succeeds; the canonical
+      // user-supplied data still wins because the row gets enriched on
+      // subsequent calls (idempotent upsert window).
+      const emailLocal = payload.email ? payload.email.split("@")[0] : "";
+      const derivedFirst = payload.firstName || emailLocal || "Lead";
+      const derivedLast = payload.lastName || "(no last name)";
+
       const { data: inserted, error: insertErr } = await supabase
         .from("leads")
         .insert({
-          first_name: payload.firstName || null,
-          last_name: payload.lastName || null,
+          first_name: derivedFirst,
+          last_name: derivedLast,
           email: payload.email || null,
           phone: phoneDigits || null,
           source,
@@ -482,8 +494,17 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[lead-intake] error", message);
+    // PostgREST errors come back as plain objects (not Error instances),
+    // so the old `String(err)` branch produced an opaque "[object Object]".
+    // Serialize whatever we got so callers can actually debug.
+    const message = error instanceof Error
+      ? error.message
+      : (typeof error === "object" && error !== null
+          ? ((error as { message?: string }).message ||
+             (error as { error_description?: string }).error_description ||
+             JSON.stringify(error))
+          : String(error));
+    console.error("[lead-intake] error", message, error);
     return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

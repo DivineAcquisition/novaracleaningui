@@ -5,13 +5,21 @@ import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session-expiry",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-session-expiry",
 };
 
 const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
   console.log(`[INITIATE-CLEANER-STRIPE] ${step}${detailsStr}`);
 };
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -21,63 +29,97 @@ serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-    const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: "2025-08-27.basil",
-    });
 
-    // Authenticate cleaner
+    // ─── Authenticate cleaner ─────────────────────────────────────────
+    // Auth failures return 401, not 500, so unauthenticated health
+    // probes and mis-tabbed sessions don't bury the real Stripe path.
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Not authenticated");
-    
+    if (!authHeader) {
+      return jsonResponse({ error: "Not authenticated" }, 401);
+    }
+
     const token = authHeader.replace("Bearer ", "");
     const { data: userData } = await supabase.auth.getUser(token);
     const userId = userData?.user?.id;
-    
-    if (!userId) throw new Error("Not authenticated");
-    
-    logStep("Authenticated user", { userId });
+    const userEmail = (userData?.user?.email || "").toLowerCase();
 
-    // Get cleaner profile
-    const { data: cleaner, error: fetchError } = await supabase
+    if (!userId) {
+      return jsonResponse({ error: "Not authenticated" }, 401);
+    }
+    logStep("Authenticated user", { userId, userEmail });
+
+    // ─── Resolve cleaner profile ──────────────────────────────────────
+    // Try user_id first; fall back to email match and STAMP user_id on
+    // the row so subsequent RLS-gated queries (and every other cleaner-
+    // facing edge function) work. This mirrors the
+    // resolve_or_link_cleaner_for_user RPC the cleaner-auth helper uses
+    // — same behavior, in-function so we don't pay the RPC round trip.
+    let { data: cleaner } = await supabase
       .from("cleaners")
       .select("*")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
-    if (fetchError || !cleaner) {
-      throw new Error("Cleaner profile not found");
+    if (!cleaner && userEmail) {
+      const { data: byEmail } = await supabase
+        .from("cleaners")
+        .select("*")
+        .ilike("email", userEmail)
+        .is("user_id", null)
+        .maybeSingle();
+      if (byEmail?.id) {
+        const { data: linked } = await supabase
+          .from("cleaners")
+          .update({ user_id: userId, updated_at: new Date().toISOString() })
+          .eq("id", byEmail.id)
+          .select("*")
+          .single();
+        cleaner = linked;
+        logStep("Auto-linked cleaner by email", { cleanerId: cleaner?.id });
+      }
+    }
+
+    if (!cleaner) {
+      return jsonResponse({ error: "Cleaner profile not found" }, 404);
     }
 
     logStep("Retrieved cleaner", { email: cleaner.email, cleanerId: cleaner.id });
 
-    // Create or retrieve Stripe Connect account
-    let accountId = cleaner.stripe_account_id;
-    
-    // Verify existing account if we have one
+    // ─── Resolve Stripe key + initialize client ──────────────────────
+    const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
+    if (!stripeKey) {
+      return jsonResponse(
+        { error: "Stripe is not configured (STRIPE_SECRET_KEY missing)" },
+        500,
+      );
+    }
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    // ─── Create or retrieve Stripe Connect account ────────────────────
+    let accountId = cleaner.stripe_account_id as string | null;
+
     if (accountId) {
       try {
         await stripe.accounts.retrieve(accountId);
         logStep("Verified existing Stripe account", { accountId });
       } catch (verifyError) {
-        // Account doesn't exist or isn't connected - clear it and create new
-        logStep("Existing account invalid, will create new", { 
-          accountId, 
-          error: verifyError instanceof Error ? verifyError.message : String(verifyError) 
+        logStep("Existing account invalid, will create new", {
+          accountId,
+          error:
+            verifyError instanceof Error
+              ? verifyError.message
+              : String(verifyError),
         });
         accountId = null;
-        
-        // Clear the invalid account ID from database
         await supabase
           .from("cleaners")
           .update({ stripe_account_id: null })
           .eq("id", cleaner.id);
       }
     }
-    
-    // Create new account if needed
+
     if (!accountId) {
       const account = await stripe.accounts.create({
         type: "express",
@@ -88,44 +130,42 @@ serve(async (req) => {
           transfers: { requested: true },
         },
         business_type: "individual",
+        metadata: {
+          cleaner_id: cleaner.id,
+          source: "novara_contractor_portal",
+        },
       });
-      
+
       accountId = account.id;
       logStep("Created Stripe account", { accountId });
-      
-      // Update cleaner with Stripe account ID
+
       await supabase
         .from("cleaners")
         .update({ stripe_account_id: accountId })
         .eq("id", cleaner.id);
     }
 
-    // Create account link for onboarding
+    // ─── Account link for hosted onboarding ──────────────────────────
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=refresh`,
-      return_url: `https://contractor.novaracleaning.com/cleaner/dashboard?stripe=complete`,
+      refresh_url:
+        "https://contractor.novaracleaning.com/cleaner/dashboard?stripe=refresh",
+      return_url:
+        "https://contractor.novaracleaning.com/cleaner/dashboard?stripe=complete",
       type: "account_onboarding",
     });
 
     logStep("Created account link", { url: accountLink.url });
 
-    return new Response(
-      JSON.stringify({ url: accountLink.url }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
+    return jsonResponse({ url: accountLink.url, accountId });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
-    );
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error !== null
+          ? (error as { message?: string }).message || JSON.stringify(error)
+          : String(error);
+    logStep("ERROR", { message: errorMessage, error });
+    return jsonResponse({ error: errorMessage }, 500);
   }
 });
