@@ -34,6 +34,7 @@ export async function resolveSecret(
 ): Promise<string> {
   if (cache.has(name)) return cache.get(name) ?? "";
   let value = "";
+  let dbHit = false;
   try {
     // deno-lint-ignore no-explicit-any
     const { data } = await (supabase as any)
@@ -42,15 +43,24 @@ export async function resolveSecret(
       .eq("key", name)
       .maybeSingle();
     if (data?.value && typeof data.value === "string") {
-      value = data.value.trim();
+      const trimmed = data.value.trim();
+      if (trimmed) {
+        value = trimmed;
+        dbHit = true;
+      }
     }
   } catch (err) {
-    console.warn(`[app-secrets] DB read failed for ${name}`, err);
+    console.warn(`[app-secrets] DB read failed for ${name}`, err instanceof Error ? err.message : String(err));
   }
   if (!value) {
     value = (Deno.env.get(name) || "").trim();
   }
-  cache.set(name, value);
+  // Only cache when the value came from the DB. Env fallbacks are
+  // re-checked on every call so a later DB rotation immediately wins
+  // without waiting for the instance to be recycled — the original
+  // cache-on-fallback behaviour pinned warm instances to a stale env
+  // var for hours after we rotated Stripe keys.
+  if (dbHit) cache.set(name, value);
   return value;
 }
 
