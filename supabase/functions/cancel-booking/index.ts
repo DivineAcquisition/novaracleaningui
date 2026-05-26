@@ -116,16 +116,65 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Void any pre-authorized completion hold ───────────────────
+    //
+    // If the cron-driven prepare-completion-hold worker had already
+    // placed a manual-capture auth on the customer's card for the
+    // remaining balance, we MUST cancel that PaymentIntent on
+    // cancellation. Otherwise the hold sits on the customer's card
+    // (eating into their available credit) until it expires after 7
+    // days. Stripe.paymentIntents.cancel on a 'requires_capture' PI
+    // releases the auth immediately. Failures here are non-critical
+    // — the worst case is the customer waits a week for the hold to
+    // drop off naturally, which is annoying but doesn't lose money.
+    if (
+      booking.completion_hold_pi_id &&
+      booking.completion_hold_status === "authorized"
+    ) {
+      try {
+        const heldPi = await stripe.paymentIntents.retrieve(
+          booking.completion_hold_pi_id,
+        );
+        if (heldPi.status === "requires_capture") {
+          await stripe.paymentIntents.cancel(booking.completion_hold_pi_id);
+          logStep("Voided completion hold", {
+            paymentIntentId: booking.completion_hold_pi_id,
+          });
+          try {
+            await supabase.from("completion_hold_log").insert({
+              booking_id: bookingId,
+              attempt: booking.completion_hold_attempts ?? 1,
+              outcome: "voided",
+              payment_intent_id: booking.completion_hold_pi_id,
+              notes: `voided on cancel-booking: ${cancelReason}`,
+            });
+          } catch (_) { /* best effort */ }
+        }
+      } catch (voidErr) {
+        logStep("Hold void failed (non-critical)", {
+          error: voidErr instanceof Error ? voidErr.message : String(voidErr),
+        });
+      }
+    }
+
     // ─── Booking row update ─────────────────────────────────────────
+    // We also clear the completion_hold_status to 'voided' (or leave
+    // 'failed' alone for the auto-cancel-after-3-failures path) so
+    // admin tooling can tell at a glance whether the hold was
+    // released gracefully.
+    const updates: Record<string, unknown> = {
+      status: "cancelled",
+      cancel_reason: cancelReason,
+      cancelled_at: new Date().toISOString(),
+      cancel_fee_cents: feeDecision.feeCents,
+      updated_at: new Date().toISOString(),
+    };
+    if (booking.completion_hold_status === "authorized") {
+      updates.completion_hold_status = "voided";
+    }
     const { error: updateError } = await supabase
       .from("bookings")
-      .update({
-        status: "cancelled",
-        cancel_reason: cancelReason,
-        cancelled_at: new Date().toISOString(),
-        cancel_fee_cents: feeDecision.feeCents,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq("id", bookingId);
     if (updateError) throw updateError;
     logStep("Booking marked cancelled");

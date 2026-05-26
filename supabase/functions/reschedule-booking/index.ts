@@ -96,6 +96,68 @@ serve(async (req) => {
       throw updateError;
     }
 
+    // 3b. Pre-authorized completion hold lifecycle.
+    //
+    // If a hold was already authorized for this booking, the auth has
+    // a 7-day life. Reschedules can push the new service date past
+    // that window, so:
+    //   • if the new service date is INSIDE the existing auth window
+    //     → leave it alone, it'll capture cleanly on completion day
+    //   • if the new service date is OUTSIDE the window → void the
+    //     existing PI and reset the hold columns so prepare-completion
+    //     -hold places a fresh auth ~5 days before the new date
+    if (
+      booking.completion_hold_pi_id &&
+      booking.completion_hold_status === 'authorized' &&
+      booking.completion_hold_auth_expires_at
+    ) {
+      const newServiceTs = Date.parse(`${newDate}T12:00:00`);
+      const expiresTs = Date.parse(booking.completion_hold_auth_expires_at);
+      if (!isNaN(newServiceTs) && !isNaN(expiresTs) && newServiceTs > expiresTs) {
+        try {
+          const { default: Stripe } = await import('https://esm.sh/stripe@18.5.0');
+          const { resolveSecret } = await import('../_shared/app-secrets.ts');
+          const stripeKey = await resolveSecret(supabase, 'STRIPE_SECRET_KEY');
+          const stripe = new Stripe(stripeKey, { apiVersion: '2025-08-27.basil' });
+          const heldPi = await stripe.paymentIntents.retrieve(booking.completion_hold_pi_id);
+          if (heldPi.status === 'requires_capture') {
+            await stripe.paymentIntents.cancel(booking.completion_hold_pi_id);
+            console.log('[reschedule-booking] voided stale hold', {
+              piId: booking.completion_hold_pi_id,
+            });
+          }
+          // Reset hold columns so the cron treats this row as eligible
+          // for a fresh auth attempt on the new date.
+          await supabase
+            .from('bookings')
+            .update({
+              completion_hold_pi_id: null,
+              completion_hold_amount_cents: null,
+              completion_hold_status: null,
+              completion_hold_attempts: 0,
+              completion_hold_last_attempt_at: null,
+              completion_hold_next_attempt_at: null,
+              completion_hold_authorized_at: null,
+              completion_hold_auth_expires_at: null,
+              completion_hold_last_error: null,
+              completion_hold_last_error_code: null,
+            })
+            .eq('id', bookingId);
+          try {
+            await supabase.from('completion_hold_log').insert({
+              booking_id: bookingId,
+              attempt: booking.completion_hold_attempts ?? 1,
+              outcome: 'voided',
+              payment_intent_id: booking.completion_hold_pi_id,
+              notes: `voided on reschedule: new service date ${newDate} is past auth expiry ${booking.completion_hold_auth_expires_at}`,
+            });
+          } catch (_) { /* best effort */ }
+        } catch (voidErr) {
+          console.error('[reschedule-booking] hold void failed (non-critical):', voidErr);
+        }
+      }
+    }
+
     // 4. Release old availability slot
     try {
       const { data: oldSlot } = await supabase
