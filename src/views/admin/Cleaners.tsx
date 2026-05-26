@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -117,6 +118,7 @@ export default function AdminCleaners() {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]["id"]>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const selected = useMemo(
     () => cleaners.find((c) => c.id === selectedId) || null,
@@ -231,23 +233,42 @@ export default function AdminCleaners() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Cleaner directory</h1>
+          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">
+            Cleaner directory
+          </h1>
           <p className="text-sm text-slate-500">
             Contractors, onboarding status, performance, and quick actions.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px]">
-          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <RiCheckLine className="w-3 h-3" /> {counts.active} active
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-            <RiTimeLine className="w-3 h-3" /> {counts.pending} pending
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-            <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <RiCheckLine className="w-3 h-3" /> {counts.active} active
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              <RiTimeLine className="w-3 h-3" /> {counts.pending} pending
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+              <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
+            </span>
+          </div>
+          <Button
+            onClick={() => setAddOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            + Add cleaner
+          </Button>
         </div>
       </div>
+
+      <AddCleanerDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onCreated={() => {
+          setAddOpen(false);
+          void load();
+        }}
+      />
 
       <Card className="border-slate-200">
         <CardContent className="p-3 sm:p-4">
@@ -627,7 +648,15 @@ function ActionsBlock({
           <Button
             variant="outline"
             disabled={actioning}
-            onClick={() => onAction("deactivate", { reason: "Manual pause" })}
+            onClick={() => {
+              const choice = window.prompt(
+                "Deactivate reason — pick one:\n" +
+                  "  personal_request | performance_issue | no_show_pattern | compliance_failure | low_rating | customer_complaint | other",
+                "personal_request",
+              );
+              if (!choice) return;
+              onAction("deactivate", { reason: choice.trim() });
+            }}
             className="border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100"
           >
             <RiTimeLine className="w-4 h-4 mr-1.5" />
@@ -639,8 +668,20 @@ function ActionsBlock({
             variant="outline"
             disabled={actioning}
             onClick={() => {
-              if (!confirm("Terminate this cleaner? They will lose portal + payout access.")) return;
-              onAction("terminate", { reason: "Manual termination" });
+              const choice = window.prompt(
+                "Termination reason — pick one:\n" +
+                  "  misconduct | compliance_failure | persistent_no_show | contract_violation | abandoned_role | other",
+                "misconduct",
+              );
+              if (!choice) return;
+              if (
+                !confirm(
+                  "Terminate this cleaner? They will lose portal + payout access.",
+                )
+              ) {
+                return;
+              }
+              onAction("terminate", { reason: choice.trim() });
             }}
             className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
           >
@@ -679,5 +720,166 @@ function ActionsBlock({
         </p>
       ) : null}
     </div>
+  );
+}
+
+// ─── Add cleaner dialog ───────────────────────────────────────────────
+//
+// Uses the existing `create-cleaner-account` edge function which:
+//   - creates a Supabase auth user (auto-generated password)
+//   - inserts the cleaner row with status='active', approved=true
+//   - returns the temporary password so the admin can share it
+//
+function AddCleanerDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onCreated: () => void;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [homeZip, setHomeZip] = useState("");
+  const [serviceZips, setServiceZips] = useState("");
+  const [payRate, setPayRate] = useState("18");
+  const [busy, setBusy] = useState(false);
+  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
+
+  const reset = () => {
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setPhone("");
+    setHomeZip("");
+    setServiceZips("");
+    setPayRate("18");
+    setCreatedPassword(null);
+  };
+
+  const submit = async () => {
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim()) {
+      toast.error("First, last, email, and phone are required.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-cleaner-account", {
+        body: {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          homeZip: homeZip.trim() || null,
+          serviceZipCodes: serviceZips
+            .split(/[,\s]+/)
+            .map((z) => z.trim())
+            .filter((z) => /^\d{5}$/.test(z)),
+          payRateHr: parseFloat(payRate) || 18,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Cleaner created — share the temp password below.`);
+      setCreatedPassword(data?.password || null);
+      onCreated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) reset();
+      }}
+    >
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="font-jakarta tracking-tight">Add cleaner</SheetTitle>
+          <SheetDescription>
+            Creates an auth login + cleaner record with active status. They'll be able
+            to sign in immediately and complete onboarding from the cleaner portal.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">First name *</Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Last name *</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">Email *</Label>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+          </div>
+          <div>
+            <Label className="text-xs">Phone *</Label>
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 301 555 0123"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Home ZIP</Label>
+              <Input value={homeZip} onChange={(e) => setHomeZip(e.target.value)} maxLength={5} />
+            </div>
+            <div>
+              <Label className="text-xs">Pay rate ($/hr)</Label>
+              <Input
+                value={payRate}
+                onChange={(e) => setPayRate(e.target.value)}
+                inputMode="decimal"
+              />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">Service ZIPs (comma-separated)</Label>
+            <Input
+              value={serviceZips}
+              onChange={(e) => setServiceZips(e.target.value)}
+              placeholder="21230, 21201, 21209"
+            />
+          </div>
+          <Button
+            onClick={submit}
+            disabled={busy}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            {busy ? (
+              <>
+                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Creating…
+              </>
+            ) : (
+              <>+ Create cleaner</>
+            )}
+          </Button>
+          {createdPassword && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs">
+              <p className="font-semibold text-emerald-900 mb-1">
+                Temporary password (share this)
+              </p>
+              <p className="font-mono text-sm break-all text-emerald-900">{createdPassword}</p>
+              <p className="text-[11px] text-emerald-700 mt-2">
+                Tell them to sign in at app.novaracleaning.com/contractor and change it.
+              </p>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
