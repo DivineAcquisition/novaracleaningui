@@ -1,25 +1,24 @@
 "use client";
 
 import {
-  RiArrowLeftLine,
   RiArrowRightLine,
-  RiCheckLine,
   RiCalendarLine,
   RiCheckboxCircleLine,
-  RiCopperCoinLine,
-  RiCopyrightLine,
-  RiErrorWarningLine,
-  RiHomeLine,
+  RiHome4Line,
+  RiInformationLine,
   RiLoader4Line,
-  RiPhoneLine,
+  RiMoneyDollarCircleLine,
+  RiPriceTag3Line,
   RiSearchLine,
-  RiShoppingBag3Line,
   RiSparklingLine,
-  RiUserAddLine,
+  RiToolsLine,
   RiUserLine,
+  RiWalletLine,
 } from "@remixicon/react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { format } from "date-fns";
+
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,49 +45,39 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
+import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
+import {
+  HOME_SIZE_RANGES,
+  SERVICE_TIER_PRICING,
+  ADD_ONS as ADD_ON_DEFS,
+  getServicePrice,
+  calculatePrice,
+} from "@/lib/pricing-system";
 
-// Pricing must mirror create-payment-intent + book-as-va (source of truth).
-const HOME_SIZES = [
-  { id: "0_999", label: "Under 1,000 sq ft", base: 27000 },
-  { id: "1000_1500", label: "1,000–1,500 sq ft", base: 34200 },
-  { id: "1501_2000", label: "1,501–2,000 sq ft", base: 43200 },
-  { id: "2001_2500", label: "2,001–2,500 sq ft", base: 50400 },
-  { id: "2501_3000", label: "2,501–3,000 sq ft", base: 61200 },
-  { id: "3001_3500", label: "3,001–3,500 sq ft", base: 68400 },
-  { id: "3501_4000", label: "3,501–4,000 sq ft", base: 79200 },
-  { id: "4001_4500", label: "4,001–4,500 sq ft", base: 88200 },
-  { id: "4501_5000", label: "4,501–5,000 sq ft", base: 97200 },
-] as const;
+// ─── Types & constants ───────────────────────────────────────────────
 
-const SERVICE_TYPES = [
-  { id: "standard", label: "Standard Clean", mult: 1.0 },
-  { id: "deep", label: "Deep Clean", mult: 1.5 },
-  { id: "moveInOut", label: "Move-In / Move-Out", mult: 2.0 },
-  { id: "combo", label: "Deep + Standard Combo", mult: 2.5 },
-] as const;
+type ServiceType = "standard" | "deep" | "moveInOut" | "combo";
 
-const ADD_ONS = [
-  { id: "fridge", label: "Inside Fridge", price: 3000 },
-  { id: "oven", label: "Inside Oven", price: 3000 },
-  { id: "windows", label: "Interior Windows", price: 4000 },
-] as const;
+type InvoiceMode = "deposit_plus_remaining" | "full_now" | "none";
 
-const TIME_SLOTS = [
-  "8:00 AM - 9:00 AM",
-  "9:00 AM - 10:00 AM",
-  "10:00 AM - 11:00 AM",
-  "11:00 AM - 12:00 PM",
-  "12:00 PM - 1:00 PM",
-  "1:00 PM - 2:00 PM",
-  "2:00 PM - 3:00 PM",
-  "3:00 PM - 4:00 PM",
-  "4:00 PM - 5:00 PM",
-  "5:00 PM - 6:00 PM",
+const SERVICE_TYPE_OPTIONS: { id: ServiceType; label: string }[] = [
+  { id: "standard", label: SERVICE_TIER_PRICING.standard.label },
+  { id: "deep", label: SERVICE_TIER_PRICING.deep.label },
+  { id: "moveInOut", label: SERVICE_TIER_PRICING.moveInOut.label },
+  { id: "combo", label: SERVICE_TIER_PRICING.combo.label },
 ];
 
-const INVOICE_MODES = [
+const ADD_ON_LIST = (Object.keys(ADD_ON_DEFS) as Array<keyof typeof ADD_ON_DEFS>).map(
+  (id) => ({
+    id,
+    label: ADD_ON_DEFS[id].label,
+    priceCents: ADD_ON_DEFS[id].price * 100,
+  }),
+);
+
+const INVOICE_MODES: { id: InvoiceMode; label: string; desc: string }[] = [
   {
     id: "deposit_plus_remaining",
     label: "Deposit today + Remaining day-of",
@@ -102,9 +91,32 @@ const INVOICE_MODES = [
   {
     id: "none",
     label: "No invoice — book only",
-    desc: "VA will collect payment another way.",
+    desc: "Booker will collect payment another way.",
   },
-] as const;
+];
+
+const DWELLING_TYPES = [
+  { value: "house", label: "House" },
+  { value: "apartment", label: "Apartment" },
+  { value: "condo", label: "Condo" },
+  { value: "townhome", label: "Townhome" },
+  { value: "other", label: "Other" },
+];
+
+const PETS_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "cats", label: "Cats" },
+  { value: "dogs", label: "Dogs" },
+  { value: "both", label: "Both" },
+];
+
+const FLOORING_OPTIONS = [
+  { value: "hardwood", label: "Hardwood" },
+  { value: "tile", label: "Tile" },
+  { value: "carpet", label: "Carpet" },
+  { value: "lvp", label: "LVP" },
+  { value: "mixed", label: "Mixed" },
+];
 
 interface LeadRow {
   id: string;
@@ -119,43 +131,61 @@ interface LeadRow {
   source: string | null;
 }
 
+type LeadHydration = LeadRow & {
+  preferred_date?: string;
+  preferred_time?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  sqft?: number;
+  special_requests?: string;
+};
+
 function formatMoney(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
+
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, "");
+}
+
+function isValidEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
+// ─── Page ────────────────────────────────────────────────────────────
 
 export default function VaBooking() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const leadIdParam = searchParams.get("lead_id");
 
-  // ─── Lead lookup ──────────────────────────────────────────────────
+  // Lead lookup
   const [searchQuery, setSearchQuery] = useState("");
   const [recentLeads, setRecentLeads] = useState<LeadRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [linkedLead, setLinkedLead] = useState<LeadRow | null>(null);
 
   useEffect(() => {
-    const load = async () => {
+    const t = setTimeout(async () => {
+      const baseSelect =
+        "id, first_name, last_name, email, phone, zip_code, service_type, lead_score, status, source";
       let query = supabase
         .from("leads")
-        .select(
-          "id, first_name, last_name, email, phone, zip_code, service_type, lead_score, status, source",
-        )
+        .select(baseSelect)
         .order("created_at", { ascending: false })
         .limit(20);
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim();
-        const digits = q.replace(/[^0-9]/g, "");
-        const filters: string[] = [];
-        filters.push(`first_name.ilike.%${q}%`);
-        filters.push(`last_name.ilike.%${q}%`);
-        filters.push(`email.ilike.%${q}%`);
+      const q = searchQuery.trim();
+      if (q) {
+        const digits = digitsOnly(q);
+        const filters: string[] = [
+          `first_name.ilike.%${q}%`,
+          `last_name.ilike.%${q}%`,
+          `email.ilike.%${q}%`,
+        ];
         if (digits) filters.push(`phone.ilike.%${digits}%`);
         query = supabase
           .from("leads")
-          .select(
-            "id, first_name, last_name, email, phone, zip_code, service_type, lead_score, status, source",
-          )
+          .select(baseSelect)
           .or(filters.join(","))
           .order("created_at", { ascending: false })
           .limit(20);
@@ -164,42 +194,96 @@ export default function VaBooking() {
       const { data, error } = await query;
       setSearching(false);
       if (!error && data) setRecentLeads(data as unknown as LeadRow[]);
-    };
-    const t = setTimeout(load, 200);
+    }, 200);
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  // ─── Booking form state ───────────────────────────────────────────
+  // Customer fields
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [addressLat, setAddressLat] = useState<number | null>(null);
+  const [addressLng, setAddressLng] = useState<number | null>(null);
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [zipCode, setZipCode] = useState("");
+
+  // Service fields
   const [homeSizeId, setHomeSizeId] = useState("1501_2000");
-  const [serviceType, setServiceType] = useState<
-    "standard" | "deep" | "moveInOut" | "combo"
-  >("standard");
+  const [serviceType, setServiceType] = useState<ServiceType>("standard");
   const [addOns, setAddOns] = useState<string[]>([]);
   const [frequency, setFrequency] = useState("one-time");
-  const [serviceDate, setServiceDate] = useState("");
-  const [timeSlot, setTimeSlot] = useState("");
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
+
+  // Schedule fields
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
   const [accessNotes, setAccessNotes] = useState("");
   const [teamNotes, setTeamNotes] = useState("");
+
+  // Property details
+  const [dwellingType, setDwellingType] = useState<string>("");
+  const [pets, setPets] = useState<string>("none");
+  const [flooring, setFlooring] = useState<string[]>([]);
+  const [parkingNotes, setParkingNotes] = useState("");
+  const [suppliesProvidedBy, setSuppliesProvidedBy] = useState<"customer" | "novara">(
+    "novara",
+  );
+  const [comboFollowUpDate, setComboFollowUpDate] = useState("");
+
+  // Payment fields
   const [csrName, setCsrName] = useState("");
-  const [invoiceMode, setInvoiceMode] = useState<
-    "deposit_plus_remaining" | "full_now" | "none"
-  >("deposit_plus_remaining");
+  const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>(
+    "deposit_plus_remaining",
+  );
   const [depositPercent, setDepositPercent] = useState("50");
   const [overrideTotal, setOverrideTotal] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [sendConfirmationSms, setSendConfirmationSms] = useState(true);
   const [sendChecklistEmail, setSendChecklistEmail] = useState(true);
 
-  // ─── Hydrate from lead if ?lead_id=… ─────────────────────────────
+  // Wallet credit lookup
+  const [walletCreditCents, setWalletCreditCents] = useState(0);
+  useEffect(() => {
+    const trimmed = email.trim().toLowerCase();
+    if (!isValidEmail(trimmed)) {
+      setWalletCreditCents(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: cust } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("email", trimmed)
+          .maybeSingle();
+        if (cancelled || !cust?.id) {
+          if (!cancelled) setWalletCreditCents(0);
+          return;
+        }
+        const { data: bal } = await (supabase.rpc as any)(
+          "get_customer_credit_balance",
+          { _customer_id: cust.id },
+        );
+        if (cancelled) return;
+        const cents = Number(
+          (bal as { balance_cents?: number } | null)?.balance_cents || 0,
+        );
+        setWalletCreditCents(cents);
+      } catch {
+        if (!cancelled) setWalletCreditCents(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [email]);
+
+  // Hydrate from ?lead_id=…
   useEffect(() => {
     if (!leadIdParam) return;
     (async () => {
@@ -210,89 +294,128 @@ export default function VaBooking() {
         )
         .eq("id", leadIdParam)
         .maybeSingle();
-      if (data) {
-        applyLead(data as unknown as LeadRow & {
-          preferred_date?: string;
-          preferred_time?: string;
-          bedrooms?: number;
-          bathrooms?: number;
-          sqft?: number;
-          special_requests?: string;
-        });
-      }
+      if (data) applyLead(data as unknown as LeadHydration);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadIdParam]);
 
-  function applyLead(
-    lead: LeadRow & {
-      preferred_date?: string;
-      preferred_time?: string;
-      bedrooms?: number;
-      bathrooms?: number;
-      sqft?: number;
-      special_requests?: string;
-    },
-  ) {
+  function applyLead(lead: LeadHydration) {
     setLinkedLead(lead);
     setFirstName(lead.first_name || "");
     setLastName(lead.last_name || "");
     setEmail(lead.email || "");
     setPhone(lead.phone || "");
     setZipCode(lead.zip_code || "");
-    if (lead.service_type) setServiceType(lead.service_type as typeof serviceType);
-    if (lead.preferred_date) setServiceDate(lead.preferred_date);
-    if (lead.preferred_time) setTimeSlot(lead.preferred_time);
+    if (lead.service_type) {
+      const st = lead.service_type as ServiceType;
+      if (["standard", "deep", "moveInOut", "combo"].includes(st)) {
+        setServiceType(st);
+      }
+    }
+    if (lead.preferred_date) {
+      const d = new Date(`${lead.preferred_date}T12:00:00`);
+      if (!Number.isNaN(d.getTime())) setSelectedDate(d);
+    }
+    if (lead.preferred_time) setSelectedTime(lead.preferred_time);
     if (lead.bedrooms) setBedrooms(String(lead.bedrooms));
     if (lead.bathrooms) setBathrooms(String(lead.bathrooms));
     if (lead.special_requests) setAccessNotes(lead.special_requests);
     toast.success(`Loaded lead — ${lead.first_name || "(no name)"}`);
   }
 
-  // ─── Live pricing ─────────────────────────────────────────────────
+  // Live pricing — driven by pricing-system.ts (Zone B, no membership)
   const pricing = useMemo(() => {
-    const base = HOME_SIZES.find((h) => h.id === homeSizeId)?.base ?? 0;
-    const mult = SERVICE_TYPES.find((s) => s.id === serviceType)?.mult ?? 1;
-    const service = Math.round(base * mult);
-    const addOnTotal = addOns.reduce(
-      (sum, a) => sum + (ADD_ONS.find((x) => x.id === a)?.price ?? 0),
-      0,
-    );
-    const computed = service + addOnTotal;
-    const override = overrideTotal.trim()
+    const calc = calculatePrice(homeSizeId, serviceType, addOns, "none", false, false, 0);
+    const baseCents = Math.round(calc.basePrice * 100);
+    const serviceCents = Math.round((calc.basePrice + calc.serviceAddition) * 100);
+    const addOnsCents = Math.round(calc.addOnsTotal * 100);
+    const subtotalCents = Math.round(calc.subtotal * 100);
+    const newCustomerDiscountCents = Math.round(calc.newCustomerDiscount * 100);
+    const computedCents = Math.round(calc.total * 100);
+
+    const overrideCents = overrideTotal.trim()
       ? Math.round(parseFloat(overrideTotal) * 100)
       : null;
-    const total = override !== null && override >= 0 ? override : computed;
-    const pct = Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
-    const deposit = invoiceMode === "full_now"
-      ? total
-      : invoiceMode === "none"
-      ? 0
-      : Math.round(total * pct);
-    return { base, service, addOnTotal, computed, total, deposit, remaining: total - deposit };
+    const totalCents =
+      overrideCents !== null && overrideCents >= 0 ? overrideCents : computedCents;
+
+    const pct =
+      Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
+    const depositCents =
+      invoiceMode === "full_now"
+        ? totalCents
+        : invoiceMode === "none"
+          ? 0
+          : Math.round(totalCents * pct);
+    const remainingCents = totalCents - depositCents;
+
+    return {
+      baseCents,
+      serviceCents,
+      addOnsCents,
+      subtotalCents,
+      newCustomerDiscountCents,
+      computedCents,
+      totalCents,
+      depositCents,
+      remainingCents,
+    };
   }, [homeSizeId, serviceType, addOns, overrideTotal, depositPercent, invoiceMode]);
 
-  // ─── Submit ───────────────────────────────────────────────────────
+  const previewServicePriceCents = useMemo(
+    () => getServicePrice(homeSizeId, serviceType, "B") * 100,
+    [homeSizeId, serviceType],
+  );
+
+  // Submit
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
 
-  const canSubmit = firstName && email && phone && homeSizeId && serviceType &&
-    serviceDate && timeSlot;
+  const phoneDigits = digitsOnly(phone);
+  const zipDigits = digitsOnly(zipCode);
+
+  const requirements = useMemo(() => {
+    const list: string[] = [];
+    if (!firstName.trim()) list.push("First name");
+    if (!isValidEmail(email)) list.push("Valid email");
+    if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
+    if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
+    if (!homeSizeId) list.push("Home size");
+    if (!serviceType) list.push("Service type");
+    if (!selectedDate) list.push("Service date");
+    if (!selectedTime) list.push("Time slot");
+    return list;
+  }, [
+    firstName,
+    email,
+    phoneDigits,
+    zipDigits,
+    homeSizeId,
+    serviceType,
+    selectedDate,
+    selectedTime,
+  ]);
+
+  const canSubmit = requirements.length === 0;
 
   const handleSubmit = async () => {
     if (!canSubmit) {
-      toast.error("Fill out customer name, email, phone, home size, service type, date and time.");
+      toast.error("Fill out all required fields before submitting.");
       return;
     }
     setSubmitting(true);
     setResult(null);
     try {
+      const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : "";
       const payload: Record<string, unknown> = {
         leadId: linkedLead?.id || leadIdParam || undefined,
-        firstName,
-        lastName,
-        email,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
         phone,
         address,
+        addressLat: addressLat ?? undefined,
+        addressLng: addressLng ?? undefined,
         city,
         state,
         zipCode,
@@ -301,7 +424,7 @@ export default function VaBooking() {
         addOns,
         frequency,
         serviceDate,
-        timeSlot,
+        timeSlot: selectedTime,
         bedrooms: bedrooms ? parseInt(bedrooms) : undefined,
         bathrooms: bathrooms ? parseFloat(bathrooms) : undefined,
         accessNotes,
@@ -309,6 +432,18 @@ export default function VaBooking() {
         csrName,
         invoiceMode,
         depositPercent: parseFloat(depositPercent) / 100,
+        promoCode: promoCode.trim().toLowerCase() || undefined,
+        propertyDetails: {
+          dwellingType: dwellingType || undefined,
+          pets,
+          flooring,
+          parkingNotes,
+          suppliesProvidedBy,
+          comboFollowUpDate:
+            serviceType === "combo" && comboFollowUpDate
+              ? comboFollowUpDate
+              : undefined,
+        },
         sendConfirmationSms,
         sendChecklistEmail,
       };
@@ -323,7 +458,9 @@ export default function VaBooking() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setResult(data);
-      toast.success(`Booking created — ${data?.bookingNumber || data?.bookingId}`);
+      toast.success(
+        `Booking created — ${data?.bookingNumber || data?.bookingId}`,
+      );
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to book: ${m}`);
@@ -334,43 +471,71 @@ export default function VaBooking() {
 
   // ─── Success screen ───────────────────────────────────────────────
   if (result?.success) {
+    const homeSizeLabel =
+      HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label || homeSizeId;
+    const serviceLabel =
+      SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)?.label || serviceType;
+    const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : "";
     return (
-      <div className="min-h-screen bg-background">
-        <SEO title="Booking Created" noindex />
-        <div className="container max-w-3xl mx-auto px-4 py-12">
-          <Card className="border-0 shadow-xl overflow-hidden">
-            <div className="h-1 w-full bg-emerald-500" />
+      <div className="min-h-full">
+        <SEO title="Novara Internal Booking" noindex />
+        <div className="container max-w-3xl mx-auto px-4 py-10">
+          <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+            <div className="h-1 w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500" />
             <CardHeader className="text-center pt-10">
               <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center">
                 <RiCheckboxCircleLine className="w-9 h-9 text-emerald-600" />
               </div>
-              <CardTitle className="text-2xl mt-4">
-                Booking {result.bookingNumber} created ✓
+              <Badge className="mx-auto mt-4 bg-emerald-100 text-emerald-700 border-0 hover:bg-emerald-100">
+                Internal booking created
+              </Badge>
+              <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900">
+                Booking {result.bookingNumber} confirmed
               </CardTitle>
               <CardDescription>
                 Email, SMS, and Stripe invoices have been dispatched.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 pb-10">
-              <div className="rounded-xl bg-muted/40 p-4 space-y-2 text-sm">
+              <div className="rounded-xl bg-slate-50 p-4 space-y-2 text-sm border border-slate-100">
                 <Row label="Customer" value={`${firstName} ${lastName}`.trim()} />
-                <Row label="Service" value={`${SERVICE_TYPES.find((s) => s.id === serviceType)?.label} — ${HOME_SIZES.find((h) => h.id === homeSizeId)?.label}`} />
-                <Row label="When" value={`${serviceDate} ${timeSlot}`} />
-                <Row label="Total" value={formatMoney(result.totals.totalCents)} />
-                <Row label="Deposit" value={formatMoney(result.totals.depositCents)} />
-                <Row label="Remaining day-of" value={formatMoney(result.totals.remainingCents)} />
+                <Row
+                  label="Service"
+                  value={`${serviceLabel} — ${homeSizeLabel}`}
+                />
+                <Row label="When" value={`${serviceDate} ${selectedTime || ""}`} />
+                <Row
+                  label="Total"
+                  value={formatMoney(result.totals?.totalCents ?? pricing.totalCents)}
+                />
+                <Row
+                  label="Deposit"
+                  value={formatMoney(
+                    result.totals?.depositCents ?? pricing.depositCents,
+                  )}
+                />
+                <Row
+                  label="Remaining day-of"
+                  value={formatMoney(
+                    result.totals?.remainingCents ?? pricing.remainingCents,
+                  )}
+                />
                 {result.ghlContactId && (
                   <Row label="GHL contact" value={result.ghlContactId} mono />
                 )}
                 {result.ghlOpportunityId && (
-                  <Row label="GHL opportunity" value={result.ghlOpportunityId} mono />
+                  <Row
+                    label="GHL opportunity"
+                    value={result.ghlOpportunityId}
+                    mono
+                  />
                 )}
               </div>
 
               {result.depositInvoice && (
                 <InvoiceCard
                   title="Deposit invoice (due today)"
-                  amount={result.totals.depositCents}
+                  amount={result.totals?.depositCents ?? pricing.depositCents}
                   invoiceId={result.depositInvoice.invoiceId}
                   url={result.depositInvoice.hostedInvoiceUrl}
                 />
@@ -378,7 +543,7 @@ export default function VaBooking() {
               {result.remainingInvoice && (
                 <InvoiceCard
                   title="Remaining-balance invoice (due day-of)"
-                  amount={result.totals.remainingCents}
+                  amount={result.totals?.remainingCents ?? pricing.remainingCents}
                   invoiceId={result.remainingInvoice.invoiceId}
                   url={result.remainingInvoice.hostedInvoiceUrl}
                 />
@@ -386,14 +551,14 @@ export default function VaBooking() {
               {result.fullInvoice && (
                 <InvoiceCard
                   title="Full-payment invoice"
-                  amount={result.totals.totalCents}
+                  amount={result.totals?.totalCents ?? pricing.totalCents}
                   invoiceId={result.fullInvoice.invoiceId}
                   url={result.fullInvoice.hostedInvoiceUrl}
                 />
               )}
 
               {result.smsResult && (
-                <div className="rounded-xl border border-border p-4 text-sm">
+                <div className="rounded-xl border border-slate-200 p-4 text-sm">
                   <p className="font-semibold mb-1">Confirmation SMS</p>
                   <p className="text-muted-foreground">
                     {result.smsResult.success
@@ -407,14 +572,12 @@ export default function VaBooking() {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => {
-                    setResult(null);
-                  }}
+                  onClick={() => setResult(null)}
                 >
                   Book another
                 </Button>
                 <Button
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  className="flex-1"
                   onClick={() =>
                     router.push(`/admin/bookings?highlight=${result.bookingId}`)
                   }
@@ -429,71 +592,59 @@ export default function VaBooking() {
     );
   }
 
+  // ─── Form ─────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <SEO title="VA Booking — Admin" noindex />
-      <div className="border-b border-border/50 bg-background sticky top-0 z-10">
-        <div className="container max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/admin/dashboard")}
-            className="-ml-2 text-muted-foreground"
-          >
-            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Dashboard
-          </Button>
-          <div className="flex items-center gap-2">
-            <RiUserAddLine className="w-4 h-4 text-primary" />
-            <h1 className="text-base font-semibold">Book a cleaning (VA)</h1>
-          </div>
-          <div className="w-[100px]" />
-        </div>
-      </div>
+    <div className="min-h-full pb-24">
+      <SEO title="Novara Internal Booking" noindex />
 
-      <div className="container max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: form */}
-        <div className="lg:col-span-2 space-y-5">
-          {/* Lead lookup */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <RiSearchLine className="w-4 h-4 text-primary" />
-                Look up an existing lead
-              </CardTitle>
-              <CardDescription>
-                Pre-fills the form so you don't have to retype data the customer already gave us.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+      <div className="container max-w-6xl mx-auto px-4 py-6">
+        <div className="mb-6">
+          <h1 className="font-jakarta text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
+            Novara Internal Booking
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Premium booking workspace for the Novara internal team — quote,
+            schedule, and dispatch in a single flow.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* LEFT: form */}
+          <div className="lg:col-span-2 space-y-5">
+            {/* Lead lookup */}
+            <SectionCard
+              title="Look up an existing lead"
+              description="Pre-fills the form so you don't have to retype data the customer already gave us."
+              icon={<RiSearchLine className="w-4 h-4" />}
+            >
               <Input
                 placeholder="Search name, email or phone…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-              {searching && (
-                <Skeleton className="h-10 w-full" />
-              )}
-              <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
+              {searching && <Skeleton className="h-10 w-full" />}
+              <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
                 {recentLeads.length === 0 && !searching && (
-                  <p className="text-xs text-muted-foreground p-3">No leads.</p>
+                  <p className="text-xs text-slate-500 p-3">No leads.</p>
                 )}
                 {recentLeads.map((l) => (
                   <button
                     key={l.id}
-                    onClick={() => applyLead(l)}
+                    type="button"
+                    onClick={() => applyLead(l as LeadHydration)}
                     className={cn(
-                      "w-full text-left p-3 hover:bg-muted/40 flex items-center justify-between",
-                      linkedLead?.id === l.id && "bg-primary/5",
+                      "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between transition-colors",
+                      linkedLead?.id === l.id && "bg-emerald-50/60",
                     )}
                   >
                     <div>
-                      <p className="text-sm font-medium">
+                      <p className="text-sm font-medium text-slate-900">
                         {l.first_name || ""} {l.last_name || ""}
                         {!l.first_name && !l.last_name && (
-                          <span className="text-muted-foreground">(no name)</span>
+                          <span className="text-slate-400">(no name)</span>
                         )}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-slate-500">
                         {l.phone || l.email || "—"} · {l.zip_code || "?"} ·{" "}
                         {l.source || "?"}
                       </p>
@@ -514,31 +665,27 @@ export default function VaBooking() {
                 ))}
               </div>
               {linkedLead && (
-                <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs text-primary">
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
                   Linked to lead {linkedLead.id.slice(0, 8)} —{" "}
                   {linkedLead.source || "no source"}.
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </SectionCard>
 
-          {/* Customer */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <RiUserLine className="w-4 h-4 text-primary" /> Customer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+            {/* Customer */}
+            <SectionCard
+              title="Customer"
+              icon={<RiUserLine className="w-4 h-4" />}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
                   <Label>First name *</Label>
                   <Input
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Last name</Label>
                   <Input
                     value={lastName}
@@ -546,16 +693,23 @@ export default function VaBooking() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
                   <Label>Email *</Label>
                   <Input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
+                  {walletCreditCents > 0 && (
+                    <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-medium">
+                      <RiWalletLine className="w-3.5 h-3.5" />
+                      {formatMoney(walletCreditCents)} wallet credit available —
+                      applied automatically
+                    </div>
+                  )}
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Phone *</Label>
                   <Input
                     type="tel"
@@ -572,14 +726,16 @@ export default function VaBooking() {
                   setCity(addr.city);
                   setState(addr.state);
                   setZipCode(addr.zipCode);
+                  setAddressLat(typeof addr.lat === "number" ? addr.lat : null);
+                  setAddressLng(typeof addr.lng === "number" ? addr.lng : null);
                 }}
               />
               <div className="grid grid-cols-3 gap-3">
-                <div>
+                <div className="space-y-1.5">
                   <Label>City</Label>
                   <Input value={city} onChange={(e) => setCity(e.target.value)} />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>State</Label>
                   <Input
                     value={state}
@@ -587,8 +743,8 @@ export default function VaBooking() {
                     maxLength={2}
                   />
                 </div>
-                <div>
-                  <Label>ZIP</Label>
+                <div className="space-y-1.5">
+                  <Label>ZIP *</Label>
                   <Input
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
@@ -596,69 +752,89 @@ export default function VaBooking() {
                   />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </SectionCard>
 
-          {/* Service */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <RiShoppingBag3Line className="w-4 h-4 text-primary" /> Service
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+            {/* Service */}
+            <SectionCard
+              title="Service"
+              icon={<RiToolsLine className="w-4 h-4" />}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
                   <Label>Home size *</Label>
                   <Select value={homeSizeId} onValueChange={setHomeSizeId}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      {HOME_SIZES.map((h) => (
-                        <SelectItem key={h.id} value={h.id}>{h.label}</SelectItem>
-                      ))}
+                      {HOME_SIZE_RANGES.filter((h) => h.standardPrice > 0).map(
+                        (h) => (
+                          <SelectItem key={h.id} value={h.id}>
+                            {h.label} — ${h.standardPrice}
+                          </SelectItem>
+                        ),
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Service type *</Label>
                   <Select
                     value={serviceType}
-                    onValueChange={(v) => setServiceType(v as typeof serviceType)}
+                    onValueChange={(v) => setServiceType(v as ServiceType)}
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      {SERVICE_TYPES.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                      {SERVICE_TYPE_OPTIONS.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-slate-500 pt-0.5">
+                    Quoted at{" "}
+                    <span className="font-medium text-slate-700">
+                      {formatMoney(previewServicePriceCents)}
+                    </span>{" "}
+                    for the selected home size.
+                  </p>
                 </div>
               </div>
+
               <div>
                 <Label className="mb-2 block">Add-ons</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {ADD_ONS.map((a) => {
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  {ADD_ON_LIST.map((a) => {
                     const checked = addOns.includes(a.id);
                     return (
                       <label
                         key={a.id}
                         className={cn(
-                          "rounded-lg border p-2 text-sm cursor-pointer flex items-center justify-between",
+                          "rounded-xl border p-3 text-sm cursor-pointer flex items-center justify-between transition-colors",
                           checked
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/30",
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-slate-200 hover:border-emerald-300",
                         )}
                       >
                         <span>
-                          <span className="font-medium">{a.label}</span>
-                          <span className="text-xs text-muted-foreground ml-2">
-                            +{formatMoney(a.price)}
+                          <span className="font-medium text-slate-900">
+                            {a.label}
+                          </span>
+                          <span className="text-xs text-slate-500 ml-2">
+                            +{formatMoney(a.priceCents)}
                           </span>
                         </span>
                         <Checkbox
                           checked={checked}
                           onCheckedChange={(v) =>
-                            setAddOns(v ? [...addOns, a.id] : addOns.filter((x) => x !== a.id))
+                            setAddOns(
+                              v
+                                ? [...addOns, a.id]
+                                : addOns.filter((x) => x !== a.id),
+                            )
                           }
                         />
                       </label>
@@ -666,8 +842,9 @@ export default function VaBooking() {
                   })}
                 </div>
               </div>
+
               <div className="grid grid-cols-3 gap-3">
-                <div>
+                <div className="space-y-1.5">
                   <Label>Bedrooms</Label>
                   <Input
                     value={bedrooms}
@@ -675,7 +852,7 @@ export default function VaBooking() {
                     inputMode="numeric"
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Bathrooms</Label>
                   <Input
                     value={bathrooms}
@@ -683,10 +860,12 @@ export default function VaBooking() {
                     inputMode="decimal"
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Frequency</Label>
                   <Select value={frequency} onValueChange={setFrequency}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="one-time">One-time</SelectItem>
                       <SelectItem value="weekly">Weekly</SelectItem>
@@ -696,97 +875,207 @@ export default function VaBooking() {
                   </Select>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </SectionCard>
 
-          {/* Schedule */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <RiCalendarLine className="w-4 h-4 text-primary" /> Schedule
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Service date *</Label>
-                  <Input
-                    type="date"
-                    value={serviceDate}
-                    onChange={(e) => setServiceDate(e.target.value)}
+            {/* Schedule — uses the customer flow SchedulePicker */}
+            <SectionCard
+              title="Schedule"
+              description="Real-time availability — same calendar customers see."
+              icon={<RiCalendarLine className="w-4 h-4" />}
+              bodyClassName="p-0"
+            >
+              <div className="-mx-6 -mb-6">
+                <SchedulePicker
+                  selectedDate={selectedDate}
+                  selectedTime={selectedTime}
+                  onDateSelect={(d) => {
+                    setSelectedDate(d);
+                    setSelectedTime(undefined);
+                  }}
+                  onTimeSelect={(_d, slot) => setSelectedTime(slot)}
+                />
+              </div>
+              <div className="px-6 pb-6 pt-4 space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Access / parking notes (visible to cleaner)</Label>
+                  <Textarea
+                    value={accessNotes}
+                    onChange={(e) => setAccessNotes(e.target.value)}
+                    placeholder="Gate code, parking instructions, pet info…"
+                    rows={2}
                   />
                 </div>
-                <div>
-                  <Label>Time slot *</Label>
-                  <Select value={timeSlot} onValueChange={setTimeSlot}>
+                <div className="space-y-1.5">
+                  <Label>Internal team notes (not shown to customer)</Label>
+                  <Textarea
+                    value={teamNotes}
+                    onChange={(e) => setTeamNotes(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* Property details */}
+            <SectionCard
+              title="Property details"
+              description="Optional — helps the cleaning team prep the right kit."
+              icon={<RiHome4Line className="w-4 h-4" />}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Dwelling type</Label>
+                  <Select value={dwellingType} onValueChange={setDwellingType}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Pick a window" />
+                      <SelectValue placeholder="Select dwelling type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TIME_SLOTS.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      {DWELLING_TYPES.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>
+                          {d.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Pets</Label>
+                  <Select value={pets} onValueChange={setPets}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PETS_OPTIONS.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          {p.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <div>
-                <Label>Access / parking notes (visible to cleaner)</Label>
-                <Textarea
-                  value={accessNotes}
-                  onChange={(e) => setAccessNotes(e.target.value)}
-                  placeholder="Gate code, parking instructions, pet info…"
-                  rows={2}
-                />
-              </div>
-              <div>
-                <Label>Internal team notes (not shown to customer)</Label>
-                <Textarea
-                  value={teamNotes}
-                  onChange={(e) => setTeamNotes(e.target.value)}
-                  rows={2}
-                />
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Payment + delivery */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <RiCopperCoinLine className="w-4 h-4 text-primary" /> Payment
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label>Flooring types</Label>
+                <div className="flex flex-wrap gap-2">
+                  {FLOORING_OPTIONS.map((f) => {
+                    const checked = flooring.includes(f.value);
+                    return (
+                      <button
+                        key={f.value}
+                        type="button"
+                        onClick={() =>
+                          setFlooring(
+                            checked
+                              ? flooring.filter((x) => x !== f.value)
+                              : [...flooring, f.value],
+                          )
+                        }
+                        className={cn(
+                          "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                          checked
+                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            : "bg-white border-slate-200 text-slate-700 hover:border-emerald-300",
+                        )}
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Parking notes</Label>
+                <Input
+                  value={parkingNotes}
+                  onChange={(e) => setParkingNotes(e.target.value)}
+                  placeholder="Driveway, street, garage code, etc."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Supplies provided by</Label>
+                <RadioGroup
+                  value={suppliesProvidedBy}
+                  onValueChange={(v) =>
+                    setSuppliesProvidedBy(v as "customer" | "novara")
+                  }
+                  className="grid grid-cols-2 gap-2"
+                >
+                  {[
+                    { id: "novara", label: "Novara" },
+                    { id: "customer", label: "Customer" },
+                  ].map((opt) => (
+                    <label
+                      key={opt.id}
+                      className={cn(
+                        "flex items-center gap-2 p-3 rounded-xl border cursor-pointer text-sm transition-colors",
+                        suppliesProvidedBy === opt.id
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 hover:border-emerald-300",
+                      )}
+                    >
+                      <RadioGroupItem value={opt.id} />
+                      <span className="font-medium text-slate-900">{opt.label}</span>
+                    </label>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              {serviceType === "combo" && (
+                <div className="space-y-1.5">
+                  <Label>Combo follow-up date</Label>
+                  <Input
+                    type="date"
+                    value={comboFollowUpDate}
+                    onChange={(e) => setComboFollowUpDate(e.target.value)}
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Standard Clean follow-up — typically 1–14 days after the
+                    Deep Clean.
+                  </p>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Payment */}
+            <SectionCard
+              title="Payment"
+              icon={<RiMoneyDollarCircleLine className="w-4 h-4" />}
+            >
               <div>
                 <Label>Invoice mode</Label>
                 <RadioGroup
                   value={invoiceMode}
-                  onValueChange={(v) => setInvoiceMode(v as typeof invoiceMode)}
+                  onValueChange={(v) => setInvoiceMode(v as InvoiceMode)}
                   className="space-y-2 mt-2"
                 >
                   {INVOICE_MODES.map((m) => (
                     <label
                       key={m.id}
                       className={cn(
-                        "flex items-start gap-3 p-3 rounded-lg border cursor-pointer",
+                        "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors",
                         invoiceMode === m.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/30",
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 hover:border-emerald-300",
                       )}
                     >
                       <RadioGroupItem value={m.id} className="mt-0.5" />
                       <div>
-                        <p className="font-medium text-sm">{m.label}</p>
-                        <p className="text-xs text-muted-foreground">{m.desc}</p>
+                        <p className="font-medium text-sm text-slate-900">
+                          {m.label}
+                        </p>
+                        <p className="text-xs text-slate-500">{m.desc}</p>
                       </div>
                     </label>
                   ))}
                 </RadioGroup>
               </div>
+
               {invoiceMode === "deposit_plus_remaining" && (
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
+                  <div className="space-y-1.5">
                     <Label>Deposit % of total</Label>
                     <Input
                       type="number"
@@ -796,7 +1085,7 @@ export default function VaBooking() {
                       onChange={(e) => setDepositPercent(e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1.5">
                     <Label>Override total ($)</Label>
                     <Input
                       type="number"
@@ -804,19 +1093,36 @@ export default function VaBooking() {
                       step={0.01}
                       value={overrideTotal}
                       onChange={(e) => setOverrideTotal(e.target.value)}
-                      placeholder={(pricing.computed / 100).toFixed(2)}
+                      placeholder={(pricing.computedCents / 100).toFixed(2)}
                     />
                   </div>
                 </div>
               )}
-              <div>
-                <Label>VA / booker name</Label>
-                <Input
-                  value={csrName}
-                  onChange={(e) => setCsrName(e.target.value)}
-                  placeholder="e.g. Anna VA"
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <RiPriceTag3Line className="w-3.5 h-3.5 text-emerald-600" />
+                    Promo code
+                  </Label>
+                  <Input
+                    value={promoCode}
+                    onChange={(e) =>
+                      setPromoCode(e.target.value.trim().toLowerCase())
+                    }
+                    placeholder="e.g. welcome10"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Booker / VA name</Label>
+                  <Input
+                    value={csrName}
+                    onChange={(e) => setCsrName(e.target.value)}
+                    placeholder="e.g. Anna VA"
+                  />
+                </div>
               </div>
+
               <div className="space-y-2 pt-1">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
@@ -832,64 +1138,155 @@ export default function VaBooking() {
                   />
                   Send Standard-Clean checklist email
                   {serviceType !== "standard" && (
-                    <span className="text-muted-foreground text-xs">
+                    <span className="text-slate-400 text-xs">
                       (only fires for Standard)
                     </span>
                   )}
                 </label>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </SectionCard>
+          </div>
 
-        {/* RIGHT: live quote + submit */}
-        <div className="lg:col-span-1 space-y-5">
-          <Card className="lg:sticky lg:top-20">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <RiSparklingLine className="w-4 h-4 text-primary" /> Live quote
-              </CardTitle>
-              <CardDescription>
-                Updates as you change service options.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Row label="Base" value={formatMoney(pricing.base)} />
-              <Row label={`${SERVICE_TYPES.find((s) => s.id === serviceType)?.label}`} value={formatMoney(pricing.service)} />
-              {pricing.addOnTotal > 0 && (
-                <Row label="Add-ons" value={formatMoney(pricing.addOnTotal)} />
-              )}
-              <Separator />
-              <Row label="Total" value={formatMoney(pricing.total)} bold />
-              <Row label="Deposit" value={formatMoney(pricing.deposit)} />
-              <Row label="Remaining" value={formatMoney(pricing.remaining)} />
+          {/* RIGHT: live quote */}
+          <div className="lg:col-span-1">
+            <div className="lg:sticky lg:top-6 space-y-4">
+              <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 px-5 py-4 text-white">
+                  <div className="flex items-center gap-2">
+                    <RiSparklingLine className="w-4 h-4" />
+                    <p className="font-jakarta font-semibold text-sm tracking-wide">
+                      Live quote
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-white/85 mt-0.5">
+                    Updates as you change service options.
+                  </p>
+                </div>
+                <CardContent className="space-y-3 pt-5">
+                  <Row
+                    label={`Base — ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label || homeSizeId}`}
+                    value={formatMoney(pricing.baseCents)}
+                  />
+                  <Row
+                    label={
+                      SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)
+                        ?.label || serviceType
+                    }
+                    value={formatMoney(pricing.serviceCents)}
+                  />
+                  {pricing.addOnsCents > 0 && (
+                    <Row
+                      label="Add-ons"
+                      value={`+${formatMoney(pricing.addOnsCents)}`}
+                    />
+                  )}
+                  {pricing.newCustomerDiscountCents > 0 && (
+                    <Row
+                      label="New-customer 50% promo"
+                      value={`−${formatMoney(pricing.newCustomerDiscountCents)}`}
+                      tone="positive"
+                    />
+                  )}
+                  <Separator />
+                  <Row
+                    label="Total"
+                    value={formatMoney(pricing.totalCents)}
+                    bold
+                  />
+                  <Row
+                    label="Deposit"
+                    value={formatMoney(pricing.depositCents)}
+                  />
+                  <Row
+                    label="Remaining"
+                    value={formatMoney(pricing.remainingCents)}
+                  />
+                  {walletCreditCents > 0 && (
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs text-emerald-800 flex items-center gap-1.5">
+                      <RiWalletLine className="w-3.5 h-3.5" />
+                      {formatMoney(walletCreditCents)} wallet credit will be
+                      applied automatically.
+                    </div>
+                  )}
 
-              <Button
-                onClick={handleSubmit}
-                disabled={!canSubmit || submitting}
-                className="w-full bg-gradient-primary mt-4 h-11"
-              >
-                {submitting ? (
-                  <>
-                    <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />{" "}
-                    Booking…
-                  </>
-                ) : (
-                  <>
-                    Create booking <RiArrowRightLine className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-              {!canSubmit && (
-                <p className="text-[11px] text-muted-foreground text-center">
-                  Fill in customer name + email + phone + service date/time to enable.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={!canSubmit || submitting}
+                    variant="default"
+                    className="w-full mt-2 h-11"
+                  >
+                    {submitting ? (
+                      <>
+                        <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                        Booking…
+                      </>
+                    ) : (
+                      <>
+                        Create booking
+                        <RiArrowRightLine className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+
+                  {!canSubmit && requirements.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                      <div className="flex items-center gap-1.5 mb-1 font-medium">
+                        <RiInformationLine className="w-3.5 h-3.5" />
+                        Still needed
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {requirements.map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Helpers / shared bits ────────────────────────────────────────────
+
+function SectionCard({
+  title,
+  description,
+  icon,
+  children,
+  bodyClassName,
+}: {
+  title: string;
+  description?: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  bodyClassName?: string;
+}) {
+  return (
+    <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 inline-flex items-center justify-center">
+            {icon}
+          </span>
+          <CardTitle className="font-jakarta text-base font-semibold text-slate-900">
+            {title}
+          </CardTitle>
+        </div>
+        {description && (
+          <CardDescription className="pl-[2.375rem] text-xs text-slate-500">
+            {description}
+          </CardDescription>
+        )}
+      </CardHeader>
+      <CardContent className={cn("space-y-3", bodyClassName)}>
+        {children}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -898,19 +1295,22 @@ function Row({
   value,
   bold = false,
   mono = false,
+  tone,
 }: {
   label: string;
   value: string;
   bold?: boolean;
   mono?: boolean;
+  tone?: "positive";
 }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-slate-500">{label}</span>
       <span
         className={cn(
-          bold && "font-semibold text-base",
+          bold && "font-semibold text-base text-slate-900",
           mono && "font-mono text-xs",
+          tone === "positive" && "text-emerald-700 font-medium",
         )}
       >
         {value}
@@ -934,12 +1334,12 @@ function InvoiceCard({
     navigator.clipboard.writeText(s).then(() => toast.success("Copied"));
   };
   return (
-    <div className="rounded-xl border border-border p-4 text-sm space-y-2">
+    <div className="rounded-xl border border-slate-200 p-4 text-sm space-y-2">
       <div className="flex items-center justify-between">
-        <p className="font-semibold">{title}</p>
+        <p className="font-semibold text-slate-900">{title}</p>
         <Badge variant="secondary">{formatMoney(amount)}</Badge>
       </div>
-      <p className="text-xs text-muted-foreground font-mono">{invoiceId}</p>
+      <p className="text-xs text-slate-500 font-mono">{invoiceId}</p>
       {url && (
         <div className="flex gap-2">
           <Button

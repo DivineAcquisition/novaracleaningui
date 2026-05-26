@@ -98,13 +98,33 @@ export default function AdminMap() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [zipCentroids, setZipCentroids] = useState<Record<string, { lat: number; lng: number }>>({});
 
+  // The actual Google "auth failure" reason (referrer block, billing,
+  // API not enabled, etc.) is not exposed via the JS Maps API — Google
+  // calls a globally-scoped `gm_authFailure` callback. We surface that
+  // here so the user gets actionable error copy instead of a silent
+  // "Google Maps unavailable".
+  const [mapsAuthError, setMapsAuthError] = useState<string | null>(null);
+
   useEffect(() => {
     // Initialise Maps once.
     let cancelled = false;
+    (window as any).gm_authFailure = () => {
+      console.warn("[admin-map] Google Maps reported gm_authFailure");
+      setMapsAuthError(
+        "Google Maps rejected the API key for this domain. " +
+          "In Google Cloud Console → APIs & Services → Credentials, edit the key and " +
+          "add HTTP referrers for *.novaracleaning.com/* and localhost:3000/*, then save.",
+      );
+      setMapsAvailable(false);
+    };
     void (async () => {
       try {
-        await loadGooglePlaces();
-        if (cancelled || !containerRef.current || !(window as any).google?.maps) {
+        const places = await loadGooglePlaces();
+        if (cancelled || !places) {
+          setMapsAvailable(false);
+          return;
+        }
+        if (!containerRef.current || !(window as any).google?.maps) {
           setMapsAvailable(false);
           return;
         }
@@ -118,7 +138,8 @@ export default function AdminMap() {
           ],
         });
         setMapsAvailable(true);
-      } catch {
+      } catch (err) {
+        console.warn("[admin-map] init failed", err);
         setMapsAvailable(false);
       }
     })();
@@ -189,10 +210,12 @@ export default function AdminMap() {
       if (!b.zip_code) return;
       const c = zipCentroids[b.zip_code];
       if (!c) return;
-      // Jitter so multiple bookings in the same zip don't overlap.
+      // Stable jitter — derived from the booking ID so pins don't
+      // walk around the map when the data refreshes.
+      const seed = hashStringToUnit(b.id);
       const jitter = 0.005;
-      const lat = c.lat + (Math.random() - 0.5) * jitter;
-      const lng = c.lng + (Math.random() - 0.5) * jitter;
+      const lat = c.lat + (seed.x - 0.5) * jitter;
+      const lng = c.lng + (seed.y - 0.5) * jitter;
       out.push({
         id: `booking-${b.id}`,
         kind: "booking",
@@ -286,8 +309,8 @@ export default function AdminMap() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-            <RiMapPin2Line className="w-5 h-5 text-emerald-700" />
+          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <RiMapPin2Line className="w-6 h-6 text-emerald-700" />
             Operational map
           </h1>
           <p className="text-sm text-slate-500">
@@ -304,12 +327,21 @@ export default function AdminMap() {
         <div className="lg:col-span-2 order-2 lg:order-1">
           {mapsAvailable === false ? (
             <Card className="border-amber-200 bg-amber-50 h-[560px] flex items-center justify-center">
-              <CardContent className="text-center py-12">
+              <CardContent className="text-center py-12 max-w-md">
                 <RiMapPin2Line className="w-10 h-10 text-amber-600 mx-auto mb-2" />
                 <p className="text-amber-900 font-medium">Google Maps unavailable</p>
-                <p className="text-xs text-amber-800 mt-1">
-                  Add a Google Places API key to <code>app_secrets.GOOGLE_PLACES_API_KEY</code> to enable.
-                </p>
+                {mapsAuthError ? (
+                  <p className="text-xs text-amber-900/90 mt-2 leading-relaxed">
+                    {mapsAuthError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-800 mt-1">
+                    Make sure the <code>GOOGLE_PLACES_API_KEY</code> Edge-Function
+                    secret is set, the Maps JavaScript API is enabled in your GCP
+                    project, and HTTP-referrer restrictions allow{" "}
+                    <code>*.novaracleaning.com/*</code>.
+                  </p>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -441,4 +473,20 @@ const dollars = (cents: number) =>
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+// Cheap deterministic hash → two values in [0,1) used to jitter pins in
+// the same ZIP without redrawing them on every refresh.
+function hashStringToUnit(s: string): { x: number; y: number } {
+  let h1 = 0x811c9dc5 >>> 0;
+  let h2 = 0xdeadbeef >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ ch, 0x85ebca6b) >>> 0;
+  }
+  return {
+    x: (h1 % 1000) / 1000,
+    y: (h2 % 1000) / 1000,
+  };
 }

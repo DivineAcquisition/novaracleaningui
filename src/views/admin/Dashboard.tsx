@@ -191,7 +191,7 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Today at a glance</h1>
+        <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Today at a glance</h1>
         <p className="text-sm text-slate-500">
           Live operations metrics &middot; everything below pulls straight from the DB.
         </p>

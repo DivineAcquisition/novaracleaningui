@@ -177,7 +177,7 @@ export default function AdminCustomers() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Customers</h1>
+          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Customers</h1>
           <p className="text-sm text-slate-500">
             {customers.length} total accounts · search, manage credits, refund bookings, send password resets.
           </p>

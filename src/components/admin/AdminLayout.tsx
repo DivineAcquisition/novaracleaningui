@@ -1,18 +1,22 @@
 "use client";
 
-// ─── AdminLayout (v2 — 2026-05-22) ──────────────────────────────────────
+// ─── AdminLayout (v3 — 2026-05-26) ──────────────────────────────────────
 //
-// Brand-aligned light shell for /admin/*. Five tabs in the left sidebar,
-// nothing else:
+// Brand-aligned premium SaaS shell for /admin/*.
 //   1. Dashboard          (live metrics + activity)
-//   2. Cleaners           (directory + onboarding + management)
-//   3. CSR Form           (VA booking submission)
-//   4. Customers          (full account control)
-//   5. Operational Map    (cleaner coverage × booking heatmap)
+//   2. Bookings           (every booking, with cancel/reschedule/refund)
+//   3. Cleaners           (directory + onboarding + management)
+//   4. Internal Booking   (VA-driven booking submission, formerly "CSR Form")
+//   5. Customers          (full account control)
+//   6. Operational Map    (cleaner coverage × booking heatmap)
+//   7. Messages           (manual SMS + email send)
+//   8. Payroll            (Stripe Connect cleaner payouts)
+//   9. Sales              (per-VA leads, bookings, revenue)
 //
-// Color scheme matches the email/brand palette (emerald gradient
-// #16A34A → #0E7C3A). Inline emerald classes — we do NOT touch
-// globals.css so customer-facing pages keep their existing tokens.
+// Premium SaaS feel: Plus Jakarta Sans display font, lovable-style press
+// buttons, sharper card density, emerald accent. Sidebar is light-gray on
+// white, with a subtle gradient on the active item to read as a SaaS
+// product, not an internal form.
 
 import {
   RiDashboardLine,
@@ -26,6 +30,8 @@ import {
   RiMenuLine,
   RiCloseLine,
   RiShieldStarLine,
+  RiCalendarCheckLine,
+  RiChat3Line,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -47,16 +53,22 @@ const NAV_ITEMS: NavItem[] = [
     title: "Dashboard",
     url: "/admin/dashboard",
     icon: RiDashboardLine,
-    description: "Live metrics + activity feed",
+    description: "Live metrics + activity",
+  },
+  {
+    title: "Bookings",
+    url: "/admin/bookings",
+    icon: RiCalendarCheckLine,
+    description: "Cancel · reschedule · refund",
   },
   {
     title: "Cleaners",
     url: "/admin/cleaners",
     icon: RiToolsLine,
-    description: "Directory, onboarding, management",
+    description: "Directory + onboarding",
   },
   {
-    title: "CSR Form",
+    title: "Internal Booking",
     url: "/admin/csr",
     icon: RiFileEditLine,
     description: "VA booking submission",
@@ -74,16 +86,22 @@ const NAV_ITEMS: NavItem[] = [
     description: "Coverage × booking heatmap",
   },
   {
+    title: "Messages",
+    url: "/admin/messages",
+    icon: RiChat3Line,
+    description: "Manual SMS + email",
+  },
+  {
     title: "Payroll",
     url: "/admin/payroll",
     icon: RiBankCardLine,
-    description: "Cleaner payouts via Stripe Connect",
+    description: "Stripe Connect payouts",
   },
   {
     title: "Sales",
     url: "/admin/sales-tracker",
     icon: RiLineChartLine,
-    description: "Per-VA leads, bookings, revenue",
+    description: "Per-VA leads & revenue",
   },
 ];
 
@@ -93,7 +111,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Close the mobile drawer whenever the route changes.
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
@@ -106,7 +123,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const active = NAV_ITEMS.find((n) => pathname?.startsWith(n.url));
 
   return (
-    <div className="min-h-screen flex w-full bg-slate-50 text-slate-900">
+    <div className="min-h-screen flex w-full bg-slate-50 text-slate-900 font-sans">
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
       <aside className="hidden lg:flex w-64 flex-col border-r border-slate-200 bg-white shrink-0">
         <SidebarBrand />
@@ -156,8 +173,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 min-w-0">
             {active ? (
               <>
-                <active.icon className="w-4 h-4 text-emerald-700 shrink-0" />
-                <h1 className="text-sm font-semibold text-slate-900 truncate">
+                <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 inline-flex items-center justify-center shrink-0">
+                  <active.icon className="w-4 h-4" />
+                </span>
+                <h1 className="font-jakarta text-sm font-semibold text-slate-900 truncate tracking-tight">
                   {active.title}
                 </h1>
                 <span className="hidden sm:inline text-xs text-slate-500 truncate">
@@ -165,11 +184,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 </span>
               </>
             ) : (
-              <h1 className="text-sm font-semibold text-slate-900">Admin</h1>
+              <h1 className="font-jakarta text-sm font-semibold text-slate-900">
+                Admin
+              </h1>
             )}
           </div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
-            <span className="hidden md:inline truncate max-w-[180px]">{user?.email}</span>
+            <span className="hidden md:inline truncate max-w-[200px] tabular-nums">
+              {user?.email}
+            </span>
           </div>
         </header>
         <div className="flex-1 overflow-auto p-4 sm:p-6">{children}</div>
@@ -188,12 +211,14 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
         compact && "border-0 py-0",
       )}
     >
-      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-sm">
+      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(16,163,74,0.4)]">
         <RiShieldStarLine className="w-5 h-5 text-white" />
       </div>
       <div className="leading-tight">
-        <p className="text-sm font-semibold text-slate-900">Novara</p>
-        <p className="text-[11px] text-slate-500 font-medium tracking-wide uppercase">
+        <p className="font-jakarta text-sm font-bold text-slate-900 tracking-tight">
+          Novara
+        </p>
+        <p className="text-[10px] text-slate-500 font-semibold tracking-[0.08em] uppercase">
           Admin Console
         </p>
       </div>
@@ -203,8 +228,8 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
 
 function SidebarNav({ pathname }: { pathname: string | null }) {
   return (
-    <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-      <p className="px-3 pb-2 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+    <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+      <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.1em] text-slate-400 font-bold">
         Workspace
       </p>
       {NAV_ITEMS.map((item) => {
@@ -214,28 +239,30 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
             key={item.url}
             href={item.url}
             className={cn(
-              "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm",
+              "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
               isActive
-                ? "bg-emerald-50 text-emerald-800 font-semibold"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100",
+                ? "bg-gradient-to-r from-emerald-50 to-emerald-50/40 text-emerald-900 font-semibold shadow-[inset_0_0_0_1px_rgba(16,163,74,0.15)]"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70",
             )}
           >
             <span
               className={cn(
-                "w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+                "w-8 h-8 rounded-md flex items-center justify-center transition-all",
                 isActive
-                  ? "bg-emerald-600 text-white"
+                  ? "bg-emerald-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
                   : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700",
               )}
             >
               <item.icon className="w-4 h-4" />
             </span>
             <div className="flex-1 min-w-0">
-              <p className="leading-tight">{item.title}</p>
+              <p className="leading-tight tracking-tight">{item.title}</p>
               <p
                 className={cn(
                   "text-[11px] leading-tight truncate",
-                  isActive ? "text-emerald-700/70" : "text-slate-400 group-hover:text-slate-500",
+                  isActive
+                    ? "text-emerald-700/70"
+                    : "text-slate-400 group-hover:text-slate-500",
                 )}
               >
                 {item.description}
@@ -258,7 +285,7 @@ function SidebarFooter({
   return (
     <div className="border-t border-slate-200 p-3 space-y-2">
       <div className="px-3 py-2 rounded-lg bg-slate-50">
-        <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+        <p className="text-[10px] uppercase tracking-wide text-slate-500 font-bold">
           Signed in
         </p>
         <p className="text-sm text-slate-900 font-medium truncate">
