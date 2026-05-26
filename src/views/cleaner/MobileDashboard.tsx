@@ -91,7 +91,13 @@ export default function MobileDashboard() {
             )
           `)
           .eq("cleaner_id", cleanerData.id)
-          .eq("status", "accepted")
+          // Match every accepted-style status used across the codebase:
+          //   • accept-job-offer (token portal) sets "Confirmed"
+          //   • legacy respond-to-offer flow sometimes wrote "accepted"
+          //   • admin assign uses "Confirmed" / "Accepted"
+          // Filtering on a single literal hid jobs the cleaner had
+          // already taken — making the mobile dashboard look empty.
+          .in("status", ["Confirmed", "Accepted", "accepted", "In Progress"])
           .order("assigned_at", { ascending: true });
 
         if (jobsData) {

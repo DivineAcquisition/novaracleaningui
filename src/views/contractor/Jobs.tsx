@@ -132,14 +132,40 @@ export default function ContractorJobs() {
   const handleCheckIn = async (job: Job) => {
     setActionLoading(job.id);
     try {
-      const response = await supabase.functions.invoke("job-check-in", {
-        body: {
-          jobAssignmentId: job.id,
-          action: "check_in",
-          cleanerId,
-        },
-      });
-      if (response.error) throw response.error;
+      // job.id here is a BOOKING id (this page queries the bookings
+      // table directly). The job-check-in function expects the
+      // job_assignments row id, so resolve it via the booking + cleaner
+      // pair. Falls back to flipping `bookings.status` directly when no
+      // assignment row exists (admin-assigned bookings).
+      const { data: assignment } = await supabase
+        .from("job_assignments")
+        .select("id")
+        .eq("job_id", job.id)
+        .eq("cleaner_id", cleanerId)
+        .maybeSingle();
+
+      if (assignment?.id) {
+        const response = await supabase.functions.invoke("job-check-in", {
+          body: {
+            jobAssignmentId: assignment.id,
+            action: "check_in",
+            cleanerId,
+          },
+        });
+        if (response.error) throw response.error;
+      } else {
+        // No assignment row — mark the booking in_progress directly so
+        // the cleaner can still complete the job afterward.
+        const { error } = await supabase
+          .from("bookings")
+          .update({
+            status: "in_progress",
+            check_in_at: new Date().toISOString(),
+          } as any)
+          .eq("id", job.id)
+          .eq("cleaner_id", cleanerId);
+        if (error) throw error;
+      }
       toast.success("Checked in successfully!");
       setJobs((prev) =>
         prev.map((j) => j.id === job.id ? { ...j, checked_in: true, check_in_time: new Date().toISOString(), status: "in_progress" } : j)
@@ -154,8 +180,16 @@ export default function ContractorJobs() {
   const handleComplete = async (job: Job) => {
     setActionLoading(job.id);
     try {
+      // The public /contractor/jobs portal has no JWT — `complete-booking`
+      // therefore needs `cleanerId` in the body so it can verify the
+      // caller matches `bookings.cleaner_id`. Without it the function
+      // returns "Unauthorized" (the symptom previously reported as
+      // "Failed to complete job" with no useful error in the toast).
       const response = await supabase.functions.invoke("complete-booking", {
-        body: { bookingId: job.booking_id || job.id },
+        body: {
+          bookingId: job.booking_id || job.id,
+          cleanerId,
+        },
       });
       if (response.error) throw response.error;
       toast.success("Job marked as completed! Payout will be processed.");

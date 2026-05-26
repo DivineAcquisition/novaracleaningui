@@ -793,20 +793,19 @@ export default function VaBooking() {
                 />
               </Field>
             </div>
-            <Field label="Service address">
-              <AddressAutocomplete
-                label=""
-                initialValue={address}
-                onAddressSelect={(addr) => {
-                  setAddress(addr.street);
-                  setCity(addr.city);
-                  setState(addr.state);
-                  setZipCode(addr.zipCode);
-                  setAddressLat(typeof addr.lat === "number" ? addr.lat : null);
-                  setAddressLng(typeof addr.lng === "number" ? addr.lng : null);
-                }}
-              />
-            </Field>
+            <AddressAutocomplete
+              label="Service address *"
+              placeholder="Start typing the customer's address…"
+              initialValue={address}
+              onAddressSelect={(addr) => {
+                setAddress(addr.street);
+                setCity(addr.city);
+                setState(addr.state);
+                setZipCode(addr.zipCode);
+                setAddressLat(typeof addr.lat === "number" ? addr.lat : null);
+                setAddressLng(typeof addr.lng === "number" ? addr.lng : null);
+              }}
+            />
             <div className="grid grid-cols-12 gap-4">
               <div className="col-span-12 md:col-span-6">
                 <Field label="City">
