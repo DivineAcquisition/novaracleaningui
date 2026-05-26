@@ -33,6 +33,8 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { upsertContact } from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,40 +108,52 @@ async function notifyCustomer(
   let smsMsg: string;
   let emailHtml: string;
 
+  // Wording is intentionally explicit about "pre-authorization hold"
+  // so the customer understands this is NOT a duplicate charge — it's
+  // the regular completion charge being reserved (held) on the card
+  // before the day of service. We also spell out the cancellation
+  // consequence on every nudge so there's no ambiguity by the time
+  // attempt 3 fails.
+  const attemptCount = booking.completion_hold_attempts ?? 1;
+  const attemptsLeft = Math.max(0, 3 - attemptCount);
+
   if (kind === "auth_failed") {
     smsMsg =
-      `NovaraCleaning: We couldn't authorize the remaining balance for your ` +
-      `${dateLabel} cleaning. Please update your card to keep your booking: ${PORTAL_URL}. ` +
-      `We'll retry automatically.`;
+      `NovaraCleaning: We couldn't place the pre-authorization hold for your ` +
+      `${dateLabel} cleaning balance. Please update your card to keep your booking — ` +
+      `${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} left before we cancel. ${PORTAL_URL}`;
     emailHtml = renderEmail({
       firstName,
-      title: "Quick payment update needed",
-      headline: "We couldn't authorize the remaining balance for your upcoming cleaning",
+      title: "Action needed: payment method update",
+      headline: "We couldn't pre-authorize the remaining balance for your cleaning",
       body:
-        `Your cleaning on <strong>${escapeHtml(dateLabel)}</strong> needs a payment-method update before we can secure ` +
-        `the rest of your service total. The card on file came back as: ` +
-        `<em>${escapeHtml(errorMessage)}</em>.`,
+        `Your cleaning on <strong>${escapeHtml(dateLabel)}</strong> needs a payment update. ` +
+        `Before service we place a <strong>pre-authorization hold</strong> on your card for the remaining balance — ` +
+        `your bank just declined that hold with: <em>${escapeHtml(errorMessage)}</em>. ` +
+        `<br/><br/><strong>What happens next:</strong> we'll retry automatically. ` +
+        `If we still can't authorize after 3 attempts (${attemptsLeft} ${attemptsLeft === 1 ? "is" : "are"} left), ` +
+        `your booking will be auto-cancelled and your deposit refunded in full.`,
       ctaLabel: "Update Payment Method",
       ctaHref: PORTAL_URL,
-      footerNote: "We'll retry automatically over the next couple of days. If we can't authorize after 3 attempts your booking will be cancelled and your deposit refunded.",
+      footerNote: "Tap the button above to swap in a new card; the next retry will run automatically within ~24 hours.",
     });
   } else {
     smsMsg =
-      `NovaraCleaning: Your ${dateLabel} cleaning was cancelled because we couldn't ` +
-      `authorize payment after 3 attempts. Your deposit has been refunded. Questions? ` +
-      `support@novaracleaning.com`;
+      `NovaraCleaning: Your ${dateLabel} cleaning was cancelled — we couldn't place the ` +
+      `pre-authorization hold for the balance after 3 attempts. Your deposit has been ` +
+      `refunded in full. Questions? support@novaracleaning.com`;
     emailHtml = renderEmail({
       firstName,
       title: "Booking cancelled — deposit refunded",
       headline: "Your Novara cleaning has been cancelled",
       body:
-        `We tried to pre-authorize the remaining balance for your ${escapeHtml(dateLabel)} cleaning ` +
-        `three times and each attempt was declined by your bank. We've cancelled the booking and ` +
-        `refunded your deposit in full. The most recent decline reason was: ` +
-        `<em>${escapeHtml(errorMessage)}</em>.`,
+        `We tried to place a <strong>pre-authorization hold</strong> on the card on file for the remaining balance ` +
+        `of your ${escapeHtml(dateLabel)} cleaning three times, and each attempt was declined by your bank. ` +
+        `We've cancelled the booking and refunded your deposit in full. ` +
+        `Most recent decline reason: <em>${escapeHtml(errorMessage)}</em>.`,
       ctaLabel: "Rebook a Cleaning",
       ctaHref: "https://try.novaracleaning.com/book/zip",
-      footerNote: "If you'd like to reschedule with a different card, simply book again and we'll secure your spot.",
+      footerNote: "Once you've added a working card, just rebook on our site and we'll secure your spot again.",
     });
   }
 
@@ -177,6 +191,79 @@ async function notifyCustomer(
     }
   } catch (e) {
     log("notify email failed (non-blocking)", { error: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ─── GHL contact update + LeadConnector inbound mirror ───────────
+  //
+  // Two channels into GHL so the user's existing automations can fire:
+  //
+  // 1. upsertContact on the GHL contact for this customer with custom
+  //    fields that record the failure state. GHL workflows can be
+  //    triggered on changes to those fields (e.g. "if completion_hold
+  //    _last_error is not empty, send a workflow SMS"). Tags also
+  //    flip so the user can segment in their UI:
+  //      tag 'completion-hold-failed'   → auth_failed
+  //      tag 'auto-cancelled-payment'   → auto_cancelled
+  //
+  // 2. mirrorToLeadConnector — fires a webhook to the inbound URL the
+  //    user has wired in their GHL account. Event names: 'completion_
+  //    hold.auth_failed' / 'completion_hold.cancelled_booking'. The
+  //    user can wire workflows on either event to send branded SMS or
+  //    email through GHL's own delivery (in addition to / instead of
+  //    Telnyx + Resend).
+  try {
+    const tag = kind === "auth_failed"
+      ? "completion-hold-failed"
+      : "auto-cancelled-payment";
+    await upsertContact({
+      email: booking.email || null,
+      phone: booking.phone || null,
+      firstName: booking.first_name || null,
+      lastName: booking.last_name || null,
+      source: "Novara Completion Hold",
+      tags: [tag],
+      customFieldsByKey: {
+        completion_hold_status: kind === "auth_failed" ? "pending_retry" : "failed_cancelled",
+        completion_hold_last_error: errorMessage.slice(0, 250),
+        completion_hold_attempts: String(booking.completion_hold_attempts ?? 0),
+        completion_hold_attempts_left: String(attemptsLeft),
+        booking_service_date: booking.service_date || "",
+        booking_id: booking.id,
+        portal_update_card_url: PORTAL_URL,
+      },
+    });
+  } catch (e) {
+    log("GHL upsertContact failed (non-blocking)", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    await mirrorToLeadConnector({
+      event: kind === "auth_failed"
+        ? "completion_hold.auth_failed"
+        : "completion_hold.cancelled_booking",
+      payload: {
+        booking_id: booking.id,
+        booking_number: booking.booking_number,
+        email: booking.email,
+        phone: booking.phone,
+        first_name: booking.first_name,
+        last_name: booking.last_name,
+        service_date: booking.service_date,
+        service_type: booking.service_type,
+        attempt: booking.completion_hold_attempts ?? 0,
+        attempts_left: attemptsLeft,
+        error_code: booking.completion_hold_last_error_code || null,
+        error_message: errorMessage,
+        portal_update_card_url: PORTAL_URL,
+        rebook_url: "https://try.novaracleaning.com/book/zip",
+      },
+    });
+  } catch (e) {
+    log("LeadConnector mirror failed (non-blocking)", {
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 
@@ -245,16 +332,12 @@ async function processBooking(
   bookingId: string,
 ): Promise<ProcessResult> {
   // Atomic claim — flip the row to a sentinel that excludes us from
-  // the next cron tick's candidate query. We pick rows that are eligible
-  // (NULL, 'pending_retry', or 'expired' status; attempts < MAX) and
-  // own the row by transitioning to 'attempting' before talking to Stripe.
+  // the next cron tick's candidate query. We use a SECURITY DEFINER
+  // RPC because PostgREST's .or() with .is.null didn't reliably match
+  // rows whose completion_hold_status was NULL — switching to a SQL
+  // function makes the claim deterministic and easier to reason about.
   const { data: claimed, error: claimErr } = await supabase
-    .from("bookings")
-    .update({ completion_hold_status: "attempting" })
-    .eq("id", bookingId)
-    .or("completion_hold_status.is.null,completion_hold_status.eq.pending_retry,completion_hold_status.eq.expired")
-    .lt("completion_hold_attempts", MAX_ATTEMPTS)
-    .select()
+    .rpc("claim_completion_hold", { _booking_id: bookingId })
     .single();
 
   if (claimErr || !claimed) {
