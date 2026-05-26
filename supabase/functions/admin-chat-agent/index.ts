@@ -1,43 +1,28 @@
-// ─── admin-chat-agent ──────────────────────────────────────────────────
+// ─── admin-chat-agent v2 ───────────────────────────────────────────────
 //
-// "Chat-examination" agent protocol for the Novara internal team.
-// Given a customer's email / phone / GHL contact id, it:
+// Field-aware extraction + autoApply + persist.
 //
-//   1. Pulls the most-recent N messages of that contact's GHL
-//      conversation (SMS + email + inbound voicemail transcripts).
-//   2. Hands the transcript to an LLM with a strict system prompt
-//      that constrains the output to a single JSON object.
-//   3. Returns structured insights the admin UI can render directly:
-//        • summary, lead temperature, stage, sentiment
-//        • key facts (price, address, household size, etc.)
-//        • open customer questions the team owes a reply to
-//        • blockers
-//        • recommended next action (with urgency + rationale)
-//        • a brand-voiced draft reply ready to send
-//        • red flags and upsell opportunities
+// Reads a GHL conversation, fetches the location's GHL custom-field
+// schema, hands the transcript + the field schema to an LLM (Claude or
+// OpenAI), and returns structured insights. When body.autoApply=true,
+// it also pushes the extracted custom fields + tag recommendations
+// onto the contact via admin-ghl-update-contact. When body.persist
+// !== false, it upserts the analysis into public.chat_insights so the
+// autonomous pulse function can see what's been analyzed already.
 //
-// The output schema is intentionally stable so the admin UI can render
-// it as cards without re-prompting, and so cron jobs can act on
-// "urgency=now" rows automatically later.
-//
-// Provider selection:
-//   - LLM_PROVIDER  in app_secrets / env: "openai" (default) | "anthropic"
-//   - OPENAI_API_KEY or ANTHROPIC_API_KEY in app_secrets / env
-//   - Model overrides:  LLM_MODEL_OPENAI / LLM_MODEL_ANTHROPIC
-//
-// The function never throws — when an API key is missing or the LLM
-// call fails, it returns a graceful { ok: false, reason } so the
-// caller can show "Set OPENAI_API_KEY to enable AI insights".
+// Provider selection (in app_secrets first, env fallback):
+//   - LLM_PROVIDER  : "anthropic" (default) | "openai"
+//   - ANTHROPIC_API_KEY  /  OPENAI_API_KEY
+//   - LLM_MODEL_ANTHROPIC (default: claude-sonnet-4-5)
+//   - LLM_MODEL_OPENAI    (default: gpt-4o-mini)
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
 
@@ -48,236 +33,221 @@ async function resolveSecret(supabase: any, name: string): Promise<string> {
       .select("value")
       .eq("key", name)
       .maybeSingle();
-    if (data?.value && typeof data.value === "string") {
-      return data.value.trim();
-    }
-  } catch {
-    /* ignore */
-  }
+    if (data?.value && typeof data.value === "string") return data.value.trim();
+  } catch {}
   return (Deno.env.get(name) || "").trim();
 }
 
-async function ghlFetch(token: string, path: string) {
-  const res = await fetch(`${GHL_BASE}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Version: GHL_VERSION,
-      Accept: "application/json",
-    },
-  });
+async function ghl(token: string, path: string, init: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Version: GHL_VERSION,
+    Accept: "application/json",
+    ...((init.headers as Record<string, string> | undefined) || {}),
+  };
+  if (init.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  const res = await fetch(`${GHL_BASE}${path}`, { ...init, headers });
   const text = await res.text();
-  try {
-    return { ok: res.ok, status: res.status, body: JSON.parse(text) };
-  } catch {
-    return { ok: res.ok, status: res.status, body: text };
-  }
+  let json: unknown = null;
+  try { json = JSON.parse(text); } catch {}
+  return { ok: res.ok, status: res.status, body: json ?? text };
 }
 
 interface ChatMessage {
   ts: string;
   direction: "inbound" | "outbound";
-  channel: string; // SMS | EMAIL | etc.
+  channel: string;
   body: string;
+}
+
+interface FieldDescriptor {
+  fieldKey: string;
+  bareKey: string;
+  name: string;
+  dataType: string; // NUMERICAL | TEXT | SINGLE_OPTIONS | MONETORY | ...
+  picklistOptions?: string[];
+}
+
+let fieldCache: { fields: FieldDescriptor[]; map: Record<string, string> } | null = null;
+async function loadGhlFieldSchema(ghlToken: string, locationId: string) {
+  if (fieldCache) return fieldCache;
+  const fields: FieldDescriptor[] = [];
+  const map: Record<string, string> = {};
+  try {
+    const res = await ghl(ghlToken, `/locations/${encodeURIComponent(locationId)}/customFields`);
+    if (res.ok) {
+      const raw = ((res.body as any)?.customFields || []) as Array<any>;
+      for (const f of raw) {
+        if (!f.id) continue;
+        const fieldKey = (f.fieldKey || f.key || "").toString();
+        const bareKey = fieldKey.split(".").pop() || fieldKey;
+        if (bareKey) map[bareKey] = f.id;
+        if (fieldKey) map[fieldKey] = f.id;
+        if (f.name) map[f.name] = f.id;
+        fields.push({
+          fieldKey,
+          bareKey,
+          name: f.name || bareKey,
+          dataType: (f.dataType || "TEXT").toString().toUpperCase(),
+          picklistOptions: Array.isArray(f.picklistOptions) ? f.picklistOptions : undefined,
+        });
+      }
+    }
+  } catch {}
+  fieldCache = { fields, map };
+  return fieldCache;
 }
 
 async function pullConversation(
   ghlToken: string,
-  ghlLocationId: string,
-  args: { contactId?: string; email?: string; phone?: string; limit: number },
-): Promise<{
-  contactId: string | null;
-  conversationId: string | null;
-  messages: ChatMessage[];
-  contact: any;
-  raw?: unknown;
-}> {
+  locationId: string,
+  args: { contactId?: string; email?: string; phone?: string; conversationId?: string; limit: number },
+) {
   let contactId = args.contactId || null;
   let contact: any = null;
-
-  // Resolve contact via search if not given.
   if (!contactId) {
     const q = (args.email || args.phone || "").trim();
     if (!q) {
-      return { contactId: null, conversationId: null, messages: [], contact: null };
+      return { contactId: null, conversationId: null, messages: [] as ChatMessage[], contact: null, lastMessageDate: null as string | null };
     }
-    const params = new URLSearchParams({ locationId: ghlLocationId, query: q });
-    const search = await ghlFetch(ghlToken, `/contacts/?${params.toString()}`);
-    if (!search.ok) {
-      return {
-        contactId: null,
-        conversationId: null,
-        messages: [],
-        contact: null,
-        raw: { stage: "contact_search", ...search },
-      };
-    }
-    const contacts = (search.body?.contacts ?? []) as any[];
+    const params = new URLSearchParams({ locationId, query: q });
+    const search = await ghl(ghlToken, `/contacts/?${params.toString()}`);
+    const contacts = ((search.body as any)?.contacts ?? []) as any[];
     const phoneDigits = (args.phone || "").replace(/\D/g, "").slice(-10);
     const emailLower = (args.email || "").toLowerCase();
-    const matched =
-      contacts.find((c) => {
-        const cEmail = (c.email || "").toLowerCase();
-        const cDigits = (c.phone || "").replace(/\D/g, "").slice(-10);
-        return (
-          (emailLower && cEmail === emailLower) ||
-          (phoneDigits && cDigits === phoneDigits)
-        );
-      }) || contacts[0];
+    const matched = contacts.find((c) => {
+      const cEmail = (c.email || "").toLowerCase();
+      const cDigits = (c.phone || "").replace(/\D/g, "").slice(-10);
+      return (emailLower && cEmail === emailLower) || (phoneDigits && cDigits === phoneDigits);
+    }) || contacts[0];
     if (!matched) {
-      return { contactId: null, conversationId: null, messages: [], contact: null };
+      return { contactId: null, conversationId: null, messages: [] as ChatMessage[], contact: null, lastMessageDate: null };
     }
     contactId = matched.id;
     contact = matched;
   }
-
-  if (!contactId) {
-    return { contactId: null, conversationId: null, messages: [], contact: null };
+  let conversationId = args.conversationId || null;
+  let lastMessageDate: string | null = null;
+  if (!conversationId) {
+    const convoRes = await ghl(
+      ghlToken,
+      `/conversations/search?locationId=${encodeURIComponent(locationId)}&contactId=${encodeURIComponent(contactId!)}&limit=5`,
+    );
+    const convos = ((convoRes.body as any)?.conversations ?? []) as any[];
+    if (convos.length === 0) {
+      return { contactId, conversationId: null, messages: [] as ChatMessage[], contact, lastMessageDate: null };
+    }
+    conversationId = convos[0].id;
+    const lmd = convos[0].lastMessageDate;
+    lastMessageDate = typeof lmd === "number" ? new Date(lmd).toISOString() : (lmd || null);
   }
-
-  // Latest conversation for this contact.
-  const convoRes = await ghlFetch(
+  const msgRes = await ghl(
     ghlToken,
-    `/conversations/search?locationId=${encodeURIComponent(
-      ghlLocationId,
-    )}&contactId=${encodeURIComponent(contactId)}&limit=5`,
+    `/conversations/${encodeURIComponent(conversationId!)}/messages?limit=${args.limit || 50}`,
   );
-  if (!convoRes.ok) {
-    return {
-      contactId,
-      conversationId: null,
-      messages: [],
-      contact,
-      raw: { stage: "convo_search", ...convoRes },
-    };
-  }
-  const convos = (convoRes.body?.conversations ?? []) as any[];
-  if (convos.length === 0) {
-    return { contactId, conversationId: null, messages: [], contact };
-  }
-  const convo = convos[0];
-
-  // Pull messages (newest first per GHL, normalize to oldest-first below).
-  const msgRes = await ghlFetch(
-    ghlToken,
-    `/conversations/${encodeURIComponent(convo.id)}/messages?limit=${args.limit || 50}`,
-  );
-  const raw =
-    (msgRes.body?.messages?.messages ?? msgRes.body?.messages ?? []) as any[];
+  const raw = (((msgRes.body as any)?.messages?.messages) ?? ((msgRes.body as any)?.messages) ?? []) as any[];
   const messages: ChatMessage[] = raw
     .map((m) => ({
       ts: m.dateAdded || m.createdAt || "",
-      direction: (m.direction || "outbound") as "inbound" | "outbound",
-      channel:
-        (m.messageType || "")
-          .toString()
-          .replace(/^TYPE_/, "")
-          .toUpperCase() || "SMS",
+      direction: ((m.direction || "outbound") as "inbound" | "outbound"),
+      channel: ((m.messageType || "").toString().replace(/^TYPE_/, "").toUpperCase() || "SMS"),
       body: (m.body || "").toString(),
     }))
     .filter((m) => m.body.trim().length > 0)
     .sort((a, b) => (a.ts < b.ts ? -1 : 1));
-
-  return { contactId, conversationId: convo.id, messages, contact };
+  if (!lastMessageDate && messages.length) lastMessageDate = messages[messages.length - 1].ts;
+  return { contactId, conversationId, messages, contact, lastMessageDate };
 }
 
-// ─── LLM call (OpenAI Chat Completions / Anthropic Messages) ───────────
+function buildSystemPrompt(fields: FieldDescriptor[]) {
+  const fieldSchema = fields.map((f) => {
+    const opts = f.picklistOptions && f.picklistOptions.length
+      ? ` options=[${f.picklistOptions.slice(0, 12).join(" | ")}]`
+      : "";
+    return `  - ${f.bareKey}  (${f.name})  type=${f.dataType}${opts}`;
+  }).join("\n");
 
-const SYSTEM_PROMPT = `You are the chat-examination agent for NovaraCleaning — a residential cleaning company. You ANALYZE a customer conversation and return structured insights for the founder Malik and his VAs.
+  return `You are the chat-examination agent for NovaraCleaning, a residential cleaning company in the DMV. You read a customer SMS/email conversation and return STRUCTURED INSIGHTS as a single JSON object.
 
-CONTEXT YOU MUST KNOW
-- Brand voice: warm, casual, founder-led, no corporate stiffness. Short sentences. Light emoji on rare occasions.
-- Plans: One-time Standard ($), Deep ($1.5×), Move-In/Out ($2×), Combo (Deep+Standard $2.5×), or Novara Glow membership (monthly/biweekly/weekly).
-- Default deposit posture: 50% deposit on first invoice, remaining 50% pre-authorized as a Stripe hold a few days before service, captured on completion.
-- Bi-weekly membership covers a full standard clean every 2 weeks with the same cleaner, 2–3 laundry loads included, no contracts.
+BRAND VOICE
+- Warm, casual, founder-led (Malik). Short sentences. No corporate stiffness. Light emoji on rare occasions.
+
+BUSINESS CONTEXT
+- Plans: Standard / Deep (1.5x) / Move-In-Out (2x) / Combo Deep+Standard (2.5x) / Novara Glow membership (monthly | biweekly | weekly).
+- Default deposit posture: 50% deposit on first invoice, remaining 50% pre-authorized as a Stripe hold a few days before service.
+- Bi-weekly membership: full standard clean every 2 weeks, same cleaner, 2-3 laundry loads included, no contracts.
 - First bi-weekly visit adds a one-time $75 Deep Clean baseline fee.
-- Service area: DMV / Maryland focus. ZIP-based pricing zones A/B/C.
-- Support phone for fallback: (844) 735-2070.
+- Service area: DMV / Maryland focus.
+- Support: (844) 735-2070.
 
-YOUR JOB
-Read the conversation transcript and produce a single JSON object exactly matching the schema below. NO prose, NO markdown, NO code fences — pure JSON.
+GHL CUSTOM FIELDS YOU CAN POPULATE
+Only emit keys from this list. Use the exact bareKey shown. NUMERICAL fields take a string of digits. MONETORY fields take a raw number string (no $). SINGLE_OPTIONS fields MUST exactly match one of the listed options or be omitted. TEXT fields take any string.
+${fieldSchema || "  (no fields available)"}
 
-SCHEMA
+OUTPUT SCHEMA (single JSON object, no markdown)
 {
-  "summary": "1-2 sentence neutral summary of where this conversation stands right now.",
+  "summary": "1-2 sentence neutral state of conversation",
   "lead_temperature": "cold" | "warm" | "hot",
   "stage": "initial_contact" | "quote_requested" | "quote_given" | "considering" | "ready_to_book" | "booked" | "paid" | "service_scheduled" | "post_service" | "ghosted" | "complaint" | "support" | "other",
   "sentiment": "positive" | "neutral" | "negative",
-  "key_facts": [ "concrete fact extracted from the chat (zip code, square footage, household size, budget, gift recipient, etc.)" ],
-  "open_questions_from_customer": [ "verbatim or paraphrased customer questions that have NOT been answered yet" ],
-  "blockers": [ "anything stopping the deal from closing (missing email, undecided cadence, price objection, etc.)" ],
+  "key_facts": ["concrete facts spotted in the chat"],
+  "open_questions_from_customer": ["customer questions NOT yet answered"],
+  "blockers": ["anything stopping the deal from closing"],
   "recommended_next_action": {
     "type": "send_sms" | "send_email" | "create_invoice" | "call" | "wait" | "none",
     "urgency": "now" | "today" | "this_week" | "low",
-    "rationale": "why this action, in one sentence"
+    "rationale": "why this action"
   },
   "suggested_reply": {
     "channel": "sms" | "email",
-    "draft": "ready-to-send message in Malik's voice, never robotic",
-    "tone_note": "1 short note about voice, e.g. 'casual founder tone, no hedging'"
+    "draft": "ready-to-send message in Malik's voice",
+    "tone_note": "1 short note about voice"
   },
-  "red_flags": [ "anything risky — angry tone, refund threat, fraud signal, etc." ],
-  "upsell_opportunities": [ "concrete add-ons that fit this lead (laundry, deep clean, biweekly upgrade, etc.)" ]
+  "red_flags": ["anything risky"],
+  "upsell_opportunities": ["concrete add-ons that fit this lead"],
+  "extracted_fields": {
+    // bareKey -> string value extracted from the chat. Only include
+    // fields where the customer EXPLICITLY mentioned the data point
+    // (e.g. "650 sq ft" -> estimated_sqft: "650"). Do NOT invent.
+  },
+  "tag_recommendations": ["warm-lead", "military-gift", "navy-family", "biweekly-interest", ...]
 }
 
 HARD RULES
-- Output MUST be valid JSON parseable with JSON.parse. No backticks, no comments, no trailing commas.
+- Output MUST be valid JSON parseable with JSON.parse. No backticks, no comments.
 - If a field has no data, return an empty string or empty array — never null.
-- Never invent customer details. Only use what's in the transcript or the public context above.
-- "suggested_reply.draft" must be the next message Malik should send — not a meta-description.
-- Keep "suggested_reply.draft" under 480 chars for SMS, under 220 words for email.
-- If the customer is angry or asks for a refund, set lead_temperature to "cold" only if they have abandoned; otherwise reflect actual signal.
-- If the last message is from the OUTBOUND team and the customer hasn't replied yet, "recommended_next_action.type" = "wait" UNLESS the customer is overdue (>24h).`;
+- Never invent customer details. extracted_fields keys must come from explicit chat content.
+- For SINGLE_OPTIONS fields, pick the option label that EXACTLY matches one in the schema or omit the key entirely.
+- For MONETORY fields, use raw numeric strings ("82" not "$82.00").
+- suggested_reply.draft must be the next message Malik should send.
+- Keep suggested_reply.draft under 480 chars for SMS, 220 words for email.
+- If the last message is OUTBOUND and the customer hasn't replied yet, recommended_next_action.type="wait" UNLESS overdue >24h.`;
+}
 
-async function callOpenAI(
-  apiKey: string,
-  model: string,
-  transcript: string,
-  contactSummary: string,
-): Promise<{ ok: true; analysis: any; raw?: string } | { ok: false; error: string }> {
+async function callOpenAI(apiKey: string, model: string, system: string, user: string) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
       temperature: 0.2,
       response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `CONTACT\n${contactSummary}\n\nTRANSCRIPT (oldest → newest)\n${transcript}\n\nReturn the JSON object now.`,
-        },
-      ],
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
     }),
   });
   const text = await res.text();
-  if (!res.ok) return { ok: false, error: `OpenAI ${res.status}: ${text.slice(0, 400)}` };
+  if (!res.ok) return { ok: false as const, error: `OpenAI ${res.status}: ${text.slice(0, 400)}` };
   let body: any = {};
-  try {
-    body = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "OpenAI returned non-JSON envelope" };
-  }
+  try { body = JSON.parse(text); } catch { return { ok: false as const, error: "OpenAI envelope not JSON" }; }
   const content = body?.choices?.[0]?.message?.content;
-  if (!content) return { ok: false, error: "OpenAI returned no content" };
+  if (!content) return { ok: false as const, error: "OpenAI returned no content" };
   let analysis: any = {};
-  try {
-    analysis = JSON.parse(content);
-  } catch {
-    return { ok: false, error: `OpenAI returned non-JSON content: ${content.slice(0, 200)}` };
-  }
-  return { ok: true, analysis, raw: content };
+  try { analysis = JSON.parse(content); }
+  catch { return { ok: false as const, error: `OpenAI content not JSON: ${content.slice(0, 200)}` }; }
+  return { ok: true as const, analysis };
 }
 
-async function callAnthropic(
-  apiKey: string,
-  model: string,
-  transcript: string,
-  contactSummary: string,
-): Promise<{ ok: true; analysis: any; raw?: string } | { ok: false; error: string }> {
+async function callAnthropic(apiKey: string, model: string, system: string, user: string) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -287,44 +257,80 @@ async function callAnthropic(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1200,
+      max_tokens: 1500,
       temperature: 0.2,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `CONTACT\n${contactSummary}\n\nTRANSCRIPT (oldest → newest)\n${transcript}\n\nReturn the JSON object now, no markdown.`,
-        },
-      ],
+      system,
+      messages: [{ role: "user", content: user }],
     }),
   });
   const text = await res.text();
-  if (!res.ok) {
-    return { ok: false, error: `Anthropic ${res.status}: ${text.slice(0, 400)}` };
-  }
+  if (!res.ok) return { ok: false as const, error: `Anthropic ${res.status}: ${text.slice(0, 400)}` };
   let body: any = {};
-  try {
-    body = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "Anthropic returned non-JSON envelope" };
-  }
+  try { body = JSON.parse(text); } catch { return { ok: false as const, error: "Anthropic envelope not JSON" }; }
   const content = body?.content?.[0]?.text;
-  if (!content) return { ok: false, error: "Anthropic returned no content" };
-  // Anthropic sometimes wraps in ```json — strip that defensively.
+  if (!content) return { ok: false as const, error: "Anthropic returned no content" };
   const cleaned = content
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```\s*$/i, "")
     .trim();
   let analysis: any = {};
-  try {
-    analysis = JSON.parse(cleaned);
-  } catch {
-    return {
-      ok: false,
-      error: `Anthropic returned non-JSON content: ${cleaned.slice(0, 200)}`,
-    };
+  try { analysis = JSON.parse(cleaned); }
+  catch { return { ok: false as const, error: `Anthropic content not JSON: ${cleaned.slice(0, 200)}` }; }
+  return { ok: true as const, analysis };
+}
+
+function filterExtractedFields(
+  extracted: Record<string, unknown> | undefined,
+  schema: FieldDescriptor[],
+) {
+  if (!extracted || typeof extracted !== "object") return {};
+  const byBare = new Map(schema.map((f) => [f.bareKey, f]));
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(extracted)) {
+    if (v === undefined || v === null || v === "") continue;
+    const f = byBare.get(k) ||
+      schema.find((d) => d.bareKey === k || d.fieldKey === k || d.name === k);
+    if (!f) continue;
+    const value = String(v).trim();
+    if (!value) continue;
+    if (f.dataType === "SINGLE_OPTIONS" && f.picklistOptions && f.picklistOptions.length) {
+      const exact = f.picklistOptions.find((opt) => opt.toLowerCase() === value.toLowerCase());
+      if (!exact) continue;
+      out[f.bareKey] = exact;
+    } else if (f.dataType === "NUMERICAL") {
+      const n = value.replace(/[^0-9.\-]/g, "");
+      if (n) out[f.bareKey] = n;
+    } else if (f.dataType === "MONETORY") {
+      const n = value.replace(/[^0-9.\-]/g, "");
+      if (n) out[f.bareKey] = n;
+    } else {
+      out[f.bareKey] = value;
+    }
   }
-  return { ok: true, analysis, raw: cleaned };
+  return out;
+}
+
+async function applyToGhl(supabase: any, body: {
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  tags: string[];
+  fields: Record<string, string>;
+  source: string;
+}) {
+  const r = await supabase.functions.invoke("admin-ghl-update-contact", {
+    body: {
+      email: body.email,
+      phone: body.phone,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      source: body.source,
+      tags: body.tags,
+      customFieldsByKey: body.fields,
+    },
+  });
+  return r;
 }
 
 serve(async (req) => {
@@ -335,155 +341,159 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-
-    // ── 1. Pull conversation from GHL (unless caller passed messages) ──
-    let messages: ChatMessage[] = Array.isArray(body.messages)
-      ? body.messages
-      : [];
-    let contact: any = body.contact || null;
-    let contactId: string | null = body.contactId || null;
-    let conversationId: string | null = null;
-
-    if (messages.length === 0) {
-      const ghlToken = await resolveSecret(supabase, "GHL_PIT_TOKEN");
-      const ghlLocationId = await resolveSecret(supabase, "GHL_LOCATION_ID");
-      if (!ghlToken || !ghlLocationId) {
-        return new Response(
-          JSON.stringify({
-            ok: false,
-            reason:
-              "GHL_PIT_TOKEN and GHL_LOCATION_ID must be set in app_secrets or env for GHL pull. Or pass `messages: [...]` directly.",
-          }),
-          {
-            status: 500,
-            headers: { ...cors, "Content-Type": "application/json" },
-          },
-        );
-      }
-      const pulled = await pullConversation(ghlToken, ghlLocationId, {
-        contactId: body.contactId,
-        email: body.email,
-        phone: body.phone,
-        limit: Number(body.limit) || 50,
+    const ghlToken = await resolveSecret(supabase, "GHL_PIT_TOKEN");
+    const ghlLocationId = await resolveSecret(supabase, "GHL_LOCATION_ID");
+    if (!ghlToken || !ghlLocationId) {
+      return new Response(JSON.stringify({ ok: false, reason: "GHL credentials not configured" }), {
+        status: 500,
+        headers: { ...cors, "Content-Type": "application/json" },
       });
-      messages = pulled.messages;
-      contact = contact || pulled.contact;
-      contactId = pulled.contactId;
-      conversationId = pulled.conversationId;
     }
 
-    if (messages.length === 0) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: "No conversation messages found for this contact.",
-          contactId,
-          conversationId,
-        }),
-        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
-      );
+    const schema = await loadGhlFieldSchema(ghlToken, ghlLocationId);
+
+    const pulled = await pullConversation(ghlToken, ghlLocationId, {
+      contactId: body.contactId,
+      email: body.email,
+      phone: body.phone,
+      conversationId: body.conversationId,
+      limit: Number(body.limit) || 50,
+    });
+    const messages = pulled.messages;
+    const contact = pulled.contact;
+    const contactId = pulled.contactId;
+    const conversationId = pulled.conversationId;
+    if (!messages.length) {
+      return new Response(JSON.stringify({
+        ok: false,
+        reason: "No messages found",
+        contactId,
+        conversationId,
+      }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    // ── 2. Resolve LLM provider + key ───────────────────────────────────
-    const providerRaw =
-      (await resolveSecret(supabase, "LLM_PROVIDER")).toLowerCase() ||
-      "openai";
+    const providerRaw = (await resolveSecret(supabase, "LLM_PROVIDER")).toLowerCase() || "openai";
     const provider = providerRaw === "anthropic" ? "anthropic" : "openai";
     const apiKey = await resolveSecret(
       supabase,
       provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY",
     );
-    const model =
-      (await resolveSecret(
-        supabase,
-        provider === "openai" ? "LLM_MODEL_OPENAI" : "LLM_MODEL_ANTHROPIC",
-      )) ||
-      (provider === "openai" ? "gpt-4o-mini" : "claude-3-5-sonnet-latest");
-
+    const model = (await resolveSecret(
+      supabase,
+      provider === "openai" ? "LLM_MODEL_OPENAI" : "LLM_MODEL_ANTHROPIC",
+    )) || (provider === "openai" ? "gpt-4o-mini" : "claude-sonnet-4-5");
     if (!apiKey) {
-      // Return the transcript + contact info but skip the analysis so
-      // the caller can show "key not configured" UI without crashing.
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: `${provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"} not configured. Add it to public.app_secrets or set as an env var.`,
-          contactId,
-          conversationId,
-          contact: contact
-            ? {
-                id: contact.id,
-                name:
-                  contact.contactName ||
-                  `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim(),
-                email: contact.email,
-                phone: contact.phone,
-              }
-            : null,
-          transcript_preview: messages.slice(-10),
-          message_count: messages.length,
-        }),
-        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
-      );
-    }
-
-    // ── 3. Build prompt + call the chosen provider ──────────────────────
-    const contactSummary = contact
-      ? `Name: ${contact.contactName || `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim() || "(unknown)"}\nEmail: ${contact.email || "—"}\nPhone: ${contact.phone || "—"}`
-      : "Name: (unknown)";
-    const transcript = messages
-      .map(
-        (m) =>
-          `[${m.ts || "—"}] ${m.direction === "inbound" ? "CUSTOMER" : "NOVARA"} (${m.channel}): ${m.body}`,
-      )
-      .join("\n");
-
-    const llm =
-      provider === "anthropic"
-        ? await callAnthropic(apiKey, model, transcript, contactSummary)
-        : await callOpenAI(apiKey, model, transcript, contactSummary);
-
-    if (!llm.ok) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: llm.error,
-          contactId,
-          conversationId,
-          message_count: messages.length,
-        }),
-        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
-      );
-    }
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        provider,
-        model,
+      return new Response(JSON.stringify({
+        ok: false,
+        reason: `${provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"} not configured`,
         contactId,
         conversationId,
-        contact: contact
-          ? {
-              id: contact.id,
-              name:
-                contact.contactName ||
-                `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim(),
-              email: contact.email,
-              phone: contact.phone,
-            }
-          : null,
         message_count: messages.length,
-        analysis: llm.analysis,
-      }),
-      { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
-    );
-  } catch (err) {
-    return new Response(
-      JSON.stringify({
+      }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    }
+
+    const systemPrompt = buildSystemPrompt(schema.fields);
+    const contactSummary = contact
+      ? `Name: ${contact.contactName || `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim() || "(unknown)"}\nEmail: ${contact.email || "-"}\nPhone: ${contact.phone || "-"}`
+      : "Name: (unknown)";
+    const transcript = messages
+      .map((m) => `[${m.ts || "-"}] ${m.direction === "inbound" ? "CUSTOMER" : "NOVARA"} (${m.channel}): ${m.body}`)
+      .join("\n");
+    const userPrompt = `CONTACT\n${contactSummary}\n\nTRANSCRIPT (oldest to newest)\n${transcript}\n\nReturn the JSON object now.`;
+
+    const llm = provider === "anthropic"
+      ? await callAnthropic(apiKey, model, systemPrompt, userPrompt)
+      : await callOpenAI(apiKey, model, systemPrompt, userPrompt);
+    if (!llm.ok) {
+      return new Response(JSON.stringify({
         ok: false,
-        reason: err instanceof Error ? err.message : String(err),
-      }),
-      { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
-    );
+        reason: llm.error,
+        contactId,
+        conversationId,
+        message_count: messages.length,
+      }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    }
+
+    const analysis = llm.analysis;
+    const cleanFields = filterExtractedFields(analysis?.extracted_fields, schema.fields);
+    const tagRecs = Array.isArray(analysis?.tag_recommendations)
+      ? (analysis.tag_recommendations as any[]).map((t) => String(t).trim()).filter(Boolean)
+      : [];
+
+    let applyReport: any = null;
+    if (body.autoApply && contact && (Object.keys(cleanFields).length > 0 || tagRecs.length > 0)) {
+      try {
+        const r = await applyToGhl(supabase, {
+          email: contact.email,
+          phone: contact.phone,
+          firstName: contact.firstName || (contact.contactName || "").split(" ")[0],
+          lastName: contact.lastName || (contact.contactName || "").split(" ").slice(1).join(" "),
+          tags: tagRecs,
+          fields: cleanFields,
+          source: "chat-agent autoApply",
+        });
+        applyReport = r.error
+          ? { error: r.error.message || String(r.error) }
+          : (r.data ?? null);
+      } catch (e) {
+        applyReport = { error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+
+    if (body.persist !== false && conversationId) {
+      try {
+        const lastTs = pulled.lastMessageDate || messages[messages.length - 1]?.ts || null;
+        await supabase.from("chat_insights").upsert({
+          conversation_id: conversationId,
+          contact_id: contactId,
+          contact_email: contact?.email || null,
+          contact_phone: contact?.phone || null,
+          contact_name: contact?.contactName || `${contact?.firstName ?? ""} ${contact?.lastName ?? ""}`.trim() || null,
+          last_analyzed_at: new Date().toISOString(),
+          last_analyzed_message_ts: lastTs,
+          message_count: messages.length,
+          provider,
+          model,
+          lead_temperature: analysis?.lead_temperature || null,
+          stage: analysis?.stage || null,
+          sentiment: analysis?.sentiment || null,
+          urgency: analysis?.recommended_next_action?.urgency || null,
+          recommended_action_type: analysis?.recommended_next_action?.type || null,
+          analysis,
+          extracted_fields: cleanFields,
+          applied_tags: tagRecs,
+          ghl_fields_skipped: applyReport?.custom_fields_skipped ?? [],
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "conversation_id" });
+      } catch (e) {
+        console.warn("persist failed", e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      provider,
+      model,
+      contactId,
+      conversationId,
+      message_count: messages.length,
+      contact: contact ? {
+        id: contact.id,
+        name: contact.contactName || `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim(),
+        email: contact.email,
+        phone: contact.phone,
+      } : null,
+      analysis,
+      extracted_fields: cleanFields,
+      tag_recommendations: tagRecs,
+      applied: Boolean(body.autoApply),
+      apply_report: applyReport,
+    }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+  } catch (err) {
+    return new Response(JSON.stringify({
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }
 });
