@@ -309,8 +309,8 @@ export default function AdminMap() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-            <RiMapPin2Line className="w-5 h-5 text-emerald-700" />
+          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <RiMapPin2Line className="w-6 h-6 text-emerald-700" />
             Operational map
           </h1>
           <p className="text-sm text-slate-500">

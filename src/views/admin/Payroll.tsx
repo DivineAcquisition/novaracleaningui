@@ -225,7 +225,7 @@ export default function AdminPayroll() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Payroll</h1>
+          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Payroll</h1>
           <p className="text-sm text-slate-500 mt-1">
             Per-cleaner completed-job rollup. Owed = completed jobs with no
             successful payout yet. "Pay now" releases via Stripe Connect.

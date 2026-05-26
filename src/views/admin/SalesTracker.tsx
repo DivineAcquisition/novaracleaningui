@@ -142,7 +142,7 @@ export default function AdminSalesTracker() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Sales tracker</h1>
+          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Sales tracker</h1>
           <p className="text-sm text-slate-500 mt-1">
             Per-VA performance. Leads handled (via lead-intake round-robin),
             bookings closed (via CSR form / book-as-va), and revenue.
