@@ -825,9 +825,14 @@ export default function BookingCheckout() {
               <Separator />
 
               <div className="space-y-2.5">
-                <h3 className="font-semibold text-sm">Cleaning checklist</h3>
+                <h3 className="font-semibold text-sm">
+                  {bookingData.serviceType === "combo"
+                    ? "Cleaning checklist (Visit 1 — Deep)"
+                    : "Cleaning checklist"}
+                </h3>
                 <div className="grid gap-1.5">
-                  {(bookingData.serviceType === "deep"
+                  {(bookingData.serviceType === "deep" ||
+                  bookingData.serviceType === "combo"
                     ? [
                         "Kitchen: deep clean appliances, cabinets, countertops",
                         "Bathrooms: scrub tiles, sanitize fixtures, polish mirrors",

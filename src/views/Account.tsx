@@ -136,19 +136,17 @@ export default function Account() {
   };
 
   const handleManageSubscription = async () => {
+    // Note: we DON'T pre-gate on `subscription?.hasCustomer` anymore.
+    // The customer-portal Edge Function auto-creates a Stripe customer
+    // when none exists, so a user who has never booked can still click
+    // through to the Billing Portal to add a card. The previous gate
+    // was the root cause of "can't access payment portal" reports from
+    // brand-new accounts.
     try {
-      if (!subscription?.hasCustomer) {
-        toast.error("Please complete a booking first to access the customer portal");
-        return;
-      }
       await openCustomerPortal();
     } catch (error: any) {
       const errorMessage = error.message || "Failed to open customer portal";
-      if (errorMessage.includes("No Stripe customer found")) {
-        toast.error("No payment methods on file. Complete a booking to add one.");
-      } else {
-        toast.error(errorMessage);
-      }
+      toast.error(errorMessage);
     }
   };
 

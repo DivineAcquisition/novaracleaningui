@@ -58,7 +58,7 @@ export default function BookingOffer() {
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'membership' | null>(null);
+  const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'combo' | 'membership' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -77,6 +77,7 @@ export default function BookingOffer() {
     // Pre-discount list prices (Zone B base — backend applies zone modifier)
     const standardList = getServicePrice(homeSizeId, 'standard', 'B');
     const deepList = getServicePrice(homeSizeId, 'deep', 'B');
+    const comboList = getServicePrice(homeSizeId, 'combo', 'B');
 
     // Per-tier post-50%-off totals + 50% deposit, computed by the same
     // calculatePrice() the checkout summary calls — guarantees the
@@ -84,6 +85,7 @@ export default function BookingOffer() {
     // and the Stripe Pay button to the cent.
     const stdPricing = calculatePrice(homeSizeId, 'standard', [], 'none', false, true, 0);
     const deepPricing = calculatePrice(homeSizeId, 'deep', [], 'none', false, true, 0);
+    const comboPricing = calculatePrice(homeSizeId, 'combo', [], 'none', false, true, 0);
 
     // Membership prices (Zone B base — recurring tier untouched by the
     // 10% reduction in v3.4)
@@ -98,12 +100,16 @@ export default function BookingOffer() {
     return {
       standard: standardList,
       deepClean: deepList,
+      combo: comboList,
       standardPromoTotal: stdPricing.total,
       standardPromoDeposit: stdPricing.deposit,
       standardPromoBalance: stdPricing.balanceDue,
       deepPromoTotal: deepPricing.total,
       deepPromoDeposit: deepPricing.deposit,
       deepPromoBalance: deepPricing.balanceDue,
+      comboPromoTotal: comboPricing.total,
+      comboPromoDeposit: comboPricing.deposit,
+      comboPromoBalance: comboPricing.balanceDue,
       membership: {
         monthly: memberPrices.monthly,
         biweekly: memberPrices.biweekly,
@@ -136,6 +142,18 @@ export default function BookingOffer() {
       membershipPlan: 'none',
     });
     trackViewContent(prices.deepClean, 'Deep Cleaning — 50% Off First Clean');
+    setTimeout(() => {
+      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  const handleSelectCombo = () => {
+    setSelectedService('combo');
+    updateBookingData({
+      serviceType: 'combo',
+      membershipPlan: 'none',
+    });
+    trackViewContent(prices.combo, 'Deep + Standard Combo — 50% Off First Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -452,6 +470,127 @@ export default function BookingOffer() {
                     </CardContent>
                   </Card>
                 </div>
+              );
+            })()}
+
+            {/* Deep + Standard Combo — 50% off
+                The Combo is one Deep Clean upfront + a follow-up Standard
+                Clean inside the next 14 days, billed as a single bundle.
+                Priced via SERVICE_TIER_PRICING.combo (2.5× standard) so
+                it lines up with the Deep Clean number above + a follow-up
+                Standard. The 50% new-customer promo applies to the whole
+                bundle. */}
+            {selectedHomeSize && prices.combo > 0 && (() => {
+              const comboDiscounted = prices.comboPromoTotal;
+              const comboDepositToday = prices.comboPromoDeposit;
+              const comboBalanceAfter = prices.comboPromoBalance;
+              const isSelected = selectedService === "combo";
+              return (
+                <Card
+                  className={cn(
+                    "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                    isSelected
+                      ? "border-primary shadow-lg ring-2 ring-primary/20"
+                      : "border-primary/20 hover:border-primary/50",
+                  )}
+                  onClick={handleSelectCombo}
+                >
+                  <CardContent className="pt-6 pb-6 px-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <RiSparklingLine className="h-4 w-4" />
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          <RiPercentLine className="h-3 w-3 mr-1" />
+                          50% off · auto-applied
+                        </Badge>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-50 text-emerald-700 border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                      >
+                        Best value
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-bold font-jakarta">
+                        Deep + Standard Combo
+                      </h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        One Deep Clean now + a Standard follow-up within 14 days.
+                        Two visits, one price — first-time customers save 50%.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                          ${comboDiscounted.toFixed(2)}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          bundle total
+                        </span>
+                      </div>
+                      <p className="text-xs text-primary font-semibold mt-1.5">
+                        50% off the entire bundle — applied automatically
+                      </p>
+                      <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">
+                            Pay today (50% deposit)
+                          </span>
+                          <span className="font-semibold text-foreground">
+                            ${comboDepositToday.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">
+                            Auto-charged after each visit
+                          </span>
+                          <span className="font-semibold text-foreground">
+                            ${comboBalanceAfter.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <ul className="space-y-2">
+                      {[
+                        "Visit 1 — full Deep Clean (everything in Deep)",
+                        "Visit 2 — Standard maintenance clean within 14 days",
+                        "Same team both visits when possible",
+                        "Inside cabinet cleaning & baseboards on visit 1",
+                        "Eco-friendly products & HEPA vacuums",
+                        "48-hour re-clean guarantee on both visits",
+                      ].map((line) => (
+                        <li
+                          key={line}
+                          className="flex items-start gap-2 text-xs md:text-sm"
+                        >
+                          <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-foreground">{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <Button
+                      size="lg"
+                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectCombo();
+                      }}
+                    >
+                      Claim Combo — Save 50%
+                      <RiArrowRightSLine className="w-4 h-4 ml-1" />
+                    </Button>
+                  </CardContent>
+                </Card>
               );
             })()}
 

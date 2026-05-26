@@ -740,7 +740,13 @@ export default function CleanerDashboard() {
                             {isCheckedIn ? "Checked In" : "Check In"}
                           </Button>
                         )}
-                        {isCheckedIn && (
+                        {/* Mark Complete is shown:
+                              - any time the cleaner has checked in, OR
+                              - whenever a job has NO assignment row (admin
+                                assigned the booking directly without going
+                                through job_assignments). Without this the
+                                booking-only path had no completion button. */}
+                        {(isCheckedIn || !job.assignmentId) && (
                           <Button
                             size="sm"
                             variant="secondary"

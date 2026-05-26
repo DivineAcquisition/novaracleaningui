@@ -385,8 +385,15 @@ serve(async (req) => {
       crypto.getRandomValues(tokenBytes);
       const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
       await supabase.from('job_assignments').update({ response_token: token }).eq('id', assignment.id);
-      const baseUrl = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/respond-to-offer";
-      
+
+      // Point cleaners at the in-portal token page, NOT the legacy
+      // `respond-to-offer` HTML edge function. The portal page calls
+      // `accept-job-offer`, which actually flips `bookings.cleaner_id`
+      // for Lead roles — the legacy HTML accept path leaves that field
+      // null, so `complete-booking` later fails with "No cleaner
+      // assigned". Single source of truth, fewer edge cases.
+      const offerUrl = `https://contractor.novaracleaning.com/cleaner/job-offer/${token}`;
+
       const message = `🧹 New Job Offer!
 
 Date: ${jobDateFormatted}
@@ -395,10 +402,9 @@ Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
 Distance: ${assignment.distance_miles.toFixed(1)} miles
 
 Respond within 15 min:
-Accept: ${baseUrl}?id=${assignment.id}&action=accept&token=${token}
-Decline: ${baseUrl}?id=${assignment.id}&action=decline&token=${token}
+${offerUrl}
 
-Or open app to view details.`;
+Open in the cleaner portal to accept or decline.`;
 
       try {
         await supabase.functions.invoke("send-sms-notification", {
