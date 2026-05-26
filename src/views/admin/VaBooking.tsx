@@ -1,9 +1,34 @@
 "use client";
 
+// ─── /admin/csr — Novara Internal Booking (v3, 2026-05-26) ─────────────
+//
+// Premium SaaS-feel booking workspace for the internal team. Rebuilt
+// after v2 looked busted — this version:
+//
+//   * drops the `container max-w-6xl` wrapper that double-padded against
+//     AdminLayout and gives the page proper breathing room
+//   * uses numbered section indicators (1 / 2 / 3 / 4 / 5) so the form
+//     reads like a guided checkout, not a wall of cards
+//   * replaces the Service Type Select with 4 visual radio cards that
+//     show price + multiplier at a glance
+//   * ships its own emerald-themed compact schedule picker (the
+//     customer-flow SchedulePicker is purple-themed and breaks the
+//     admin visual rhythm when embedded)
+//   * lead lookup is collapsed by default — no noise on mount
+//   * uses the canonical pricing-system constants, sends lat/lng,
+//     supports promo + wallet credit, and wires all the property-
+//     details fields the customer flow asks for
+//   * sticky right rail with the live quote in a brand-gradient card,
+//     premium CTA, and an inline "still needed" requirements list.
+
 import {
   RiArrowRightLine,
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
   RiCalendarLine,
+  RiCheckLine,
   RiCheckboxCircleLine,
+  RiCloseLine,
   RiHome4Line,
   RiInformationLine,
   RiLoader4Line,
@@ -13,13 +38,35 @@ import {
   RiSparklingLine,
   RiToolsLine,
   RiUserLine,
+  RiUserSearchLine,
   RiWalletLine,
+  RiTimeLine,
+  RiSunFoggyLine,
+  RiSunLine,
+  RiMoonLine,
 } from "@remixicon/react";
+import {
+  addDays,
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  format,
+  getDay,
+  isBefore,
+  isSameDay,
+  isSameMonth,
+  isWeekend,
+  startOfDay,
+  startOfMonth,
+} from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { format } from "date-fns";
+import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { useAvailability } from "@/hooks/use-availability";
+
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,9 +75,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -38,35 +86,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
-import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import {
+  ADD_ONS as ADD_ON_DEFS,
   HOME_SIZE_RANGES,
   SERVICE_TIER_PRICING,
-  ADD_ONS as ADD_ON_DEFS,
-  getServicePrice,
   calculatePrice,
+  getServicePrice,
 } from "@/lib/pricing-system";
 
-// ─── Types & constants ───────────────────────────────────────────────
+// ─── Types & constants ─────────────────────────────────────────────────
 
 type ServiceType = "standard" | "deep" | "moveInOut" | "combo";
-
 type InvoiceMode = "deposit_plus_remaining" | "full_now" | "none";
 
-const SERVICE_TYPE_OPTIONS: { id: ServiceType; label: string }[] = [
-  { id: "standard", label: SERVICE_TIER_PRICING.standard.label },
-  { id: "deep", label: SERVICE_TIER_PRICING.deep.label },
-  { id: "moveInOut", label: SERVICE_TIER_PRICING.moveInOut.label },
-  { id: "combo", label: SERVICE_TIER_PRICING.combo.label },
+const SERVICE_TYPE_OPTIONS: {
+  id: ServiceType;
+  label: string;
+  subline: string;
+  multiplier: number;
+}[] = [
+  {
+    id: "standard",
+    label: "Standard Clean",
+    subline: "Regular upkeep",
+    multiplier: SERVICE_TIER_PRICING.standard.multiplier,
+  },
+  {
+    id: "deep",
+    label: "Deep Clean",
+    subline: "First-time / refresh",
+    multiplier: SERVICE_TIER_PRICING.deep.multiplier,
+  },
+  {
+    id: "moveInOut",
+    label: "Move-In / Out",
+    subline: "Empty home, deep",
+    multiplier: SERVICE_TIER_PRICING.moveInOut.multiplier,
+  },
+  {
+    id: "combo",
+    label: "Deep + Standard",
+    subline: "Deep + follow-up",
+    multiplier: SERVICE_TIER_PRICING.combo.multiplier,
+  },
 ];
 
 const ADD_ON_LIST = (Object.keys(ADD_ON_DEFS) as Array<keyof typeof ADD_ON_DEFS>).map(
@@ -80,7 +148,7 @@ const ADD_ON_LIST = (Object.keys(ADD_ON_DEFS) as Array<keyof typeof ADD_ON_DEFS>
 const INVOICE_MODES: { id: InvoiceMode; label: string; desc: string }[] = [
   {
     id: "deposit_plus_remaining",
-    label: "Deposit today + Remaining day-of",
+    label: "Deposit today + remaining day-of",
     desc: "Two Stripe invoices. Most common.",
   },
   {
@@ -91,7 +159,7 @@ const INVOICE_MODES: { id: InvoiceMode; label: string; desc: string }[] = [
   {
     id: "none",
     label: "No invoice — book only",
-    desc: "Booker will collect payment another way.",
+    desc: "Booker collects payment another way.",
   },
 ];
 
@@ -118,6 +186,21 @@ const FLOORING_OPTIONS = [
   { value: "mixed", label: "Mixed" },
 ];
 
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+const TIME_SLOTS = [
+  { id: "8:00 AM - 9:00 AM", label: "8 AM", period: "morning" as const },
+  { id: "9:00 AM - 10:00 AM", label: "9 AM", period: "morning" as const },
+  { id: "10:00 AM - 11:00 AM", label: "10 AM", period: "morning" as const },
+  { id: "11:00 AM - 12:00 PM", label: "11 AM", period: "morning" as const },
+  { id: "12:00 PM - 1:00 PM", label: "12 PM", period: "afternoon" as const },
+  { id: "1:00 PM - 2:00 PM", label: "1 PM", period: "afternoon" as const },
+  { id: "2:00 PM - 3:00 PM", label: "2 PM", period: "afternoon" as const },
+  { id: "3:00 PM - 4:00 PM", label: "3 PM", period: "afternoon" as const },
+  { id: "4:00 PM - 5:00 PM", label: "4 PM", period: "evening" as const },
+  { id: "5:00 PM - 6:00 PM", label: "5 PM", period: "evening" as const },
+];
+
 interface LeadRow {
   id: string;
   first_name: string | null;
@@ -140,32 +223,32 @@ type LeadHydration = LeadRow & {
   special_requests?: string;
 };
 
-function formatMoney(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+const fmtMoney = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const digitsOnly = (s: string) => s.replace(/\D/g, "");
+const isValidEmail = (s: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
-function digitsOnly(s: string): string {
-  return s.replace(/\D/g, "");
-}
-
-function isValidEmail(s: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
-}
-
-// ─── Page ────────────────────────────────────────────────────────────
+// ─── Page ──────────────────────────────────────────────────────────────
 
 export default function VaBooking() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const leadIdParam = searchParams.get("lead_id");
 
-  // Lead lookup
+  // Lead lookup (collapsed by default)
+  const [leadLookupOpen, setLeadLookupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [recentLeads, setRecentLeads] = useState<LeadRow[]>([]);
+  const [leadResults, setLeadResults] = useState<LeadRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [linkedLead, setLinkedLead] = useState<LeadRow | null>(null);
 
   useEffect(() => {
+    if (!leadLookupOpen) {
+      setLeadResults([]);
+      return;
+    }
+    const q = searchQuery.trim();
+    setSearching(true);
     const t = setTimeout(async () => {
       const baseSelect =
         "id, first_name, last_name, email, phone, zip_code, service_type, lead_score, status, source";
@@ -173,11 +256,10 @@ export default function VaBooking() {
         .from("leads")
         .select(baseSelect)
         .order("created_at", { ascending: false })
-        .limit(20);
-      const q = searchQuery.trim();
+        .limit(15);
       if (q) {
         const digits = digitsOnly(q);
-        const filters: string[] = [
+        const filters = [
           `first_name.ilike.%${q}%`,
           `last_name.ilike.%${q}%`,
           `email.ilike.%${q}%`,
@@ -188,17 +270,16 @@ export default function VaBooking() {
           .select(baseSelect)
           .or(filters.join(","))
           .order("created_at", { ascending: false })
-          .limit(20);
+          .limit(15);
       }
-      setSearching(true);
       const { data, error } = await query;
       setSearching(false);
-      if (!error && data) setRecentLeads(data as unknown as LeadRow[]);
+      if (!error && data) setLeadResults(data as unknown as LeadRow[]);
     }, 200);
     return () => clearTimeout(t);
-  }, [searchQuery]);
+  }, [searchQuery, leadLookupOpen]);
 
-  // Customer fields
+  // Customer
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -210,7 +291,7 @@ export default function VaBooking() {
   const [state, setState] = useState("");
   const [zipCode, setZipCode] = useState("");
 
-  // Service fields
+  // Service
   const [homeSizeId, setHomeSizeId] = useState("1501_2000");
   const [serviceType, setServiceType] = useState<ServiceType>("standard");
   const [addOns, setAddOns] = useState<string[]>([]);
@@ -218,23 +299,24 @@ export default function VaBooking() {
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
 
-  // Schedule fields
+  // Property
+  const [propertyOpen, setPropertyOpen] = useState(false);
+  const [dwellingType, setDwellingType] = useState<string>("");
+  const [pets, setPets] = useState<string>("none");
+  const [flooring, setFlooring] = useState<string[]>([]);
+  const [parkingNotes, setParkingNotes] = useState("");
+  const [suppliesProvidedBy, setSuppliesProvidedBy] = useState<
+    "customer" | "novara"
+  >("novara");
+  const [comboFollowUpDate, setComboFollowUpDate] = useState("");
+
+  // Schedule
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
   const [accessNotes, setAccessNotes] = useState("");
   const [teamNotes, setTeamNotes] = useState("");
 
-  // Property details
-  const [dwellingType, setDwellingType] = useState<string>("");
-  const [pets, setPets] = useState<string>("none");
-  const [flooring, setFlooring] = useState<string[]>([]);
-  const [parkingNotes, setParkingNotes] = useState("");
-  const [suppliesProvidedBy, setSuppliesProvidedBy] = useState<"customer" | "novara">(
-    "novara",
-  );
-  const [comboFollowUpDate, setComboFollowUpDate] = useState("");
-
-  // Payment fields
+  // Payment
   const [csrName, setCsrName] = useState("");
   const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>(
     "deposit_plus_remaining",
@@ -245,7 +327,7 @@ export default function VaBooking() {
   const [sendConfirmationSms, setSendConfirmationSms] = useState(true);
   const [sendChecklistEmail, setSendChecklistEmail] = useState(true);
 
-  // Wallet credit lookup
+  // Wallet credit
   const [walletCreditCents, setWalletCreditCents] = useState(0);
   useEffect(() => {
     const trimmed = email.trim().toLowerCase();
@@ -320,17 +402,24 @@ export default function VaBooking() {
     if (lead.bedrooms) setBedrooms(String(lead.bedrooms));
     if (lead.bathrooms) setBathrooms(String(lead.bathrooms));
     if (lead.special_requests) setAccessNotes(lead.special_requests);
+    setLeadLookupOpen(false);
     toast.success(`Loaded lead — ${lead.first_name || "(no name)"}`);
   }
 
-  // Live pricing — driven by pricing-system.ts (Zone B, no membership)
+  // Live pricing
   const pricing = useMemo(() => {
-    const calc = calculatePrice(homeSizeId, serviceType, addOns, "none", false, false, 0);
-    const baseCents = Math.round(calc.basePrice * 100);
+    const calc = calculatePrice(
+      homeSizeId,
+      serviceType,
+      addOns,
+      "none",
+      false,
+      false,
+      0,
+    );
     const serviceCents = Math.round((calc.basePrice + calc.serviceAddition) * 100);
     const addOnsCents = Math.round(calc.addOnsTotal * 100);
     const subtotalCents = Math.round(calc.subtotal * 100);
-    const newCustomerDiscountCents = Math.round(calc.newCustomerDiscount * 100);
     const computedCents = Math.round(calc.total * 100);
 
     const overrideCents = overrideTotal.trim()
@@ -350,22 +439,15 @@ export default function VaBooking() {
     const remainingCents = totalCents - depositCents;
 
     return {
-      baseCents,
       serviceCents,
       addOnsCents,
       subtotalCents,
-      newCustomerDiscountCents,
       computedCents,
       totalCents,
       depositCents,
       remainingCents,
     };
   }, [homeSizeId, serviceType, addOns, overrideTotal, depositPercent, invoiceMode]);
-
-  const previewServicePriceCents = useMemo(
-    () => getServicePrice(homeSizeId, serviceType, "B") * 100,
-    [homeSizeId, serviceType],
-  );
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -380,21 +462,10 @@ export default function VaBooking() {
     if (!isValidEmail(email)) list.push("Valid email");
     if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
     if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
-    if (!homeSizeId) list.push("Home size");
-    if (!serviceType) list.push("Service type");
     if (!selectedDate) list.push("Service date");
     if (!selectedTime) list.push("Time slot");
     return list;
-  }, [
-    firstName,
-    email,
-    phoneDigits,
-    zipDigits,
-    homeSizeId,
-    serviceType,
-    selectedDate,
-    selectedTime,
-  ]);
+  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime]);
 
   const canSubmit = requirements.length === 0;
 
@@ -469,257 +540,262 @@ export default function VaBooking() {
     }
   };
 
-  // ─── Success screen ───────────────────────────────────────────────
+  // ─── Success screen ─────────────────────────────────────────────────
   if (result?.success) {
     const homeSizeLabel =
       HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label || homeSizeId;
     const serviceLabel =
       SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)?.label || serviceType;
-    const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : "";
+    const serviceDate = selectedDate ? format(selectedDate, "MMM d, yyyy") : "";
     return (
-      <div className="min-h-full">
+      <div className="max-w-2xl mx-auto">
         <SEO title="Novara Internal Booking" noindex />
-        <div className="container max-w-3xl mx-auto px-4 py-10">
-          <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
-            <div className="h-1 w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500" />
-            <CardHeader className="text-center pt-10">
-              <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center">
-                <RiCheckboxCircleLine className="w-9 h-9 text-emerald-600" />
-              </div>
-              <Badge className="mx-auto mt-4 bg-emerald-100 text-emerald-700 border-0 hover:bg-emerald-100">
-                Internal booking created
-              </Badge>
-              <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900">
-                Booking {result.bookingNumber} confirmed
-              </CardTitle>
-              <CardDescription>
-                Email, SMS, and Stripe invoices have been dispatched.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5 pb-10">
-              <div className="rounded-xl bg-slate-50 p-4 space-y-2 text-sm border border-slate-100">
-                <Row label="Customer" value={`${firstName} ${lastName}`.trim()} />
-                <Row
-                  label="Service"
-                  value={`${serviceLabel} — ${homeSizeLabel}`}
-                />
-                <Row label="When" value={`${serviceDate} ${selectedTime || ""}`} />
-                <Row
-                  label="Total"
-                  value={formatMoney(result.totals?.totalCents ?? pricing.totalCents)}
-                />
-                <Row
-                  label="Deposit"
-                  value={formatMoney(
-                    result.totals?.depositCents ?? pricing.depositCents,
-                  )}
-                />
-                <Row
-                  label="Remaining day-of"
-                  value={formatMoney(
-                    result.totals?.remainingCents ?? pricing.remainingCents,
-                  )}
-                />
-                {result.ghlContactId && (
-                  <Row label="GHL contact" value={result.ghlContactId} mono />
+        <Card className="border border-slate-200 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] rounded-2xl overflow-hidden">
+          <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400" />
+          <CardHeader className="text-center pt-10">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center ring-1 ring-emerald-200">
+              <RiCheckboxCircleLine className="w-7 h-7 text-emerald-600" />
+            </div>
+            <Badge className="mx-auto mt-3 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50 font-medium">
+              Internal booking created
+            </Badge>
+            <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
+              Booking #{result.bookingNumber} confirmed
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Email, SMS, and Stripe invoices have been dispatched.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5 pb-8">
+            <div className="rounded-xl bg-slate-50 p-5 space-y-2 text-sm border border-slate-100">
+              <SummaryRow label="Customer" value={`${firstName} ${lastName}`.trim()} />
+              <SummaryRow label="Service" value={`${serviceLabel} — ${homeSizeLabel}`} />
+              <SummaryRow label="When" value={`${serviceDate} ${selectedTime || ""}`} />
+              <Separator className="my-2" />
+              <SummaryRow
+                label="Total"
+                value={fmtMoney(result.totals?.totalCents ?? pricing.totalCents)}
+                bold
+              />
+              <SummaryRow
+                label="Deposit"
+                value={fmtMoney(
+                  result.totals?.depositCents ?? pricing.depositCents,
                 )}
-                {result.ghlOpportunityId && (
-                  <Row
-                    label="GHL opportunity"
-                    value={result.ghlOpportunityId}
-                    mono
-                  />
+              />
+              <SummaryRow
+                label="Remaining day-of"
+                value={fmtMoney(
+                  result.totals?.remainingCents ?? pricing.remainingCents,
                 )}
-              </div>
+              />
+            </div>
 
-              {result.depositInvoice && (
-                <InvoiceCard
-                  title="Deposit invoice (due today)"
-                  amount={result.totals?.depositCents ?? pricing.depositCents}
-                  invoiceId={result.depositInvoice.invoiceId}
-                  url={result.depositInvoice.hostedInvoiceUrl}
-                />
-              )}
-              {result.remainingInvoice && (
-                <InvoiceCard
-                  title="Remaining-balance invoice (due day-of)"
-                  amount={result.totals?.remainingCents ?? pricing.remainingCents}
-                  invoiceId={result.remainingInvoice.invoiceId}
-                  url={result.remainingInvoice.hostedInvoiceUrl}
-                />
-              )}
-              {result.fullInvoice && (
-                <InvoiceCard
-                  title="Full-payment invoice"
-                  amount={result.totals?.totalCents ?? pricing.totalCents}
-                  invoiceId={result.fullInvoice.invoiceId}
-                  url={result.fullInvoice.hostedInvoiceUrl}
-                />
-              )}
+            {result.depositInvoice && (
+              <InvoiceCard
+                title="Deposit invoice (due today)"
+                amount={result.totals?.depositCents ?? pricing.depositCents}
+                invoiceId={result.depositInvoice.invoiceId}
+                url={result.depositInvoice.hostedInvoiceUrl}
+              />
+            )}
+            {result.remainingInvoice && (
+              <InvoiceCard
+                title="Remaining-balance invoice (due day-of)"
+                amount={result.totals?.remainingCents ?? pricing.remainingCents}
+                invoiceId={result.remainingInvoice.invoiceId}
+                url={result.remainingInvoice.hostedInvoiceUrl}
+              />
+            )}
+            {result.fullInvoice && (
+              <InvoiceCard
+                title="Full-payment invoice"
+                amount={result.totals?.totalCents ?? pricing.totalCents}
+                invoiceId={result.fullInvoice.invoiceId}
+                url={result.fullInvoice.hostedInvoiceUrl}
+              />
+            )}
 
-              {result.smsResult && (
-                <div className="rounded-xl border border-slate-200 p-4 text-sm">
-                  <p className="font-semibold mb-1">Confirmation SMS</p>
-                  <p className="text-muted-foreground">
-                    {result.smsResult.success
-                      ? `Sent via GHL (msg ${result.smsResult.messageId || "—"})`
-                      : `Failed: ${result.smsResult.error || JSON.stringify(result.smsResult)}`}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setResult(null)}
-                >
-                  Book another
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() =>
-                    router.push(`/admin/bookings?highlight=${result.bookingId}`)
-                  }
-                >
-                  Open in Bookings
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setResult(null)}
+              >
+                Book another
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() =>
+                  router.push(`/admin/bookings?highlight=${result.bookingId}`)
+                }
+              >
+                Open in Bookings
+                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  // ─── Form ─────────────────────────────────────────────────────────
+  // ─── Form ───────────────────────────────────────────────────────────
   return (
-    <div className="min-h-full pb-24">
+    <div className="max-w-[1240px] mx-auto">
       <SEO title="Novara Internal Booking" noindex />
 
-      <div className="container max-w-6xl mx-auto px-4 py-6">
-        <div className="mb-6">
-          <h1 className="font-jakarta text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
-            Novara Internal Booking
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Premium booking workspace for the Novara internal team — quote,
-            schedule, and dispatch in a single flow.
-          </p>
+      {/* Page header — SaaS eyebrow + title + actions */}
+      <header className="mb-7">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-emerald-700/80 bg-emerald-50 border border-emerald-200/70 rounded-full px-2 py-0.5">
+            Workspace · Internal
+          </span>
+          {linkedLead && (
+            <Badge className="bg-slate-100 text-slate-700 border-0 hover:bg-slate-100 text-[10px]">
+              Lead linked · {linkedLead.id.slice(0, 8)}
+            </Badge>
+          )}
         </div>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h1 className="font-jakarta text-[28px] leading-tight font-bold tracking-tight text-slate-900">
+              Novara Internal Booking
+            </h1>
+            <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+              Build a booking on behalf of a customer — quote, schedule, dispatch,
+              and bill in a single flow.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLeadLookupOpen((v) => !v)}
+            className="border-slate-200 bg-white"
+          >
+            <RiUserSearchLine className="w-4 h-4 mr-1.5" />
+            {leadLookupOpen ? "Close lead search" : "Search existing lead"}
+          </Button>
+        </div>
+      </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* LEFT: form */}
-          <div className="lg:col-span-2 space-y-5">
-            {/* Lead lookup */}
-            <SectionCard
-              title="Look up an existing lead"
-              description="Pre-fills the form so you don't have to retype data the customer already gave us."
-              icon={<RiSearchLine className="w-4 h-4" />}
-            >
+      {/* Optional inline lead lookup */}
+      {leadLookupOpen && (
+        <Card className="mb-6 border border-slate-200 rounded-2xl shadow-sm">
+          <CardContent className="p-4 space-y-3">
+            <div className="relative">
+              <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search name, email or phone…"
+                placeholder="Search by name, email, or phone…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-slate-50 border-slate-200 focus-visible:bg-white"
+                autoFocus
               />
-              {searching && <Skeleton className="h-10 w-full" />}
-              <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
-                {recentLeads.length === 0 && !searching && (
-                  <p className="text-xs text-slate-500 p-3">No leads.</p>
-                )}
-                {recentLeads.map((l) => (
-                  <button
-                    key={l.id}
-                    type="button"
-                    onClick={() => applyLead(l as LeadHydration)}
-                    className={cn(
-                      "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between transition-colors",
-                      linkedLead?.id === l.id && "bg-emerald-50/60",
-                    )}
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        {l.first_name || ""} {l.last_name || ""}
-                        {!l.first_name && !l.last_name && (
-                          <span className="text-slate-400">(no name)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {l.phone || l.email || "—"} · {l.zip_code || "?"} ·{" "}
-                        {l.source || "?"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {l.lead_score && (
-                        <Badge variant="outline" className="text-[10px]">
-                          {l.lead_score}
-                        </Badge>
-                      )}
-                      {l.status && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          {l.status}
-                        </Badge>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              {linkedLead && (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
-                  Linked to lead {linkedLead.id.slice(0, 8)} —{" "}
-                  {linkedLead.source || "no source"}.
-                </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 max-h-72 overflow-y-auto">
+              {searching && <Skeleton className="h-10 w-full m-2" />}
+              {!searching && leadResults.length === 0 && (
+                <p className="text-xs text-slate-500 p-3">
+                  No leads found. Start typing or press × to close.
+                </p>
               )}
-            </SectionCard>
-
-            {/* Customer */}
-            <SectionCard
-              title="Customer"
-              icon={<RiUserLine className="w-4 h-4" />}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>First name *</Label>
-                  <Input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Last name</Label>
-                  <Input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Email *</Label>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                  {walletCreditCents > 0 && (
-                    <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-medium">
-                      <RiWalletLine className="w-3.5 h-3.5" />
-                      {formatMoney(walletCreditCents)} wallet credit available —
-                      applied automatically
-                    </div>
+              {leadResults.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => applyLead(l as LeadHydration)}
+                  className={cn(
+                    "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between transition-colors",
+                    linkedLead?.id === l.id && "bg-emerald-50/60",
                   )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Phone *</Label>
-                  <Input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 301-555-0199"
-                  />
-                </div>
-              </div>
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">
+                      {l.first_name || ""} {l.last_name || ""}
+                      {!l.first_name && !l.last_name && (
+                        <span className="text-slate-400">(no name)</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {l.phone || l.email || "—"} · {l.zip_code || "?"} ·{" "}
+                      {l.source || "—"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {l.lead_score && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {l.lead_score}
+                      </Badge>
+                    )}
+                    {l.status && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {l.status}
+                      </Badge>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* LEFT — form */}
+        <div className="xl:col-span-8 space-y-5">
+          {/* 1 — Customer */}
+          <FormSection
+            number={1}
+            title="Customer"
+            description="Who is this booking for?"
+            icon={<RiUserLine className="w-4 h-4" />}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="First name" required>
+                <Input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Anthony"
+                />
+              </Field>
+              <Field label="Last name">
+                <Input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Sannie"
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field
+                label="Email"
+                required
+                rightHint={
+                  walletCreditCents > 0
+                    ? `${fmtMoney(walletCreditCents)} wallet credit`
+                    : undefined
+                }
+              >
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="customer@email.com"
+                />
+              </Field>
+              <Field label="Phone" required>
+                <Input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 301-555-0199"
+                />
+              </Field>
+            </div>
+            <Field label="Service address">
               <AddressAutocomplete
+                label=""
                 initialValue={address}
                 onAddressSelect={(addr) => {
                   setAddress(addr.street);
@@ -730,587 +806,905 @@ export default function VaBooking() {
                   setAddressLng(typeof addr.lng === "number" ? addr.lng : null);
                 }}
               />
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label>City</Label>
+            </Field>
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-12 md:col-span-6">
+                <Field label="City">
                   <Input value={city} onChange={(e) => setCity(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>State</Label>
+                </Field>
+              </div>
+              <div className="col-span-6 md:col-span-3">
+                <Field label="State">
                   <Input
                     value={state}
                     onChange={(e) => setState(e.target.value.toUpperCase())}
                     maxLength={2}
+                    placeholder="MD"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>ZIP *</Label>
+                </Field>
+              </div>
+              <div className="col-span-6 md:col-span-3">
+                <Field label="ZIP" required>
                   <Input
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
                     maxLength={5}
+                    placeholder="21201"
                   />
-                </div>
+                </Field>
               </div>
-            </SectionCard>
+            </div>
+          </FormSection>
 
-            {/* Service */}
-            <SectionCard
-              title="Service"
-              icon={<RiToolsLine className="w-4 h-4" />}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Home size *</Label>
-                  <Select value={homeSizeId} onValueChange={setHomeSizeId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {HOME_SIZE_RANGES.filter((h) => h.standardPrice > 0).map(
-                        (h) => (
-                          <SelectItem key={h.id} value={h.id}>
-                            {h.label} — ${h.standardPrice}
-                          </SelectItem>
-                        ),
+          {/* 2 — Service */}
+          <FormSection
+            number={2}
+            title="Service"
+            description="Type, size, and add-ons. Pricing updates in the rail."
+            icon={<RiToolsLine className="w-4 h-4" />}
+          >
+            <Field label="Home size">
+              <Select value={homeSizeId} onValueChange={setHomeSizeId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOME_SIZE_RANGES.filter((h) => h.standardPrice > 0).map((h) => (
+                    <SelectItem key={h.id} value={h.id}>
+                      <div className="flex w-full items-center justify-between gap-6">
+                        <span>{h.label}</span>
+                        <span className="text-slate-500 text-xs tabular-nums">
+                          from ${h.standardPrice}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Service type
+              </Label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {SERVICE_TYPE_OPTIONS.map((opt) => {
+                  const active = serviceType === opt.id;
+                  const previewCents =
+                    getServicePrice(homeSizeId, opt.id, "B") * 100;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setServiceType(opt.id)}
+                      className={cn(
+                        "group relative text-left rounded-xl border p-3 transition-all",
+                        active
+                          ? "border-emerald-500 bg-emerald-50 shadow-[0_0_0_3px_rgba(16,163,74,0.12)]"
+                          : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50",
                       )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Service type *</Label>
-                  <Select
-                    value={serviceType}
-                    onValueChange={(v) => setServiceType(v as ServiceType)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SERVICE_TYPE_OPTIONS.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-slate-500 pt-0.5">
-                    Quoted at{" "}
-                    <span className="font-medium text-slate-700">
-                      {formatMoney(previewServicePriceCents)}
-                    </span>{" "}
-                    for the selected home size.
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <Label className="mb-2 block">Add-ons</Label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  {ADD_ON_LIST.map((a) => {
-                    const checked = addOns.includes(a.id);
-                    return (
-                      <label
-                        key={a.id}
+                    >
+                      {active && (
+                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center">
+                          <RiCheckLine className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                      <p
                         className={cn(
-                          "rounded-xl border p-3 text-sm cursor-pointer flex items-center justify-between transition-colors",
-                          checked
-                            ? "border-emerald-500 bg-emerald-50"
-                            : "border-slate-200 hover:border-emerald-300",
+                          "text-sm font-semibold leading-tight",
+                          active ? "text-emerald-900" : "text-slate-900",
                         )}
                       >
-                        <span>
-                          <span className="font-medium text-slate-900">
-                            {a.label}
-                          </span>
-                          <span className="text-xs text-slate-500 ml-2">
-                            +{formatMoney(a.priceCents)}
-                          </span>
-                        </span>
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(v) =>
-                            setAddOns(
-                              v
-                                ? [...addOns, a.id]
-                                : addOns.filter((x) => x !== a.id),
-                            )
-                          }
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Bedrooms</Label>
-                  <Input
-                    value={bedrooms}
-                    onChange={(e) => setBedrooms(e.target.value)}
-                    inputMode="numeric"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Bathrooms</Label>
-                  <Input
-                    value={bathrooms}
-                    onChange={(e) => setBathrooms(e.target.value)}
-                    inputMode="decimal"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Frequency</Label>
-                  <Select value={frequency} onValueChange={setFrequency}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="one-time">One-time</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </SectionCard>
-
-            {/* Schedule — uses the customer flow SchedulePicker */}
-            <SectionCard
-              title="Schedule"
-              description="Real-time availability — same calendar customers see."
-              icon={<RiCalendarLine className="w-4 h-4" />}
-              bodyClassName="p-0"
-            >
-              <div className="-mx-6 -mb-6">
-                <SchedulePicker
-                  selectedDate={selectedDate}
-                  selectedTime={selectedTime}
-                  onDateSelect={(d) => {
-                    setSelectedDate(d);
-                    setSelectedTime(undefined);
-                  }}
-                  onTimeSelect={(_d, slot) => setSelectedTime(slot)}
-                />
-              </div>
-              <div className="px-6 pb-6 pt-4 space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Access / parking notes (visible to cleaner)</Label>
-                  <Textarea
-                    value={accessNotes}
-                    onChange={(e) => setAccessNotes(e.target.value)}
-                    placeholder="Gate code, parking instructions, pet info…"
-                    rows={2}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Internal team notes (not shown to customer)</Label>
-                  <Textarea
-                    value={teamNotes}
-                    onChange={(e) => setTeamNotes(e.target.value)}
-                    rows={2}
-                  />
-                </div>
-              </div>
-            </SectionCard>
-
-            {/* Property details */}
-            <SectionCard
-              title="Property details"
-              description="Optional — helps the cleaning team prep the right kit."
-              icon={<RiHome4Line className="w-4 h-4" />}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Dwelling type</Label>
-                  <Select value={dwellingType} onValueChange={setDwellingType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select dwelling type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DWELLING_TYPES.map((d) => (
-                        <SelectItem key={d.value} value={d.value}>
-                          {d.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Pets</Label>
-                  <Select value={pets} onValueChange={setPets}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PETS_OPTIONS.map((p) => (
-                        <SelectItem key={p.value} value={p.value}>
-                          {p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Flooring types</Label>
-                <div className="flex flex-wrap gap-2">
-                  {FLOORING_OPTIONS.map((f) => {
-                    const checked = flooring.includes(f.value);
-                    return (
-                      <button
-                        key={f.value}
-                        type="button"
-                        onClick={() =>
-                          setFlooring(
-                            checked
-                              ? flooring.filter((x) => x !== f.value)
-                              : [...flooring, f.value],
-                          )
-                        }
+                        {opt.label}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {opt.subline}
+                      </p>
+                      <p
                         className={cn(
-                          "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                          "text-sm font-bold tabular-nums mt-2",
+                          active ? "text-emerald-700" : "text-slate-700",
+                        )}
+                      >
+                        {fmtMoney(previewCents)}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Add-ons
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {ADD_ON_LIST.map((a) => {
+                  const checked = addOns.includes(a.id);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() =>
+                        setAddOns(
+                          checked
+                            ? addOns.filter((x) => x !== a.id)
+                            : [...addOns, a.id],
+                        )
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                        checked
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "w-4 h-4 rounded-full inline-flex items-center justify-center border",
                           checked
                             ? "bg-emerald-600 border-emerald-600 text-white"
-                            : "bg-white border-slate-200 text-slate-700 hover:border-emerald-300",
+                            : "border-slate-300",
                         )}
                       >
-                        {f.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                        {checked && <RiCheckLine className="w-2.5 h-2.5" />}
+                      </span>
+                      <span className="font-medium">{a.label}</span>
+                      <span className="text-xs text-slate-500 tabular-nums">
+                        +{fmtMoney(a.priceCents)}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              <div className="space-y-1.5">
-                <Label>Parking notes</Label>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Bedrooms">
                 <Input
-                  value={parkingNotes}
-                  onChange={(e) => setParkingNotes(e.target.value)}
-                  placeholder="Driveway, street, garage code, etc."
+                  value={bedrooms}
+                  onChange={(e) => setBedrooms(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="3"
                 />
-              </div>
+              </Field>
+              <Field label="Bathrooms">
+                <Input
+                  value={bathrooms}
+                  onChange={(e) => setBathrooms(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="2.5"
+                />
+              </Field>
+              <Field label="Frequency">
+                <Select value={frequency} onValueChange={setFrequency}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="one-time">One-time</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
 
-              <div className="space-y-2">
-                <Label>Supplies provided by</Label>
-                <RadioGroup
-                  value={suppliesProvidedBy}
-                  onValueChange={(v) =>
-                    setSuppliesProvidedBy(v as "customer" | "novara")
-                  }
-                  className="grid grid-cols-2 gap-2"
-                >
-                  {[
-                    { id: "novara", label: "Novara" },
-                    { id: "customer", label: "Customer" },
-                  ].map((opt) => (
-                    <label
-                      key={opt.id}
-                      className={cn(
-                        "flex items-center gap-2 p-3 rounded-xl border cursor-pointer text-sm transition-colors",
-                        suppliesProvidedBy === opt.id
-                          ? "border-emerald-500 bg-emerald-50"
-                          : "border-slate-200 hover:border-emerald-300",
-                      )}
+            {/* Property details — collapsible */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40">
+              <button
+                type="button"
+                onClick={() => setPropertyOpen((v) => !v)}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 rounded-xl"
+              >
+                <div className="flex items-center gap-2">
+                  <RiHome4Line className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-700">
+                    Property details — dwelling, pets, flooring, supplies
+                  </span>
+                  <span className="text-[10px] text-slate-500 bg-white border border-slate-200 rounded-full px-1.5 py-0.5">
+                    optional
+                  </span>
+                </div>
+                <RiArrowRightLine
+                  className={cn(
+                    "w-4 h-4 text-slate-400 transition-transform",
+                    propertyOpen && "rotate-90",
+                  )}
+                />
+              </button>
+              {propertyOpen && (
+                <div className="px-4 pb-4 pt-1 space-y-4 border-t border-slate-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="Dwelling type">
+                      <Select value={dwellingType} onValueChange={setDwellingType}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DWELLING_TYPES.map((d) => (
+                            <SelectItem key={d.value} value={d.value}>
+                              {d.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Pets">
+                      <Select value={pets} onValueChange={setPets}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PETS_OPTIONS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Flooring
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {FLOORING_OPTIONS.map((f) => {
+                        const checked = flooring.includes(f.value);
+                        return (
+                          <button
+                            key={f.value}
+                            type="button"
+                            onClick={() =>
+                              setFlooring(
+                                checked
+                                  ? flooring.filter((x) => x !== f.value)
+                                  : [...flooring, f.value],
+                              )
+                            }
+                            className={cn(
+                              "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                              checked
+                                ? "bg-emerald-600 border-emerald-600 text-white"
+                                : "bg-white border-slate-200 text-slate-700 hover:border-emerald-300",
+                            )}
+                          >
+                            {f.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <Field label="Parking notes">
+                    <Input
+                      value={parkingNotes}
+                      onChange={(e) => setParkingNotes(e.target.value)}
+                      placeholder="Driveway, street, garage code…"
+                    />
+                  </Field>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Supplies provided by
+                    </Label>
+                    <RadioGroup
+                      value={suppliesProvidedBy}
+                      onValueChange={(v) =>
+                        setSuppliesProvidedBy(v as "customer" | "novara")
+                      }
+                      className="grid grid-cols-2 gap-2"
                     >
-                      <RadioGroupItem value={opt.id} />
-                      <span className="font-medium text-slate-900">{opt.label}</span>
-                    </label>
-                  ))}
-                </RadioGroup>
-              </div>
+                      {[
+                        { id: "novara", label: "Novara" },
+                        { id: "customer", label: "Customer" },
+                      ].map((opt) => (
+                        <label
+                          key={opt.id}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors",
+                            suppliesProvidedBy === opt.id
+                              ? "border-emerald-500 bg-emerald-50"
+                              : "border-slate-200 bg-white hover:border-emerald-300",
+                          )}
+                        >
+                          <RadioGroupItem value={opt.id} />
+                          <span className="font-medium text-slate-900">
+                            {opt.label}
+                          </span>
+                        </label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                  {serviceType === "combo" && (
+                    <Field
+                      label="Combo follow-up date"
+                      hint="Standard Clean follow-up — typically 1–14 days after the Deep Clean."
+                    >
+                      <Input
+                        type="date"
+                        value={comboFollowUpDate}
+                        onChange={(e) => setComboFollowUpDate(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                </div>
+              )}
+            </div>
+          </FormSection>
 
-              {serviceType === "combo" && (
-                <div className="space-y-1.5">
-                  <Label>Combo follow-up date</Label>
+          {/* 3 — Schedule (custom emerald-themed inline picker) */}
+          <FormSection
+            number={3}
+            title="Schedule"
+            description="Pick a date and time slot — same availability customers see."
+            icon={<RiCalendarLine className="w-4 h-4" />}
+          >
+            <InlineSchedulePicker
+              selectedDate={selectedDate}
+              selectedTime={selectedTime}
+              onDateSelect={(d) => {
+                setSelectedDate(d);
+                setSelectedTime(undefined);
+              }}
+              onTimeSelect={(slot) => setSelectedTime(slot)}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <Field
+                label="Access / parking notes"
+                hint="Shown to the cleaner."
+              >
+                <Textarea
+                  value={accessNotes}
+                  onChange={(e) => setAccessNotes(e.target.value)}
+                  placeholder="Gate code, parking, pet info…"
+                  rows={3}
+                />
+              </Field>
+              <Field label="Internal team notes" hint="Hidden from customer.">
+                <Textarea
+                  value={teamNotes}
+                  onChange={(e) => setTeamNotes(e.target.value)}
+                  rows={3}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* 4 — Payment */}
+          <FormSection
+            number={4}
+            title="Payment"
+            description="Invoice posture, promo, and comm preferences."
+            icon={<RiMoneyDollarCircleLine className="w-4 h-4" />}
+          >
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Invoice mode
+              </Label>
+              <RadioGroup
+                value={invoiceMode}
+                onValueChange={(v) => setInvoiceMode(v as InvoiceMode)}
+                className="grid grid-cols-1 md:grid-cols-3 gap-2"
+              >
+                {INVOICE_MODES.map((m) => (
+                  <label
+                    key={m.id}
+                    className={cn(
+                      "flex items-start gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors",
+                      invoiceMode === m.id
+                        ? "border-emerald-500 bg-emerald-50"
+                        : "border-slate-200 bg-white hover:border-emerald-300",
+                    )}
+                  >
+                    <RadioGroupItem value={m.id} className="mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 leading-tight">
+                        {m.label}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {m.desc}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            {invoiceMode === "deposit_plus_remaining" && (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Deposit % of total">
                   <Input
-                    type="date"
-                    value={comboFollowUpDate}
-                    onChange={(e) => setComboFollowUpDate(e.target.value)}
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={depositPercent}
+                    onChange={(e) => setDepositPercent(e.target.value)}
                   />
-                  <p className="text-[11px] text-slate-500">
-                    Standard Clean follow-up — typically 1–14 days after the
-                    Deep Clean.
-                  </p>
-                </div>
-              )}
-            </SectionCard>
-
-            {/* Payment */}
-            <SectionCard
-              title="Payment"
-              icon={<RiMoneyDollarCircleLine className="w-4 h-4" />}
-            >
-              <div>
-                <Label>Invoice mode</Label>
-                <RadioGroup
-                  value={invoiceMode}
-                  onValueChange={(v) => setInvoiceMode(v as InvoiceMode)}
-                  className="space-y-2 mt-2"
-                >
-                  {INVOICE_MODES.map((m) => (
-                    <label
-                      key={m.id}
-                      className={cn(
-                        "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors",
-                        invoiceMode === m.id
-                          ? "border-emerald-500 bg-emerald-50"
-                          : "border-slate-200 hover:border-emerald-300",
-                      )}
-                    >
-                      <RadioGroupItem value={m.id} className="mt-0.5" />
-                      <div>
-                        <p className="font-medium text-sm text-slate-900">
-                          {m.label}
-                        </p>
-                        <p className="text-xs text-slate-500">{m.desc}</p>
-                      </div>
-                    </label>
-                  ))}
-                </RadioGroup>
+                </Field>
+                <Field label="Override total ($)">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={overrideTotal}
+                    onChange={(e) => setOverrideTotal(e.target.value)}
+                    placeholder={(pricing.computedCents / 100).toFixed(2)}
+                  />
+                </Field>
               </div>
+            )}
 
-              {invoiceMode === "deposit_plus_remaining" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Deposit % of total</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={depositPercent}
-                      onChange={(e) => setDepositPercent(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Override total ($)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={overrideTotal}
-                      onChange={(e) => setOverrideTotal(e.target.value)}
-                      placeholder={(pricing.computedCents / 100).toFixed(2)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field
+                label={
+                  <span className="flex items-center gap-1.5">
                     <RiPriceTag3Line className="w-3.5 h-3.5 text-emerald-600" />
                     Promo code
-                  </Label>
-                  <Input
-                    value={promoCode}
-                    onChange={(e) =>
-                      setPromoCode(e.target.value.trim().toLowerCase())
-                    }
-                    placeholder="e.g. welcome10"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Booker / VA name</Label>
-                  <Input
-                    value={csrName}
-                    onChange={(e) => setCsrName(e.target.value)}
-                    placeholder="e.g. Anna VA"
-                  />
-                </div>
-              </div>
+                  </span>
+                }
+              >
+                <Input
+                  value={promoCode}
+                  onChange={(e) =>
+                    setPromoCode(e.target.value.trim().toLowerCase())
+                  }
+                  placeholder="welcome10"
+                />
+              </Field>
+              <Field label="Booker / VA name">
+                <Input
+                  value={csrName}
+                  onChange={(e) => setCsrName(e.target.value)}
+                  placeholder="Anna VA"
+                />
+              </Field>
+            </div>
 
-              <div className="space-y-2 pt-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={sendConfirmationSms}
-                    onCheckedChange={(v) => setSendConfirmationSms(v === true)}
-                  />
-                  Send confirmation SMS via GHL
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={sendChecklistEmail}
-                    onCheckedChange={(v) => setSendChecklistEmail(v === true)}
-                  />
-                  Send Standard-Clean checklist email
-                  {serviceType !== "standard" && (
-                    <span className="text-slate-400 text-xs">
-                      (only fires for Standard)
-                    </span>
-                  )}
-                </label>
-              </div>
-            </SectionCard>
-          </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Notifications
+              </p>
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <Checkbox
+                  checked={sendConfirmationSms}
+                  onCheckedChange={(v) => setSendConfirmationSms(v === true)}
+                />
+                Send confirmation SMS via GHL
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <Checkbox
+                  checked={sendChecklistEmail}
+                  onCheckedChange={(v) => setSendChecklistEmail(v === true)}
+                />
+                Send Standard-Clean checklist email
+                {serviceType !== "standard" && (
+                  <span className="text-slate-400 text-xs">
+                    (only fires for Standard)
+                  </span>
+                )}
+              </label>
+            </div>
+          </FormSection>
+        </div>
 
-          {/* RIGHT: live quote */}
-          <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-6 space-y-4">
-              <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 px-5 py-4 text-white">
-                  <div className="flex items-center gap-2">
-                    <RiSparklingLine className="w-4 h-4" />
-                    <p className="font-jakarta font-semibold text-sm tracking-wide">
-                      Live quote
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-white/85 mt-0.5">
-                    Updates as you change service options.
+        {/* RIGHT — sticky quote rail */}
+        <aside className="xl:col-span-4">
+          <div className="xl:sticky xl:top-6 space-y-4">
+            <Card className="border border-slate-200 rounded-2xl overflow-hidden shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)]">
+              <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 py-5 text-white">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -translate-y-8 translate-x-8" />
+                <div className="relative flex items-center gap-2">
+                  <RiSparklingLine className="w-4 h-4" />
+                  <p className="font-jakarta font-bold text-sm tracking-tight">
+                    Live quote
                   </p>
                 </div>
-                <CardContent className="space-y-3 pt-5">
-                  <Row
-                    label={`Base — ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label || homeSizeId}`}
-                    value={formatMoney(pricing.baseCents)}
+                <p className="relative text-[11px] text-white/85 mt-0.5">
+                  Updates as you adjust the booking.
+                </p>
+              </div>
+              <CardContent className="space-y-2.5 pt-5 pb-5">
+                <SummaryRow
+                  label={`${SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)?.label} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
+                  value={fmtMoney(pricing.serviceCents)}
+                />
+                {pricing.addOnsCents > 0 && (
+                  <SummaryRow
+                    label={`Add-ons (${addOns.length})`}
+                    value={`+${fmtMoney(pricing.addOnsCents)}`}
                   />
-                  <Row
-                    label={
-                      SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)
-                        ?.label || serviceType
-                    }
-                    value={formatMoney(pricing.serviceCents)}
-                  />
-                  {pricing.addOnsCents > 0 && (
-                    <Row
-                      label="Add-ons"
-                      value={`+${formatMoney(pricing.addOnsCents)}`}
-                    />
-                  )}
-                  {pricing.newCustomerDiscountCents > 0 && (
-                    <Row
-                      label="New-customer 50% promo"
-                      value={`−${formatMoney(pricing.newCustomerDiscountCents)}`}
-                      tone="positive"
-                    />
-                  )}
-                  <Separator />
-                  <Row
-                    label="Total"
-                    value={formatMoney(pricing.totalCents)}
-                    bold
-                  />
-                  <Row
-                    label="Deposit"
-                    value={formatMoney(pricing.depositCents)}
-                  />
-                  <Row
-                    label="Remaining"
-                    value={formatMoney(pricing.remainingCents)}
-                  />
-                  {walletCreditCents > 0 && (
-                    <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs text-emerald-800 flex items-center gap-1.5">
-                      <RiWalletLine className="w-3.5 h-3.5" />
-                      {formatMoney(walletCreditCents)} wallet credit will be
-                      applied automatically.
-                    </div>
-                  )}
+                )}
+                <Separator className="my-1.5" />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Total
+                  </span>
+                  <span className="font-jakarta text-2xl font-bold text-slate-900 tabular-nums">
+                    {fmtMoney(pricing.totalCents)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Deposit
+                    </p>
+                    <p className="text-sm font-bold text-slate-900 tabular-nums">
+                      {fmtMoney(pricing.depositCents)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Day-of
+                    </p>
+                    <p className="text-sm font-bold text-slate-900 tabular-nums">
+                      {fmtMoney(pricing.remainingCents)}
+                    </p>
+                  </div>
+                </div>
 
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={!canSubmit || submitting}
-                    variant="default"
-                    className="w-full mt-2 h-11"
-                  >
-                    {submitting ? (
-                      <>
-                        <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                        Booking…
-                      </>
-                    ) : (
-                      <>
-                        Create booking
-                        <RiArrowRightLine className="w-4 h-4 ml-2" />
-                      </>
-                    )}
-                  </Button>
+                {walletCreditCents > 0 && (
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800 flex items-center gap-1.5 mt-2">
+                    <RiWalletLine className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {fmtMoney(walletCreditCents)} wallet credit applied
+                      automatically at checkout.
+                    </span>
+                  </div>
+                )}
 
-                  {!canSubmit && requirements.length > 0 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
-                      <div className="flex items-center gap-1.5 mb-1 font-medium">
-                        <RiInformationLine className="w-3.5 h-3.5" />
-                        Still needed
-                      </div>
-                      <ul className="list-disc list-inside space-y-0.5">
-                        {requirements.map((r) => (
-                          <li key={r}>{r}</li>
-                        ))}
-                      </ul>
-                    </div>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!canSubmit || submitting}
+                  variant="default"
+                  size="lg"
+                  className="w-full mt-3"
+                >
+                  {submitting ? (
+                    <>
+                      <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                      Creating booking…
+                    </>
+                  ) : (
+                    <>
+                      Create booking
+                      <RiArrowRightLine className="w-4 h-4 ml-2" />
+                    </>
                   )}
-                </CardContent>
-              </Card>
+                </Button>
+
+                {!canSubmit && requirements.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900 mt-1">
+                    <div className="flex items-center gap-1.5 mb-1 font-semibold">
+                      <RiInformationLine className="w-3.5 h-3.5" />
+                      Still needed
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {requirements.map((r) => (
+                        <li key={r}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border border-slate-200 rounded-2xl shadow-sm">
+              <CardContent className="p-4 text-[11px] text-slate-500 space-y-1.5">
+                <p className="flex items-center gap-1.5">
+                  <RiInformationLine className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="font-medium text-slate-700">
+                    Internal-only
+                  </span>
+                </p>
+                <p className="leading-relaxed">
+                  This form bypasses the customer-facing checkout. Stripe
+                  invoices are sent based on the invoice mode you select above.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// ─── Inline schedule picker (emerald-themed, admin-compact) ────────────
+
+function InlineSchedulePicker({
+  selectedDate,
+  selectedTime,
+  onDateSelect,
+  onTimeSelect,
+}: {
+  selectedDate: Date | undefined;
+  selectedTime: string | undefined;
+  onDateSelect: (d: Date) => void;
+  onTimeSelect: (slot: string) => void;
+}) {
+  const minDate = addDays(new Date(), 3);
+  const endDate = addDays(new Date(), 60);
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(minDate));
+  const { availability, loading } = useAvailability(minDate, endDate);
+
+  const availabilityByDate = useMemo(() => {
+    const map: Record<string, Record<string, { available: boolean; capacity: number; booked: number }>> = {};
+    availability.forEach((slot) => {
+      if (!map[slot.service_date]) map[slot.service_date] = {};
+      map[slot.service_date][slot.time_slot] = {
+        available: slot.is_available ?? slot.current_bookings < slot.max_capacity,
+        capacity: slot.max_capacity,
+        booked: slot.current_bookings,
+      };
+    });
+    return map;
+  }, [availability]);
+
+  const selectedDateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
+  const slotsForDate = selectedDateStr ? availabilityByDate[selectedDateStr] || {} : {};
+
+  const isDateDisabled = (d: Date) =>
+    isWeekend(d) || isBefore(startOfDay(d), startOfDay(minDate));
+
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const pad = getDay(monthStart);
+    return [...Array(pad).fill(null), ...days];
+  }, [currentMonth]);
+
+  const periods = [
+    { id: "morning", label: "Morning", icon: RiSunLine, color: "text-amber-500" },
+    { id: "afternoon", label: "Afternoon", icon: RiSunFoggyLine, color: "text-orange-500" },
+    { id: "evening", label: "Evening", icon: RiMoonLine, color: "text-indigo-500" },
+  ] as const;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+        {/* Calendar */}
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+              Pick a date
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  const prev = addMonths(currentMonth, -1);
+                  if (!isBefore(endOfMonth(prev), minDate)) setCurrentMonth(prev);
+                }}
+                disabled={isBefore(endOfMonth(addMonths(currentMonth, -1)), minDate)}
+              >
+                <RiArrowLeftSLine className="h-4 w-4" />
+              </Button>
+              <span className="text-xs font-semibold text-slate-700 min-w-[100px] text-center">
+                {format(currentMonth, "MMMM yyyy")}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  const next = addMonths(currentMonth, 1);
+                  if (isBefore(startOfMonth(next), endDate)) setCurrentMonth(next);
+                }}
+                disabled={!isBefore(startOfMonth(addMonths(currentMonth, 1)), endDate)}
+              >
+                <RiArrowRightSLine className="h-4 w-4" />
+              </Button>
             </div>
           </div>
+          <div className="grid grid-cols-7 gap-0.5 mb-1">
+            {WEEKDAYS.map((d, i) => (
+              <div
+                key={i}
+                className="text-center text-[10px] font-bold text-slate-400 py-1"
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((day, idx) => {
+              if (!day) return <div key={`pad-${idx}`} className="aspect-square" />;
+              const disabled = isDateDisabled(day);
+              const isSel = selectedDate && isSameDay(day, selectedDate);
+              const isToday = isSameDay(day, new Date());
+              const inMonth = isSameMonth(day, currentMonth);
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => !disabled && onDateSelect(day)}
+                  disabled={disabled}
+                  className={cn(
+                    "aspect-square rounded-lg text-xs font-medium transition-all relative flex items-center justify-center",
+                    disabled && "text-slate-300 cursor-not-allowed",
+                    !disabled && !isSel && "text-slate-700 hover:bg-emerald-50 hover:text-emerald-900",
+                    isSel && "bg-emerald-600 text-white shadow-[0_2px_8px_-2px_rgba(16,163,74,0.5)]",
+                    !inMonth && !isSel && "text-slate-300",
+                    isToday && !isSel && "ring-1 ring-emerald-300",
+                  )}
+                >
+                  {format(day, "d")}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2 pl-1">
+            Weekends greyed out · 3-day lead required
+          </p>
+        </div>
+
+        {/* Time slots */}
+        <div className="p-4">
+          <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-3">
+            {selectedDate
+              ? `Time on ${format(selectedDate, "EEE, MMM d")}`
+              : "Pick a time"}
+          </p>
+          {!selectedDate ? (
+            <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+              <RiTimeLine className="w-8 h-8 mb-2 opacity-50" />
+              <p className="text-xs">Select a date first</p>
+            </div>
+          ) : loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-1.5">
+                  <Skeleton className="h-3 w-20" />
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[1, 2, 3, 4].map((j) => (
+                      <Skeleton key={j} className="h-8 rounded-md" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {periods.map(({ id, label, icon: Icon, color }) => {
+                const slots = TIME_SLOTS.filter((s) => s.period === id);
+                return (
+                  <div key={id} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      <Icon className={cn("w-3.5 h-3.5", color)} />
+                      {label}
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {slots.map((slot) => {
+                        const av = slotsForDate[slot.id];
+                        const available =
+                          av === undefined ? true : av.available;
+                        const isSel = selectedTime === slot.id;
+                        return (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            onClick={() => available && onTimeSelect(slot.id)}
+                            disabled={!available}
+                            className={cn(
+                              "h-8 rounded-md text-xs font-semibold transition-all tabular-nums",
+                              isSel
+                                ? "bg-emerald-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
+                                : available
+                                  ? "bg-slate-50 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200"
+                                  : "bg-slate-100 text-slate-400 line-through cursor-not-allowed border border-slate-100",
+                            )}
+                          >
+                            {slot.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Helpers / shared bits ────────────────────────────────────────────
+// ─── Form section + helpers ────────────────────────────────────────────
 
-function SectionCard({
+function FormSection({
+  number,
   title,
   description,
   icon,
   children,
-  bodyClassName,
 }: {
+  number: number;
   title: string;
   description?: string;
   icon: React.ReactNode;
   children: React.ReactNode;
-  bodyClassName?: string;
 }) {
   return (
-    <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+    <Card className="border border-slate-200 rounded-2xl shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 inline-flex items-center justify-center">
-            {icon}
+        <div className="flex items-start gap-3">
+          <span className="relative shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white inline-flex items-center justify-center font-jakarta font-bold text-sm shadow-[0_2px_8px_-2px_rgba(16,163,74,0.45)]">
+            {number}
           </span>
-          <CardTitle className="font-jakarta text-base font-semibold text-slate-900">
-            {title}
-          </CardTitle>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-emerald-700">{icon}</span>
+              <CardTitle className="font-jakarta text-base font-bold text-slate-900 tracking-tight">
+                {title}
+              </CardTitle>
+            </div>
+            {description && (
+              <CardDescription className="text-xs text-slate-500 mt-0.5">
+                {description}
+              </CardDescription>
+            )}
+          </div>
         </div>
-        {description && (
-          <CardDescription className="pl-[2.375rem] text-xs text-slate-500">
-            {description}
-          </CardDescription>
-        )}
       </CardHeader>
-      <CardContent className={cn("space-y-3", bodyClassName)}>
-        {children}
-      </CardContent>
+      <CardContent className="space-y-4 pt-1">{children}</CardContent>
     </Card>
   );
 }
 
-function Row({
+function Field({
+  label,
+  children,
+  required = false,
+  hint,
+  rightHint,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+  required?: boolean;
+  hint?: string;
+  rightHint?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-semibold text-slate-700">
+          {label}
+          {required && <span className="text-emerald-600 ml-0.5">*</span>}
+        </Label>
+        {rightHint && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">
+            <RiWalletLine className="w-3 h-3" />
+            {rightHint}
+          </span>
+        )}
+      </div>
+      {children}
+      {hint && <p className="text-[11px] text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+function SummaryRow({
   label,
   value,
   bold = false,
-  mono = false,
-  tone,
 }: {
   label: string;
   value: string;
   bold?: boolean;
-  mono?: boolean;
-  tone?: "positive";
 }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-500 truncate max-w-[60%]">{label}</span>
       <span
         className={cn(
-          bold && "font-semibold text-base text-slate-900",
-          mono && "font-mono text-xs",
-          tone === "positive" && "text-emerald-700 font-medium",
+          "tabular-nums",
+          bold && "font-semibold text-slate-900",
         )}
       >
         {value}
@@ -1334,12 +1728,12 @@ function InvoiceCard({
     navigator.clipboard.writeText(s).then(() => toast.success("Copied"));
   };
   return (
-    <div className="rounded-xl border border-slate-200 p-4 text-sm space-y-2">
+    <div className="rounded-xl border border-slate-200 p-4 text-sm space-y-2 bg-white">
       <div className="flex items-center justify-between">
         <p className="font-semibold text-slate-900">{title}</p>
-        <Badge variant="secondary">{formatMoney(amount)}</Badge>
+        <Badge variant="secondary">{fmtMoney(amount)}</Badge>
       </div>
-      <p className="text-xs text-slate-500 font-mono">{invoiceId}</p>
+      <p className="text-xs text-slate-500 font-mono break-all">{invoiceId}</p>
       {url && (
         <div className="flex gap-2">
           <Button
@@ -1352,7 +1746,7 @@ function InvoiceCard({
           </Button>
           <Button
             size="sm"
-            className="flex-1"
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={() => window.open(url, "_blank", "noopener")}
           >
             Open
