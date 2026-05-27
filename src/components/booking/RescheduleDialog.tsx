@@ -33,6 +33,13 @@ interface RescheduleDialogProps {
   onOpenChange: (open: boolean) => void;
   booking: Booking;
   onSuccess: () => void;
+  /**
+   * Caller context — defaults to "customer_portal". The admin
+   * /admin/bookings page passes "admin" so the audit trail and any
+   * differential downstream behavior (skip late-fee, skip customer
+   * confirmation toast, etc.) can branch on it.
+   */
+  source?: "customer_portal" | "admin";
 }
 
 export function RescheduleDialog({
@@ -40,6 +47,7 @@ export function RescheduleDialog({
   onOpenChange,
   booking,
   onSuccess,
+  source = "customer_portal",
 }: RescheduleDialogProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   // selectedTime carries the slot id ("9:00 AM - 10:00 AM" shape), which
@@ -71,7 +79,7 @@ export function RescheduleDialog({
           newTimeSlot: selectedTime,
           oldDate: booking.service_date,
           oldTimeSlot: booking.time_slot,
-          source: "customer_portal",
+          source,
         },
       });
 

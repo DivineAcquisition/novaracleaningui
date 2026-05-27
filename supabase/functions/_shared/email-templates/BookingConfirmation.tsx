@@ -26,6 +26,20 @@ interface BookingConfirmationProps {
   newCustomerDiscount?: number;
   membershipDiscount?: number;
   fullPaymentDiscount?: number;
+  /**
+   * Public URL to the service-specific checklist page so the customer
+   * can see exactly what's included in their cleaning before the
+   * visit. Populated by post-confirm-booking helper based on
+   * serviceType ('standard' → /checklist/standard-clean, etc).
+   */
+  checklistLink?: string;
+  /**
+   * Hosted invoice URL — when an invoice is attached to the booking
+   * (VA-flow deposit_plus_remaining or full_now), the email surfaces
+   * a "Pay invoice" CTA. Customers paying via the deposit funnel get
+   * an empty value here and the CTA is hidden.
+   */
+  hostedInvoiceUrl?: string;
 }
 
 const formatTimeSlot = (slot: string) => {
@@ -175,6 +189,33 @@ export const BookingConfirmation = (props: BookingConfirmationProps) => {
         </ul>
       </Highlight>
 
+      {/* Checklist callout — links to the public service checklist
+          so the customer can see exactly what's included before the
+          visit. The link is populated server-side based on
+          serviceType (standard / deep / move-in-out / combo). */}
+      {props.checklistLink && (
+        <Section style={checklistBox}>
+          <Text style={checklistTitle}>✨ See what's included</Text>
+          <Text style={checklistText}>
+            Every line item your cleaner will tackle, broken down by room.
+            Open the checklist for your {formatServiceType(props.serviceType || "")}:
+          </Text>
+          <Section style={{ textAlign: "center" as const, marginTop: "12px" }}>
+            <Button href={props.checklistLink}>View Cleaning Checklist</Button>
+          </Section>
+        </Section>
+      )}
+
+      {/* Hosted invoice CTA — only shown when an invoice is attached
+          to the booking (VA-channel deposit_plus_remaining / full_now
+          flows). Customers paying via the in-funnel deposit don't see
+          this since their card was already charged. */}
+      {props.hostedInvoiceUrl && (
+        <Section style={buttonContainer}>
+          <Button href={props.hostedInvoiceUrl}>Pay Your Invoice</Button>
+        </Section>
+      )}
+
       <Section style={buttonContainer}>
         <Button href={BRAND.urls.account}>View Booking Details</Button>
       </Section>
@@ -283,6 +324,28 @@ const totalSavingsAmount = {
 const buttonContainer = {
   textAlign: 'center' as const,
   margin: `${BRAND.spacing.xl} 0`,
+};
+
+const checklistBox = {
+  backgroundColor: '#ecfdf5', // emerald-50
+  padding: BRAND.spacing.lg,
+  borderRadius: BRAND.borderRadius.lg,
+  margin: `${BRAND.spacing.lg} 0`,
+  border: `1px solid #6ee7b7`, // emerald-300
+};
+
+const checklistTitle = {
+  margin: '0 0 8px 0',
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#047857', // emerald-700
+};
+
+const checklistText = {
+  margin: '0',
+  fontSize: '14px',
+  lineHeight: '1.5',
+  color: BRAND.colors.gray[700],
 };
 
 const link = {

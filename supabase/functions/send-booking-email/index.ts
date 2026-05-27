@@ -69,6 +69,13 @@ interface BookingEmailRequest {
     membershipPlan?: string;
     rescheduleLink?: string;
     cancellationLink?: string;
+    /**
+     * Public link to the service-specific checklist
+     * (https://try.novaracleaning.com/checklist/<slug>). Surfaced in
+     * the confirmation email so customers can see the full list of
+     * line items their cleaner will execute before the visit.
+     */
+    checklistLink?: string;
   };
   bookingData?: any;
 }
@@ -150,6 +157,10 @@ function populateMigmaTemplate(html: string, data: BookingEmailRequest['data']):
     '{{contact.referral_link}}': data.referralLink || '#',
     '{{appointment.reschedule_link}}': data.rescheduleLink || '#',
     '{{appointment.cancellation_link}}': data.cancellationLink || '#',
+    // Public service checklist (e.g. /checklist/standard-clean) so the
+    // Migma template can render a "See what's included" CTA without
+    // hard-coding service-type → URL logic in the HTML editor.
+    '{{appointment.checklist_link}}': data.checklistLink || '#',
     '{{unsubscribe_link}}': '#',
   };
 

@@ -47,6 +47,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
+import {
+  runPostConfirmFanout,
+  checklistLinkForServiceType,
+} from "../_shared/post-confirm-booking.ts";
+import { getEstimatedHours } from "../_shared/payout-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -342,6 +347,11 @@ interface VaBookingBody {
   city?: string;
   state?: string;
   zipCode?: string;
+  // Optional geocoded coordinates from the admin AddressAutocomplete.
+  // We mirror them onto the customers row so the Ops Map can plot the
+  // visit without a second geocode.
+  addressLat?: number;
+  addressLng?: number;
   homeSizeId: string;
   serviceType: string;
   addOns?: string[];
@@ -352,6 +362,7 @@ interface VaBookingBody {
   bathrooms?: number;
   dwellingType?: string;
   pets?: string;
+  flooringType?: string;
   sqft?: number;
   priceOverride?: { total: number; deposit?: number };
   invoiceMode?: "deposit_plus_remaining" | "full_now" | "none";
@@ -363,6 +374,34 @@ interface VaBookingBody {
   accessNotes?: string;
   sendConfirmationSms?: boolean;
   sendChecklistEmail?: boolean;
+  /**
+   * Property details bag forwarded by the admin Internal Booking
+   * form's collapsible section. We persist these on the booking row
+   * so dispatch + cleaner job offers see them immediately, instead of
+   * leaving them blank until the customer revisits /book/details.
+   *
+   * Field-name conventions mirror what the form actually emits:
+   *   • flooring (string)         → bookings.flooring_type
+   *   • comboFollowUpDate (date)  → bookings.second_visit_date
+   *   • parkingNotes (string)     → appended to bookings.access_notes
+   *   • suppliesProvidedBy (string) → appended to bookings.team_notes
+   */
+  propertyDetails?: {
+    bedrooms?: number;
+    bathrooms?: number;
+    sqft?: number;
+    dwellingType?: string;
+    pets?: string;
+    flooringType?: string;
+    flooring?: string | string[];
+    parkingNotes?: string;
+    suppliesProvidedBy?: string;
+    accessNotes?: string;
+    secondVisitDate?: string | null;
+    comboFollowUpDate?: string | null;
+  };
+  /** Optional promo code from the admin form. Currently informational only on the VA path. */
+  promoCode?: string;
 }
 
 serve(async (req) => {
@@ -414,7 +453,10 @@ serve(async (req) => {
         : Math.round(totalCents * depositPercent));
     const remainingCents = Math.max(0, totalCents - depositCents);
 
-    // 2. Upsert the customer row (no Stripe yet)
+    // 2. Upsert the customer row (no Stripe yet). We mirror lat/lng
+    //    from the admin AddressAutocomplete so the Ops Map can plot
+    //    the customer immediately, instead of waiting on the next
+    //    geocode-address pass.
     const { data: customerRow, error: custErr } = await supabase
       .from("customers")
       .upsert(
@@ -427,6 +469,8 @@ serve(async (req) => {
           city: body.city || null,
           state: body.state || null,
           zip: body.zipCode || null,
+          lat: body.addressLat ?? null,
+          lng: body.addressLng ?? null,
         },
         { onConflict: "email" },
       )
@@ -439,9 +483,51 @@ serve(async (req) => {
     const customerId = customerRow.id as string;
 
     // 3. Insert the booking row
+    //
+    // VA bookings flow through the same downstream helper as customer
+    // bookings (see runPostConfirmFanout below). For that to work we
+    // need to stamp the same financial + ops fields create-payment-
+    // intent stamps on the customer path: cleaner_payout_cents,
+    // platform_fee_cents, payout_status, estimated_duration_hours,
+    // offer_type. Otherwise auto-dispatch + payroll see NULL and skip
+    // the row.
     const bookingStatus = invoiceMode === "none"
       ? "pending_payment"
       : "confirmed";
+
+    // Cleaner pay = revenue × 40% (Foundation default at booking time
+    // — dispatch-job recomputes when offering using the assigned
+    // cleaner's actual tier %).
+    const DEFAULT_BOOKING_PAY_PCT = 40;
+    const cleanerPayoutCents = Math.floor(
+      (totalCents * DEFAULT_BOOKING_PAY_PCT) / 100,
+    );
+    const platformFeeCents = Math.max(0, totalCents - cleanerPayoutCents);
+
+    // Property details bag — accept either flat fields on the body or
+    // a nested propertyDetails object. The admin Internal Booking form
+    // sends the nested shape; older callers send flat.
+    const pd = body.propertyDetails || {};
+    const bedrooms = pd.bedrooms ?? body.bedrooms ?? null;
+    const bathrooms = pd.bathrooms ?? body.bathrooms ?? null;
+    const sqft = pd.sqft ?? body.sqft ?? null;
+    const dwellingType = pd.dwellingType || body.dwellingType || null;
+    const pets = pd.pets || body.pets || null;
+    const flooringRaw = pd.flooringType ?? pd.flooring ?? body.flooringType;
+    const flooringType = Array.isArray(flooringRaw)
+      ? flooringRaw.join(", ")
+      : (flooringRaw || null);
+    const accessNotesParts: string[] = [];
+    if (pd.accessNotes || body.accessNotes) accessNotesParts.push(String(pd.accessNotes || body.accessNotes));
+    if (pd.parkingNotes) accessNotesParts.push(`Parking: ${pd.parkingNotes}`);
+    const accessNotes = accessNotesParts.length ? accessNotesParts.join(" · ") : null;
+    const teamNotesParts: string[] = [];
+    if (body.teamNotes || body.notes) teamNotesParts.push(String(body.teamNotes || body.notes));
+    if (pd.suppliesProvidedBy) teamNotesParts.push(`Supplies: ${pd.suppliesProvidedBy}`);
+    if (body.promoCode) teamNotesParts.push(`Promo code: ${body.promoCode.toUpperCase()}`);
+    const teamNotes = teamNotesParts.length ? teamNotesParts.join(" · ") : null;
+    const secondVisitDate = pd.secondVisitDate || pd.comboFollowUpDate || null;
+
     const { data: booking, error: bookErr } = await supabase
       .from("bookings")
       .insert({
@@ -456,26 +542,38 @@ serve(async (req) => {
         zip_code: body.zipCode || null,
         home_size_id: body.homeSizeId,
         service_type: body.serviceType,
+        offer_type: body.serviceType,
         add_ons: body.addOns || [],
         frequency: body.frequency || "one-time",
         service_date: body.serviceDate,
         time_slot: body.timeSlot,
         arrival_window: body.timeSlot,
-        bedrooms: body.bedrooms ?? null,
-        bathrooms: body.bathrooms ?? null,
-        dwelling_type: body.dwellingType || null,
-        pets: body.pets || null,
-        sqft: body.sqft ?? null,
+        bedrooms,
+        bathrooms,
+        dwelling_type: dwellingType,
+        pets,
+        flooring_type: flooringType,
+        sqft,
+        second_visit_date: secondVisitDate,
         base_price_cents: calc.serviceAdj,
         deposit_cents: depositCents,
         total_estimate_cents: totalCents,
+        platform_fee_cents: platformFeeCents,
+        cleaner_payout_cents: cleanerPayoutCents,
+        payout_status: "pending",
         payment_option: invoiceMode === "full_now" ? "full" : "deposit",
+        estimated_duration_hours: getEstimatedHours(body.homeSizeId),
         status: bookingStatus,
+        // For confirmed VA bookings, treat the moment of insert as the
+        // confirmation timestamp so reporting / GHL / dispatch all see
+        // a non-null confirmed_at like customer bookings do.
+        confirmed_at:
+          bookingStatus === "confirmed" ? new Date().toISOString() : null,
         booking_channel: "admin",
         booker_source: body.csrName ? `va_${body.csrName}` : "va_admin",
         sdr_rep_name: body.csrName || null,
-        access_notes: body.accessNotes || null,
-        team_notes: body.teamNotes || body.notes || null,
+        access_notes: accessNotes,
+        team_notes: teamNotes,
       })
       .select()
       .single();
@@ -623,74 +721,74 @@ serve(async (req) => {
       }
     }
 
-    // 7. Confirmation + receipt emails
-    const emails: Record<string, unknown> = {};
-    try {
-      const emailRes = await fetch(
-        `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-          },
-          body: JSON.stringify({
-            type: "confirmation",
-            email: body.email,
-            data: {
-              firstName: body.firstName,
-              lastName: body.lastName || "",
-              bookingId,
-              bookingNumber: bookingRef,
-              serviceDate: body.serviceDate,
-              timeSlot: body.timeSlot,
-              arrivalWindow: body.timeSlot,
-              serviceType: body.serviceType,
-              homeSize: body.homeSizeId,
-              address: body.address,
-              city: body.city,
-              state: body.state,
-              zipCode: body.zipCode,
-              totalAmount: totalCents,
-              depositAmount: depositCents,
-              balanceAmount: remainingCents,
-              paymentOption: invoiceMode === "full_now" ? "full" : "deposit",
-              addOns: body.addOns || [],
-              frequency: body.frequency || "one-time",
-              hostedInvoiceUrl: remainingInvoice?.hostedInvoiceUrl ||
-                fullInvoice?.hostedInvoiceUrl,
-            },
-          }),
-        },
-      );
-      emails.confirmation = await emailRes.json();
-    } catch (err) {
-      emails.confirmation_error = err instanceof Error ? err.message : String(err);
+    // 7. Confirmation + receipt emails + downstream fan-out.
+    //
+    // We delegate to the SAME shared helper finalize-booking uses, so
+    // VA bookings fire identical side effects to customer bookings:
+    //   • Confirmation email (with checklist link)
+    //   • Payment receipt email (only when an invoice was created)
+    //   • auto-dispatch-booking
+    //   • create-google-calendar-event
+    //   • send-zapier-webhook (full GHL custom-field map)
+    //   • sync-to-anything
+    //   • book-ghl-appointment (no-op since we already invoked above)
+    //   • send-post-booking-sms (account + referral link)
+    //
+    // We DO skip the customer SMS in the helper because we still want
+    // to send the VA-specific invoice-aware copy below (different from
+    // the Telnyx confirmation SMS the customer flow uses).
+    //
+    // Pre-stamp hosted_invoice_url on the booking row so the helper's
+    // confirmation email carries the right "Pay invoice" link.
+    if (depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl) {
+      const url = depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl;
+      if (url) {
+        await supabase
+          .from("bookings")
+          .update({ hosted_invoice_url: url })
+          .eq("id", bookingId);
+      }
+    }
+    // For confirmed VA bookings, mark payment_received_at when the
+    // VA collected payment in-line (full_now). deposit_plus_remaining
+    // leaves it null until the customer actually pays the invoice —
+    // the stripe-webhook will stamp it when invoice.payment_succeeded.
+    if (bookingStatus === "confirmed" && invoiceMode === "full_now") {
+      await supabase
+        .from("bookings")
+        .update({ payment_received_at: new Date().toISOString() })
+        .eq("id", bookingId);
     }
 
-    const sendChecklist = body.sendChecklistEmail !== false &&
-      body.serviceType === "standard";
-    if (sendChecklist) {
+    const emails: Record<string, unknown> = {};
+    if (bookingStatus === "confirmed") {
       try {
-        const ck = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-cleaning-checklist`,
+        // Re-fetch the booking row so the shared helper sees the
+        // hosted_invoice_url + payment_received_at + customer_id we
+        // just stamped. Otherwise its email payload would miss them.
+        const { data: refreshed } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("id", bookingId)
+          .single();
+
+        const fanout = await runPostConfirmFanout(
+          supabase,
+          refreshed || booking,
           {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-            },
-            body: JSON.stringify({
-              email: body.email,
-              firstName: body.firstName,
-              serviceType: "standard",
-            }),
+            source: "admin",
+            checklistLink: checklistLinkForServiceType(body.serviceType),
+            // Customer SMS is sent below with VA-specific invoice copy.
+            skipCustomerSms: true,
           },
         );
-        emails.checklist = await ck.json();
+        emails.fanout = fanout;
       } catch (err) {
-        emails.checklist_error = err instanceof Error ? err.message : String(err);
+        emails.fanout_error = err instanceof Error ? err.message : String(err);
+        logStep("post-confirm fanout failed (non-blocking)", emails.fanout_error);
       }
+    } else {
+      logStep("invoiceMode=none → skipping post-confirm fanout (booking still pending_payment)");
     }
 
     // 8. Confirmation SMS via GHL (uses verified outbound number)
