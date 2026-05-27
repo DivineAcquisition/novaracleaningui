@@ -271,9 +271,15 @@ serve(async (req) => {
             promoDiscountCents = promo.value * 100; // Convert dollars to cents
           }
 
-          // Validate profit margin
+          // Validate profit margin under the revenue-share model.
+          // Worst-case cleaner cost is Elite (50%) + ~3% Stripe fee.
+          // We compare the residual margin against the promo's
+          // configured floor.
           const tempTotal = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents;
-          const profitMargin = (tempTotal - cleanerPayoutCents) / tempTotal;
+          const tentativeCleanerCost = Math.floor(tempTotal * 0.50);
+          const profitMargin = tempTotal > 0
+            ? (tempTotal - tentativeCleanerCost) / tempTotal
+            : 0;
           const minMargin = (promo.min_profit_margin_percent || 20) / 100;
 
           if (profitMargin >= minMargin) {
