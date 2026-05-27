@@ -67,6 +67,7 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // on try so the entire Stripe-checkout-return flow keeps a single host.
   ["/book", "try"],
   ["/membership", "try"], // /membership and /membership/[planId] browse
+  ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
   ["/demo", "try"],
   ["/pricing-sheet", "try"],
 ];
