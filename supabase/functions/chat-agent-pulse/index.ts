@@ -1,18 +1,17 @@
-// ─── chat-agent-pulse — autonomous rhythm ──────────────────────────────
+// ─── chat-agent-pulse — autonomous rhythm v2 (parallelized) ────────────
 //
 // Runs every 4 hours via pg_cron job 16 (chat-agent-pulse-every-4h).
 //
 // Each tick:
-//   1. Lists GHL conversations with activity in the last 36 hours
-//      (window padding so a missed tick doesn't drop messages).
-//   2. For each, reads chat_insights and skips conversations whose
-//      lastMessageDate hasn't moved since the previous analysis —
-//      saves both LLM tokens and GHL API calls.
-//   3. Invokes admin-chat-agent with autoApply=true, persist=true so:
-//        • extracted GHL custom fields land on the contact
-//        • tag recommendations are added to the contact
-//        • an audit row upserts into public.chat_insights
-//   4. Returns a tally of analyzed / skipped / mapped / errors.
+//   1. Lists GHL conversations sorted by last_message_date desc with
+//      a 36-hour lookback window.
+//   2. Joins against chat_insights and skips conversations whose
+//      lastMessageDate hasn't moved since the previous analysis.
+//   3. Fans the survivors out through admin-chat-agent with autoApply
+//      + persist using a sliding-window concurrency runner so a single
+//      tick fits under Supabase's 150s edge timeout.
+//   4. Reports listed / analyzed / skipped_unchanged / mapped / errors
+//      plus per-conversation details.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -60,6 +59,31 @@ function asISO(input: unknown): string | null {
   return null;
 }
 
+// Sliding-window concurrency runner: keep `concurrency` requests in
+// flight at all times until the queue drains. Cheaper than batched
+// Promise.all because slow workers don't block the next batch.
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function pump() {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i]);
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => pump(),
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const startedAt = Date.now();
@@ -78,14 +102,18 @@ serve(async (req) => {
       );
     }
 
+    // Tunables sized for Supabase 150s edge timeout. Each Claude
+    // analysis is ~15-20s, so 12 conversations × 4 in flight ≈ 60-90s.
     const lookbackHours = Number(body.lookbackHours) > 0 ? Number(body.lookbackHours) : 36;
     const cap = Number(body.maxConversations) > 0
-      ? Math.min(Number(body.maxConversations), 200)
-      : 75;
+      ? Math.min(Number(body.maxConversations), 50)
+      : 12;
+    const concurrency = Number(body.concurrency) > 0
+      ? Math.min(Number(body.concurrency), 6)
+      : 4;
     const lookbackCutoff = Date.now() - lookbackHours * 60 * 60 * 1000;
 
-    // 1. Walk GHL conversations sorted by lastMessageDate desc until we
-    //    fall off the lookback window or hit the cap.
+    // 1. Walk GHL conversations sorted by lastMessageDate desc.
     const conversations: Array<any> = [];
     let offset = 0;
     while (conversations.length < cap) {
@@ -102,10 +130,7 @@ serve(async (req) => {
           ? c.lastMessageDate
           : Date.parse(c.lastMessageDate || "");
         if (!Number.isFinite(ts)) continue;
-        if (ts < lookbackCutoff) {
-          offset = -1;
-          break;
-        }
+        if (ts < lookbackCutoff) { offset = -1; break; }
         conversations.push(c);
         kept++;
         if (conversations.length >= cap) break;
@@ -115,8 +140,7 @@ serve(async (req) => {
       if (kept === 0) break;
     }
 
-    // 2. Skip conversations whose lastMessageDate hasn't moved since
-    //    last analysis.
+    // 2. Skip conversations that haven't moved since last analysis.
     const ids = conversations.map((c) => c.id).filter(Boolean);
     const existing: Record<string, string | null> = {};
     if (ids.length > 0) {
@@ -128,26 +152,31 @@ serve(async (req) => {
         existing[row.conversation_id] = row.last_analyzed_message_ts;
       }
     }
+    const todo: any[] = [];
+    const skipped: any[] = [];
+    for (const c of conversations) {
+      const lastMsgIso = asISO(c.lastMessageDate);
+      const lastAnalyzed = existing[c.id];
+      if (lastMsgIso && lastAnalyzed && Date.parse(lastAnalyzed) >= Date.parse(lastMsgIso)) {
+        skipped.push({ conversation_id: c.id, status: "skipped_unchanged" });
+      } else {
+        todo.push(c);
+      }
+    }
 
+    // 3. Fan out the agent in parallel.
     const stats = {
       listed: conversations.length,
       analyzed: 0,
-      skipped_unchanged: 0,
+      skipped_unchanged: skipped.length,
       mapped: 0,
       errors: 0,
       total_fields_applied: 0,
       total_tags_applied: 0,
     };
-    const details: any[] = [];
+    const details: any[] = [...skipped];
 
-    for (const c of conversations) {
-      const lastMsgIso = asISO(c.lastMessageDate);
-      const lastAnalyzed = existing[c.id];
-      if (lastMsgIso && lastAnalyzed && Date.parse(lastAnalyzed) >= Date.parse(lastMsgIso)) {
-        stats.skipped_unchanged++;
-        details.push({ conversation_id: c.id, status: "skipped_unchanged" });
-        continue;
-      }
+    const results = await runWithConcurrency(todo, concurrency, async (c) => {
       try {
         const r = await supabase.functions.invoke("admin-chat-agent", {
           body: {
@@ -161,48 +190,51 @@ serve(async (req) => {
           },
         });
         if (r.error) {
-          stats.errors++;
-          details.push({
+          return {
             conversation_id: c.id,
-            status: "error",
+            status: "error" as const,
             error: r.error.message || String(r.error),
-          });
-          continue;
+          };
         }
         const data = r.data as any;
         if (!data?.ok) {
-          stats.errors++;
-          details.push({
+          return {
             conversation_id: c.id,
-            status: "error",
+            status: "error" as const,
             error: data?.reason || "unknown",
-          });
-          continue;
+          };
         }
-        stats.analyzed++;
-        const appliedFields = Object.keys(data?.extracted_fields || {}).length;
-        const appliedTags = (data?.tag_recommendations || []).length;
-        if (appliedFields > 0 || appliedTags > 0) {
-          stats.mapped++;
-          stats.total_fields_applied += appliedFields;
-          stats.total_tags_applied += appliedTags;
-        }
-        details.push({
+        return {
           conversation_id: c.id,
-          status: "analyzed",
+          status: "analyzed" as const,
           urgency: data?.analysis?.recommended_next_action?.urgency,
           stage: data?.analysis?.stage,
           temperature: data?.analysis?.lead_temperature,
-          fields: appliedFields,
-          tags: appliedTags,
-        });
+          fields: Object.keys(data?.extracted_fields || {}).length,
+          tags: (data?.tag_recommendations || []).length,
+        };
       } catch (e) {
-        stats.errors++;
-        details.push({
+        return {
           conversation_id: c.id,
-          status: "error",
+          status: "error" as const,
           error: e instanceof Error ? e.message : String(e),
-        });
+        };
+      }
+    });
+
+    for (const d of results) {
+      details.push(d);
+      if (d.status === "analyzed") {
+        stats.analyzed++;
+        const fields = (d as any).fields || 0;
+        const tags = (d as any).tags || 0;
+        if (fields > 0 || tags > 0) {
+          stats.mapped++;
+          stats.total_fields_applied += fields;
+          stats.total_tags_applied += tags;
+        }
+      } else if (d.status === "error") {
+        stats.errors++;
       }
     }
 
@@ -211,8 +243,9 @@ serve(async (req) => {
         ok: true,
         tick_started_at: new Date(startedAt).toISOString(),
         tick_duration_ms: Date.now() - startedAt,
+        params: { lookbackHours, cap, concurrency },
         stats,
-        details: details.slice(0, 50),
+        details: details.slice(0, 60),
       }),
       { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
     );
