@@ -1,12 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { 
-  getEstimatedHours, 
-  calculateCleanerPayout,
+import {
+  getEstimatedHours,
   getSqftRange,
   getTeamSize,
-  DEFAULT_CLEANER_HOURLY_RATE_CENTS 
 } from "../_shared/payout-utils.ts";
 import { syncBookingLifecycle, splitFullAddress } from "../_shared/ghl-client.ts";
 import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
@@ -312,7 +310,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
           last_name,
           email,
           phone,
-          pay_rate_hr,
+          pay_tier,
+          pay_percentage,
           average_rating,
           total_ratings,
           completed_bookings,
@@ -346,12 +345,19 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       .eq('customer_id', booking.customer_id)
       .maybeSingle();
 
-    // Calculate estimated hours and payout with team size
+    // Calculate estimated hours (still used for scheduling copy) and
+    // payout under the revenue-share model. Pay = revenue × pay_pct /
+    // teamSize (split across the team). The booking's stored
+    // cleaner_payout_cents is the per-cleaner share once
+    // complete-booking has finalized it; before that we compute on the
+    // fly using the assigned cleaner's pay_percentage (or default 40%).
     const estimatedHours = booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
-    const cleanerHourlyRateCents = booking.cleaner_hourly_rate_cents || DEFAULT_CLEANER_HOURLY_RATE_CENTS;
-    const perCleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
     const teamSize = getTeamSize(booking.home_size_id);
-    const totalTeamPayoutCents = perCleanerPayoutCents * teamSize;
+    const revenueCents = booking.final_charge_cents || booking.total_estimate_cents || 0;
+    const assignedPayPct = Number(booking.cleaners?.pay_percentage) || 40;
+    const totalTeamPayoutCents = Math.floor((revenueCents * assignedPayPct) / 100);
+    const perCleanerPayoutCents = booking.cleaner_payout_cents
+      || Math.floor(totalTeamPayoutCents / Math.max(1, teamSize));
     const totalChargedCents = booking.final_charge_cents || booking.total_estimate_cents;
     const companyNetCents = totalChargedCents - totalTeamPayoutCents;
 
@@ -446,8 +452,12 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Assigned Cleaner Name": booking.cleaners ? `${booking.cleaners.first_name} ${booking.cleaners.last_name}` : "",
       "Assigned Cleaner Email": booking.cleaners?.email || "",
       "Assigned Cleaner Phone": booking.cleaners?.phone || "",
-      "Assigned Cleaner Pay Rate": booking.cleaners ? `$${(booking.cleaners.pay_rate_hr || 18).toFixed(2)}/hr` : "",
-      "Assigned Cleaner Total Pay": booking.cleaners ? formatCurrency(estimatedHours * ((booking.cleaners.pay_rate_hr || 18) * 100)) : "",
+      "Assigned Cleaner Pay Rate": booking.cleaners
+        ? `${booking.cleaners.pay_percentage || 40}% revenue share`
+        : "",
+      "Assigned Cleaner Total Pay": booking.cleaners
+        ? formatCurrency(perCleanerPayoutCents)
+        : "",
       "Assigned Cleaner Avg Rating": booking.cleaners?.average_rating ? `${booking.cleaners.average_rating.toFixed(1)} (${booking.cleaners.total_ratings || 0} reviews)` : "",
       "Assigned Cleaner Completed Jobs": booking.cleaners?.completed_bookings || 0,
       "Assigned Cleaner Acceptance Rate": booking.cleaners?.acceptance_rate ? `${(booking.cleaners.acceptance_rate * 100).toFixed(0)}%` : "",
@@ -507,11 +517,11 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     // we can map to the 1)/2)/3) Contractor fields + assigned_cleaner
     // _pay_tier. Prefer job_assignments (multi-cleaner team), fall
     // back to booking.cleaners.
-    const teamCleaners: Array<{ name?: string; phone?: string; payRate?: number }> = [];
+    const teamCleaners: Array<{ name?: string; phone?: string; payTier?: string | null; payRate?: number }> = [];
     if (booking.job_id) {
       const { data: assigns } = await supabase
         .from('job_assignments')
-        .select('cleaners (first_name, last_name, phone, pay_rate_hr)')
+        .select('cleaners (first_name, last_name, phone, pay_tier, pay_percentage)')
         .eq('job_id', booking.job_id)
         .in('status', ['Offered', 'Confirmed', 'Assigned'])
         .limit(3);
@@ -522,7 +532,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
             teamCleaners.push({
               name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
               phone: c.phone ?? undefined,
-              payRate: c.pay_rate_hr ?? undefined,
+              payTier: c.pay_tier ?? null,
+              payRate: Number(c.pay_percentage) || undefined,
             });
           }
         });
@@ -532,7 +543,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       teamCleaners.push({
         name: `${booking.cleaners.first_name} ${booking.cleaners.last_name}`,
         phone: booking.cleaners.phone,
-        payRate: (booking.cleaners as any).pay_rate_hr,
+        payTier: (booking.cleaners as any).pay_tier ?? null,
+        payRate: Number((booking.cleaners as any).pay_percentage) || undefined,
       });
     }
 

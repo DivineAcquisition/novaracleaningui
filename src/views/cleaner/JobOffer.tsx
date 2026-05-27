@@ -44,6 +44,7 @@ interface OfferDetail {
     role: string | null;
     distance_miles: number | null;
     pay_rate_hr: number | null;
+    pay_percentage_snapshot: number | null;
     estimated_pay_cents: number | null;
     expires_at: string | null;
     accepted_at: string | null;
@@ -308,12 +309,13 @@ export default function CleanerJobOfferPage() {
             />
             <InfoRow
               icon={RiMoneyDollarCircleLine}
-              label="Pay rate"
+              label="Revenue share"
               value={
-                offer.assignment.pay_rate_hr
-                  ? `$${Number(offer.assignment.pay_rate_hr).toFixed(0)}/hr (${offer.job.duration_est_hours ?? 3}h estimated)`
+                offer.assignment.estimated_pay_cents
+                  ? `${offer.assignment.pay_percentage_snapshot ?? 40}% of job revenue · ${dollars(offer.assignment.estimated_pay_cents)} for you`
                   : "—"
               }
+              hint="Pay = job revenue × your tier %, split evenly when multiple cleaners are assigned."
             />
             {offer.job.notes ? (
               <>

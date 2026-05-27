@@ -81,7 +81,15 @@ export interface BookingRowLike {
 export interface MapperCleaner {
   name?: string;
   phone?: string;
-  /** Hourly pay rate in dollars OR cents — the mapPayTier helper accepts either. */
+  /**
+   * Pay tier ('foundation' | 'proven' | 'elite') — preferred under the
+   * revenue-share model. Pass-through to mapPayTier.
+   */
+  payTier?: string | null;
+  /**
+   * @deprecated Legacy hourly rate (dollars OR cents). Kept for
+   * back-compat where a row hasn't been migrated to pay_tier yet.
+   */
   payRate?: number;
 }
 
@@ -254,14 +262,26 @@ function mapCustomerSource(utmSource?: string | null, fbclid?: string | null, gc
   return ""; // unknown — leave blank, GHL doesn't have an "Other"
 }
 
-// Assigned Cleaner Pay Tier — maps an hourly rate (in cents or dollars)
-// to the configured GHL tier label.
-function mapPayTier(payRate?: number | null): string {
-  if (!payRate || payRate <= 0) return "";
-  const dollars = payRate >= 100 ? payRate / 100 : payRate; // accept cents or dollars
-  if (dollars >= 22) return "Elite ($22/hr)";
-  if (dollars >= 20) return "Proven ($20/hr)";
-  return "Foundation ($18/hr)";
+// Assigned Cleaner Pay Tier — under the new revenue-share model the
+// tier is stored directly on cleaners.pay_tier. We accept either the
+// tier string (preferred) or the legacy hourly rate (back-compat for
+// rows that haven't been migrated yet) and map to the GHL label using
+// the new revenue-share copy.
+function mapPayTier(payTierOrRate?: string | number | null): string {
+  if (payTierOrRate == null || payTierOrRate === "") return "";
+  const s = String(payTierOrRate).toLowerCase();
+  if (s === "elite") return "Elite (50% revenue share)";
+  if (s === "proven") return "Proven (45% revenue share)";
+  if (s === "foundation") return "Foundation (40% revenue share)";
+  // Numeric fallback — treat as legacy hourly rate during transition.
+  const n = Number(payTierOrRate);
+  if (Number.isFinite(n) && n > 0) {
+    const dollars = n >= 100 ? n / 100 : n;
+    if (dollars >= 22) return "Elite (50% revenue share)";
+    if (dollars >= 20) return "Proven (45% revenue share)";
+    return "Foundation (40% revenue share)";
+  }
+  return "";
 }
 
 // Membership Status — Not Started | Payment Issue | Paused | Canceled | Active | Trialing.
@@ -453,7 +473,16 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
   const cleanerName = (idx: number) => cleaner(idx)?.name || "";
   const cleanerPhone = (idx: number) => cleaner(idx)?.phone || "";
   // Pay tier: use the highest tier across assigned cleaners (lead
-  // determines the team's posted tier on the contact record).
+  // determines the team's posted tier on the contact record). Prefers
+  // the explicit pay_tier string; falls back to the legacy hourly rate
+  // for un-migrated rows.
+  const TIER_RANK: Record<string, number> = { foundation: 1, proven: 2, elite: 3 };
+  const topPayTier = input.cleaners.reduce<string | null>((best, c) => {
+    const t = String(c.payTier || "").toLowerCase();
+    if (!t) return best;
+    if (!best) return t;
+    return (TIER_RANK[t] || 0) > (TIER_RANK[best] || 0) ? t : best;
+  }, null);
   const topPayRate = input.cleaners.reduce(
     (max, c) => (c.payRate && c.payRate > max ? c.payRate : max),
     0,
@@ -647,7 +676,7 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     team_size_assigned: b.num_cleaners_assigned ?? input.cleaners.length ?? "",
     // Pay Tier SINGLE_OPTIONS: Foundation ($18/hr) | Proven
     // ($20/hr) | Elite ($22/hr). Uses the team's highest tier.
-    assigned_cleaner_pay_tier: mapPayTier(topPayRate),
+    assigned_cleaner_pay_tier: mapPayTier(topPayTier ?? topPayRate),
     "1_contractor": cleanerName(0),
     "1_contractor_number": cleanerPhone(0),
     "2_contractor": cleanerName(1),

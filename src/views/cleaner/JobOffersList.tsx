@@ -44,6 +44,7 @@ interface OfferRow {
   status: string;
   distance_miles: number | null;
   estimated_pay_cents: number | null;
+  pay_percentage_snapshot: number | null;
   response_token: string | null;
   assigned_at: string | null;
   jobs: {
@@ -83,7 +84,7 @@ export default function JobOffersList() {
       const { data } = await supabase
         .from("job_assignments")
         .select(
-          "id, role, status, distance_miles, estimated_pay_cents, response_token, assigned_at, jobs (service_type, address, city, state, start_datetime, duration_est_hours, sq_ft)",
+          "id, role, status, distance_miles, estimated_pay_cents, pay_percentage_snapshot, response_token, assigned_at, jobs (service_type, address, city, state, start_datetime, duration_est_hours, sq_ft)",
         )
         .eq("cleaner_id", auth.cleaner.id)
         .ilike("status", "offered")
@@ -206,6 +207,11 @@ export default function JobOffersList() {
                     </span>
                     <span className="text-right text-emerald-700 font-bold tabular-nums">
                       {formatMoney(o.estimated_pay_cents)}
+                      {o.pay_percentage_snapshot ? (
+                        <span className="block text-[10px] font-semibold text-emerald-600/80">
+                          {o.pay_percentage_snapshot}% revenue share
+                        </span>
+                      ) : null}
                     </span>
                   </div>
 

@@ -132,8 +132,8 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
           <li>• Payouts are processed automatically when jobs are marked complete</li>
           <li>• Money is transferred to your linked bank account via Stripe</li>
           <li>• Transfers typically arrive in 1-2 business days</li>
-          <li>• Platform fees are deducted automatically from customer payments</li>
-          <li>• You receive your hourly rate × hours worked</li>
+          <li>• You earn a flat percentage of every job's revenue (40% Foundation, 45% Proven, 50% Elite)</li>
+          <li>• Multi-cleaner jobs split the pool evenly across the team</li>
         </ul>
       </Card>
     </div>

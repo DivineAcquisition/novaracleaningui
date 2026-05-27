@@ -42,7 +42,8 @@ interface CleanerProfile {
   completed_bookings?: number | null;
   average_rating?: number | null;
   total_ratings?: number | null;
-  pay_rate_hr?: number | null;
+  pay_tier?: string | null;
+  pay_percentage?: number | null;
 }
 
 type JobSource = "assignments" | "bookings";
@@ -244,8 +245,8 @@ export default function CleanerDashboard() {
               service_date: b.service_date,
               time_slot: b.time_slot,
               duration_est_hours: b.estimated_duration_hours,
-              estimated_pay_cents: b.cleaner_payout_cents ?? (b.total_estimate_cents
-                ? Math.round((b.total_estimate_cents || 0) * 0.45)
+              estimated_pay_cents: b.cleaner_payout_cents ?? (b.total_estimate_cents && profile?.pay_percentage
+                ? Math.floor((b.total_estimate_cents || 0) * profile.pay_percentage / 100)
                 : null),
               cleaner_payout_cents: b.cleaner_payout_cents,
               total_estimate_cents: b.total_estimate_cents,
@@ -667,10 +668,13 @@ export default function CleanerDashboard() {
                     : job.service_date && job.time_slot
                       ? `${format(new Date(job.service_date), "EEEE, MMM d")} at ${job.time_slot}`
                       : "—";
+                  const sharePct = profile?.pay_percentage ?? 40;
                   const pay =
                     job.estimated_pay_cents ??
                     job.cleaner_payout_cents ??
-                    (job.total_estimate_cents ? Math.round(job.total_estimate_cents * 0.45) : null);
+                    (job.total_estimate_cents
+                      ? Math.floor(job.total_estimate_cents * sharePct / 100)
+                      : null);
                   const isCheckedIn = !!job.check_in_time;
                   const zip = zipForJob(job);
                   const mapsUrl = getGoogleMapsUrl(job.address, job.city, job.state, zip);

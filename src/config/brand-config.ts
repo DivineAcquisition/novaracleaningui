@@ -325,7 +325,13 @@ export const ACTIVE_PROMOS: PromoConfig[] = [
 // =============================================================================
 
 export const CLEANER_CONFIG = {
-  baseHourlyRate: 18,           // $ per hour paid to cleaners
+  // Revenue share by tier (percent of customer-paid revenue).
+  payPercentage: {
+    foundation: 40,
+    proven: 45,
+    elite: 50,
+  },
+  defaultPayPercentage: 40, // Foundation default for unassigned jobs
   teamSize: {
     standard: 2,                // 2 cleaners for homes ≤2500 sqft
     large: 3,                   // 3 cleaners for homes >2500 sqft
@@ -409,12 +415,24 @@ export function getTeamSize(homeSizeId: string): number {
 }
 
 /**
- * Calculate cleaner payout for a job
+ * Calculate the total cleaner pool for a job under the revenue-share
+ * model. Returns the dollar amount the company owes the team in total
+ * (split evenly per cleaner).
+ *
+ *   pool = revenue × payPercentage / 100
+ *
+ * Pass `payPercentage` explicitly when you know the assigned team's
+ * highest tier. Defaults to Foundation (40%) which matches what
+ * create-payment-intent stamps at booking time before any cleaner is
+ * assigned.
  */
-export function calculateCleanerPayout(homeSizeId: string): number {
-  const homeSize = getHomeSize(homeSizeId);
-  if (!homeSize) return 0;
-  
-  const teamSize = getTeamSize(homeSizeId);
-  return homeSize.baseHours * CLEANER_CONFIG.baseHourlyRate * teamSize;
+export function calculateCleanerPayout(
+  homeSizeId: string,
+  serviceTierId: string = "standard",
+  payPercentage: number = CLEANER_CONFIG.defaultPayPercentage,
+  addOnIds: string[] = [],
+): number {
+  const revenue = calculateTotal(homeSizeId, serviceTierId, addOnIds, false);
+  const pct = Math.max(0, Math.min(100, payPercentage));
+  return Math.round(revenue * pct) / 100;
 }

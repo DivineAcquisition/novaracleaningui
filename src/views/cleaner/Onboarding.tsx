@@ -271,7 +271,8 @@ export default function CleanerOnboarding() {
         preferred_work_days: formData.preferredWorkDays,
         avatar_url: avatarUrl,
         skillset: formData.skillset,
-        pay_rate_hr: 18.00,
+        pay_tier: "foundation",
+        pay_percentage: 40,
         status: "active",
         approved: true,
         onboarding_complete: true,
@@ -631,15 +632,18 @@ export default function CleanerOnboarding() {
                     </p>
                   </div>
 
-                  {/* Pay Rate Display */}
+                  {/* Pay model display — revenue share */}
                   <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl p-4 border border-green-500/20">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
                         <RiMoneyDollarCircleLine className="w-5 h-5 text-green-600" />
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Your Pay Rate</p>
-                        <p className="text-2xl font-bold text-green-600">Starting at $18/hour</p>
+                        <p className="text-sm text-muted-foreground">Your Pay Model</p>
+                        <p className="text-2xl font-bold text-green-600">40% of every job</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Starting tier (Foundation). Move to Proven (45%) and Elite (50%) as you complete more jobs.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -739,8 +743,8 @@ export default function CleanerOnboarding() {
                         <p className="font-medium">{formData.maxTravelMiles} miles</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Pay Rate</p>
-                        <p className="font-medium text-green-600">Starting at $18/hour</p>
+                        <p className="text-muted-foreground">Pay Model</p>
+                        <p className="font-medium text-green-600">40% of every job (Foundation tier)</p>
                       </div>
                     </div>
 

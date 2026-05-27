@@ -41,8 +41,13 @@ serve(async (req) => {
       max_travel_miles = 20,
       preferred_work_days,
       skillset,
-      pay_rate_hr = 18,
+      pay_tier,
     } = body;
+
+    const tierNorm = ["foundation", "proven", "elite"].includes(String(pay_tier || "").toLowerCase())
+      ? String(pay_tier).toLowerCase()
+      : "foundation";
+    const payPercentage = tierNorm === "elite" ? 50 : tierNorm === "proven" ? 45 : 40;
 
     // Validate required fields
     if (!email || !first_name || !last_name || !phone) {
@@ -135,7 +140,8 @@ serve(async (req) => {
         max_travel_miles,
         preferred_work_days: preferred_work_days || [],
         skillset: skillset || ["Standard Cleaning"],
-        pay_rate_hr,
+        pay_tier: tierNorm,
+        pay_percentage: payPercentage,
         user_id: authData.user.id,
         status: "active",
         approved: true,

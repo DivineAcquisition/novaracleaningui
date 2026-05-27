@@ -59,7 +59,7 @@ interface CleanerRow {
   home_zip: string | null;
   state: string | null;
   pay_tier: string | null;
-  pay_rate_hr: number | null;
+  pay_percentage: number | null;
   completed_bookings: number | null;
   total_bookings: number | null;
   acceptance_rate: number | null;
@@ -145,7 +145,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_rate_hr,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_agreement_signed,ob_google_chat_joined,ob_supplies_checklist_viewed,ob_payouts_setup,ob_training_accessed,ghl_synced_at,ghl_sync_error,created_at,activated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_agreement_signed,ob_google_chat_joined,ob_supplies_checklist_viewed,ob_payouts_setup,ob_training_accessed,ghl_synced_at,ghl_sync_error,created_at,activated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -353,7 +353,7 @@ export default function AdminCleaners() {
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{fullName(c)}</div>
                         <div className="text-[11px] text-slate-500">
-                          {c.pay_tier || "Unassigned tier"} · ${c.pay_rate_hr || 0}/hr
+                          {(c.pay_tier || "foundation").charAt(0).toUpperCase() + (c.pay_tier || "foundation").slice(1)} · {c.pay_percentage ?? 40}% revenue share
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell text-slate-700">
@@ -745,7 +745,7 @@ function AddCleanerDialog({
   const [phone, setPhone] = useState("");
   const [homeZip, setHomeZip] = useState("");
   const [serviceZips, setServiceZips] = useState("");
-  const [payRate, setPayRate] = useState("18");
+  const [payTier, setPayTier] = useState<"foundation" | "proven" | "elite">("foundation");
   const [busy, setBusy] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
 
@@ -756,7 +756,7 @@ function AddCleanerDialog({
     setPhone("");
     setHomeZip("");
     setServiceZips("");
-    setPayRate("18");
+    setPayTier("foundation");
     setCreatedPassword(null);
   };
 
@@ -778,7 +778,7 @@ function AddCleanerDialog({
             .split(/[,\s]+/)
             .map((z) => z.trim())
             .filter((z) => /^\d{5}$/.test(z)),
-          payRateHr: parseFloat(payRate) || 18,
+          payTier,
         },
       });
       if (error) throw error;
@@ -838,12 +838,16 @@ function AddCleanerDialog({
               <Input value={homeZip} onChange={(e) => setHomeZip(e.target.value)} maxLength={5} />
             </div>
             <div>
-              <Label className="text-xs">Pay rate ($/hr)</Label>
-              <Input
-                value={payRate}
-                onChange={(e) => setPayRate(e.target.value)}
-                inputMode="decimal"
-              />
+              <Label className="text-xs">Pay tier</Label>
+              <select
+                value={payTier}
+                onChange={(e) => setPayTier(e.target.value as "foundation" | "proven" | "elite")}
+                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500"
+              >
+                <option value="foundation">Foundation (40%)</option>
+                <option value="proven">Proven (45%)</option>
+                <option value="elite">Elite (50%)</option>
+              </select>
             </div>
           </div>
           <div>

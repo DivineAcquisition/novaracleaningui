@@ -41,7 +41,7 @@ serve(async (req) => {
     const { data: assignment, error: aErr } = await supabase
       .from("job_assignments")
       .select(
-        "id, job_id, cleaner_id, status, role, distance_miles, pay_rate_hr, estimated_pay_cents, expires_at, accepted_at, declined_at, response_token",
+        "id, job_id, cleaner_id, status, role, distance_miles, pay_rate_hr, pay_percentage_snapshot, estimated_pay_cents, expires_at, accepted_at, declined_at, response_token",
       )
       .eq("response_token", token)
       .maybeSingle();

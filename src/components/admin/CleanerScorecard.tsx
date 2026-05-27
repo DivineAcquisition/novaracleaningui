@@ -20,8 +20,7 @@ interface Scorecard {
   name: string;
   status: string;
   pay_tier: string;
-  pay_rate_hr: number | null;
-  net_rate_hr: number | null;
+  pay_percentage: number | null;
   total_jobs_completed: number;
   average_rating: number | null;
   total_ratings: number | null;
@@ -206,7 +205,7 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
           <DialogTitle className="flex items-center gap-2">
             <RiTrophyLine className="w-5 h-5 text-amber-400" />
             {scorecard?.name || "Cleaner Scorecard"}
-            {scorecard && <Badge variant="outline" className="border-amber-500/30 text-amber-300">{scorecard.pay_tier}</Badge>}
+            {scorecard && <Badge variant="outline" className="border-amber-500/30 text-amber-300">{scorecard.pay_tier} · {scorecard.pay_percentage ?? 40}%</Badge>}
             {scorecard && <Badge variant={scorecard.status === "active" ? "default" : "destructive"} className="capitalize">{scorecard.status}</Badge>}
           </DialogTitle>
         </DialogHeader>

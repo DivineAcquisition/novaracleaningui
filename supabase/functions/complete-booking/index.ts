@@ -91,12 +91,92 @@ serve(async (req) => {
 
     logStep("Booking validated");
 
-    // Mark booking as completed
+    // ─── Recompute cleaner payout using actual assigned cleaner ────
+    //
+    // create-payment-intent writes cleaner_payout_cents at booking
+    // time using the DEFAULT 40% (Foundation) because no cleaner is
+    // assigned yet. By the time complete-booking runs, the actual
+    // assigned cleaner's tier may be Proven (45%) or Elite (50%) — and
+    // for multi-cleaner jobs we have to use the highest tier on the
+    // team. Recompute now so the payouts ledger and process-payout see
+    // the correct number.
+    let recomputedPayoutCents = booking.cleaner_payout_cents || 0;
+    let recomputedPayPct = 40;
+    try {
+      const { data: assigns } = await supabase
+        .from("job_assignments")
+        .select(
+          "id, cleaner_id, role, pay_percentage_snapshot, cleaners(pay_percentage)",
+        )
+        .eq("job_id", booking.job_id || "")
+        .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "completed"]);
+
+      const team: Array<{ id: string; pct: number }> = [];
+      if (assigns?.length) {
+        for (const a of assigns) {
+          const pct = Number(
+            (a as any).pay_percentage_snapshot
+              || ((a as any).cleaners?.pay_percentage)
+              || 0,
+          ) || 40;
+          team.push({ id: a.cleaner_id, pct });
+        }
+      }
+      // Always include the booking's primary cleaner_id even if no
+      // job_assignment row exists (admin-assigned booking).
+      if (booking.cleaner_id && !team.find((t) => t.id === booking.cleaner_id)) {
+        const { data: c } = await supabase
+          .from("cleaners")
+          .select("pay_percentage")
+          .eq("id", booking.cleaner_id)
+          .maybeSingle();
+        team.push({ id: booking.cleaner_id, pct: Number(c?.pay_percentage) || 40 });
+      }
+
+      if (team.length > 0) {
+        const revenue = booking.final_charge_cents
+          || booking.total_estimate_cents
+          || 0;
+        recomputedPayPct = team.reduce((m, t) => Math.max(m, t.pct), 40);
+        const pool = Math.floor((revenue * recomputedPayPct) / 100);
+        const perCleaner = Math.floor(pool / team.length);
+        recomputedPayoutCents = perCleaner;
+
+        // Update each assignment's estimated_pay_cents to the final
+        // per-cleaner number, and stamp the booking with the pool/lead
+        // share so process-payout transfers the right amount.
+        if (assigns?.length) {
+          await Promise.all(
+            assigns.map((a) =>
+              supabase
+                .from("job_assignments")
+                .update({
+                  estimated_pay_cents: perCleaner,
+                  pay_percentage_snapshot: recomputedPayPct,
+                })
+                .eq("id", a.id),
+            ),
+          );
+        }
+        logStep("Recomputed payout (revenue share)", {
+          revenue,
+          payPct: recomputedPayPct,
+          cleanerCount: team.length,
+          perCleaner,
+        });
+      }
+    } catch (recalcErr) {
+      logStep("Pay recompute failed (non-blocking)", { error: String(recalcErr) });
+    }
+
+    // Mark booking as completed and stamp the (possibly updated)
+    // cleaner_payout_cents so process-payout uses it.
     const { error: updateError } = await supabase
       .from("bookings")
       .update({
         status: "completed",
         completed_at: new Date().toISOString(),
+        cleaner_payout_cents: recomputedPayoutCents,
       })
       .eq("id", bookingId);
 
@@ -370,19 +450,26 @@ serve(async (req) => {
       logStep("Payout triggered successfully");
     }
 
-    // Send completion email to cleaner
+    // Send completion email to cleaner. Earnings figure now uses the
+    // cleaner's actual pay_percentage (40 / 45 / 50) rather than the
+    // legacy hardcoded 0.45. We prefer the booking's stored
+    // cleaner_payout_cents (already correct from process-payout) and
+    // fall back to revenue × cleaner.pay_percentage.
     if (booking.cleaner_id) {
       try {
         const { data: cleaner } = await supabase
           .from("cleaners")
-          .select("first_name, email")
+          .select("first_name, email, pay_percentage, pay_tier")
           .eq("id", booking.cleaner_id)
           .single();
 
         if (cleaner?.email) {
-          const estimatedEarnings = booking.total_estimate_cents
-            ? Math.round(booking.total_estimate_cents * 0.45)
-            : 0;
+          const revenue = booking.final_charge_cents
+            || booking.total_estimate_cents
+            || 0;
+          const pct = Number(cleaner.pay_percentage) || 40;
+          const estimatedEarnings = booking.cleaner_payout_cents
+            || Math.floor((revenue * pct) / 100);
 
           await supabase.functions.invoke('send-cleaner-email', {
             body: {
@@ -394,6 +481,8 @@ serve(async (req) => {
                 serviceDate: booking.service_date,
                 customerName: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
                 earnings: estimatedEarnings,
+                payPercentage: pct,
+                jobRevenueCents: revenue,
                 payoutStatus: payoutResponse.error ? 'processing' : 'initiated',
               },
             },

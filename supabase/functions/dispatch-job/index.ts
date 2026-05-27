@@ -341,22 +341,46 @@ serve(async (req) => {
       }))
     });
 
-    // STAGE 4: Create job assignments with estimated pay
-    const assignments = selectedCleaners.map((cleaner, index) => {
-      const estimatedPayCents = Math.round(
-        (cleaner.pay_rate_hr || 18) * job.duration_est_hours * 100
-      );
-      
-      return {
-        job_id: jobId,
-        cleaner_id: cleaner.id,
-        distance_miles: cleaner.distance_miles,
-        role: index === 0 ? "Lead" : "Support",
-        status: "Offered",
-        pay_rate_hr: cleaner.pay_rate_hr || 18,
-        estimated_pay_cents: estimatedPayCents
-      };
-    });
+    // STAGE 4: Create job assignments with estimated pay (revenue share)
+    //
+    // Pay is now a flat percentage of customer-paid job revenue, NOT
+    // hourly. Pull the linked booking to get the revenue, then:
+    //   pool = revenue_cents × max(payPercentage among cleaners) / 100
+    //   per-cleaner = pool / cleaner_count
+    //
+    // Mixed-tier jobs use the HIGHEST tier on the team so a Foundation
+    // cleaner working alongside an Elite cleaner still gets the 50%
+    // pool share split.
+    const { data: linkedBooking } = await supabase
+      .from("bookings")
+      .select("id, total_estimate_cents, final_charge_cents")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const revenueCents = Number(
+      linkedBooking?.final_charge_cents || linkedBooking?.total_estimate_cents || 0,
+    );
+    const cleanerCount = Math.max(1, selectedCleaners.length);
+    const teamMaxPct = selectedCleaners.reduce((m: number, c: any) => {
+      const p = Number(c.pay_percentage) || 40;
+      return p > m ? p : m;
+    }, 40);
+    const poolCents = Math.floor((revenueCents * teamMaxPct) / 100);
+    const perCleanerPayCents = Math.floor(poolCents / cleanerCount);
+
+    const assignments = selectedCleaners.map((cleaner, index) => ({
+      job_id: jobId,
+      cleaner_id: cleaner.id,
+      distance_miles: cleaner.distance_miles,
+      role: index === 0 ? "Lead" : "Support",
+      status: "Offered",
+      // pay_rate_hr kept on the row for legacy back-compat (it's no
+      // longer the source of truth — pay_percentage_snapshot is).
+      pay_rate_hr: cleaner.pay_rate_hr || 18,
+      pay_percentage_snapshot: teamMaxPct,
+      estimated_pay_cents: perCleanerPayCents,
+    }));
 
     const { data: createdAssignments, error: assignError } = await supabase
       .from("job_assignments")
@@ -380,7 +404,13 @@ serve(async (req) => {
         month: 'short', 
         day: 'numeric' 
       });
-      const estimatedPay = (assignment.cleaners.pay_rate_hr * job.duration_est_hours).toFixed(2);
+      // SMS pay copy now reflects revenue share, not hourly. The
+      // assignment.estimated_pay_cents already accounts for cleaner
+      // count + tier %, so just format and ship.
+      const estimatedPay = ((assignment.estimated_pay_cents || 0) / 100).toFixed(2);
+      const sharePct = assignment.pay_percentage_snapshot
+        || assignment.cleaners?.pay_percentage
+        || 40;
       const tokenBytes = new Uint8Array(16);
       crypto.getRandomValues(tokenBytes);
       const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -398,7 +428,7 @@ serve(async (req) => {
 
 Date: ${jobDateFormatted}
 Location: ${job.city}, ${job.zip}
-Pay: $${estimatedPay} for ${job.duration_est_hours}hrs
+Pay: $${estimatedPay} (${sharePct}% revenue share, ~${job.duration_est_hours}hrs)
 Distance: ${assignment.distance_miles.toFixed(1)} miles
 
 Respond within 15 min:

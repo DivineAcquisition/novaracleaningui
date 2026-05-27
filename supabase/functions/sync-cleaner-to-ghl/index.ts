@@ -98,9 +98,13 @@ function buildContractorCustomFields(cleaner: any): Record<string, unknown> {
     contractor_id: cleaner.id,
     contractor_status: cleaner.status || "",
     contractor_pay_tier: cleaner.pay_tier || "foundation",
-    contractor_pay_rate_hr: cleaner.pay_rate_hr ?? null,
-    contractor_platform_fee_pct: cleaner.platform_fee_pct ?? null,
-    contractor_net_rate_hr: cleaner.net_rate_hr ?? null,
+    contractor_pay_percentage: cleaner.pay_percentage ?? 40,
+    // Legacy fields kept for back-compat with existing GHL custom
+    // fields. They mirror pay_percentage so old GHL views still show
+    // sensible numbers, but the canonical field is contractor_pay_percentage.
+    contractor_pay_rate_hr: null,
+    contractor_platform_fee_pct: null,
+    contractor_net_rate_hr: null,
     contractor_home_address: cleaner.home_address || "",
     contractor_home_city: cleaner.home_city || "",
     contractor_home_state: cleaner.state || "",

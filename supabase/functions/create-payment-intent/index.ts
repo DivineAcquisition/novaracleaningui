@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { 
-  getEstimatedHours, 
-  calculateCleanerPayout,
-  DEFAULT_CLEANER_HOURLY_RATE_CENTS 
-} from "../_shared/payout-utils.ts";
+import { getEstimatedHours } from "../_shared/payout-utils.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 
 const corsHeaders = {
@@ -222,11 +218,12 @@ serve(async (req) => {
       }
     }
 
-    // Calculate credit coverage and cleaner costs BEFORE promo validation
+    // Calculate credit coverage. Cleaner payout is now computed AFTER
+    // we know the final totalAmount (revenue share % of customer-paid
+    // revenue). estimatedHours is still computed for calendar/duration
+    // copy, just no longer used for pay math.
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
     const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
-    const cleanerHourlyRateCents = DEFAULT_CLEANER_HOURLY_RATE_CENTS;
-    const cleanerPayoutCents = calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
 
     // Validate promo code if provided
     let promoDiscountCents = 0;
@@ -353,14 +350,21 @@ serve(async (req) => {
     if (totalAmount < 0) totalAmount = 0;
     logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, promoDiscountCents, walletCreditCents, totalAmount });
 
+    // Cleaner payout = flat 40% of customer-paid revenue (Foundation
+    // tier default at booking time — no cleaner has been assigned yet).
+    // dispatch-job recomputes using the actual assigned cleaner's tier
+    // % when the job goes out for offer, so this is just the booking-
+    // time placeholder that complete-booking and process-payout fall
+    // back to if dispatch never ran.
+    const DEFAULT_BOOKING_PAY_PCT = 40;
+    const cleanerPayoutCents = Math.floor((totalAmount * DEFAULT_BOOKING_PAY_PCT) / 100);
     const platformFeeCents = totalAmount - cleanerPayoutCents;
-    
-    logStep("Payout calculation (hourly-based)", { 
-      estimatedHours, 
-      hourlyRate: cleanerHourlyRateCents / 100,
-      cleanerPayoutCents, 
+
+    logStep("Payout calculation (revenue share)", {
+      totalAmount,
+      payPercentage: DEFAULT_BOOKING_PAY_PCT,
+      cleanerPayoutCents,
       platformFeeCents,
-      totalAmount 
     });
 
     // Determine amount to charge.
@@ -521,7 +525,6 @@ serve(async (req) => {
         payout_status: 'pending',
         booking_number: bookingNumber,
         estimated_duration_hours: estimatedHours,
-        cleaner_hourly_rate_cents: cleanerHourlyRateCents,
         team_notes: referralCode 
           ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}${walletCreditCents > 0 ? ` | Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : ''}`
           : (promoCode ? `Promo code: PROMO:${promoCode}${walletCreditCents > 0 ? ` | Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : ''}` : (walletCreditCents > 0 ? `Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : null)),

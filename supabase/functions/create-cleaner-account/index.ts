@@ -17,8 +17,16 @@ serve(async (req) => {
   }
 
   try {
-    const { email, firstName, lastName, phone, state, homeZip, serviceZipCodes, payRateHr } = await req.json();
-    logStep("Creating cleaner account", { email, firstName, lastName, state, homeZip });
+    // payTier accepts 'foundation' | 'proven' | 'elite' (defaults to
+    // foundation/40%). payRateHr is accepted for back-compat but ignored
+    // — the pay model is now flat revenue share, not hourly.
+    const { email, firstName, lastName, phone, state, homeZip, serviceZipCodes, payTier } = await req.json();
+    logStep("Creating cleaner account", { email, firstName, lastName, state, homeZip, payTier });
+
+    const tier = ["foundation", "proven", "elite"].includes(String(payTier || "").toLowerCase())
+      ? String(payTier).toLowerCase()
+      : "foundation";
+    const payPercentage = tier === "elite" ? 50 : tier === "proven" ? 45 : 40;
 
     // Generate password: firstInitial + fullLastName + nv2025!
     const password = `${firstName[0].toLowerCase()}${lastName}nv2025!`;
@@ -65,7 +73,8 @@ serve(async (req) => {
         state: state || null,
         home_zip: homeZip || null,
         service_zip_codes: serviceZipCodes || [],
-        pay_rate_hr: payRateHr || 18,
+        pay_tier: tier,
+        pay_percentage: payPercentage,
         user_id: authData.user.id,
         status: "active",
         approved: true,

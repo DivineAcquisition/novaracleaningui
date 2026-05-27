@@ -583,7 +583,11 @@ export type Database = {
           ob_training_accessed_at: string | null
           on_time_rate: number | null
           onboarding_complete: boolean | null
+          pay_percentage: number
           pay_rate_hr: number
+          pay_tier: string | null
+          platform_fee_pct: number | null
+          net_rate_hr: number | null
           portal_checklist_complete: boolean | null
           payouts_enabled: boolean | null
           phone: string
@@ -643,7 +647,11 @@ export type Database = {
           ob_training_accessed_at?: string | null
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
+          pay_percentage?: number
           pay_rate_hr?: number
+          pay_tier?: string | null
+          platform_fee_pct?: number | null
+          net_rate_hr?: number | null
           portal_checklist_complete?: boolean | null
           payouts_enabled?: boolean | null
           phone: string
@@ -703,7 +711,11 @@ export type Database = {
           ob_training_accessed_at?: string | null
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
+          pay_percentage?: number
           pay_rate_hr?: number
+          pay_tier?: string | null
+          platform_fee_pct?: number | null
+          net_rate_hr?: number | null
           portal_checklist_complete?: boolean | null
           payouts_enabled?: boolean | null
           phone?: string
@@ -1016,6 +1028,11 @@ export type Database = {
           id: string
           job_id: string
           pay_rate_hr: number | null
+          pay_percentage_snapshot: number | null
+          response_token: string | null
+          accepted_at: string | null
+          declined_at: string | null
+          expires_at: string | null
           reminder_count: number | null
           reminder_sent_at: string | null
           responded_at: string | null
@@ -1031,6 +1048,11 @@ export type Database = {
           id?: string
           job_id: string
           pay_rate_hr?: number | null
+          pay_percentage_snapshot?: number | null
+          response_token?: string | null
+          accepted_at?: string | null
+          declined_at?: string | null
+          expires_at?: string | null
           reminder_count?: number | null
           reminder_sent_at?: string | null
           responded_at?: string | null
@@ -1046,6 +1068,11 @@ export type Database = {
           id?: string
           job_id?: string
           pay_rate_hr?: number | null
+          pay_percentage_snapshot?: number | null
+          response_token?: string | null
+          accepted_at?: string | null
+          declined_at?: string | null
+          expires_at?: string | null
           reminder_count?: number | null
           reminder_sent_at?: string | null
           responded_at?: string | null
@@ -2041,7 +2068,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      cleaner_payroll_v1: {
+        Row: {
+          average_rating: number | null
+          cleaner_id: string | null
+          cleaner_status: string | null
+          completed_bookings: number | null
+          email: string | null
+          failed_cents: number | null
+          first_name: string | null
+          jobs_completed: number | null
+          jobs_in_progress: number | null
+          last_name: string | null
+          last_paid_at: string | null
+          oldest_unpaid_completed_at: string | null
+          owed_cents: number | null
+          paid_cents: number | null
+          pay_percentage: number | null
+          pay_tier: string | null
+          payouts_enabled: boolean | null
+          phone: string | null
+          processing_cents: number | null
+          stripe_account_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
@@ -2080,6 +2131,8 @@ export type Database = {
           payouts_enabled: boolean | null
           phone_verified: boolean | null
           pay_rate_hr: number | null
+          pay_tier: string | null
+          pay_percentage: number | null
           was_linked: boolean | null
           was_auto_promoted: boolean | null
         }[]

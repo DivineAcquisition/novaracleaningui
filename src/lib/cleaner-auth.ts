@@ -48,7 +48,8 @@ export interface ResolvedCleaner {
   stripe_account_id: string | null;
   payouts_enabled: boolean | null;
   phone_verified: boolean | null;
-  pay_rate_hr: number | null;
+  pay_tier: string | null;
+  pay_percentage: number | null;
   was_linked: boolean | null;
   was_auto_promoted: boolean | null;
 }
@@ -115,7 +116,7 @@ export async function resolveCleanerAuth(): Promise<CleanerAuthResolution> {
     const { data: fallback } = await supabase
       .from("cleaners")
       .select(
-        "id, user_id, first_name, last_name, email, phone, home_zip, onboarding_complete, approved, status, stripe_account_id, payouts_enabled, phone_verified, pay_rate_hr",
+        "id, user_id, first_name, last_name, email, phone, home_zip, onboarding_complete, approved, status, stripe_account_id, payouts_enabled, phone_verified, pay_tier, pay_percentage",
       )
       .eq("user_id", session.user.id)
       .maybeSingle();

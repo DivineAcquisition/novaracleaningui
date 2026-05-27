@@ -46,6 +46,7 @@ interface Job {
   state: string;
   zip_code: string;
   total_estimate_cents: number;
+  cleaner_payout_cents?: number | null;
   home_size_id: string;
   first_name: string;
   last_name: string;
@@ -346,7 +347,7 @@ export default function ContractorJobs() {
                             <Badge variant="outline" className={cn("text-[10px]", sc.class)}>
                               <span className={cn("w-1.5 h-1.5 rounded-full mr-1", sc.dot)} />{sc.label}
                             </Badge>
-                            <span className="font-bold text-primary text-sm">${(job.total_estimate_cents * 0.45 / 100).toFixed(0)}</span>
+                            <span className="font-bold text-primary text-sm">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.40)) / 100).toFixed(0)}</span>
                           </div>
                         </div>
 
@@ -422,7 +423,7 @@ export default function ContractorJobs() {
                           <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
                             <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Done
                           </Badge>
-                          <span className="text-sm font-semibold text-emerald-600">${(job.total_estimate_cents * 0.45 / 100).toFixed(0)}</span>
+                          <span className="text-sm font-semibold text-emerald-600">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.40)) / 100).toFixed(0)}</span>
                         </div>
                       </div>
                     </CardContent>

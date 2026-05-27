@@ -61,7 +61,7 @@ interface PayrollRow {
   phone: string | null;
   cleaner_status: string | null;
   pay_tier: string | null;
-  pay_rate_hr: number | null;
+  pay_percentage: number | null;
   stripe_account_id: string | null;
   payouts_enabled: boolean | null;
   average_rating: number | null;
@@ -326,7 +326,7 @@ export default function AdminPayroll() {
                           <p className="text-[11px] text-slate-500 truncate max-w-[220px]">
                             {r.email}
                             {r.pay_tier ? ` · ${r.pay_tier}` : ""}
-                            {r.pay_rate_hr ? ` · $${Number(r.pay_rate_hr).toFixed(0)}/hr` : ""}
+                            {r.pay_percentage ? ` · ${r.pay_percentage}% revenue share` : ""}
                           </p>
                         </div>
                       </TableCell>

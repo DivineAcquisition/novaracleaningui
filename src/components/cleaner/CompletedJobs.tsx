@@ -58,12 +58,15 @@ export function CompletedJobs({ jobs }: CompletedJobsProps) {
               <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>{booking.address}, {booking.city}</span>
             </div>
-            {booking.estimated_duration_hours && (
+            {booking.total_estimate_cents && booking.cleaner_payout_cents ? (
               <div className="flex items-center gap-2 text-xs">
                 <RiMoneyDollarCircleLine className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>{booking.estimated_duration_hours} hours × ${booking.cleaner_hourly_rate_cents / 100}/hr</span>
+                <span>
+                  {Math.round((booking.cleaner_payout_cents / booking.total_estimate_cents) * 100)}% of
+                  ${(booking.total_estimate_cents / 100).toFixed(2)} job revenue
+                </span>
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2">

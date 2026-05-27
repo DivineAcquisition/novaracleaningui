@@ -16,9 +16,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import {
-  getEstimatedHours,
-  calculateCleanerPayout,
-  DEFAULT_CLEANER_HOURLY_RATE_CENTS,
+  calculateCleanerPayoutCents,
+  DEFAULT_PAY_PERCENTAGE,
 } from "../_shared/payout-utils.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 
@@ -65,7 +64,7 @@ serve(async (req) => {
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
       .select(
-        `*, cleaners(id, stripe_account_id, payouts_enabled, first_name, last_name, email, phone, completed_bookings, total_earnings_cents)`,
+        `*, cleaners(id, stripe_account_id, payouts_enabled, first_name, last_name, email, phone, completed_bookings, total_earnings_cents, pay_percentage, pay_tier)`,
       )
       .eq("id", bookingId)
       .single();
@@ -84,6 +83,8 @@ serve(async (req) => {
       phone: string | null;
       completed_bookings: number | null;
       total_earnings_cents: number | null;
+      pay_percentage: number | null;
+      pay_tier: string | null;
     } | null;
 
     if (!cleaner || !cleaner.stripe_account_id) {
@@ -124,22 +125,28 @@ serve(async (req) => {
       );
     }
 
-    const estimatedHours =
-      booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
-    const cleanerHourlyRateCents =
-      booking.cleaner_hourly_rate_cents || DEFAULT_CLEANER_HOURLY_RATE_CENTS;
+    // Cleaner payout = revenue × pay_percentage. We prefer the value
+    // already stamped on bookings.cleaner_payout_cents (set by
+    // create-payment-intent at booking time and by complete-booking at
+    // completion using the actual assigned cleaner's tier). Fallback
+    // computes it fresh from the cleaner's current pay_percentage so a
+    // missing column never blocks payout.
+    const revenueCents =
+      booking.final_charge_cents || booking.total_estimate_cents || 0;
+    const payPercentage = Number(cleaner.pay_percentage) || DEFAULT_PAY_PERCENTAGE;
+
+    // For solo-cleaner bookings we treat cleaner_count = 1. Multi-
+    // cleaner jobs already have per-assignment payouts written by
+    // complete-booking, so this path only fires for the booking-level
+    // ledger of the lead cleaner.
     const cleanerPayoutCents =
       booking.cleaner_payout_cents ||
-      calculateCleanerPayout(estimatedHours, cleanerHourlyRateCents);
-    const platformFeeCents = Math.max(
-      0,
-      (booking.final_charge_cents || booking.total_estimate_cents || 0) -
-        cleanerPayoutCents,
-    );
+      calculateCleanerPayoutCents(revenueCents, payPercentage, 1);
+    const platformFeeCents = Math.max(0, revenueCents - cleanerPayoutCents);
 
-    logStep("Computed payout", {
-      estimatedHours,
-      hourlyRate: cleanerHourlyRateCents / 100,
+    logStep("Computed payout (revenue share)", {
+      revenueCents,
+      payPercentage,
       cleanerPayoutCents,
       platformFeeCents,
     });
@@ -170,7 +177,7 @@ serve(async (req) => {
         amount: cleanerPayoutCents,
         currency: "usd",
         destination: cleaner.stripe_account_id,
-        description: `Payout for booking ${bookingId.substring(0, 8)} - ${estimatedHours}hrs @ $${cleanerHourlyRateCents / 100}/hr`,
+        description: `Payout for booking ${bookingId.substring(0, 8)} - ${payPercentage}% revenue share`,
         metadata: {
           booking_id: bookingId,
           cleaner_id: cleaner.id,

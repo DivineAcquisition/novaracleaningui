@@ -54,7 +54,8 @@ interface CleanerProfile {
   payouts_enabled: boolean;
   onboarding_complete: boolean;
   portal_checklist_complete?: boolean;
-  pay_rate_hr?: number;
+  pay_tier?: string;
+  pay_percentage?: number;
   ob_agreement_signed: boolean;
   ob_agreement_signed_at: string | null;
   ob_google_chat_joined: boolean;
@@ -1094,7 +1095,8 @@ export default function OnboardingPortal() {
                           <div className="bg-green-500/5 rounded-lg p-3 border border-green-500/20">
                             <p className="text-xs text-green-700">
                               Payouts are processed within 2-3 business days
-                              after each completed job. Your rate: <span className="font-bold">${profile?.pay_rate_hr || 18}/hour</span>.
+                              after each completed job. You earn <span className="font-bold">{profile?.pay_percentage || 40}% of every job's revenue</span>
+                              {" "}({(profile?.pay_tier || "foundation")} tier).
                             </p>
                           </div>
 

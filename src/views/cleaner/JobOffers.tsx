@@ -43,16 +43,15 @@ export default function JobOffers() {
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
-  const [payRate, setPayRate] = useState(18);
+  const [payPct, setPayPct] = useState(40);
 
   const fetchOffers = async () => {
     if (!user) return;
 
     try {
-      // Get cleaner ID
       const { data: cleaner } = await supabase
         .from("cleaners")
-        .select("id, pay_rate_hr")
+        .select("id, pay_percentage")
         .eq("user_id", user.id)
         .single();
 
@@ -60,7 +59,7 @@ export default function JobOffers() {
         throw new Error("Cleaner profile not found");
       }
 
-      if (cleaner.pay_rate_hr) setPayRate(cleaner.pay_rate_hr);
+      if (cleaner.pay_percentage) setPayPct(Number(cleaner.pay_percentage));
 
       // Get pending offers
       const { data, error } = await (supabase as any)
@@ -258,10 +257,10 @@ export default function JobOffers() {
                   <div className="p-3 bg-muted rounded-lg">
                     <p className="text-sm font-medium">Estimated Pay</p>
                     <p className="text-2xl font-bold text-primary">
-                      ${(offer.jobs.duration_est_hours * payRate).toFixed(2)}
+                      ${((offer.estimated_pay_cents || 0) / 100).toFixed(2)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      ${payRate}/hour × {offer.jobs.duration_est_hours} hours
+                      {payPct}% revenue share
                     </p>
                   </div>
 
