@@ -125,6 +125,17 @@ async function pullConversation(
     }
     contactId = matched.id;
     contact = matched;
+  } else {
+    // contactId was passed directly (e.g. from chat-agent-pulse).
+    // Fetch the full contact record so the persisted audit row has
+    // name / email / phone — otherwise chat_insights ends up with
+    // anonymous entries and downstream filtering / dashboards break.
+    try {
+      const cRes = await ghl(ghlToken, `/contacts/${encodeURIComponent(contactId)}`);
+      if (cRes.ok) {
+        contact = (cRes.body as any)?.contact ?? cRes.body ?? null;
+      }
+    } catch { /* ignore */ }
   }
   let conversationId = args.conversationId || null;
   let lastMessageDate: string | null = null;
