@@ -178,12 +178,18 @@ serve(async (req) => {
 
     const results = await runWithConcurrency(todo, concurrency, async (c) => {
       try {
+        // Pass the conversation's lastMessageDate so the agent stores
+        // exactly that value as last_analyzed_message_ts. Otherwise the
+        // agent falls back to messages[last].ts which can differ by
+        // sub-second precision from GHL's lastMessageDate, causing the
+        // conversation to be re-analyzed every tick.
         const r = await supabase.functions.invoke("admin-chat-agent", {
           body: {
             conversationId: c.id,
             contactId: c.contactId,
             email: c.email,
             phone: c.phone,
+            lastMessageDateOverride: asISO(c.lastMessageDate),
             limit: 50,
             autoApply: true,
             persist: true,

@@ -453,7 +453,13 @@ serve(async (req) => {
 
     if (body.persist !== false && conversationId) {
       try {
-        const lastTs = pulled.lastMessageDate || messages[messages.length - 1]?.ts || null;
+        // Prefer the caller-supplied override (pulse passes the
+        // conversation's lastMessageDate from GHL's conversation list)
+        // so the next tick's idempotency comparison matches exactly.
+        const lastTs = body.lastMessageDateOverride
+          || pulled.lastMessageDate
+          || messages[messages.length - 1]?.ts
+          || null;
         await supabase.from("chat_insights").upsert({
           conversation_id: conversationId,
           contact_id: contactId,
