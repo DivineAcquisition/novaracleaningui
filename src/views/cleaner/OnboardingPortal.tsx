@@ -1095,7 +1095,7 @@ export default function OnboardingPortal() {
                           <div className="bg-green-500/5 rounded-lg p-3 border border-green-500/20">
                             <p className="text-xs text-green-700">
                               Payouts are processed within 2-3 business days
-                              after each completed job. You earn <span className="font-bold">{profile?.pay_percentage || 40}% of every job's revenue</span>
+                              after each completed job. You earn <span className="font-bold">{profile?.pay_percentage || 35}% of every job's revenue</span>
                               {" "}({(profile?.pay_tier || "foundation")} tier).
                             </p>
                           </div>

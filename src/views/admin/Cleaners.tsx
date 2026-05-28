@@ -353,7 +353,7 @@ export default function AdminCleaners() {
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{fullName(c)}</div>
                         <div className="text-[11px] text-slate-500">
-                          {(c.pay_tier || "foundation").charAt(0).toUpperCase() + (c.pay_tier || "foundation").slice(1)} · {c.pay_percentage ?? 40}% revenue share
+                          {(c.pay_tier || "foundation").charAt(0).toUpperCase() + (c.pay_tier || "foundation").slice(1)} · {c.pay_percentage ?? 35}% revenue share
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell text-slate-700">
@@ -844,9 +844,9 @@ function AddCleanerDialog({
                 onChange={(e) => setPayTier(e.target.value as "foundation" | "proven" | "elite")}
                 className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500"
               >
-                <option value="foundation">Foundation (40%)</option>
-                <option value="proven">Proven (45%)</option>
-                <option value="elite">Elite (50%)</option>
+                <option value="foundation">Foundation (35%)</option>
+                <option value="proven">Proven (40%)</option>
+                <option value="elite">Elite (45%)</option>
               </select>
             </div>
           </div>

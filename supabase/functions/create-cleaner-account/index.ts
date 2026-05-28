@@ -26,7 +26,7 @@ serve(async (req) => {
     const tier = ["foundation", "proven", "elite"].includes(String(payTier || "").toLowerCase())
       ? String(payTier).toLowerCase()
       : "foundation";
-    const payPercentage = tier === "elite" ? 50 : tier === "proven" ? 45 : 40;
+    const payPercentage = tier === "elite" ? 45 : tier === "proven" ? 40 : 35;
 
     // Generate password: firstInitial + fullLastName + nv2025!
     const password = `${firstName[0].toLowerCase()}${lastName}nv2025!`;

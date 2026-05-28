@@ -327,11 +327,11 @@ export const ACTIVE_PROMOS: PromoConfig[] = [
 export const CLEANER_CONFIG = {
   // Revenue share by tier (percent of customer-paid revenue).
   payPercentage: {
-    foundation: 40,
-    proven: 45,
-    elite: 50,
+    foundation: 35,
+    proven: 40,
+    elite: 45,
   },
-  defaultPayPercentage: 40, // Foundation default for unassigned jobs
+  defaultPayPercentage: 35, // Foundation default for unassigned jobs
   teamSize: {
     standard: 2,                // 2 cleaners for homes ≤2500 sqft
     large: 3,                   // 3 cleaners for homes >2500 sqft

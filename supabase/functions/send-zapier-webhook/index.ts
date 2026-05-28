@@ -354,7 +354,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const estimatedHours = booking.estimated_duration_hours || getEstimatedHours(booking.home_size_id);
     const teamSize = getTeamSize(booking.home_size_id);
     const revenueCents = booking.final_charge_cents || booking.total_estimate_cents || 0;
-    const assignedPayPct = Number(booking.cleaners?.pay_percentage) || 40;
+    const assignedPayPct = Number(booking.cleaners?.pay_percentage) || 35;
     const totalTeamPayoutCents = Math.floor((revenueCents * assignedPayPct) / 100);
     const perCleanerPayoutCents = booking.cleaner_payout_cents
       || Math.floor(totalTeamPayoutCents / Math.max(1, teamSize));
@@ -453,7 +453,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       "Assigned Cleaner Email": booking.cleaners?.email || "",
       "Assigned Cleaner Phone": booking.cleaners?.phone || "",
       "Assigned Cleaner Pay Rate": booking.cleaners
-        ? `${booking.cleaners.pay_percentage || 40}% revenue share`
+        ? `${booking.cleaners.pay_percentage || 35}% revenue share`
         : "",
       "Assigned Cleaner Total Pay": booking.cleaners
         ? formatCurrency(perCleanerPayoutCents)

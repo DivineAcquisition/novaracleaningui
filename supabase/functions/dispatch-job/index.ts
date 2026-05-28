@@ -363,9 +363,9 @@ serve(async (req) => {
     );
     const cleanerCount = Math.max(1, selectedCleaners.length);
     const teamMaxPct = selectedCleaners.reduce((m: number, c: any) => {
-      const p = Number(c.pay_percentage) || 40;
+      const p = Number(c.pay_percentage) || 35;
       return p > m ? p : m;
-    }, 40);
+    }, 35);
     const poolCents = Math.floor((revenueCents * teamMaxPct) / 100);
     const perCleanerPayCents = Math.floor(poolCents / cleanerCount);
 
@@ -410,7 +410,7 @@ serve(async (req) => {
       const estimatedPay = ((assignment.estimated_pay_cents || 0) / 100).toFixed(2);
       const sharePct = assignment.pay_percentage_snapshot
         || assignment.cleaners?.pay_percentage
-        || 40;
+        || 35;
       const tokenBytes = new Uint8Array(16);
       crypto.getRandomValues(tokenBytes);
       const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');

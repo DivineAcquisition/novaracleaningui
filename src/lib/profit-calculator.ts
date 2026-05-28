@@ -20,10 +20,10 @@
  */
 
 // Most conservative tier for company-side discount validation:
-// assume Elite (50%) when checking whether a discount still leaves
+// assume Elite (45%) when checking whether a discount still leaves
 // margin. That way we never approve a promo that breaks even on
 // Foundation but loses money once the cleaner hits Elite.
-const WORST_CASE_PAY_PERCENT = 0.50;
+const WORST_CASE_PAY_PERCENT = 0.45;
 const PLATFORM_FEE_PERCENT = 0.03;
 const MINIMUM_PROFIT_MARGIN = 0.20;
 

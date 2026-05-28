@@ -312,7 +312,7 @@ export default function CleanerJobOfferPage() {
               label="Revenue share"
               value={
                 offer.assignment.estimated_pay_cents
-                  ? `${offer.assignment.pay_percentage_snapshot ?? 40}% of job revenue · ${dollars(offer.assignment.estimated_pay_cents)} for you`
+                  ? `${offer.assignment.pay_percentage_snapshot ?? 35}% of job revenue · ${dollars(offer.assignment.estimated_pay_cents)} for you`
                   : "—"
               }
               hint="Pay = job revenue × your tier %, split evenly when multiple cleaners are assigned."

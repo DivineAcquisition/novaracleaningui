@@ -495,10 +495,10 @@ serve(async (req) => {
       ? "pending_payment"
       : "confirmed";
 
-    // Cleaner pay = revenue × 40% (Foundation default at booking time
+    // Cleaner pay = revenue × 35% (Foundation default at booking time
     // — dispatch-job recomputes when offering using the assigned
     // cleaner's actual tier %).
-    const DEFAULT_BOOKING_PAY_PCT = 40;
+    const DEFAULT_BOOKING_PAY_PCT = 35;
     const cleanerPayoutCents = Math.floor(
       (totalCents * DEFAULT_BOOKING_PAY_PCT) / 100,
     );

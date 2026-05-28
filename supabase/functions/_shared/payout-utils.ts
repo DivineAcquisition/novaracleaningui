@@ -1,12 +1,12 @@
-// ─── Cleaner pay model: revenue share (40 / 45 / 50%) ──────────────────
+// ─── Cleaner pay model: revenue share (35 / 40 / 45%) ──────────────────
 //
 // Replaces the legacy hourly-rate model ($18/$20/$22) with a flat
 // percentage of customer-paid job revenue, tiered by cleaner tenure +
 // performance:
 //
-//   Foundation : 40% of job revenue
-//   Proven     : 45% of job revenue
-//   Elite      : 50% of job revenue
+//   Foundation : 35% of job revenue
+//   Proven     : 40% of job revenue
+//   Elite      : 45% of job revenue
 //
 // Multi-cleaner jobs: tier % applies to the job total. Cleaners split
 // the pool evenly. Mixed tiers use the HIGHEST tier on the job
@@ -21,9 +21,9 @@
 // job_assignments.pay_percentage_snapshot.
 export type PayTier = "foundation" | "proven" | "elite";
 export const TIER_REVENUE_SHARE: Record<PayTier, number> = {
-  foundation: 40,
-  proven: 45,
-  elite: 50,
+  foundation: 35,
+  proven: 40,
+  elite: 45,
 };
 
 export const DEFAULT_PAY_TIER: PayTier = "foundation";
@@ -47,8 +47,8 @@ export function normalizePayTier(value: unknown): PayTier {
  */
 export function tierFromPayPercentage(pct: number | null | undefined): PayTier {
   const n = Math.round(Number(pct) || 0);
-  if (n >= 50) return "elite";
-  if (n >= 45) return "proven";
+  if (n >= 45) return "elite";
+  if (n >= 40) return "proven";
   return "foundation";
 }
 

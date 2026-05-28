@@ -270,16 +270,16 @@ function mapCustomerSource(utmSource?: string | null, fbclid?: string | null, gc
 function mapPayTier(payTierOrRate?: string | number | null): string {
   if (payTierOrRate == null || payTierOrRate === "") return "";
   const s = String(payTierOrRate).toLowerCase();
-  if (s === "elite") return "Elite (50% revenue share)";
-  if (s === "proven") return "Proven (45% revenue share)";
-  if (s === "foundation") return "Foundation (40% revenue share)";
+  if (s === "elite") return "Elite (45% revenue share)";
+  if (s === "proven") return "Proven (40% revenue share)";
+  if (s === "foundation") return "Foundation (35% revenue share)";
   // Numeric fallback — treat as legacy hourly rate during transition.
   const n = Number(payTierOrRate);
   if (Number.isFinite(n) && n > 0) {
     const dollars = n >= 100 ? n / 100 : n;
-    if (dollars >= 22) return "Elite (50% revenue share)";
-    if (dollars >= 20) return "Proven (45% revenue share)";
-    return "Foundation (40% revenue share)";
+    if (dollars >= 22) return "Elite (45% revenue share)";
+    if (dollars >= 20) return "Proven (40% revenue share)";
+    return "Foundation (35% revenue share)";
   }
   return "";
 }

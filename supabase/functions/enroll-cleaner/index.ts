@@ -47,7 +47,7 @@ serve(async (req) => {
     const tierNorm = ["foundation", "proven", "elite"].includes(String(pay_tier || "").toLowerCase())
       ? String(pay_tier).toLowerCase()
       : "foundation";
-    const payPercentage = tierNorm === "elite" ? 50 : tierNorm === "proven" ? 45 : 40;
+    const payPercentage = tierNorm === "elite" ? 45 : tierNorm === "proven" ? 40 : 35;
 
     // Validate required fields
     if (!email || !first_name || !last_name || !phone) {

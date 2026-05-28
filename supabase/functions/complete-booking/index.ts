@@ -118,7 +118,7 @@ serve(async (req) => {
             (a as any).pay_percentage_snapshot
               || ((a as any).cleaners?.pay_percentage)
               || 0,
-          ) || 40;
+          ) || 35;
           team.push({ id: a.cleaner_id, pct });
         }
       }
@@ -130,14 +130,14 @@ serve(async (req) => {
           .select("pay_percentage")
           .eq("id", booking.cleaner_id)
           .maybeSingle();
-        team.push({ id: booking.cleaner_id, pct: Number(c?.pay_percentage) || 40 });
+        team.push({ id: booking.cleaner_id, pct: Number(c?.pay_percentage) || 35 });
       }
 
       if (team.length > 0) {
         const revenue = booking.final_charge_cents
           || booking.total_estimate_cents
           || 0;
-        recomputedPayPct = team.reduce((m, t) => Math.max(m, t.pct), 40);
+        recomputedPayPct = team.reduce((m, t) => Math.max(m, t.pct), 35);
         const pool = Math.floor((revenue * recomputedPayPct) / 100);
         const perCleaner = Math.floor(pool / team.length);
         recomputedPayoutCents = perCleaner;
@@ -467,7 +467,7 @@ serve(async (req) => {
           const revenue = booking.final_charge_cents
             || booking.total_estimate_cents
             || 0;
-          const pct = Number(cleaner.pay_percentage) || 40;
+          const pct = Number(cleaner.pay_percentage) || 35;
           const estimatedEarnings = booking.cleaner_payout_cents
             || Math.floor((revenue * pct) / 100);
 

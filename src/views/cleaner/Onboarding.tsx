@@ -272,7 +272,7 @@ export default function CleanerOnboarding() {
         avatar_url: avatarUrl,
         skillset: formData.skillset,
         pay_tier: "foundation",
-        pay_percentage: 40,
+        pay_percentage: 35,
         status: "active",
         approved: true,
         onboarding_complete: true,
@@ -640,9 +640,9 @@ export default function CleanerOnboarding() {
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Your Pay Model</p>
-                        <p className="text-2xl font-bold text-green-600">40% of every job</p>
+                        <p className="text-2xl font-bold text-green-600">35% of every job</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Starting tier (Foundation). Move to Proven (45%) and Elite (50%) as you complete more jobs.
+                          Starting tier (Foundation). Move to Proven (40%) and Elite (45%) as you complete more jobs.
                         </p>
                       </div>
                     </div>
@@ -744,7 +744,7 @@ export default function CleanerOnboarding() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Pay Model</p>
-                        <p className="font-medium text-green-600">40% of every job (Foundation tier)</p>
+                        <p className="font-medium text-green-600">35% of every job (Foundation tier)</p>
                       </div>
                     </div>
 

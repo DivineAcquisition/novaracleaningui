@@ -668,7 +668,7 @@ export default function CleanerDashboard() {
                     : job.service_date && job.time_slot
                       ? `${format(new Date(job.service_date), "EEEE, MMM d")} at ${job.time_slot}`
                       : "—";
-                  const sharePct = profile?.pay_percentage ?? 40;
+                  const sharePct = profile?.pay_percentage ?? 35;
                   const pay =
                     job.estimated_pay_cents ??
                     job.cleaner_payout_cents ??

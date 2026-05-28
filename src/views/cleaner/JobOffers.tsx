@@ -43,7 +43,7 @@ export default function JobOffers() {
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
-  const [payPct, setPayPct] = useState(40);
+  const [payPct, setPayPct] = useState(35);
 
   const fetchOffers = async () => {
     if (!user) return;

@@ -276,7 +276,8 @@ serve(async (req) => {
           // We compare the residual margin against the promo's
           // configured floor.
           const tempTotal = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents;
-          const tentativeCleanerCost = Math.floor(tempTotal * 0.50);
+          // Worst-case cleaner cost is the highest tier (Elite) at 45%.
+          const tentativeCleanerCost = Math.floor(tempTotal * 0.45);
           const profitMargin = tempTotal > 0
             ? (tempTotal - tentativeCleanerCost) / tempTotal
             : 0;
@@ -356,13 +357,13 @@ serve(async (req) => {
     if (totalAmount < 0) totalAmount = 0;
     logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, promoDiscountCents, walletCreditCents, totalAmount });
 
-    // Cleaner payout = flat 40% of customer-paid revenue (Foundation
+    // Cleaner payout = flat 35% of customer-paid revenue (Foundation
     // tier default at booking time — no cleaner has been assigned yet).
     // dispatch-job recomputes using the actual assigned cleaner's tier
     // % when the job goes out for offer, so this is just the booking-
     // time placeholder that complete-booking and process-payout fall
     // back to if dispatch never ran.
-    const DEFAULT_BOOKING_PAY_PCT = 40;
+    const DEFAULT_BOOKING_PAY_PCT = 35;
     const cleanerPayoutCents = Math.floor((totalAmount * DEFAULT_BOOKING_PAY_PCT) / 100);
     const platformFeeCents = totalAmount - cleanerPayoutCents;
 
