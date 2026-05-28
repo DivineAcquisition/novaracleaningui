@@ -89,11 +89,13 @@ serve(async (req) => {
         .eq("id", cleanerId);
     }
 
-    // Create account link for onboarding
+    // Create account link for onboarding. Returns the cleaner to the
+    // admin Cleaners page after they finish (or `?refresh=` if Stripe
+    // expires the link before they complete it).
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `https://book.novaracleaning.com/admin/cleaners?refresh=${cleanerId}`,
-      return_url: `https://book.novaracleaning.com/admin/cleaners?onboarding=complete&cleaner=${cleanerId}`,
+      refresh_url: `https://admin.novaracleaning.com/admin/cleaners?refresh=${cleanerId}`,
+      return_url: `https://admin.novaracleaning.com/admin/cleaners?onboarding=complete&cleaner=${cleanerId}`,
       type: "account_onboarding",
     });
 
