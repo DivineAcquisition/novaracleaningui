@@ -29,31 +29,9 @@ const log = (step: string, details?: unknown) => {
   console.log(`[AI-TOOL] ${step}`, details === undefined ? "" : JSON.stringify(details));
 };
 
-// ─── Pricing (mirrors src/lib/pricing-system.ts v3.4) ─────────────────────
-const HOME_SIZE_PRICE: Record<string, number> = {
-  "0_999": 270,
-  "1000_1500": 342,
-  "1501_2000": 432,
-  "2001_2500": 504,
-  "2501_3000": 612,
-  "3001_3500": 684,
-  "3501_4000": 792,
-  "4001_4500": 882,
-  "4501_5000": 972,
-  "5000_plus": 0, // requires custom quote
-};
-const HOME_SIZE_HOURS: Record<string, number> = {
-  "0_999": 2.0, "1000_1500": 2.5, "1501_2000": 3.0, "2001_2500": 3.5,
-  "2501_3000": 4.0, "3001_3500": 4.5, "3501_4000": 5.0, "4001_4500": 5.5,
-  "4501_5000": 6.0, "5000_plus": 8.0,
-};
-const SERVICE_MULT: Record<string, number> = {
-  standard: 1.0, deep: 1.5, combo: 2.5, moveInOut: 2.0,
-};
-const ADD_ON_PRICE: Record<string, number> = { fridge: 30, oven: 30, windows: 40 };
-const MEMBERSHIP_DISCOUNT: Record<string, number> = { none: 0, monthly: 0.20, biweekly: 0.25, weekly: 0.30 };
-const NEW_CUSTOMER_DISCOUNT_PCT = 0.5;
-const DEPOSIT_PCT = 0.5;
+// ─── Pricing (delegates to _shared/pricing.ts — v4 single SOT) ────────────
+import { calculatePriceCents } from "../_shared/pricing.ts";
+
 const ACCOUNT_PORTAL_URL = "https://try.novaracleaning.com/account";
 
 function calcPrice(args: {
@@ -63,29 +41,22 @@ function calcPrice(args: {
   membershipPlan: string;
   isNewCustomer: boolean;
 }): { subtotalCents: number; promoCents: number; totalCents: number; depositCents: number } {
-  const base = HOME_SIZE_PRICE[args.homeSizeId] || 0;
-  const mult = SERVICE_MULT[args.serviceType] ?? 1.0;
-  const serviceCost = base * mult;
-  // Move-In/Out bundles fridge + oven; ignore those add-ons.
-  const filteredAddOns = args.serviceType === "moveInOut"
-    ? args.addOns.filter((a) => !["fridge", "oven"].includes(a))
-    : args.addOns;
-  const addOnTotal = filteredAddOns.reduce((s, a) => s + (ADD_ON_PRICE[a] || 0), 0);
-  const subtotal = serviceCost + addOnTotal;
-  // Promo eligibility: new customers OR all customers on standard/deep/combo
-  // (membership has its own per-clean savings; promo doesn't stack)
-  const promoEligible = args.membershipPlan === "none"
-    && ["standard", "deep", "combo"].includes(args.serviceType);
-  const promo = promoEligible ? subtotal * NEW_CUSTOMER_DISCOUNT_PCT : 0;
-  // Membership discount on extras only
-  const membershipDiscount = (MEMBERSHIP_DISCOUNT[args.membershipPlan] || 0) * (serviceCost - base + addOnTotal);
-  const total = Math.round((subtotal - promo - membershipDiscount) * 100);
-  const deposit = Math.round(total * DEPOSIT_PCT);
+  // isNewCustomer is intentionally ignored — v4 discounts depend on
+  // service tier only (15% std, 25% deep, 50% off std portion of combo).
+  void args.isNewCustomer;
+  const c = calculatePriceCents(
+    args.homeSizeId,
+    args.serviceType,
+    args.addOns || [],
+    args.membershipPlan || "none",
+    false,
+    "B",
+  );
   return {
-    subtotalCents: Math.round(subtotal * 100),
-    promoCents: Math.round(promo * 100),
-    totalCents: total,
-    depositCents: deposit,
+    subtotalCents: c.subtotalCents,
+    promoCents: c.discountCents,
+    totalCents: c.totalCents,
+    depositCents: c.depositCents,
   };
 }
 

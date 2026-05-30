@@ -98,7 +98,11 @@ export default function AdminBookings() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [dateRange, setDateRange] = useState<"upcoming" | "past_30" | "all">("upcoming");
+  // Default to "all" so brand-new internal or customer bookings show up
+  // immediately regardless of their `service_date` (the old default
+  // "upcoming" used `service_date >= today` which silently hid bookings
+  // dated yesterday in UTC, or any booking still missing a service_date).
+  const [dateRange, setDateRange] = useState<"all" | "upcoming" | "past_30" | "last_7_created">("all");
   const [selected, setSelected] = useState<BookingRow | null>(null);
 
   const load = useCallback(async () => {
@@ -109,7 +113,10 @@ export default function AdminBookings() {
         .select(
           "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, created_at, uses_credit, cancel_reason, service_duration",
         )
-        .order("service_date", { ascending: false })
+        // Order by created_at so the most-recently-booked row floats to
+        // the top — that's what an operator opening the tab needs to see
+        // first (especially right after an internal-booking submit).
+        .order("created_at", { ascending: false })
         .limit(500);
       const today = new Date().toISOString().slice(0, 10);
       if (dateRange === "upcoming") {
@@ -118,7 +125,12 @@ export default function AdminBookings() {
         const past = new Date();
         past.setDate(past.getDate() - 30);
         q = q.gte("service_date", past.toISOString().slice(0, 10));
+      } else if (dateRange === "last_7_created") {
+        const past = new Date();
+        past.setDate(past.getDate() - 7);
+        q = q.gte("created_at", past.toISOString());
       }
+      // dateRange === "all" → no date predicate; show everything.
       if (statusFilter !== "all") {
         q = q.eq("status", statusFilter);
       }
@@ -217,9 +229,10 @@ export default function AdminBookings() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="upcoming">Upcoming + today</SelectItem>
-                <SelectItem value="past_30">Last 30 days</SelectItem>
-                <SelectItem value="all">All time</SelectItem>
+                <SelectItem value="all">All bookings</SelectItem>
+                <SelectItem value="last_7_created">Booked in last 7 days</SelectItem>
+                <SelectItem value="upcoming">Upcoming service date + today</SelectItem>
+                <SelectItem value="past_30">Service date in last 30 days</SelectItem>
               </SelectContent>
             </Select>
           </div>

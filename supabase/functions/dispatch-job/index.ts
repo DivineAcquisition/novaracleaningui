@@ -76,6 +76,110 @@ function calculatePerformanceScore(acceptanceRate: number | null, onTimeRate: nu
 }
 
 /**
+ * Broadcast fallback: when scoring returns ZERO qualified cleaners (or
+ * there are no eligible cleaners at all), instead of throwing and
+ * leaving the operator to find out via the dispatch_alerts table, we
+ * SMS every active cleaner in the directory via GHL with a "first to
+ * claim" link. The first cleaner to hit /cleaner/job-claim/<token>
+ * wins; the rest see "already taken" when they tap the link.
+ *
+ * We insert one job_assignments row per active cleaner with status =
+ * 'Broadcast' and a per-cleaner response_token. The claim endpoint
+ * (`accept-job-offer`) atomically flips the winning row to 'Confirmed'
+ * and bulk-cancels the others to 'Broadcast_Lost'.
+ *
+ * Also stamps the job row with a dispatch_alert so the admin map / 
+ * dashboard surfaces the broadcast for human review.
+ */
+async function broadcastJob(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  // deno-lint-ignore no-explicit-any
+  job: any,
+  reason: string,
+): Promise<{ broadcastSent: number; broadcastSkipped: number; reason: string }> {
+  await supabase.from("dispatch_alerts").insert({
+    job_id: job.id,
+    reason: `Broadcast fallback: ${reason}`,
+    severity: "warning",
+  }).then(() => undefined).catch(() => undefined);
+
+  await supabase
+    .from("jobs")
+    .update({
+      status: "Broadcast",
+      manual_intervention_required: false,
+      dispatch_alert_reason: `Broadcast — ${reason}`,
+    })
+    .eq("id", job.id)
+    .then(() => undefined).catch(() => undefined);
+
+  const { data: all } = await supabase
+    .from("cleaners")
+    .select("id, first_name, last_name, phone, email, sms_notifications_enabled")
+    .eq("approved", true)
+    .eq("available_for_bookings", true)
+    .eq("status", "active");
+
+  const eligible = (all || []).filter((c: any) => !!c.phone);
+  if (eligible.length === 0) {
+    return { broadcastSent: 0, broadcastSkipped: 0, reason: "no_active_cleaners" };
+  }
+
+  // Build the assignment rows + per-cleaner tokens
+  const rows = eligible.map((c: any) => {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    return {
+      job_id: job.id,
+      cleaner_id: c.id,
+      status: "Broadcast",
+      role: "Broadcast",
+      response_token: token,
+    };
+  });
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from("job_assignments")
+    .insert(rows)
+    .select("id, cleaner_id, response_token");
+  if (insertErr) {
+    logStep("broadcast insert failed", { err: insertErr.message });
+    return { broadcastSent: 0, broadcastSkipped: 0, reason: "insert_failed" };
+  }
+
+  const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  });
+  const baseMsg = `🧹 Open Job — first to claim wins!\n\nDate: ${jobDateFormatted}\nLocation: ${job.city || ""} ${job.zip || ""}\n~${job.duration_est_hours || 2.5} hrs · revenue share pay\n\nTap to grab it:`;
+
+  let sent = 0; let skipped = 0;
+  for (const c of eligible) {
+    const row = (inserted || []).find((r: any) => r.cleaner_id === c.id);
+    if (!row || !c.sms_notifications_enabled) { skipped++; continue; }
+    const url = `https://contractor.novaracleaning.com/cleaner/job-offer/${row.response_token}`;
+    try {
+      await supabase.functions.invoke("send-ghl-sms", {
+        body: {
+          phone: c.phone,
+          email: c.email || undefined,
+          firstName: c.first_name || undefined,
+          lastName: c.last_name || undefined,
+          message: `${baseMsg}\n${url}\n\nReply STOP to opt out.`,
+          type: "job_broadcast",
+        },
+      });
+      sent++;
+    } catch (_) {
+      skipped++;
+    }
+  }
+  logStep("Broadcast complete", { sent, skipped, reason });
+  return { broadcastSent: sent, broadcastSkipped: skipped, reason };
+}
+
+/**
  * Check for scheduling conflicts
  */
 async function hasSchedulingConflict(
@@ -146,8 +250,40 @@ serve(async (req) => {
       throw new Error(`Job not found: ${jobError?.message}`);
     }
 
+    // If the job row is missing coordinates, try one geocode pass before
+    // giving up — auto-dispatch-booking should have populated them, but
+    // we've seen rows slip through (e.g. when geocode-address timed out
+    // during the post-confirm fanout). One retry here lets dispatch
+    // continue instead of hard-failing on cold-start.
     if (!job.lat || !job.lng) {
-      throw new Error("Job location not geocoded");
+      try {
+        const geo = await supabase.functions.invoke("geocode-address", {
+          body: {
+            address: job.address,
+            city: job.city,
+            state: job.state,
+            zip: job.zip,
+          },
+        });
+        // deno-lint-ignore no-explicit-any
+        const g = (geo?.data as any) || {};
+        if (g.lat && g.lng) {
+          await supabase
+            .from("jobs")
+            .update({ lat: g.lat, lng: g.lng })
+            .eq("id", jobId);
+          job.lat = g.lat;
+          job.lng = g.lng;
+          logStep("Job geocoded on dispatch", { lat: job.lat, lng: job.lng });
+        }
+      } catch (geoErr) {
+        logStep("dispatch geocode retry failed", { err: String((geoErr as Error).message) });
+      }
+    }
+    if (!job.lat || !job.lng) {
+      // We CAN still broadcast — no eligibility filter requires lat/lng.
+      // Fall through and let the broadcast path pick it up. Just log.
+      logStep("Job missing coordinates — distance scoring will skip; broadcast fallback available");
     }
 
     logStep("Job details", { 
@@ -176,24 +312,12 @@ serve(async (req) => {
     }
 
     if (!cleaners || cleaners.length === 0) {
-      logStep("No available cleaners found");
-      
-      await supabase.from("dispatch_alerts").insert({
-        job_id: jobId,
-        reason: "No available cleaners found",
-        severity: "critical"
-      });
-
-      await supabase
-        .from("jobs")
-        .update({ 
-          status: "Dispatching",
-          manual_intervention_required: true,
-          dispatch_alert_reason: "No available cleaners"
-        })
-        .eq("id", jobId);
-
-      throw new Error("No available cleaners");
+      logStep("No available cleaners found — falling back to broadcast");
+      const bResult = await broadcastJob(supabase, job, "No active cleaners passed hard filters");
+      return new Response(
+        JSON.stringify({ success: true, broadcast: true, ...bResult }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     logStep(`Found ${cleaners.length} approved cleaners`);
@@ -281,24 +405,16 @@ serve(async (req) => {
     }
 
     if (scoredCandidates.length === 0) {
-      logStep("No qualified candidates found");
-      
-      await supabase.from("dispatch_alerts").insert({
-        job_id: jobId,
-        reason: "No cleaners meet requirements (distance, availability, conflicts)",
-        severity: "critical"
-      });
-
-      await supabase
-        .from("jobs")
-        .update({ 
-          status: "Dispatching",
-          manual_intervention_required: true,
-          dispatch_alert_reason: "No qualified cleaners"
-        })
-        .eq("id", jobId);
-
-      throw new Error("No qualified candidates found");
+      logStep("No qualified candidates after scoring — falling back to broadcast");
+      const bResult = await broadcastJob(
+        supabase,
+        job,
+        "No cleaners met scoring filters (distance, capacity, conflicts)",
+      );
+      return new Response(
+        JSON.stringify({ success: true, broadcast: true, ...bResult }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     logStep(`${scoredCandidates.length} qualified candidates found`);
@@ -437,13 +553,15 @@ ${offerUrl}
 Open in the cleaner portal to accept or decline.`;
 
       try {
-        await supabase.functions.invoke("send-sms-notification", {
+        await supabase.functions.invoke("send-ghl-sms", {
           body: {
-            toPhone: assignment.cleaners.phone,
+            phone: assignment.cleaners.phone,
+            email: assignment.cleaners.email || undefined,
+            firstName: assignment.cleaners.first_name || undefined,
+            lastName: assignment.cleaners.last_name || undefined,
             message,
             type: "job_offer",
-            jobAssignmentId: assignment.id
-          }
+          },
         });
       } catch (smsError) {
         console.error(`[SMS] Failed to send to ${assignment.cleaners.first_name}:`, smsError);

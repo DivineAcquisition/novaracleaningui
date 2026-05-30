@@ -151,23 +151,62 @@ serve(async (req) => {
       );
     }
 
+    // Atomically flip THIS assignment to Confirmed only if it's still
+    // in a takeable state (Offered or Broadcast). Then, for broadcast
+    // jobs, retire every OTHER broadcast row on the same job to
+    // 'Broadcast_Lost' so siblings see "already taken" when they click.
+    const takeableStatuses = ["offered", "broadcast"];
+    const wasBroadcast = status === "broadcast";
     const { data: updated, error: updateErr } = await supabase
       .from("job_assignments")
       .update({
         status: "Confirmed",
+        role: wasBroadcast ? "Lead" : assignment.role || "Lead",
         accepted_at: new Date().toISOString(),
         responded_at: new Date().toISOString(),
       })
       .eq("id", assignment.id)
-      .ilike("status", "offered")
-      .select("id")
+      .in("status", takeableStatuses.map((s) => s.charAt(0).toUpperCase() + s.slice(1)))
+      .select("id, role")
       .maybeSingle();
     if (updateErr) throw updateErr;
     if (!updated) {
-      return new Response(
-        JSON.stringify({ ok: false, reason: "taken", message: "Offer is no longer available." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
-      );
+      // Try a case-insensitive variant for legacy rows.
+      const { data: updated2 } = await supabase
+        .from("job_assignments")
+        .update({
+          status: "Confirmed",
+          role: wasBroadcast ? "Lead" : assignment.role || "Lead",
+          accepted_at: new Date().toISOString(),
+          responded_at: new Date().toISOString(),
+        })
+        .eq("id", assignment.id)
+        .or("status.ilike.offered,status.ilike.broadcast")
+        .select("id")
+        .maybeSingle();
+      if (!updated2) {
+        return new Response(
+          JSON.stringify({ ok: false, reason: "taken", message: "Offer is no longer available." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+        );
+      }
+    }
+
+    // First-to-claim cleanup for broadcast jobs — bulk-mark the other
+    // broadcast rows as Broadcast_Lost so they can't be double-claimed
+    // and the cleaners see a graceful "already taken" on the offer page.
+    if (wasBroadcast) {
+      try {
+        await supabase
+          .from("job_assignments")
+          .update({ status: "Broadcast_Lost" })
+          .eq("job_id", assignment.job_id)
+          .neq("id", assignment.id)
+          .ilike("status", "broadcast");
+      } catch (_) { /* non-fatal */ }
+      // Update the cleaner's role on the winning row to Lead — the
+      // broadcast had no roles assigned. (Already done above when we
+      // updated.)
     }
 
     if (job.status !== "Assigned" && job.status !== "In Progress") {

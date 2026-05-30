@@ -713,6 +713,30 @@ function ActionsBlock({
           <RiAlertLine className="w-4 h-4 mr-1.5" />
           Flag for review
         </Button>
+        <Button
+          variant="outline"
+          disabled={actioning}
+          onClick={async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke("apploye-invite-cleaner", {
+                body: { cleanerId: cleaner.id },
+              });
+              if (error) throw error;
+              if (data?.error) throw new Error(data.details || data.error);
+              if (data?.alreadyInvited) {
+                toast.success("Cleaner already has an Apploye seat.");
+              } else {
+                toast.success("Apploye invite sent — they'll get an email from Apploye.");
+              }
+            } catch (err) {
+              toast.error("Apploye invite failed: " + (err as Error).message);
+            }
+          }}
+          className="border-sky-200 text-sky-800 bg-sky-50 hover:bg-sky-100"
+        >
+          <RiTimeLine className="w-4 h-4 mr-1.5" />
+          Invite to Apploye
+        </Button>
       </div>
       {actioning ? (
         <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
@@ -739,6 +763,7 @@ function AddCleanerDialog({
   onOpenChange: (o: boolean) => void;
   onCreated: () => void;
 }) {
+  const [mode, setMode] = useState<"full" | "bypass">("full");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -749,7 +774,13 @@ function AddCleanerDialog({
   const [busy, setBusy] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
 
+  // Bypass-onboarding state machine: send code → verify code.
+  const [bypassStep, setBypassStep] = useState<"send" | "verify">("send");
+  const [bypassCleanerId, setBypassCleanerId] = useState<string | null>(null);
+  const [bypassCode, setBypassCode] = useState("");
+
   const reset = () => {
+    setMode("full");
     setFirstName("");
     setLastName("");
     setEmail("");
@@ -758,6 +789,69 @@ function AddCleanerDialog({
     setServiceZips("");
     setPayTier("foundation");
     setCreatedPassword(null);
+    setBypassStep("send");
+    setBypassCleanerId(null);
+    setBypassCode("");
+  };
+
+  const sendBypassCode = async () => {
+    if (!phone.trim()) {
+      toast.error("Phone number is required.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
+        body: {
+          action: "bypass_onboarding_send_code",
+          phone: phone.trim(),
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          email: email.trim().toLowerCase() || undefined,
+          zip: homeZip.trim() || undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setBypassCleanerId(data?.cleanerId || null);
+      setBypassStep("verify");
+      toast.success(`Code sent to ${data?.phone || phone.trim()}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyBypassCode = async () => {
+    if (!bypassCleanerId) {
+      toast.error("No active code session. Re-send first.");
+      return;
+    }
+    if (bypassCode.trim().length < 4) {
+      toast.error("Enter the 6-digit code from the SMS.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
+        body: {
+          action: "bypass_onboarding_verify_code",
+          cleanerId: bypassCleanerId,
+          code: bypassCode.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Cleaner activated — ready for dispatch.");
+      onCreated();
+      onOpenChange(false);
+      reset();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async () => {
@@ -805,10 +899,115 @@ function AddCleanerDialog({
         <SheetHeader>
           <SheetTitle className="font-jakarta tracking-tight">Add cleaner</SheetTitle>
           <SheetDescription>
-            Creates an auth login + cleaner record with active status. They'll be able
-            to sign in immediately and complete onboarding from the cleaner portal.
+            Either create a full auth-backed cleaner account, or skip the
+            onboarding flow entirely by verifying their phone number with a
+            one-time code.
           </SheetDescription>
         </SheetHeader>
+        <div className="mt-5 flex rounded-xl border border-slate-200 p-1 bg-slate-50">
+          <button
+            type="button"
+            onClick={() => { setMode("full"); setBypassStep("send"); setBypassCleanerId(null); setBypassCode(""); }}
+            className={cn(
+              "flex-1 text-xs font-semibold py-2 rounded-lg transition-colors",
+              mode === "full" ? "bg-white shadow-sm text-emerald-700" : "text-slate-600 hover:text-slate-900",
+            )}
+          >
+            Full account
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("bypass")}
+            className={cn(
+              "flex-1 text-xs font-semibold py-2 rounded-lg transition-colors",
+              mode === "bypass" ? "bg-white shadow-sm text-emerald-700" : "text-slate-600 hover:text-slate-900",
+            )}
+          >
+            Bypass onboarding (phone verify)
+          </button>
+        </div>
+
+        {mode === "bypass" ? (
+          <div className="mt-5 space-y-3">
+            <p className="text-[12px] text-slate-500 leading-relaxed">
+              {bypassStep === "send"
+                ? "Enter their phone number. We'll text a 6-digit code through GHL. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
+                : "Type the code they read back from the SMS. The cleaner row will be activated and made available for dispatch."}
+            </p>
+            {bypassStep === "send" ? (
+              <>
+                <div>
+                  <Label className="text-xs">Phone *</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 301 555 0123" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">First name (optional)</Label>
+                    <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Last name (optional)</Label>
+                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Email (optional)</Label>
+                    <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Home ZIP (optional)</Label>
+                    <Input value={homeZip} onChange={(e) => setHomeZip(e.target.value)} maxLength={5} />
+                  </div>
+                </div>
+                <Button
+                  onClick={sendBypassCode}
+                  disabled={busy}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {busy ? (
+                    <>
+                      <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Sending code…
+                    </>
+                  ) : (
+                    <>Send 6-digit code via SMS</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label className="text-xs">6-digit code</Label>
+                  <Input
+                    value={bypassCode}
+                    onChange={(e) => setBypassCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="text-lg tracking-widest text-center font-mono"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => { setBypassStep("send"); setBypassCode(""); }}
+                  >
+                    Re-send code
+                  </Button>
+                  <Button
+                    onClick={verifyBypassCode}
+                    disabled={busy || bypassCode.length < 4}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    {busy ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Verify + activate
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
         <div className="mt-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -883,6 +1082,7 @@ function AddCleanerDialog({
             </div>
           )}
         </div>
+        )}
       </SheetContent>
     </Sheet>
   );

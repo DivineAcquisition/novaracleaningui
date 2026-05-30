@@ -13,43 +13,33 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
 };
 
-// ─── V2 Pricing Constants ───────────────────────────────
-const HOME_SIZE_PRICING = [
-  { id: '0_999',     basePrice: 150 },
-  { id: '1000_1500', basePrice: 189 },
-  { id: '1501_2000', basePrice: 239 },
-  { id: '2001_2500', basePrice: 279 },
-  { id: '2501_3000', basePrice: 339 },
-  { id: '3001_3500', basePrice: 379 },
-  { id: '3501_4000', basePrice: 439 },
-  { id: '4001_4500', basePrice: 489 },
-  { id: '4501_5000', basePrice: 539 },
-];
+// ─── Pricing (delegates to _shared/pricing.ts — v4 single SOT) ──────────
+//
+// This function bundles a membership sign-up Checkout Session with the
+// member's first clean. The first-clean price uses the same v4 base
+// table the customer sees on /book; the membership recurring price
+// comes from the same MEMBERSHIP_PRICES table the React app reads.
+import {
+  HOME_SIZE_RANGES,
+  SERVICE_TIER_PRICING,
+  ADD_ONS as SHARED_ADD_ONS,
+  MEMBERSHIP_PRICES,
+  getServiceFinalPrice,
+} from "../_shared/pricing.ts";
 
-const SERVICE_PRICING = {
-  standard:  { label: 'Standard Cleaning', multiplier: 1.0 },
-  deep:      { label: 'Deep Cleaning',     multiplier: 1.5 },
-  moveInOut: { label: 'Move-In/Out Cleaning', multiplier: 2.0 },
+const ADD_ON_PRICING: Record<string, { label: string; price: number }> = {
+  fridge:  { label: "Inside Fridge",     price: SHARED_ADD_ONS.fridge.price },
+  oven:    { label: "Inside Oven",       price: SHARED_ADD_ONS.oven.price },
+  windows: { label: "Interior Windows",  price: SHARED_ADD_ONS.windows.price },
 };
 
-const ADD_ON_PRICING = {
-  fridge:   { label: 'Inside Fridge', price: 30 },
-  oven:     { label: 'Inside Oven',   price: 30 },
-  windows:  { label: 'Interior Windows', price: 40 },
+const SERVICE_PRICING: Record<string, { label: string; multiplier: number }> = {
+  standard:  { label: SERVICE_TIER_PRICING.standard.label,  multiplier: SERVICE_TIER_PRICING.standard.multiplier },
+  deep:      { label: SERVICE_TIER_PRICING.deep.label,      multiplier: SERVICE_TIER_PRICING.deep.multiplier },
+  moveInOut: { label: SERVICE_TIER_PRICING.moveInOut.label, multiplier: SERVICE_TIER_PRICING.moveInOut.multiplier },
 };
 
-// V2 Membership pricing lookup (Zone B) — monthly price in dollars
-const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
-  '0_999':     { monthly: 129, biweekly: 199, weekly: 349 },
-  '1000_1500': { monthly: 159, biweekly: 249, weekly: 449 },
-  '1501_2000': { monthly: 199, biweekly: 319, weekly: 569 },
-  '2001_2500': { monthly: 229, biweekly: 369, weekly: 659 },
-  '2501_3000': { monthly: 279, biweekly: 449, weekly: 799 },
-  '3001_3500': { monthly: 319, biweekly: 499, weekly: 899 },
-  '3501_4000': { monthly: 369, biweekly: 579, weekly: 1039 },
-  '4001_4500': { monthly: 409, biweekly: 649, weekly: 1159 },
-  '4501_5000': { monthly: 459, biweekly: 719, weekly: 1279 },
-};
+const HOME_SIZE_PRICING = HOME_SIZE_RANGES.map((h) => ({ id: h.id, basePrice: h.standardPrice }));
 
 const MEMBERSHIP_PLAN_LABELS: Record<string, string> = {
   monthly: 'Glow Monthly (1x/mo)',
@@ -297,15 +287,14 @@ serve(async (req) => {
       throw new Error(`Invalid home size: ${homeSizeId}`);
     }
     
-    const basePrice = homePricing.basePrice;
     const servicePricing = SERVICE_PRICING[serviceType as keyof typeof SERVICE_PRICING];
     if (!servicePricing) {
       throw new Error(`Invalid service type: ${serviceType}`);
     }
-    
-    // V2: use multiplier instead of flat addition
-    const totalServicePrice = Math.round(basePrice * servicePricing.multiplier);
-    
+
+    // v4: use the per-service final price (15%/25%/combo rule applied).
+    const totalServicePrice = getServiceFinalPrice(homeSizeId, serviceType, "B");
+
     lineItems.push({
       price_data: {
         currency: 'usd',
@@ -313,27 +302,11 @@ serve(async (req) => {
           name: `${servicePricing.label} (${homeSizeId.replace('_', '-')} sqft)`,
           description: `Cleaning service for ${homeSizeId.replace('_', '-')} sq ft home`,
         },
-        unit_amount: totalServicePrice * 100,
+        unit_amount: Math.round(totalServicePrice * 100),
       },
       quantity: 1,
     });
-    logStep("Added service to line items", { basePrice, multiplier: servicePricing.multiplier, totalServicePrice });
-    
-    // Deposit (only if NOT using credit)
-    if (!isMemberUsingCredit) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: 'Booking Deposit',
-            description: 'Refundable deposit applied to final balance',
-          },
-          unit_amount: 3900,
-        },
-        quantity: 1,
-      });
-      logStep("Added deposit to line items");
-    }
+    logStep("Added service to line items (v4 pricing)", { homeSizeId, serviceType, totalServicePrice });
     
     // Add-ons
     if (addOns.length > 0) {

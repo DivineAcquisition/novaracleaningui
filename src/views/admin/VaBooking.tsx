@@ -103,7 +103,11 @@ import {
 // ─── Types & constants ─────────────────────────────────────────────────
 
 type ServiceType = "standard" | "deep" | "moveInOut" | "combo";
-type InvoiceMode = "deposit_plus_remaining" | "full_now" | "none";
+type InvoiceMode =
+  | "deposit_plus_remaining"
+  | "deposit_plus_preauth"
+  | "full_now"
+  | "none";
 
 const SERVICE_TYPE_OPTIONS: {
   id: ServiceType;
@@ -148,8 +152,13 @@ const ADD_ON_LIST = (Object.keys(ADD_ON_DEFS) as Array<keyof typeof ADD_ON_DEFS>
 const INVOICE_MODES: { id: InvoiceMode; label: string; desc: string }[] = [
   {
     id: "deposit_plus_remaining",
-    label: "Deposit today + remaining day-of",
-    desc: "Two Stripe invoices. Most common.",
+    label: "Deposit today + remaining invoiced day-of",
+    desc: "Customer pays the deposit invoice today; a second invoice for the remaining balance is auto-sent the morning of service.",
+  },
+  {
+    id: "deposit_plus_preauth",
+    label: "Deposit today + auto-charge on completion (pre-auth hold)",
+    desc: "Customer pays the deposit AND saves a card on a hosted Stripe page. We place a pre-auth on the remaining balance a few days before service and capture it when admin clicks 'Mark Completed'. Best for repeat customers and gift bookings.",
   },
   {
     id: "full_now",
@@ -159,7 +168,7 @@ const INVOICE_MODES: { id: InvoiceMode; label: string; desc: string }[] = [
   {
     id: "none",
     label: "No invoice — book only",
-    desc: "Booker collects payment another way.",
+    desc: "Booker collects payment another way (cash, off-platform).",
   },
 ];
 
@@ -599,12 +608,12 @@ export default function VaBooking() {
                 url={result.depositInvoice.hostedInvoiceUrl}
               />
             )}
-            {result.remainingInvoice && (
+            {result.preauthSession && (
               <InvoiceCard
-                title="Remaining-balance invoice (due day-of)"
-                amount={result.totals?.remainingCents ?? pricing.remainingCents}
-                invoiceId={result.remainingInvoice.invoiceId}
-                url={result.remainingInvoice.hostedInvoiceUrl}
+                title="Deposit + saved card (Stripe Checkout)"
+                amount={result.totals?.depositCents ?? pricing.depositCents}
+                invoiceId={result.preauthSession.id}
+                url={result.preauthSession.url}
               />
             )}
             {result.fullInvoice && (
@@ -615,6 +624,11 @@ export default function VaBooking() {
                 url={result.fullInvoice.hostedInvoiceUrl}
               />
             )}
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              {result.remainingInvoice
+                ? "Remaining-balance invoice was sent immediately (legacy mode)."
+                : "Remaining balance is auto-handled per your selected mode — invoice mailed the morning of service (deposit + remaining), or pre-auth captured on Mark Completed (deposit + pre-auth)."}
+            </p>
 
             <div className="flex gap-3 pt-2">
               <Button
@@ -1210,7 +1224,8 @@ export default function VaBooking() {
               </RadioGroup>
             </div>
 
-            {invoiceMode === "deposit_plus_remaining" && (
+            {(invoiceMode === "deposit_plus_remaining" ||
+              invoiceMode === "deposit_plus_preauth") && (
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Deposit % of total">
                   <Input
@@ -1231,6 +1246,16 @@ export default function VaBooking() {
                     placeholder={(pricing.computedCents / 100).toFixed(2)}
                   />
                 </Field>
+                {invoiceMode === "deposit_plus_preauth" && (
+                  <div className="col-span-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-900 leading-relaxed">
+                    A hosted Stripe Checkout link will be sent to the customer
+                    that collects the deposit AND saves their card off-session.
+                    A pre-auth hold for the remaining balance is placed a few
+                    days before service (existing prepare-completion-hold
+                    cron) and captured automatically when admin marks the
+                    booking complete.
+                  </div>
+                )}
               </div>
             )}
 

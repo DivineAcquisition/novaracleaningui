@@ -97,18 +97,50 @@ serve(async (req) => {
     return json({ ok: true, skipped: "no_phone" });
   }
 
+  // Resolve the customer row + referral code. `booking.customer_id` may
+  // hold either a Supabase customers.id UUID (set by create-payment-
+  // intent + book-as-va initial insert) OR a Stripe `cus_…` id (set by
+  // book-as-va after the Stripe customer is created). To stay
+  // robust against either, resolve by EMAIL first, then fall back to
+  // the UUID path. This fixes the VA-flow bug where the referral SMS
+  // sent a generic homepage link because the cus_… lookup returned
+  // nothing.
   let referralCode: string | null = null;
-  if (booking.customer_id) {
-    const { data: cust } = await supabase
-      .from("customers").select("referral_code").eq("id", booking.customer_id).maybeSingle();
-    referralCode = cust?.referral_code || null;
-    if (!referralCode && booking.email) {
-      const gen = await safeInvoke(supabase, "generate-referral-code", { customerId: booking.customer_id, email: booking.email });
-      if (gen.ok) {
-        const { data: refreshed } = await supabase
-          .from("customers").select("referral_code").eq("id", booking.customer_id).maybeSingle();
-        referralCode = refreshed?.referral_code || null;
-      }
+  let customerUuid: string | null = null;
+  if (booking.email) {
+    const { data: byEmail } = await supabase
+      .from("customers")
+      .select("id, referral_code")
+      .eq("email", String(booking.email).toLowerCase())
+      .maybeSingle();
+    if (byEmail) {
+      customerUuid = byEmail.id as string;
+      referralCode = byEmail.referral_code || null;
+    }
+  }
+  if (!customerUuid && booking.customer_id && !String(booking.customer_id).startsWith("cus_")) {
+    const { data: byId } = await supabase
+      .from("customers")
+      .select("id, referral_code")
+      .eq("id", booking.customer_id)
+      .maybeSingle();
+    if (byId) {
+      customerUuid = byId.id as string;
+      referralCode = byId.referral_code || null;
+    }
+  }
+  if (!referralCode && customerUuid && booking.email) {
+    const gen = await safeInvoke(supabase, "generate-referral-code", {
+      customerId: customerUuid,
+      email: booking.email,
+    });
+    if (gen.ok) {
+      const { data: refreshed } = await supabase
+        .from("customers")
+        .select("referral_code")
+        .eq("id", customerUuid)
+        .maybeSingle();
+      referralCode = refreshed?.referral_code || null;
     }
   }
 
