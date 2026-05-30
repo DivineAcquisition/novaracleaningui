@@ -97,6 +97,46 @@ export default function AdminMap() {
   const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [zipCentroids, setZipCentroids] = useState<Record<string, { lat: number; lng: number }>>({});
+  const [apployePings, setApployePings] = useState<Array<{
+    cleanerId: string | null;
+    cleanerName: string | null;
+    lat: number | null;
+    lng: number | null;
+    status: string;
+    pingedAt: string | null;
+    activeBookingNumber: number | null;
+  }>>([]);
+  const [apployeConfigured, setApployeConfigured] = useState<boolean | null>(null);
+
+  // Poll Apploye live tracking every 30s — soft-fails to a "not
+  // configured" banner if APPLOYE_API_KEY isn't set.
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("apploye-live-tracking");
+        if (!alive) return;
+        if (error) {
+          setApployeConfigured(false);
+          return;
+        }
+        const d = data as { ok?: boolean; members?: any[] };
+        if (d?.ok) {
+          setApployeConfigured(true);
+          setApployePings(
+            (d.members || []).filter((m: any) => typeof m.lat === "number" && typeof m.lng === "number"),
+          );
+        } else {
+          setApployeConfigured(false);
+        }
+      } catch (_) {
+        if (alive) setApployeConfigured(false);
+      }
+    };
+    void tick();
+    const i = setInterval(() => void tick(), 30000);
+    return () => { alive = false; clearInterval(i); };
+  }, []);
 
   // The actual Google "auth failure" reason (referrer block, billing,
   // API not enabled, etc.) is not exposed via the JS Maps API — Google
@@ -227,8 +267,24 @@ export default function AdminMap() {
       });
     });
 
+    // Apploye live GPS pings (magenta, larger). Plotted on top so the
+    // operator can spot live cleaner positions vs. their declared
+    // home base.
+    apployePings.forEach((p) => {
+      if (p.lat == null || p.lng == null) return;
+      out.push({
+        id: `apploye-${p.cleanerId || p.cleanerName || Math.random()}`,
+        kind: "gps",
+        lat: p.lat,
+        lng: p.lng,
+        color: p.status === "clocked_in" ? "#a855f7" : "#94a3b8",
+        title: `${p.cleanerName || "Cleaner"} · ${p.status}`,
+        subtitle: `Last ping: ${p.pingedAt ? new Date(p.pingedAt).toLocaleTimeString() : "—"}${p.activeBookingNumber ? ` · on NOV-${String(p.activeBookingNumber).padStart(5, "0")}` : ""}`,
+      });
+    });
+
     return out;
-  }, [cleaners, bookings, zipCentroids]);
+  }, [cleaners, bookings, zipCentroids, apployePings]);
 
   // ─── Sync pins → markers ───────────────────────────────────────────────
   useEffect(() => {
@@ -349,12 +405,42 @@ export default function AdminMap() {
               <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
             </div>
           )}
-          <div className="flex items-center gap-3 text-[11px] text-slate-600 mt-3 px-1">
+          <div className="flex items-center gap-3 text-[11px] text-slate-600 mt-3 px-1 flex-wrap">
             <Legend dot="#10b981" label="Active cleaner / confirmed booking" />
             <Legend dot="#f59e0b" label="Pending" />
             <Legend dot="#3b82f6" label="Completed booking" />
+            <Legend dot="#a855f7" label="Apploye GPS (clocked in)" />
             <Legend dot="#94a3b8" label="Inactive / no slot" />
           </div>
+          {apployeConfigured === false && (
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-[12px] text-sky-900">
+              <p className="font-semibold mb-0.5">Apploye live tracking is not configured yet.</p>
+              <p>
+                Set <code>APPLOYE_API_KEY</code> and{" "}
+                <code>APPLOYE_WORKSPACE_ID</code> in <em>app_secrets</em> (or
+                Cursor Cloud-Agents → Secrets). Then invite each cleaner from
+                the Cleaners tab — once they install the app, their live GPS
+                shows up on this map.
+              </p>
+            </div>
+          )}
+          {apployeConfigured && apployePings.length > 0 && (
+            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-3 text-[12px] text-purple-900">
+              <p className="font-semibold mb-1">
+                {apployePings.length} cleaner{apployePings.length === 1 ? "" : "s"} pinging live (Apploye)
+              </p>
+              <ul className="space-y-0.5">
+                {apployePings.slice(0, 6).map((p) => (
+                  <li key={p.cleanerId || p.cleanerName} className="flex justify-between">
+                    <span>{p.cleanerName || "Unnamed"} · {p.status}</span>
+                    <span className="text-purple-700">
+                      {p.pingedAt ? new Date(p.pingedAt).toLocaleTimeString() : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4 order-1 lg:order-2">

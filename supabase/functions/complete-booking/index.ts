@@ -459,7 +459,7 @@ serve(async (req) => {
       try {
         const { data: cleaner } = await supabase
           .from("cleaners")
-          .select("first_name, email, pay_percentage, pay_tier")
+          .select("first_name, email, phone, pay_percentage, pay_tier")
           .eq("id", booking.cleaner_id)
           .single();
 
@@ -488,6 +488,46 @@ serve(async (req) => {
             },
           });
           logStep("Cleaner completion email sent");
+        }
+
+        // Mint a single-use photo-upload token and SMS the cleaner with
+        // a public form to drop before / after photos for this job.
+        // Idempotent — if a token already exists we reuse it.
+        if (cleaner?.phone) {
+          try {
+            let token = (booking as any).photo_upload_token as string | null;
+            if (!token) {
+              const bytes = new Uint8Array(20);
+              crypto.getRandomValues(bytes);
+              token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+              await supabase
+                .from("bookings")
+                .update({
+                  photo_upload_token: token,
+                  photo_upload_sent_at: new Date().toISOString(),
+                })
+                .eq("id", bookingId);
+            } else {
+              await supabase
+                .from("bookings")
+                .update({ photo_upload_sent_at: new Date().toISOString() })
+                .eq("id", bookingId);
+            }
+            const url = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}`;
+            const msg = `Novara: Job marked completed. Please upload your before & after photos here so we can wrap this up and release your payout:\n${url}\n\nReply STOP to opt out.`;
+            await supabase.functions.invoke("send-ghl-sms", {
+              body: {
+                phone: cleaner.phone,
+                email: cleaner.email || undefined,
+                firstName: cleaner.first_name || undefined,
+                message: msg,
+                type: "cleaner_photo_request",
+              },
+            });
+            logStep("Cleaner photo-upload SMS sent");
+          } catch (smsErr) {
+            logStep("Cleaner photo SMS failed (non-critical)", { error: smsErr });
+          }
         }
       } catch (emailError) {
         logStep("Cleaner email failed (non-critical)", { error: emailError });

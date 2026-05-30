@@ -713,6 +713,30 @@ function ActionsBlock({
           <RiAlertLine className="w-4 h-4 mr-1.5" />
           Flag for review
         </Button>
+        <Button
+          variant="outline"
+          disabled={actioning}
+          onClick={async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke("apploye-invite-cleaner", {
+                body: { cleanerId: cleaner.id },
+              });
+              if (error) throw error;
+              if (data?.error) throw new Error(data.details || data.error);
+              if (data?.alreadyInvited) {
+                toast.success("Cleaner already has an Apploye seat.");
+              } else {
+                toast.success("Apploye invite sent — they'll get an email from Apploye.");
+              }
+            } catch (err) {
+              toast.error("Apploye invite failed: " + (err as Error).message);
+            }
+          }}
+          className="border-sky-200 text-sky-800 bg-sky-50 hover:bg-sky-100"
+        >
+          <RiTimeLine className="w-4 h-4 mr-1.5" />
+          Invite to Apploye
+        </Button>
       </div>
       {actioning ? (
         <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
