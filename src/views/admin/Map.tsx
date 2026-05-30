@@ -64,7 +64,7 @@ interface BookingRow {
 
 interface Pin {
   id: string;
-  kind: "cleaner" | "booking";
+  kind: "cleaner" | "booking" | "gps";
   lat: number;
   lng: number;
   color: string;

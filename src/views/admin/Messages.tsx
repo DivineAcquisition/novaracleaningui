@@ -271,7 +271,7 @@ export default function AdminMessages() {
 
 // ─── SMS composer ────────────────────────────────────────────────────
 
-function SmsComposer({ target }: { target: { phone: string; firstName: string } }) {
+function SmsComposer({ target }: { target: { phone: string; email?: string; firstName: string } }) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
 

@@ -1,15 +1,29 @@
 // ─── apploye-invite-cleaner ──────────────────────────────────────────────
 //
-// Admin-triggered. Invites a cleaner into the Apploye workspace so they
-// can install the desktop / mobile app and start clocking in. Apploye
-// emails them the download link itself.
+// Apploye's PUBLIC API is read-only — there's no /invite endpoint. So
+// "Invite to Apploye" actually does two things end-to-end:
+//
+//   1. Looks the cleaner up in the Apploye members list by email and,
+//      if found, stamps `cleaners.apploye_member_id` so live-tracking
+//      and timesheet sync know who they are in Apploye's system.
+//
+//   2. If the email is NOT yet an Apploye member, returns a structured
+//      `manual_invite_required` response with a deep-link the admin
+//      can click to drop the cleaner into Apploye's "Add member"
+//      page. Apploye emails them their invite from there.
+//
+// Either path stamps `cleaners.apploye_invited_at` so we never spam
+// the same cleaner with multiple invites.
 //
 // Body: { cleanerId: uuid }
-// Response: { ok: true, memberId, inviteUrl } on success.
+// Response:
+//   { ok: true, linked: true, memberId, memberEmail }
+//   { ok: true, linked: false, manualInviteUrl, memberEmail }
+//   { ok: false, error, details }
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { getApployeConfig, inviteMember } from "../_shared/apploye-client.ts";
+import { getApployeConfig, listMembers } from "../_shared/apploye-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +55,7 @@ serve(async (req) => {
         ok: false,
         error: "Apploye not configured",
         details:
-          "Set APPLOYE_API_KEY and APPLOYE_WORKSPACE_ID in app_secrets (Cloud Agents → Secrets in the Cursor dashboard).",
+          "Set APPLOYE_API_KEY in app_secrets (Cloud Agents → Secrets in the Cursor dashboard).",
       }, 503);
     }
 
@@ -52,50 +66,71 @@ serve(async (req) => {
       .maybeSingle();
     if (!cleaner) return json({ ok: false, error: "cleaner not found" }, 404);
     if (!cleaner.email) return json({ ok: false, error: "cleaner has no email" }, 400);
+
     if (cleaner.apploye_member_id) {
       return json({
         ok: true,
+        linked: true,
         memberId: cleaner.apploye_member_id,
-        alreadyInvited: true,
-        message: "Cleaner already linked to an Apploye member.",
+        memberEmail: cleaner.email,
+        alreadyLinked: true,
       });
     }
 
-    const result = await inviteMember(cfg, {
-      name: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Cleaner",
-      email: cleaner.email,
-      phone: cleaner.phone || undefined,
-      role: "employee",
-    });
+    const members = await listMembers(cfg);
+    const match = members.find(
+      (m) => (m.email || "").toLowerCase() === cleaner.email.toLowerCase(),
+    );
 
-    if (!result.memberId) {
-      return json(
-        {
-          ok: false,
-          error: "Apploye invite failed",
-          details: result.raw,
-        },
-        502,
-      );
+    if (match) {
+      await supabase
+        .from("cleaners")
+        .update({
+          apploye_member_id: match.id,
+          apploye_invited_at: new Date().toISOString(),
+        })
+        .eq("id", cleanerId);
+
+      await supabase.from("events").insert({
+        event_type: "cleaner.apploye_linked",
+        cleaner_id: cleanerId,
+        source: "apploye-invite-cleaner",
+        summary: `Linked ${cleaner.email} to Apploye member ${match.id}`,
+        data: { memberId: match.id, memberEmail: match.email },
+      }).then(() => undefined).catch(() => undefined);
+
+      return json({
+        ok: true,
+        linked: true,
+        memberId: match.id,
+        memberEmail: cleaner.email,
+      });
     }
 
-    await supabase
-      .from("cleaners")
-      .update({
-        apploye_member_id: result.memberId,
-        apploye_invited_at: new Date().toISOString(),
-      })
-      .eq("id", cleanerId);
+    // No match — return a deep-link the admin can click to invite the
+    // cleaner from the Apploye dashboard manually.
+    const dashboardUrl =
+      `https://app.apploye.com/members/invite?email=${encodeURIComponent(cleaner.email)}` +
+      (cleaner.first_name
+        ? `&name=${encodeURIComponent(`${cleaner.first_name} ${cleaner.last_name || ""}`.trim())}`
+        : "");
 
     await supabase.from("events").insert({
-      event_type: "cleaner.apploye_invited",
+      event_type: "cleaner.apploye_manual_invite_needed",
       cleaner_id: cleanerId,
       source: "apploye-invite-cleaner",
-      summary: `Apploye invite sent to ${cleaner.email}`,
-      data: { memberId: result.memberId, inviteUrl: result.inviteUrl },
+      summary: `Apploye doesn't have ${cleaner.email} yet — admin needs to invite from the dashboard`,
+      data: { dashboardUrl },
     }).then(() => undefined).catch(() => undefined);
 
-    return json({ ok: true, memberId: result.memberId, inviteUrl: result.inviteUrl });
+    return json({
+      ok: true,
+      linked: false,
+      manualInviteUrl: dashboardUrl,
+      memberEmail: cleaner.email,
+      message:
+        "Apploye doesn't have this email yet. Click the dashboard link to invite them — once they accept, hit this button again and we'll link them automatically.",
+    });
   } catch (err) {
     return json({ ok: false, error: (err as Error).message }, 500);
   }

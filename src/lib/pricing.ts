@@ -80,28 +80,36 @@ export type AddOnId = keyof typeof ADD_ONS;
 // rules below DO NOT apply to memberships — the membership price IS the
 // discount.
 
+// Membership plan metadata. `monthlyPrice` + `includedHours` +
+// `overtimeDiscount` are zero-valued here because the actual per-home
+// monthly rate comes from MEMBERSHIP_PRICES below (varies by home
+// size). They're kept as fields so legacy consumers compile.
 export const MEMBERSHIP_PLANS = {
   none: {
     id: "none", label: "Pay Per Clean", frequency: "one-time",
-    cleansPerMonth: 0, discount: 0,
+    cleansPerMonth: 0, monthlyPrice: 0, includedHours: 0, overtimeDiscount: 0,
+    discount: 0,
     description: "No commitment, pay as you go",
     features: ["Flexible scheduling", "No monthly fees", "Book anytime"],
   },
   monthly: {
     id: "monthly", label: "Glow Monthly", frequency: "monthly",
-    cleansPerMonth: 1, discount: 0.15,
+    cleansPerMonth: 1, monthlyPrice: 0, includedHours: 0, overtimeDiscount: 0.15,
+    discount: 0.15,
     description: "1 clean/month • members get our best per-clean rates",
     features: ["1 clean per month", "Priority scheduling", "Cancel anytime"],
   },
   biweekly: {
     id: "biweekly", label: "Glow Bi-Weekly", frequency: "biweekly",
-    cleansPerMonth: 2, discount: 0.25,
+    cleansPerMonth: 2, monthlyPrice: 0, includedHours: 0, overtimeDiscount: 0.25,
+    discount: 0.25,
     description: "2 cleans/month • members get our best per-clean rates • BEST VALUE",
     features: ["2 cleans per month", "Priority scheduling", "Free add-ons", "Same trusted team"],
   },
   weekly: {
     id: "weekly", label: "Glow Weekly", frequency: "weekly",
-    cleansPerMonth: 4, discount: 0.35,
+    cleansPerMonth: 4, monthlyPrice: 0, includedHours: 0, overtimeDiscount: 0.35,
+    discount: 0.35,
     description: "4 cleans/month • members get our best per-clean rates • Premium",
     features: ["4 cleans per month", "VIP scheduling", "Free add-ons", "Dedicated team"],
   },

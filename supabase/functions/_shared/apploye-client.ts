@@ -1,29 +1,35 @@
 // ─── Apploye API client ──────────────────────────────────────────────────
 //
-// Thin Deno wrapper over the Apploye Public API (Bearer token auth).
-// Reads `APPLOYE_API_KEY` and `APPLOYE_WORKSPACE_ID` from `app_secrets`
-// first, falling back to Edge Function env vars. Soft-fails the whole
-// way down — every helper returns null / [] when credentials are
-// missing so callers don't have to special-case the "not configured
-// yet" state.
+// Thin Deno wrapper over Apploye's Public REST API (X-APPLOYE-API-KEY
+// header auth, base URL https://public-api.apploye.com).
 //
-// Apploye API reference: https://www.apploye.com/api-documentation
-// Versioned through the base URL (no Accept-Version header required).
+// Endpoint reference (as of 2026-05): https://apploye-com.s3.amazonaws.com/time-tracking-api/index.html
 //
-// NOTE: Apploye's exact endpoint shapes differ by plan. The wrappers
-// here use the endpoints documented as of 2025-Q2; ops can override
-// the base URL via `APPLOYE_API_BASE` if Apploye reshapes.
+//   GET /members/                            — list org members
+//   GET /timesheets/?start_date=&end_date=   — list timesheets
+//   GET /project/                            — list projects
+//   GET /project/{id}/assignees/             — list project assignees
+//   GET /project/{id}/tasks/                 — list project tasks
+//
+// The public API is INTENTIONALLY read-only — Apploye does not expose
+// invite / clock-in / live-GPS endpoints publicly. We work around that
+// by:
+//   * "Linking" a cleaner to an Apploye member by email match (no
+//     invite endpoint — the admin invites them inside the Apploye
+//     dashboard first, then this code resolves the apploye_member_id).
+//   * Deriving "currently active" cleaners from today's timesheets
+//     (rows with no end_time and started_at within the last few hours
+//     count as clocked in).
 
-const DEFAULT_BASE = "https://www.apploye.com/api/v1";
+const DEFAULT_BASE = "https://public-api.apploye.com";
 
 export interface ApployeConfig {
-  token: string;
-  workspaceId: string;
+  apiKey: string;
   base: string;
 }
 
 export async function getApployeConfig(supabase: any): Promise<ApployeConfig | null> {
-  const fetch1 = async (key: string): Promise<string> => {
+  const read = async (key: string): Promise<string> => {
     let value = "";
     try {
       const { data } = await supabase
@@ -36,11 +42,10 @@ export async function getApployeConfig(supabase: any): Promise<ApployeConfig | n
     if (!value) value = (Deno.env.get(key) || "").trim();
     return value;
   };
-  const token = await fetch1("APPLOYE_API_KEY");
-  const workspaceId = await fetch1("APPLOYE_WORKSPACE_ID");
-  const base = (await fetch1("APPLOYE_API_BASE")) || DEFAULT_BASE;
-  if (!token || !workspaceId) return null;
-  return { token, workspaceId, base: base.replace(/\/+$/, "") };
+  const apiKey = await read("APPLOYE_API_KEY");
+  const base = (await read("APPLOYE_API_BASE")) || DEFAULT_BASE;
+  if (!apiKey) return null;
+  return { apiKey, base: base.replace(/\/+$/, "") };
 }
 
 export async function apployeFetch(
@@ -50,7 +55,7 @@ export async function apployeFetch(
 ): Promise<Response> {
   const url = `${cfg.base}${path}`;
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${cfg.token}`,
+    "X-APPLOYE-API-KEY": cfg.apiKey,
     Accept: "application/json",
     ...(init.headers as Record<string, string> | undefined),
   };
@@ -62,126 +67,106 @@ export async function apployeFetch(
 
 export interface ApployeMember {
   id: string;
-  name: string | null;
+  username: string | null;
   email: string | null;
-  invitedAt?: string;
-  lastSeenAt?: string;
-  active?: boolean;
+  timezone: string | null;
 }
 
-/** List every member in the workspace. */
 export async function listMembers(cfg: ApployeConfig): Promise<ApployeMember[]> {
   try {
-    const r = await apployeFetch(
-      cfg,
-      `/workspaces/${encodeURIComponent(cfg.workspaceId)}/members`,
-    );
+    const r = await apployeFetch(cfg, `/members/`);
     if (!r.ok) return [];
     const j = await r.json();
-    const list = (j.members || j.data || []) as Array<Record<string, unknown>>;
+    const list = (j.response || []) as Array<Record<string, unknown>>;
     return list.map((m) => ({
-      id: String(m.id || m.member_id || ""),
-      name: (m.name || m.full_name || null) as string | null,
-      email: (m.email || null) as string | null,
-      active: Boolean(m.active ?? true),
+      id: String(m.id || ""),
+      username: (m.username as string) || null,
+      email: (m.email as string) || null,
+      timezone: (m.timezone as string) || null,
     }));
   } catch (_) {
     return [];
   }
 }
 
-/**
- * Invite a cleaner into the workspace. Apploye emails them a download
- * link for the desktop / mobile app. Returns the resulting member id
- * (so we can store it on cleaners.apploye_member_id) or null on failure.
- */
-export async function inviteMember(
-  cfg: ApployeConfig,
-  args: { name: string; email: string; phone?: string; role?: string },
-): Promise<{ memberId: string | null; inviteUrl: string | null; raw: unknown }> {
+export interface ApployeProject {
+  id: string;
+  name: string | null;
+  status: string | null;
+  startDate: string | null;
+  deadline: string | null;
+}
+
+export async function listProjects(cfg: ApployeConfig): Promise<ApployeProject[]> {
   try {
-    const r = await apployeFetch(
-      cfg,
-      `/workspaces/${encodeURIComponent(cfg.workspaceId)}/members/invite`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          name: args.name,
-          email: args.email,
-          phone: args.phone,
-          role: args.role || "employee",
-        }),
-      },
-    );
-    const raw = await r.json().catch(() => ({}));
-    if (!r.ok) return { memberId: null, inviteUrl: null, raw };
-    return {
-      memberId: String((raw as any)?.member?.id || (raw as any)?.id || ""),
-      inviteUrl: String((raw as any)?.invite_url || (raw as any)?.url || "") || null,
-      raw,
-    };
-  } catch (err) {
-    return { memberId: null, inviteUrl: null, raw: { error: (err as Error).message } };
+    const r = await apployeFetch(cfg, `/project/`);
+    if (!r.ok) return [];
+    const j = await r.json();
+    const list = (j.response || []) as Array<Record<string, unknown>>;
+    return list.map((p) => ({
+      id: String(p.id || ""),
+      name: (p.name as string) || null,
+      status: (p.status as string) || null,
+      startDate: (p.start_date as string) || null,
+      deadline: (p.deadline as string) || null,
+    }));
+  } catch (_) {
+    return [];
   }
 }
 
-/**
- * Return the latest GPS pings for every member in the workspace. Used
- * by the admin map to plot live cleaner positions.
- */
-export interface ApployeGpsPing {
-  memberId: string;
-  memberName: string | null;
-  lat: number | null;
-  lng: number | null;
-  pingedAt: string | null;
-  status: "clocked_in" | "clocked_out" | "on_break" | "unknown";
+export interface ApployeTimesheet {
+  id: string;
+  userId: string | null;
+  userEmail: string | null;
+  projectId: string | null;
+  taskId: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationSec: number | null;
+  /** True when there's a `started_at` but no `ended_at` AND
+   *  started within the last 12 hours — our heuristic for "clocked in
+   *  right now" since the public API doesn't expose a clock-in state
+   *  field directly. */
+  isActive: boolean;
 }
 
-export async function fetchLiveGps(cfg: ApployeConfig): Promise<ApployeGpsPing[]> {
+export async function listTimesheets(
+  cfg: ApployeConfig,
+  startIso: string,
+  endIso: string,
+): Promise<ApployeTimesheet[]> {
   try {
     const r = await apployeFetch(
       cfg,
-      `/workspaces/${encodeURIComponent(cfg.workspaceId)}/live-tracking`,
+      `/timesheets/?start_date=${encodeURIComponent(startIso)}&end_date=${encodeURIComponent(endIso)}`,
     );
     if (!r.ok) return [];
     const j = await r.json();
-    const list = (j.tracking || j.data || []) as Array<Record<string, any>>;
-    return list.map((row) => ({
-      memberId: String(row.member_id || row.id || ""),
-      memberName: (row.member_name || row.name || null) as string | null,
-      lat: typeof row.lat === "number" ? row.lat : Number(row.lat) || null,
-      lng: typeof row.lng === "number" ? row.lng : Number(row.lng) || null,
-      pingedAt: (row.timestamp || row.updated_at || null) as string | null,
-      status: ((row.status || "unknown") as ApployeGpsPing["status"]),
-    }));
+    const list = (j.response || []) as Array<Record<string, any>>;
+    const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
+    return list.map((t) => {
+      const startedAt = (t.started_at || t.start_time || null) as string | null;
+      const endedAt = (t.ended_at || t.end_time || null) as string | null;
+      const isActive = !!startedAt && !endedAt &&
+        new Date(startedAt).getTime() > twelveHoursAgo;
+      return {
+        id: String(t.id || ""),
+        userId: (t.user_id as string) || null,
+        userEmail: (t.user_email || t.email) as string || null,
+        projectId: (t.project_id as string) || null,
+        taskId: (t.task_id as string) || null,
+        startedAt,
+        endedAt,
+        durationSec: typeof t.duration === "number"
+          ? t.duration
+          : typeof t.duration_sec === "number"
+          ? t.duration_sec
+          : null,
+        isActive,
+      };
+    });
   } catch (_) {
     return [];
-  }
-}
-
-/**
- * Start a tracked task (= clock in to a specific job). Apploye logs the
- * timestamp + GPS automatically once the cleaner has the app open.
- */
-export async function startTask(
-  cfg: ApployeConfig,
-  args: { memberId: string; taskName: string; projectId?: string },
-): Promise<{ taskId: string | null; raw: unknown }> {
-  try {
-    const r = await apployeFetch(cfg, `/tasks/start`, {
-      method: "POST",
-      body: JSON.stringify({
-        workspace_id: cfg.workspaceId,
-        member_id: args.memberId,
-        project_id: args.projectId,
-        name: args.taskName,
-      }),
-    });
-    const raw = await r.json().catch(() => ({}));
-    if (!r.ok) return { taskId: null, raw };
-    return { taskId: String((raw as any)?.task?.id || (raw as any)?.id || ""), raw };
-  } catch (err) {
-    return { taskId: null, raw: { error: (err as Error).message } };
   }
 }
