@@ -265,10 +265,8 @@ export default function AdminCleaners() {
         open={addOpen}
         onOpenChange={setAddOpen}
         onCreated={() => {
-          // Reload the directory but DON'T close the sheet — the full-
-          // account flow keeps the generated temp password visible so the
-          // admin can copy it. The bypass flow closes itself on activation.
-          void load({ silent: true });
+          setAddOpen(false);
+          void load();
         }}
       />
 
@@ -933,7 +931,7 @@ function AddCleanerDialog({
           <div className="mt-5 space-y-3">
             <p className="text-[12px] text-slate-500 leading-relaxed">
               {bypassStep === "send"
-                ? "Enter their phone number. We'll text a 6-digit code through GHL. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
+                ? "Enter their phone number. We'll text a 6-digit code via Telnyx. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
                 : "Type the code they read back from the SMS. The cleaner row will be activated and made available for dispatch."}
             </p>
             {bypassStep === "send" ? (
