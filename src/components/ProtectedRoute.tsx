@@ -30,10 +30,19 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
           return;
         }
 
-        const { data, error } = await (supabase.rpc as any)('has_role', {
-          _user_id: session.user.id,
-          _role: requiredRole,
-        });
+        // Admin-portal pages accept both `admin` and `va` (virtual
+        // assistant) roles. VAs operate the same console; the matching RLS
+        // policies were added in the va_admin_portal_access migration.
+        // Any other requiredRole falls back to a strict has_role check.
+        const { data, error } =
+          requiredRole === "admin"
+            ? await (supabase.rpc as any)("is_admin_or_va", {
+                _uid: session.user.id,
+              })
+            : await (supabase.rpc as any)("has_role", {
+                _user_id: session.user.id,
+                _role: requiredRole,
+              });
 
         if (error) {
           console.error('Error checking role:', error);

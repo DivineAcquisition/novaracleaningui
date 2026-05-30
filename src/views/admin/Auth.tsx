@@ -44,19 +44,19 @@ export default function AdminAuth() {
   const verifyAdminAndRoute = async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase.rpc("has_role", {
-        _user_id: user.id,
-        _role: "admin",
+      // Admin console accepts both admin and VA (virtual assistant) roles.
+      const { data, error } = await (supabase.rpc as any)("is_admin_or_va", {
+        _uid: user.id,
       });
       if (error) {
-        toast.error("Failed to verify admin access", { description: error.message });
+        toast.error("Failed to verify access", { description: error.message });
         return;
       }
       if (data === true) {
         router.push("/admin/dashboard");
       } else {
         toast.error("Access denied", {
-          description: "Your account doesn't have admin permissions.",
+          description: "Your account doesn't have admin or VA permissions.",
         });
         await supabase.auth.signOut();
       }

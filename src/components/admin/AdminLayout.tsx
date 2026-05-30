@@ -12,6 +12,7 @@
 //   7. Messages           (manual SMS + email send)
 //   8. Payroll            (Stripe Connect cleaner payouts)
 //   9. Sales              (per-VA leads, bookings, revenue)
+//  10. Team               (admins + VA portal access)
 //
 // Premium SaaS feel: Plus Jakarta Sans display font, lovable-style press
 // buttons, sharper card density, emerald accent. Sidebar is light-gray on
@@ -32,6 +33,7 @@ import {
   RiShieldStarLine,
   RiCalendarCheckLine,
   RiChat3Line,
+  RiTeamLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -102,6 +104,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/sales-tracker",
     icon: RiLineChartLine,
     description: "Per-VA leads & revenue",
+  },
+  {
+    title: "Team",
+    url: "/admin/team",
+    icon: RiTeamLine,
+    description: "Admins & VA access",
   },
 ];
 

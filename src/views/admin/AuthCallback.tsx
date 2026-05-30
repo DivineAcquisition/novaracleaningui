@@ -36,21 +36,22 @@ export default function AdminAuthCallback() {
         return;
       }
 
-      const { data: hasAdminRole, error: roleError } = await supabase.rpc(
-        "has_role",
-        { _user_id: session.user.id, _role: "admin" },
+      // Admin console accepts both admin and VA (virtual assistant) roles.
+      const { data: hasPortalAccess, error: roleError } = await (supabase.rpc as any)(
+        "is_admin_or_va",
+        { _uid: session.user.id },
       );
 
       if (roleError) {
-        toast.error("Failed to verify admin access", {
+        toast.error("Failed to verify access", {
           description: roleError.message,
         });
         router.replace("/admin/auth");
         return;
       }
 
-      if (hasAdminRole === true) {
-        toast.success("Welcome back, admin.");
+      if (hasPortalAccess === true) {
+        toast.success("Welcome back.");
         router.replace("/admin/dashboard");
         return;
       }

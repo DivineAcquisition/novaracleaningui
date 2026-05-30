@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { format } from "date-fns";
+import { RiArrowRightLine, RiNotification3Line } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
 import { ProfileCompletionWizard } from "@/components/cleaner/ProfileCompletionWizard";
 import { UpcomingJobs } from "@/components/cleaner/UpcomingJobs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { MobileHeader } from "@/components/mobile/MobileHeader";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { PullToRefresh } from "@/components/mobile/PullToRefresh";
@@ -22,6 +28,8 @@ export default function MobileDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [cleaner, setCleaner] = useState<any>(null);
   const [upcomingJobs, setUpcomingJobs] = useState<any[]>([]);
+  const [offers, setOffers] = useState<any[]>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalEarnings: 0,
     jobsCompleted: 0,
@@ -62,7 +70,7 @@ export default function MobileDashboard() {
 
       if (cleanerData) {
         setCleaner(cleanerData);
-        
+
         const acceptanceRate = cleanerData.total_offers_received > 0
           ? (cleanerData.total_offers_accepted / cleanerData.total_offers_received) * 100
           : 0;
@@ -75,19 +83,21 @@ export default function MobileDashboard() {
           acceptanceRate,
         });
 
-        // Fetch upcoming jobs
+        // Fetch upcoming (accepted) jobs.
         const { data: jobsData } = await supabase
           .from("job_assignments")
           .select(`
             *,
             jobs (
+              id,
               service_type,
               start_datetime,
               address,
               city,
               state,
               zip,
-              duration_est_hours
+              duration_est_hours,
+              check_in_time
             )
           `)
           .eq("cleaner_id", cleanerData.id)
@@ -95,20 +105,45 @@ export default function MobileDashboard() {
           //   • accept-job-offer (token portal) sets "Confirmed"
           //   • legacy respond-to-offer flow sometimes wrote "accepted"
           //   • admin assign uses "Confirmed" / "Accepted"
-          // Filtering on a single literal hid jobs the cleaner had
-          // already taken — making the mobile dashboard look empty.
           .in("status", ["Confirmed", "Accepted", "accepted", "In Progress"])
           .order("assigned_at", { ascending: true });
+
+        // Resolve booking ids so "Mark done" can call complete-booking.
+        const jobIds = (jobsData || []).map((a: any) => a.jobs?.id).filter(Boolean);
+        const bookingByJob: Record<string, string> = {};
+        if (jobIds.length > 0) {
+          const { data: bookingRows } = await supabase
+            .from("bookings")
+            .select("id, job_id")
+            .in("job_id", jobIds);
+          (bookingRows || []).forEach((b: any) => {
+            if (b.job_id) bookingByJob[b.job_id] = b.id;
+          });
+        }
 
         if (jobsData) {
           const formattedJobs = jobsData.map((assignment: any) => ({
             id: assignment.id,
+            assignmentId: assignment.id,
             role: assignment.role,
+            status: assignment.status,
             estimated_pay_cents: assignment.estimated_pay_cents,
+            bookingId: assignment.jobs?.id ? bookingByJob[assignment.jobs.id] : undefined,
             ...assignment.jobs,
           }));
           setUpcomingJobs(formattedJobs);
         }
+
+        // Fetch active (un-responded) offers for the Active Offers tab.
+        const { data: offerData } = await supabase
+          .from("job_assignments")
+          .select(
+            "id, role, status, estimated_pay_cents, pay_percentage_snapshot, response_token, assigned_at, jobs (service_type, city, state, start_datetime, duration_est_hours)",
+          )
+          .eq("cleaner_id", cleanerData.id)
+          .ilike("status", "offered")
+          .order("assigned_at", { ascending: false });
+        setOffers((offerData || []) as any[]);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -119,10 +154,51 @@ export default function MobileDashboard() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRefresh = async () => {
     await fetchData();
+  };
+
+  const handleCheckIn = async (job: any) => {
+    if (!cleaner?.id || !job?.assignmentId) return;
+    setActionLoading(`checkin-${job.id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("job-check-in", {
+        body: { jobAssignmentId: job.assignmentId, action: "check_in", cleanerId: cleaner.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Checked in. Have a great clean!");
+      await fetchData();
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't check in");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleComplete = async (job: any) => {
+    if (!job?.bookingId) {
+      toast.error("Couldn't find the booking for this job. Pull to refresh and try again.");
+      return;
+    }
+    if (!confirm("Mark this job complete? This notifies the office and triggers payout.")) return;
+    setActionLoading(`complete-${job.id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("complete-booking", {
+        body: { bookingId: job.bookingId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Job marked complete.");
+      await fetchData();
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't complete job");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   if (isLoading) {
@@ -142,10 +218,10 @@ export default function MobileDashboard() {
   if (cleaner && !cleaner.onboarding_complete) {
     return (
       <>
-        <ProfileCompletionWizard 
-          open={!cleaner.onboarding_complete} 
-          cleaner={cleaner} 
-          onComplete={fetchData} 
+        <ProfileCompletionWizard
+          open={!cleaner.onboarding_complete}
+          cleaner={cleaner}
+          onComplete={fetchData}
         />
         <MobileBottomNav />
       </>
@@ -155,7 +231,7 @@ export default function MobileDashboard() {
   return (
     <div className="min-h-screen bg-background pb-20">
       <MobileHeader title="Dashboard" />
-      
+
       <PullToRefresh onRefresh={handleRefresh}>
         <div className="p-4 space-y-4">
           <div className="space-y-2">
@@ -180,17 +256,80 @@ export default function MobileDashboard() {
               </TabsTrigger>
               <TabsTrigger value="offers" className="text-sm">
                 Active Offers
+                {offers.length > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                    {offers.length}
+                  </span>
+                )}
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="upcoming" className="mt-4">
-              <UpcomingJobs jobs={upcomingJobs} />
+              <UpcomingJobs
+                jobs={upcomingJobs}
+                onCheckIn={handleCheckIn}
+                onComplete={handleComplete}
+                actionLoading={actionLoading}
+              />
             </TabsContent>
-            
+
             <TabsContent value="offers" className="mt-4">
-              <div className="text-center py-8 text-muted-foreground">
-                No active offers at the moment
-              </div>
+              {offers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <RiNotification3Line className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No active offers at the moment</p>
+                  <p className="text-xs mt-1">
+                    You&apos;ll get a text + push the moment a job opens nearby.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {offers.map((o) => (
+                    <Card key={o.id} className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h3 className="font-semibold text-base capitalize">
+                            {String(o.jobs?.service_type || "cleaning").replaceAll("_", " ")}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {o.jobs?.start_datetime
+                              ? format(new Date(o.jobs.start_datetime), "EEE, MMM d · h:mm a")
+                              : "—"}
+                            {o.jobs?.city ? ` · ${o.jobs.city}, ${o.jobs.state || ""}` : ""}
+                          </p>
+                        </div>
+                        <Badge className="bg-amber-100 text-amber-800 border-0 hover:bg-amber-100 text-[10px]">
+                          New offer
+                        </Badge>
+                      </div>
+                      <p className="text-lg font-bold text-primary mb-3">
+                        ${((o.estimated_pay_cents || 0) / 100).toFixed(2)}
+                        {o.pay_percentage_snapshot ? (
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {" "}
+                            · {o.pay_percentage_snapshot}% share
+                          </span>
+                        ) : null}
+                      </p>
+                      {o.response_token ? (
+                        <Button
+                          asChild
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                          <Link href={`/cleaner/job-offer/${o.response_token}`}>
+                            Review &amp; respond
+                            <RiArrowRightLine className="w-4 h-4 ml-1.5" />
+                          </Link>
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-amber-700">
+                          Offer link unavailable — contact dispatch.
+                        </p>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>
