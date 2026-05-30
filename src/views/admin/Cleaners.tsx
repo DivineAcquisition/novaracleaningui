@@ -704,9 +704,14 @@ function ActionsBlock({
           variant="outline"
           disabled={actioning}
           onClick={() => {
-            const note = prompt("Flag note (visible to admin only):");
-            if (!note) return;
-            onAction("flag", { note });
+            const issueType = window.prompt(
+              "Flag issue type — pick one:\n" +
+                "  background_check_expiring | insurance_expiring | low_rating | attendance_problem | customer_complaint | quality_issue | policy_violation | no_show | other",
+              "other",
+            );
+            if (!issueType) return;
+            const details = window.prompt("Flag note / details (optional):") || undefined;
+            onAction("flag", { issueType: issueType.trim(), details });
           }}
           className="border-slate-200 text-slate-700"
         >
@@ -931,7 +936,7 @@ function AddCleanerDialog({
           <div className="mt-5 space-y-3">
             <p className="text-[12px] text-slate-500 leading-relaxed">
               {bypassStep === "send"
-                ? "Enter their phone number. We'll text a 6-digit code via Telnyx. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
+                ? "Enter their phone number. We'll text a 6-digit code through GHL. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
                 : "Type the code they read back from the SMS. The cleaner row will be activated and made available for dispatch."}
             </p>
             {bypassStep === "send" ? (
