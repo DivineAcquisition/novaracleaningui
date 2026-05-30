@@ -265,8 +265,10 @@ export default function AdminCleaners() {
         open={addOpen}
         onOpenChange={setAddOpen}
         onCreated={() => {
-          setAddOpen(false);
-          void load();
+          // Reload the directory but DON'T close the sheet — the full-
+          // account flow keeps the generated temp password visible so the
+          // admin can copy it. The bypass flow closes itself on activation.
+          void load({ silent: true });
         }}
       />
 
@@ -704,14 +706,9 @@ function ActionsBlock({
           variant="outline"
           disabled={actioning}
           onClick={() => {
-            const issueType = window.prompt(
-              "Flag issue type — pick one:\n" +
-                "  background_check_expiring | insurance_expiring | low_rating | attendance_problem | customer_complaint | quality_issue | policy_violation | no_show | other",
-              "other",
-            );
-            if (!issueType) return;
-            const details = window.prompt("Flag note / details (optional):") || undefined;
-            onAction("flag", { issueType: issueType.trim(), details });
+            const note = prompt("Flag note (visible to admin only):");
+            if (!note) return;
+            onAction("flag", { note });
           }}
           className="border-slate-200 text-slate-700"
         >
