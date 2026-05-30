@@ -704,9 +704,14 @@ function ActionsBlock({
           variant="outline"
           disabled={actioning}
           onClick={() => {
-            const note = prompt("Flag note (visible to admin only):");
-            if (!note) return;
-            onAction("flag", { note });
+            const issueType = window.prompt(
+              "Flag issue type — pick one:\n" +
+                "  background_check_expiring | insurance_expiring | low_rating | attendance_problem | customer_complaint | quality_issue | policy_violation | no_show | other",
+              "other",
+            );
+            if (!issueType) return;
+            const details = window.prompt("Flag note / details (optional):") || undefined;
+            onAction("flag", { issueType: issueType.trim(), details });
           }}
           className="border-slate-200 text-slate-700"
         >

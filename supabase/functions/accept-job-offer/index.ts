@@ -227,7 +227,13 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
       bookingRow = (b as any) || null;
-      if (bookingRow && String(assignment.role || "").toLowerCase() === "lead") {
+      // Use the EFFECTIVE role, not the pre-update one. Broadcast offers
+      // carry role "Broadcast" before acceptance; the winner is promoted
+      // to "Lead" above. Checking the stale assignment.role here meant
+      // broadcast winners never got bookings.cleaner_id set, so
+      // complete-booking later failed with "No cleaner assigned".
+      const effectiveRole = wasBroadcast ? "lead" : String(assignment.role || "lead").toLowerCase();
+      if (bookingRow && effectiveRole === "lead") {
         await supabase
           .from("bookings")
           .update({

@@ -97,18 +97,34 @@ serve(async (req) => {
     const recipient = normalizePhone(toPhone);
 
     // Allow the caller to override the sender (used for diagnostic tests).
-    // Otherwise fall through to the configured fallback list.
-    const senders = fromOverride ? [fromOverride] : TELNYX_SENDERS;
+    // Otherwise fall through to the configured fallback list. Each
+    // candidate is `null` when we want Telnyx to pick a sender from the
+    // messaging profile's number pool (requires TELNYX_MESSAGING_PROFILE_ID).
+    const explicitSenders = fromOverride ? [fromOverride] : TELNYX_SENDERS;
+    const senders: (string | null)[] = explicitSenders.length > 0
+      ? explicitSenders
+      : (TELNYX_MESSAGING_PROFILE_ID ? [null] : []);
+
+    if (senders.length === 0) {
+      throw new Error(
+        "No Telnyx sender configured. Set TELNYX_PHONE_NUMBER or TELNYX_MESSAGING_PROFILE_ID.",
+      );
+    }
 
     let lastErrorDetail = "No sender configured";
     let succeeded = false;
     let messageId: string | undefined;
     let messageCost: number = 0;
     let messageStatus: string = "sent";
-    let usedSender: string = senders[0] || "";
+    let usedSender: string = explicitSenders[0] || "messaging_profile_pool";
 
     for (const candidate of senders) {
-      const requestBody = { from: candidate, to: recipient, text: message };
+      // When a messaging profile is configured, always include it. When no
+      // explicit `from` is available, Telnyx uses the profile's number pool.
+      const requestBody: Record<string, unknown> = { to: recipient, text: message };
+      if (candidate) requestBody.from = candidate;
+      if (TELNYX_MESSAGING_PROFILE_ID) requestBody.messaging_profile_id = TELNYX_MESSAGING_PROFILE_ID;
+
       const telnyxResponse = await fetch(telnyxUrl, {
         method: "POST",
         headers: {
@@ -121,11 +137,11 @@ serve(async (req) => {
 
       if (telnyxResponse.ok) {
         succeeded = true;
-        usedSender = candidate;
+        usedSender = candidate || telnyxData.data?.from?.phone_number || "messaging_profile_pool";
         messageId = telnyxData.data?.id;
         messageCost = telnyxData.data?.cost?.amount || 0;
         messageStatus = telnyxData.data?.to?.[0]?.status || "sent";
-        console.log(`[SMS] Sent via ${candidate}. ID: ${messageId}`);
+        console.log(`[SMS] Sent via ${usedSender}. ID: ${messageId}`);
         break;
       }
 
@@ -133,7 +149,7 @@ serve(async (req) => {
         telnyxData.errors?.[0]?.detail ||
         telnyxData.errors?.[0]?.title ||
         `HTTP ${telnyxResponse.status}`;
-      console.warn(`[SMS] Sender ${candidate} rejected: ${lastErrorDetail}`);
+      console.warn(`[SMS] Sender ${candidate || "profile-pool"} rejected: ${lastErrorDetail}`);
 
       const isSenderError = /invalid source number|from number|not valid|not authorized|messaging_profile|10dlc/i.test(
         lastErrorDetail,

@@ -312,7 +312,7 @@ serve(async (req) => {
       //   * Upsert (or find) the cleaners row by phone.
       //   * Generate a 6-digit code, store it on
       //     cleaner_verification_codes with a 10-minute expiry.
-      //   * SMS the code via send-ghl-sms.
+      //   * SMS the code via Telnyx (send-sms-notification).
       //   * Returns the cleanerId so the UI can poll/show the code field.
       //
       // STEP 2: bypass_onboarding_verify_code

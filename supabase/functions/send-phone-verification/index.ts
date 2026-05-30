@@ -120,31 +120,25 @@ serve(async (req) => {
       logStep("Failed to persist code (non-critical)", { error: String((e as Error).message) });
     }
 
-    const contractorSmsNumberId = await (async () => {
-      try {
-        const { data } = await supabase.from("app_secrets").select("value").eq("key", "GHL_CONTRACTOR_SMS_NUMBER_ID").maybeSingle();
-        return (data?.value as string) || "";
-      } catch { return ""; }
-    })();
-
-    const { data: smsData, error: smsError } = await supabase.functions.invoke("send-ghl-sms", {
+    const { data: smsData, error: smsError } = await supabase.functions.invoke("send-sms-notification", {
       body: {
-        phone: normalized,
-        firstName: firstName || undefined,
+        toPhone: normalized,
         message: `Your Novara Cleaning verification code is: ${code}. Valid for 15 minutes.`,
         type: "verification",
-        fromNumberId: contractorSmsNumberId || undefined,
       },
     });
 
-    if (smsError) {
-      logStep("send-ghl-sms invoke error", { error: smsError });
+    // send-sms-notification returns a 500 body { error } on Telnyx failure;
+    // invoke() surfaces that as `smsError`, but also guard the data shape.
+    if (smsError || (smsData as any)?.error) {
+      const detail = String((smsError as any)?.message || (smsData as any)?.error || smsError);
+      logStep("send-sms-notification (Telnyx) error", { error: detail });
       return new Response(
-        JSON.stringify({ error: "Failed to send verification SMS. Please check your phone number and try again.", detail: String((smsError as any)?.message || smsError) }),
+        JSON.stringify({ error: "Failed to send verification SMS. Please check your phone number and try again.", detail }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
       );
     }
-    logStep("SMS dispatched via GHL", { phone: normalized, smsData });
+    logStep("SMS dispatched via Telnyx", { phone: normalized, smsData });
 
     return new Response(
       JSON.stringify({ success: true, message: "Verification code sent" }),
