@@ -44,6 +44,9 @@ export default function AdminTeam() {
   const [busy, setBusy] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdEmail, setCreatedEmail] = useState<string | null>(null);
+  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -78,6 +81,8 @@ export default function AdminTeam() {
     }
     setBusy(true);
     setCreatedPassword(null);
+    setInviteSent(false);
+    setInviteError(null);
     try {
       const { data, error } = await supabase.functions.invoke("admin-create-team-user", {
         body: {
@@ -88,15 +93,28 @@ export default function AdminTeam() {
           role,
         },
       });
-      if (error) throw error;
+      if (error) {
+        const msg =
+          error.message?.includes("Failed to send a request to the Edge Function")
+            ? "Team service unavailable — ask ops to deploy admin-create-team-user."
+            : error.message;
+        throw new Error(msg);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
+      const sent = Boolean((data as any)?.inviteSent);
+      setInviteSent(sent);
+      setInviteError((data as any)?.inviteError || null);
       setCreatedPassword((data as any)?.password || null);
       setCreatedEmail(email.trim().toLowerCase());
-      toast.success(
-        (data as any)?.reusedExistingLogin
-          ? "Existing account granted portal access — temp password reset below."
-          : `${role === "admin" ? "Admin" : "VA"} created — share the temp password below.`,
-      );
+      if (sent) {
+        toast.success(
+          `Invite email sent to ${email.trim().toLowerCase()} — they can accept and join the workspace.`,
+        );
+      } else {
+        toast.warning(
+          "User added, but the invite email could not be sent. Share the fallback password below or resend the invite.",
+        );
+      }
       setEmail("");
       setFirstName("");
       setLastName("");
@@ -105,6 +123,22 @@ export default function AdminTeam() {
       toast.error(err?.message || "Couldn't create team user");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const resendInvite = async (userId: string, memberEmail: string | null) => {
+    setResendingId(userId);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-create-team-user", {
+        body: { action: "resend_invite", userId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Invite resent to ${memberEmail || "team member"}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't resend invite");
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -213,16 +247,35 @@ export default function AdminTeam() {
               </Button>
             </div>
           </div>
-          {createdPassword && (
+          {inviteSent && createdEmail && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs">
               <p className="font-semibold text-emerald-900 mb-1">
-                Temporary password for {createdEmail}
+                Invite sent to {createdEmail}
               </p>
-              <p className="font-mono text-sm break-all text-emerald-900">{createdPassword}</p>
-              <p className="text-[11px] text-emerald-700 mt-2">
-                Share this securely. They sign in at the admin console and should
-                change it from their account settings.
+              <p className="text-emerald-800">
+                They received an email to accept workspace access at{" "}
+                <span className="font-medium">admin.novaracleaning.com</span>. The link
+                lets them set a password (new accounts) or sign in (existing accounts).
               </p>
+            </div>
+          )}
+          {!inviteSent && createdEmail && (createdPassword || inviteError) && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs">
+              <p className="font-semibold text-amber-900 mb-1">
+                Invite email failed for {createdEmail}
+              </p>
+              {inviteError && (
+                <p className="text-amber-800 mb-2">{inviteError}</p>
+              )}
+              {createdPassword && (
+                <>
+                  <p className="text-amber-800 mb-1">Fallback temporary password:</p>
+                  <p className="font-mono text-sm break-all text-amber-900">{createdPassword}</p>
+                  <p className="text-[11px] text-amber-700 mt-2">
+                    Share securely, or use Resend invite below once email is configured.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </CardContent>
@@ -286,6 +339,19 @@ export default function AdminTeam() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-sky-200 text-sky-700"
+                            disabled={resendingId === u.userId}
+                            onClick={() => void resendInvite(u.userId, u.email)}
+                          >
+                            {resendingId === u.userId ? (
+                              <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              "Resend invite"
+                            )}
+                          </Button>
                           {!isAdmin && (
                             <Button
                               size="sm"
