@@ -41,7 +41,7 @@
 //   sendChecklistEmail? bool (default true based on serviceType==='standard')
 //
 // Response: { booking, customerId, ghlContactId, ghlOpportunityId,
-//             depositInvoice?, remainingInvoice?, fullInvoice?,
+//             depositInvoice?, preauthSession?, fullInvoice?,
 //             smsResult, emails }
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -67,45 +67,37 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[BOOK-AS-VA] ${step}${tail}`);
 };
 
-// ─── Pricing (must mirror create-payment-intent for consistency) ────
-const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
-  standard: 1.0,
-  deep: 1.5,
-  combo: 2.5,
-  moveInOut: 2.0,
-};
-const ADD_ON_PRICING: Record<string, number> = {
-  fridge: 3000,
-  oven: 3000,
-  windows: 4000,
-};
-const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 27000,
-  "1000_1500": 34200,
-  "1501_2000": 43200,
-  "2001_2500": 50400,
-  "2501_3000": 61200,
-  "3001_3500": 68400,
-  "3501_4000": 79200,
-  "4001_4500": 88200,
-  "4501_5000": 97200,
-  "5000_plus": 0,
-};
+// ─── Pricing ────────────────────────────────────────────────────────
+//
+// SOURCE OF TRUTH: `_shared/pricing.ts`. The v4 module is mirrored 1:1
+// with `src/lib/pricing.ts` so the React quote, the Stripe charge, and
+// this VA flow all produce identical numbers. Discount rules
+// (15% standard / 25% deep / 50% off standard portion of combo) live
+// in that module — DO NOT reapply them here.
+import { calculatePriceCents } from "../_shared/pricing.ts";
 
 function computePrice(opts: {
   homeSizeId: string;
   serviceType: string;
   addOns: string[];
-}): { base: number; serviceAdj: number; addOnTotal: number; total: number } {
-  const base = HOME_SIZE_PRICING[opts.homeSizeId] ?? 0;
-  const mult = SERVICE_TIER_MULTIPLIERS[opts.serviceType] ?? 1;
-  const serviceAdj = Math.round(base * mult);
-  const addOnTotal = (opts.addOns || []).reduce(
-    (sum, a) => sum + (ADD_ON_PRICING[a] ?? 0),
-    0,
+  membershipPlan?: string;
+}): { base: number; serviceList: number; serviceFinal: number; addOnTotal: number; total: number; discount: number } {
+  const c = calculatePriceCents(
+    opts.homeSizeId,
+    opts.serviceType,
+    opts.addOns || [],
+    opts.membershipPlan || "none",
+    false,
+    "B",
   );
-  const total = serviceAdj + addOnTotal;
-  return { base, serviceAdj, addOnTotal, total };
+  return {
+    base: c.basePriceCents,
+    serviceList: c.serviceListCents,
+    serviceFinal: c.serviceFinalCents,
+    addOnTotal: c.addOnsCents,
+    total: c.totalCents,
+    discount: c.discountCents,
+  };
 }
 
 // ─── E.164 normalizer ───────────────────────────────────────────────
@@ -365,7 +357,11 @@ interface VaBookingBody {
   flooringType?: string;
   sqft?: number;
   priceOverride?: { total: number; deposit?: number };
-  invoiceMode?: "deposit_plus_remaining" | "full_now" | "none";
+  invoiceMode?:
+    | "deposit_plus_remaining"
+    | "deposit_plus_preauth"
+    | "full_now"
+    | "none";
   depositPercent?: number;
   csrName?: string;
   customerSource?: string;
@@ -452,6 +448,19 @@ serve(async (req) => {
         ? totalCents
         : Math.round(totalCents * depositPercent));
     const remainingCents = Math.max(0, totalCents - depositCents);
+    // payment_option drives the day-of behaviour:
+    //   • "full"     — paid up-front, nothing left to charge
+    //   • "deposit"  — deferred invoice sent the morning of service
+    //                  (cron: send-remaining-day-of) OR captured from the
+    //                  pre-auth hold if invoiceMode === deposit_plus_preauth
+    //   • "preauth"  — alias for deposit + saved card; same as deposit
+    //                  but the day-of cron captures the hold from
+    //                  prepare-completion-hold instead of invoicing.
+    const paymentOption = invoiceMode === "full_now"
+      ? "full"
+      : invoiceMode === "deposit_plus_preauth"
+      ? "preauth"
+      : "deposit";
 
     // 2. Upsert the customer row (no Stripe yet). We mirror lat/lng
     //    from the admin AddressAutocomplete so the Ops Map can plot
@@ -555,13 +564,13 @@ serve(async (req) => {
         flooring_type: flooringType,
         sqft,
         second_visit_date: secondVisitDate,
-        base_price_cents: calc.serviceAdj,
+        base_price_cents: calc.serviceList,
         deposit_cents: depositCents,
         total_estimate_cents: totalCents,
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: "pending",
-        payment_option: invoiceMode === "full_now" ? "full" : "deposit",
+        payment_option: paymentOption,
         estimated_duration_hours: getEstimatedHours(body.homeSizeId),
         status: bookingStatus,
         // For confirmed VA bookings, treat the moment of insert as the
@@ -627,10 +636,24 @@ serve(async (req) => {
       logStep("GHL appointment call errored (non-blocking)", apptErr);
     }
 
-    // 6. Stripe invoices (deposit_plus_remaining / full_now / none)
+    // 6. Stripe charges. Only ONE customer-facing charge artifact is
+    //    created at booking time — the day-of remaining balance is
+    //    handled by a cron (`send-remaining-day-of` for invoices,
+    //    `prepare-completion-hold` + `complete-booking` for pre-auth).
+    //
+    //   • "deposit_plus_remaining" — send deposit invoice today.
+    //         The remaining balance is invoiced the morning of service
+    //         by `send-remaining-day-of` (Stripe send_invoice flow).
+    //   • "deposit_plus_preauth"   — open a Stripe Checkout Session that
+    //         collects the deposit + saves the card off-session. The
+    //         remaining balance is placed on hold a few days before
+    //         service (existing `prepare-completion-hold` cron) and
+    //         captured when admin clicks "Mark Completed".
+    //   • "full_now"               — single full-amount invoice today.
+    //   • "none"                   — no charge artifact at all.
     let depositInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
-    let remainingInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
     let fullInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
+    let preauthSession: { id: string; url: string | null } | null = null;
     if (invoiceMode !== "none" && totalCents > 0) {
       const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
       if (stripeKey) {
@@ -648,53 +671,77 @@ serve(async (req) => {
             postal_code: body.zipCode,
           },
         );
-        await supabase
-          .from("bookings")
-          .update({ customer_id: stripeCustomerId })
-          .eq("id", bookingId);
+        // Mirror onto customers row so referral/credit lookups by email
+        // still work (we deliberately keep customers.id = uuid, not the
+        // Stripe cus_…). See `customers.stripe_customer_id`.
+        try {
+          await supabase
+            .from("customers")
+            .update({ stripe_customer_id: stripeCustomerId })
+            .eq("id", customerId);
+        } catch (_) { /* column may not exist on legacy schemas — ignore */ }
 
-        const svcMs = new Date(`${body.serviceDate}T12:00:00`).getTime();
-        const daysToService = Math.max(
-          0,
-          Math.ceil((svcMs - Date.now()) / 86400000),
-        );
-
-        if (invoiceMode === "deposit_plus_remaining") {
-          if (depositCents > 0) {
-            depositInvoice = await createAndSendInvoice(
-              stripe,
-              stripeCustomerId,
-              depositCents,
-              `${bookingRef} — Deposit for ${body.serviceType} cleaning on ${body.serviceDate}`,
-              0,
+        if (invoiceMode === "deposit_plus_remaining" && depositCents > 0) {
+          depositInvoice = await createAndSendInvoice(
+            stripe,
+            stripeCustomerId,
+            depositCents,
+            `${bookingRef} — Deposit for ${body.serviceType} cleaning on ${body.serviceDate}`,
+            0,
+            {
+              booking_id: bookingId,
+              booking_number: String(booking.booking_number || ""),
+              purpose: "deposit",
+            },
+          );
+        } else if (invoiceMode === "deposit_plus_preauth" && depositCents > 0) {
+          // Hosted Checkout Session: collects the deposit AND saves the
+          // card off-session, so prepare-completion-hold can place the
+          // pre-auth a few days before service.
+          const siteBase = (Deno.env.get("PUBLIC_SITE_URL") ||
+            "https://novaracleaning.com").replace(/\/+$/, "");
+          const session = await stripe.checkout.sessions.create({
+            mode: "payment",
+            customer: stripeCustomerId,
+            payment_method_types: ["card"],
+            line_items: [
               {
+                quantity: 1,
+                price_data: {
+                  currency: "usd",
+                  unit_amount: depositCents,
+                  product_data: {
+                    name: `${bookingRef} — Deposit (Novara Cleaning)`,
+                    description:
+                      `Deposit for ${body.serviceType} clean on ${body.serviceDate}. Remaining $${(remainingCents / 100).toFixed(2)} will be authorized a few days before service and captured after we complete the job.`,
+                  },
+                },
+              },
+            ],
+            payment_intent_data: {
+              setup_future_usage: "off_session",
+              metadata: {
                 booking_id: bookingId,
                 booking_number: String(booking.booking_number || ""),
-                purpose: "deposit",
+                purpose: "deposit_preauth",
               },
-            );
-          }
-          if (remainingCents > 0) {
-            remainingInvoice = await createAndSendInvoice(
-              stripe,
-              stripeCustomerId,
-              remainingCents,
-              `${bookingRef} — Remaining balance for ${body.serviceType} cleaning on ${body.serviceDate}`,
-              daysToService,
-              {
-                booking_id: bookingId,
-                booking_number: String(booking.booking_number || ""),
-                purpose: "remaining_balance",
-              },
-            );
-            await supabase
-              .from("bookings")
-              .update({
-                stripe_invoice_id: remainingInvoice.invoiceId,
-                hosted_invoice_url: remainingInvoice.hostedInvoiceUrl,
-              })
-              .eq("id", bookingId);
-          }
+            },
+            success_url: `${siteBase}/book/success?booking_id=${bookingId}&deposit=ok`,
+            cancel_url: `${siteBase}/book/success?booking_id=${bookingId}&deposit=cancelled`,
+            metadata: {
+              booking_id: bookingId,
+              booking_number: String(booking.booking_number || ""),
+              purpose: "deposit_preauth",
+            },
+          });
+          preauthSession = { id: session.id, url: session.url };
+          await supabase
+            .from("bookings")
+            .update({
+              checkout_session_id: session.id,
+              hosted_invoice_url: session.url, // re-use the URL slot so SMS/email pick it up
+            })
+            .eq("id", bookingId);
         } else if (invoiceMode === "full_now") {
           fullInvoice = await createAndSendInvoice(
             stripe,
@@ -739,7 +786,8 @@ serve(async (req) => {
     // the Telnyx confirmation SMS the customer flow uses).
     //
     // Pre-stamp hosted_invoice_url on the booking row so the helper's
-    // confirmation email carries the right "Pay invoice" link.
+    // confirmation email carries the right "Pay invoice" / "Pay deposit"
+    // link. preauthSession.url already stamped above.
     if (depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl) {
       const url = depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl;
       if (url) {
@@ -748,6 +796,33 @@ serve(async (req) => {
           .update({ hosted_invoice_url: url })
           .eq("id", bookingId);
       }
+    }
+
+    // 6b. Pre-mint the customer's referral_code (lookup by email so it
+    // works even after we overwrite booking.customer_id with the Stripe
+    // cus_ id in older flows). send-post-booking-sms reads
+    // customers.referral_code by email and embeds the unique link.
+    try {
+      const { data: existingCust } = await supabase
+        .from("customers")
+        .select("id, referral_code")
+        .eq("email", body.email)
+        .maybeSingle();
+      if (existingCust && !existingCust.referral_code) {
+        await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-referral-code`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+            },
+            body: JSON.stringify({ customerId: existingCust.id, email: body.email }),
+          },
+        );
+      }
+    } catch (err) {
+      logStep("pre-mint referral code failed (non-blocking)", err);
     }
     // For confirmed VA bookings, mark payment_received_at when the
     // VA collected payment in-line (full_now). deposit_plus_remaining
@@ -803,12 +878,12 @@ serve(async (req) => {
         msgParts.push(`. Total $${(totalCents / 100).toFixed(2)}.`);
         if (depositInvoice) {
           msgParts.push(
-            ` Deposit invoice ($${(depositCents / 100).toFixed(2)}) just sent to your email — please pay today.`,
+            ` Deposit invoice ($${(depositCents / 100).toFixed(2)}) just sent to your email — please pay today. We'll send the remaining $${(remainingCents / 100).toFixed(2)} the morning of service.`,
           );
         }
-        if (remainingInvoice) {
+        if (preauthSession?.url) {
           msgParts.push(
-            ` Remaining $${(remainingCents / 100).toFixed(2)} is due on ${body.serviceDate}.`,
+            ` Please pay your $${(depositCents / 100).toFixed(2)} deposit and save your card here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
           );
         }
         if (fullInvoice) {
@@ -856,7 +931,7 @@ serve(async (req) => {
           remainingCents,
         },
         depositInvoice,
-        remainingInvoice,
+        preauthSession,
         fullInvoice,
         smsResult,
         emails,

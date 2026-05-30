@@ -15,51 +15,14 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PAYMENT-INTENT] ${step}${detailsStr}`);
 };
 
-// ─── v2.0 Pricing (cents) ────────────────────────────────
-// Deep = Standard × 1.5 | Move-In/Out = Standard × 2.0
-// Combo = Standard + Deep = 2.5× standard (the "Deep + Standard
-// Combo" bundle: initial Deep Clean + a follow-up Standard Clean
-// within 14 days, scheduled on /book/details after deposit).
-const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
-  standard: 1.0,
-  deep: 1.5,
-  combo: 2.5,
-  moveInOut: 2.0,
-};
+// ─── v4.0 Pricing — single source of truth ──────────────
+//
+// Pricing math lives in `_shared/pricing.ts` (mirrored in `src/lib/
+// pricing.ts`). DO NOT redefine bases or discounts here — drift between
+// the two is exactly what caused the v3 "$216 quote → $432 charge" bug.
+import { calculatePriceCents, HOME_SIZE_RANGES } from "../_shared/pricing.ts";
 
-const ADD_ON_PRICING: Record<string, number> = {
-  fridge: 3000, // $30
-  oven: 3000, // $30
-  windows: 4000, // $40
-};
-
-// Zone B base standard clean prices in cents (v3.4 — v3.3 lowered 10%
-// across the board. Membership pricing stays at the listed rate card —
-// only one-time / combo prices come down).
-const HOME_SIZE_PRICING: Record<string, number> = {
-  "0_999": 27000,
-  "1000_1500": 34200,
-  "1501_2000": 43200,
-  "2001_2500": 50400,
-  "2501_3000": 61200,
-  "3001_3500": 68400,
-  "3501_4000": 79200,
-  "4001_4500": 88200,
-  "4501_5000": 97200,
-  "5000_plus": 0,
-};
-
-// Deposit is now 50% of the booking total — no more flat $39 down.
 const DEPOSIT_PERCENT = 0.5;
-// New-customer discount is now 50% off subtotal (was a flat $60).
-const NEW_CUSTOMER_DISCOUNT_PERCENT = 0.5;
-
-// Membership discount on extras only
-const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
-  monthly: 0.15,
-  biweekly: 0.25,
-  weekly: 0.35,
-};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -126,91 +89,72 @@ serve(async (req) => {
       apiVersion: "2025-08-27.basil",
     });
 
-    // Calculate pricing to match frontend logic (values in cents)
-    // v2.0: Deep = Standard × 1.5, Move-In/Out = Standard × 2.0
-    const baseStandardPrice = HOME_SIZE_PRICING[bookingData.homeSizeId as string];
-    if (baseStandardPrice === undefined) {
-      logStep("Invalid home size ID", { homeSizeId: bookingData.homeSizeId, validIds: Object.keys(HOME_SIZE_PRICING) });
+    // ─── Single-source pricing ──────────────────────────────────────────
+    // Validate home size first so we get a clean 400 if it's bogus.
+    const knownSize = HOME_SIZE_RANGES.find((h) => h.id === bookingData.homeSizeId);
+    if (!knownSize) {
+      logStep("Invalid home size ID", { homeSizeId: bookingData.homeSizeId });
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: "Invalid home size selected",
           details: "Please go back and select a valid home size.",
-          code: "INVALID_HOME_SIZE" 
+          code: "INVALID_HOME_SIZE",
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    
-    // Apply service tier multiplier
-    const tierMultiplier = SERVICE_TIER_MULTIPLIERS[bookingData.serviceType as string] ?? 1.0;
-    const basePrice = Math.round(baseStandardPrice * tierMultiplier);
-    const serviceTierPrice = basePrice - baseStandardPrice; // The addition from the tier
 
-    // Prepare add-ons (Move-In/Out includes fridge & oven already)
+    const membershipPlan: string = bookingData.membershipPlan || "none";
     const incomingAddOns: string[] = Array.isArray(bookingData.addOns) ? bookingData.addOns : [];
-    const relevantAddOns = bookingData.serviceType === 'moveInOut'
-      ? incomingAddOns.filter((a) => a !== 'fridge' && a !== 'oven')
-      : incomingAddOns;
+    const calc = calculatePriceCents(
+      bookingData.homeSizeId as string,
+      bookingData.serviceType as string,
+      incomingAddOns,
+      membershipPlan,
+      !!bookingData.useCredit,
+      "B",
+    );
+    const basePrice = calc.serviceListCents; // pre-discount list (kept on booking.base_price_cents)
+    const subtotal = calc.subtotalCents;
+    const addOnsTotal = calc.addOnsCents;
+    const serviceTierDiscount = calc.discountCents;
+    // `newCustomerDiscount` / `membershipDiscount` are kept as variable names
+    // because downstream code (logging, metadata) references them. All flat
+    // legacy discounts (promo codes, 50% acquisition, 50% referral) are now
+    // intentionally ZERO — discounts come exclusively from the per-service
+    // rules in _shared/pricing.ts (15% standard, 25% deep, 50% off standard
+    // portion of combo).
+    const newCustomerDiscount = serviceTierDiscount;
+    const membershipDiscount = 0;
 
-    const addOnsTotal = relevantAddOns.reduce((sum, a) => sum + (ADD_ON_PRICING[a] ?? 0), 0);
-
-    const subtotal = basePrice + addOnsTotal;
-
-    // Membership discount applies only to extras (service addition + add-ons) and only if not using credit
-    const membershipPlan: string = bookingData.membershipPlan || 'none';
-    const extras = serviceTierPrice + addOnsTotal;
-    const membershipPct = (!bookingData.useCredit && MEMBERSHIP_DISCOUNTS[membershipPlan]) ? MEMBERSHIP_DISCOUNTS[membershipPlan] : 0;
-    const membershipDiscount = Math.round(extras * membershipPct);
-
-    // Check booking history to determine booking number and new customer status
+    // Booking history is still tracked for analytics (referral / activation
+    // reports), but does NOT influence pricing anymore.
     const { data: previousBookings } = await supabaseClient
-      .from('bookings')
-      .select('id, status')
-      .eq('email', bookingData.email)
-      .in('status', ['confirmed', 'completed'])
-      .order('created_at', { ascending: false });
-    
+      .from("bookings")
+      .select("id, status")
+      .eq("email", bookingData.email)
+      .in("status", ["confirmed", "completed"])
+      .order("created_at", { ascending: false });
     const bookingNumber = (previousBookings?.length || 0) + 1;
     const isNewCustomer = bookingNumber === 1;
-    // 50% promo — applied to every Standard, Deep, and Combo
-    // (Deep+Standard) one-time booking. Previously gated on
-    // isNewCustomer (queried from past booking history) but that
-    // produced visible inconsistencies for repeat / test customers:
-    // the offer card showed the discounted price (computed with
-    // isNewCustomer=true for display) and then the server returned an
-    // un-discounted total, charging double the expected deposit. The
-    // 50% off is now a flat acquisition promo so the offer card,
-    // checkout summary, and Stripe Pay button always agree to the cent.
-    // Members + Move-In/Out are still excluded — they have their own
-    // discount tiers. `isNewCustomer` is still computed above for
-    // booking-row reporting + downstream metadata.
     void isNewCustomer;
-    const promoEligible =
-      membershipPlan === 'none' &&
-      (bookingData.serviceType === 'standard' ||
-       bookingData.serviceType === 'deep' ||
-       bookingData.serviceType === 'combo');
-    const newCustomerDiscount = promoEligible
-      ? Math.round(subtotal * NEW_CUSTOMER_DISCOUNT_PERCENT)
-      : 0;
 
-    // Validate referral code if provided
+    // Referral codes still attach to the booking row (so the referrer
+    // gets a referral credit when the booking completes via
+    // complete-booking) but they no longer subtract from the customer's
+    // total. The 50%-off-via-referral stack was retired with the new
+    // pricing rules.
     let referralDiscountCents = 0;
-    let referralCode = '';
+    let referralCode = "";
     if (bookingData.referralCode) {
-      logStep("Validating referral code", { code: bookingData.referralCode });
       const { data: referrer } = await supabaseClient
-        .from('customers')
-        .select('id, email')
-        .eq('referral_code', bookingData.referralCode)
+        .from("customers")
+        .select("id, email")
+        .eq("referral_code", bookingData.referralCode)
         .maybeSingle();
-
       if (referrer && referrer.email !== bookingData.email) {
-        // Referral reward is now 50% off the post-membership subtotal (replaces $50 flat).
-        const referralBase = Math.max(0, subtotal - membershipDiscount);
-        referralDiscountCents = Math.round(referralBase * 0.5);
-        referralCode = bookingData.referralCode;
-        logStep("Valid referral code applied (50% off)", { discount: referralDiscountCents, referrerEmail: referrer.email });
+        referralCode = String(bookingData.referralCode).toUpperCase();
+        logStep("Referral code attached (no discount stack)", { referralCode, referrerEmail: referrer.email });
       } else if (referrer && referrer.email === bookingData.email) {
         logStep("Referral code rejected - cannot refer yourself");
       } else {
@@ -218,96 +162,22 @@ serve(async (req) => {
       }
     }
 
-    // Calculate credit coverage. Cleaner payout is now computed AFTER
-    // we know the final totalAmount (revenue share % of customer-paid
-    // revenue). estimatedHours is still computed for calendar/duration
-    // copy, just no longer used for pay math.
+    // Calculate credit coverage. Already included in `calc.totalCents`
+    // when useCredit was passed to calculatePriceCents, but we keep the
+    // local variable for logging consistency.
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
     const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
 
-    // Validate promo code if provided
+    // Promo codes are no longer honored — the only discounts in v4 are
+    // the per-service-tier rules in _shared/pricing.ts. A code on the
+    // payload is logged for analytics but never reduces the charge.
     let promoDiscountCents = 0;
     let promoCode = '';
     if (bookingData.promoCode) {
-      logStep("Validating promo code", { code: bookingData.promoCode });
-      
-      const { data: promo, error: promoError } = await supabaseClient
-        .from('promo_codes')
-        .select('*')
-        .eq('code', bookingData.promoCode.toUpperCase())
-        .eq('active', true)
-        .single();
-
-      if (!promoError && promo) {
-        // Check expiration
-        const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
-        
-        // Check customer eligibility
-        const eligibleForPromo = 
-          promo.applies_to === 'all' ||
-          (promo.applies_to === 'new_customers' && isNewCustomer) ||
-          (promo.applies_to === 'returning_customers' && !isNewCustomer);
-
-        // Check usage limits
-        const withinTotalLimit = !promo.max_total_uses || promo.total_uses < promo.max_total_uses;
-        
-        // Check per-customer usage
-        let withinCustomerLimit = true;
-        if (promo.max_uses_per_customer) {
-          const { data: customerUsage } = await supabaseClient
-            .from('bookings')
-            .select('id')
-            .eq('email', bookingData.email)
-            .ilike('team_notes', `%PROMO:${bookingData.promoCode.toUpperCase()}%`);
-          
-          withinCustomerLimit = !customerUsage || customerUsage.length < promo.max_uses_per_customer;
-        }
-
-        if (!isExpired && eligibleForPromo && withinTotalLimit && withinCustomerLimit) {
-          // Calculate discount
-          if (promo.type === 'percent') {
-            promoDiscountCents = Math.round((subtotal * promo.value) / 100);
-          } else {
-            promoDiscountCents = promo.value * 100; // Convert dollars to cents
-          }
-
-          // Validate profit margin under the revenue-share model.
-          // Worst-case cleaner cost is Elite (50%) + ~3% Stripe fee.
-          // We compare the residual margin against the promo's
-          // configured floor.
-          const tempTotal = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents;
-          // Worst-case cleaner cost is the highest tier (Elite) at 45%.
-          const tentativeCleanerCost = Math.floor(tempTotal * 0.45);
-          const profitMargin = tempTotal > 0
-            ? (tempTotal - tentativeCleanerCost) / tempTotal
-            : 0;
-          const minMargin = (promo.min_profit_margin_percent || 20) / 100;
-
-          if (profitMargin >= minMargin) {
-            promoCode = bookingData.promoCode.toUpperCase();
-            logStep("Valid promo code applied", { 
-              discount: promoDiscountCents, 
-              promoCode,
-              profitMargin: Math.round(profitMargin * 100) + '%'
-            });
-          } else {
-            logStep("Promo code rejected - insufficient profit margin", { 
-              requiredMargin: minMargin,
-              actualMargin: profitMargin 
-            });
-            promoDiscountCents = 0;
-          }
-        } else {
-          logStep("Promo code not eligible", { 
-            isExpired, 
-            eligibleForPromo, 
-            withinTotalLimit, 
-            withinCustomerLimit 
-          });
-        }
-      } else {
-        logStep("Invalid promo code");
-      }
+      logStep("Promo code received but discounts are disabled in v4", {
+        code: String(bookingData.promoCode).toUpperCase(),
+      });
+      promoCode = String(bookingData.promoCode).toUpperCase();
     }
 
     logStep("Customer booking history", { 
@@ -353,9 +223,18 @@ serve(async (req) => {
       logStep("Wallet credit lookup failed (non-blocking)", { error: walletErr instanceof Error ? walletErr.message : String(walletErr) });
     }
 
-    let totalAmount = subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents - walletCreditCents;
-    if (totalAmount < 0) totalAmount = 0;
-    logStep("Base calculation", { subtotal, membershipDiscount, newCustomerDiscount, creditCoverage, referralDiscountCents, promoDiscountCents, walletCreditCents, totalAmount });
+    // v4: total is whatever the pricing module said, minus any wallet
+    // credit. All "discounts" are already baked into calc.totalCents.
+    let totalAmount = Math.max(0, calc.totalCents - walletCreditCents);
+    logStep("Base calculation (v4)", {
+      subtotal,
+      serviceTierDiscount,
+      creditCoverage,
+      referralDiscountCents,
+      promoDiscountCents,
+      walletCreditCents,
+      totalAmount,
+    });
 
     // Cleaner payout = flat 35% of customer-paid revenue (Foundation
     // tier default at booking time — no cleaner has been assigned yet).

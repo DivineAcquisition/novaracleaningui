@@ -14,69 +14,29 @@ const logStep = (step: string, details?: any) => {
   console.log(`[MODIFY-BOOKING] ${step}${detailsStr}`);
 };
 
-// Pricing configuration (must match frontend)
-const HOME_SIZE_PRICING: Record<string, { standardPrice: number }> = {
-  '0_999': { standardPrice: 150 },
-  '1000_1500': { standardPrice: 187.5 },
-  '1501_2000': { standardPrice: 225 },
-  '2001_2500': { standardPrice: 262.5 },
-  '2501_3000': { standardPrice: 300 },
-  '3001_3500': { standardPrice: 337.5 },
-  '3501_4000': { standardPrice: 375 },
-  '4001_4500': { standardPrice: 412.5 },
-  '4501_5000': { standardPrice: 450 },
-};
-
-const SERVICE_PRICING: Record<string, number> = {
-  standard: 0,
-  deep: 50,
-  moveInOut: 120,
-};
-
-const ADD_ON_PRICING: Record<string, number> = {
-  fridge: 30,
-  oven: 30,
-  windows: 40,
-};
-
-const MEMBERSHIP_DISCOUNTS: Record<string, number> = {
-  none: 0,
-  monthly: 0.20,
-  biweekly: 0.25,
-  weekly: 0.30,
-};
+// Pricing math is owned by `_shared/pricing.ts`. Modify-booking just
+// asks for the same dollar total the customer would see in /book and
+// the same Stripe charge create-payment-intent would generate.
+import {
+  calculatePrice as sharedCalculatePrice,
+} from "../_shared/pricing.ts";
 
 function calculatePrice(
   homeSizeId: string,
   serviceType: string,
   addOns: string[],
   membershipPlan: string,
-  useCredit: boolean
+  useCredit: boolean,
 ): number {
-  const basePrice = HOME_SIZE_PRICING[homeSizeId]?.standardPrice || 0;
-  const serviceAddition = SERVICE_PRICING[serviceType] || 0;
-  
-  let addOnsTotal = 0;
-  if (serviceType === 'moveInOut') {
-    // Move-In/Out includes fridge & oven
-    addOnsTotal = addOns
-      .filter(addon => addon === 'windows')
-      .reduce((total, addon) => total + (ADD_ON_PRICING[addon] || 0), 0);
-  } else {
-    addOnsTotal = addOns.reduce((total, addon) => total + (ADD_ON_PRICING[addon] || 0), 0);
-  }
-  
-  const subtotal = basePrice + serviceAddition + addOnsTotal;
-  
-  // Membership discount on extras only
-  const membershipDiscount = MEMBERSHIP_DISCOUNTS[membershipPlan] || 0;
-  const extrasAmount = serviceAddition + addOnsTotal;
-  const discountAmount = extrasAmount * membershipDiscount;
-  
-  // Credit coverage
-  const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;
-  
-  return subtotal - discountAmount - creditCoverage;
+  const c = sharedCalculatePrice(
+    homeSizeId,
+    serviceType,
+    addOns,
+    membershipPlan || "none",
+    useCredit,
+    "B",
+  );
+  return c.total;
 }
 
 serve(async (req) => {

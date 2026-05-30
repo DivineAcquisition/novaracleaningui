@@ -249,26 +249,13 @@ export default function BookingCheckout() {
     };
     checkNewCustomer();
   }, [bookingData.email]);
-  const autoApplyBestPromo = async (isNew: boolean) => {
-    if (!bookingData.email || isAutoApplying) return;
-    setIsAutoApplying(true);
-    try {
-      const subtotal = calculatePrice(bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns, bookingData.membershipPlan, bookingData.useCredit, isNew, 0).subtotal;
-      const bestPromo = await findBestPromoCode(supabase, bookingData.email, isNew, subtotal);
-      if (bestPromo) {
-        setAutoAppliedPromo(bestPromo);
-        setAppliedPromoCode(bestPromo.code);
-        setPromoDiscount(bestPromo.discount);
-        updateBookingData({
-          promoCode: bestPromo.code
-        });
-        toast.success(`🎉 ${bestPromo.description} auto-applied! Saving $${bestPromo.discount.toFixed(2)}`);
-      }
-    } catch (error) {
-      console.error('Error auto-applying promo:', error);
-    } finally {
-      setIsAutoApplying(false);
-    }
+  // v4: promo-code auto-apply is intentionally a no-op. All customer
+  // discounts now come exclusively from the per-service-tier rules in
+  // src/lib/pricing.ts (standard 15%, deep 25%, combo 50% off standard
+  // portion). Stacking a DB promo would double-discount.
+  const autoApplyBestPromo = async (_isNew: boolean) => {
+    void _isNew;
+    return;
   };
 
   // Swipe handlers
@@ -297,19 +284,18 @@ export default function BookingCheckout() {
         toast.error('Invalid or already used referral code');
         return;
       }
-      const discount = (referral.credit_cents || 2000) / 100;
-      setReferralDiscount(discount);
+      // v4: referrals no longer discount the bookee — the referrer
+      // gets a credit when this booking completes (see complete-booking).
+      // We still capture the code on the booking row so the reward
+      // attribution works.
+      setReferralDiscount(0);
       setAppliedReferralCode(referralInput.toUpperCase());
       updateBookingData({
-        referralCode: referralInput.toUpperCase()
+        referralCode: referralInput.toUpperCase(),
       });
-      // Force Stripe to re-init so the Pay button reflects the new
-      // (lower) deposit amount. Without this the button is frozen at
-      // the amount returned when the PaymentIntent was first created.
-      setClientSecret(null);
-      setBookingId(null);
-      setPaymentAmount(0);
-      toast.success(`Referral applied! $${discount.toFixed(2)} off`);
+      toast.success(
+        "Referral attached — when your booking completes, your friend gets a credit.",
+      );
     } catch (err) {
       toast.error('Error validating referral code');
     } finally {
@@ -351,20 +337,18 @@ export default function BookingCheckout() {
         toast.error('This code is only for new customers');
         return;
       }
-      const subtotal = depositPricing.subtotal;
-      let discount = promo.type === 'percent' ? Math.round(subtotal * promo.value / 100 * 100) / 100 : promo.value;
-      setPromoDiscount(discount);
+      // v4: promo codes no longer reduce the price — discounts are
+      // baked into the per-service-tier rate (15% std / 25% deep /
+      // 50% off std portion of combo). We keep the code on the booking
+      // for reporting only.
+      setPromoDiscount(0);
       setAppliedPromoCode(promoInput.toUpperCase());
       setAutoAppliedPromo(null);
       updateBookingData({
         promoCode: promoInput.toUpperCase()
       });
-      // Force Stripe to re-init so the Pay button reflects the
-      // promo-discounted deposit amount.
-      setClientSecret(null);
-      setBookingId(null);
-      setPaymentAmount(0);
-      toast.success(`🎉 Promo applied! Saving $${discount.toFixed(2)}`);
+      // No need to re-init Stripe — v4 promo codes carry no discount.
+      toast.success("Promo code attached for our records — the published rate already reflects the best available price.");
       setShowPromoSuggestions(false);
     } catch (err) {
       toast.error('Error validating promo code');
