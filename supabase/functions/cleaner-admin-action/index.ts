@@ -122,11 +122,23 @@ serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
   const { action, cleanerId } = body || {};
-  if (!action || !cleanerId) return json({ error: "action + cleanerId required" }, 400);
+  if (!action) return json({ error: "action required" }, 400);
 
-  const { data: cleaner, error: cErr } = await adminClient
-    .from("cleaners").select("*").eq("id", cleanerId).maybeSingle();
-  if (cErr || !cleaner) return json({ error: "cleaner not found" }, 404);
+  // bypass_onboarding has its own pre-cleaner lookup path because it
+  // also supports a phone-only call (no cleanerId yet — we resolve or
+  // create the row from the phone).
+  if (action !== "bypass_onboarding_send_code" && action !== "bypass_onboarding_verify_code") {
+    if (!cleanerId) return json({ error: "cleanerId required" }, 400);
+  }
+
+  let cleaner: any = null;
+  if (cleanerId) {
+    const { data, error: cErr } = await adminClient
+      .from("cleaners").select("*").eq("id", cleanerId).maybeSingle();
+    if (cErr) return json({ error: "cleaner lookup failed" }, 500);
+    if (!data) return json({ error: "cleaner not found" }, 404);
+    cleaner = data;
+  }
 
   try {
     switch (action) {
@@ -287,6 +299,167 @@ serve(async (req) => {
         // insurance-on-file, etc.) into the contractor's GHL contact.
         adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
           .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
+        return json({ ok: true, cleaner: updated });
+      }
+
+      // ─── BYPASS ONBOARDING ───────────────────────────────────────────
+      // Two-step admin flow that converts a phone number into an
+      // active, dispatch-ready cleaner without forcing the full
+      // multi-step onboarding portal.
+      //
+      // STEP 1: bypass_onboarding_send_code
+      //   body: { phone, firstName?, lastName?, email?, homeAddress?, city?, state?, zip? }
+      //   * Upsert (or find) the cleaners row by phone.
+      //   * Generate a 6-digit code, store it on
+      //     cleaner_verification_codes with a 10-minute expiry.
+      //   * SMS the code via send-ghl-sms.
+      //   * Returns the cleanerId so the UI can poll/show the code field.
+      //
+      // STEP 2: bypass_onboarding_verify_code
+      //   body: { cleanerId, code }
+      //   * Validate the code is present, unexpired, and matches.
+      //   * Flip the cleaner row to status='active', approved=true,
+      //     phone_verified=true, onboarding_complete=true,
+      //     available_for_bookings=true. Stamp activated_at.
+      //   * Fire-and-forget sync-cleaner-to-ghl + lifecycle email.
+      case "bypass_onboarding_send_code": {
+        const phoneRaw = String(body.phone || "").trim();
+        if (!phoneRaw) return json({ error: "phone required" }, 400);
+        const digits = phoneRaw.replace(/[^0-9]/g, "");
+        const phoneE164 = digits.length === 10
+          ? `+1${digits}`
+          : digits.length === 11 && digits.startsWith("1")
+          ? `+${digits}`
+          : phoneRaw.startsWith("+") ? phoneRaw : `+${digits}`;
+        const phoneShort = digits.length >= 10 ? digits.slice(-10) : digits;
+
+        // Find or create the cleaner row.
+        let { data: c } = await adminClient
+          .from("cleaners")
+          .select("*")
+          .eq("phone", phoneShort)
+          .maybeSingle();
+        if (!c) {
+          const { data: created, error: createErr } = await adminClient
+            .from("cleaners")
+            .insert({
+              first_name: body.firstName || "Cleaner",
+              last_name: body.lastName || "",
+              email: body.email || `${phoneShort}@pending.novara`,
+              phone: phoneShort,
+              status: "pending",
+              approved: false,
+              available_for_bookings: false,
+              home_address: body.homeAddress || null,
+              home_city: body.city || null,
+              home_state: body.state || null,
+              home_zip: body.zip || null,
+            })
+            .select()
+            .maybeSingle();
+          if (createErr) throw createErr;
+          c = created;
+        }
+
+        // Generate code.
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        try {
+          await adminClient
+            .from("cleaner_verification_codes")
+            .insert({
+              cleaner_id: c.id,
+              code,
+              expires_at: expiresAt,
+              consumed: false,
+            });
+        } catch (insErr) {
+          console.warn("[bypass] verification-code insert failed (will still SMS)", insErr);
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.bypass_code_sent",
+          cleaner_id: c.id,
+          source: "cleaner-admin-action",
+          summary: `Admin sent onboarding-bypass code to ${c.first_name} ${c.last_name || ""}`,
+          data: { phone: phoneE164, by: callerId },
+        }).then(() => undefined).catch(() => undefined);
+
+        // SMS the code via GHL.
+        try {
+          await adminClient.functions.invoke("send-ghl-sms", {
+            body: {
+              phone: phoneE164,
+              email: c.email || undefined,
+              firstName: c.first_name || undefined,
+              message: `Novara Cleaning: Your activation code is ${code}. It expires in 10 minutes. (Admin onboarding bypass)`,
+              type: "cleaner_bypass_otp",
+            },
+          });
+        } catch (smsErr) {
+          return json({ error: "sms send failed", detail: String((smsErr as Error).message) }, 502);
+        }
+
+        return json({ ok: true, cleanerId: c.id, phone: phoneE164, expiresAt });
+      }
+
+      case "bypass_onboarding_verify_code": {
+        if (!cleanerId) return json({ error: "cleanerId required" }, 400);
+        const code = String(body.code || "").trim();
+        if (code.length < 4) return json({ error: "code required" }, 400);
+        const { data: c } = await adminClient
+          .from("cleaners").select("*").eq("id", cleanerId).maybeSingle();
+        if (!c) return json({ error: "cleaner not found" }, 404);
+
+        const { data: vc } = await adminClient
+          .from("cleaner_verification_codes")
+          .select("id, code, expires_at, consumed")
+          .eq("cleaner_id", cleanerId)
+          .eq("code", code)
+          .eq("consumed", false)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!vc) return json({ error: "invalid code" }, 401);
+        if (vc.expires_at && new Date(vc.expires_at).getTime() < Date.now()) {
+          return json({ error: "code expired" }, 401);
+        }
+
+        await adminClient
+          .from("cleaner_verification_codes")
+          .update({ consumed: true, consumed_at: new Date().toISOString() })
+          .eq("id", vc.id);
+
+        const { data: updated, error: updErr } = await adminClient
+          .from("cleaners")
+          .update({
+            status: "active",
+            approved: true,
+            phone_verified: true,
+            onboarding_complete: true,
+            available_for_bookings: true,
+            activated_at: c.activated_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", cleanerId)
+          .select()
+          .maybeSingle();
+        if (updErr) throw updErr;
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.bypass_activated",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary: `Cleaner ${c.first_name || ""} ${c.last_name || ""} activated via admin bypass`,
+          data: { by: callerId },
+        }).then(() => undefined).catch(() => undefined);
+
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
+        adminClient.functions.invoke("send-cleaner-lifecycle-email", {
+          body: { cleanerId, lifecycle: "activated" },
+        }).catch(() => undefined);
+
         return json({ ok: true, cleaner: updated });
       }
 
