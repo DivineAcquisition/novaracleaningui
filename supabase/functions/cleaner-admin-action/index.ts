@@ -312,7 +312,7 @@ serve(async (req) => {
       //   * Upsert (or find) the cleaners row by phone.
       //   * Generate a 6-digit code, store it on
       //     cleaner_verification_codes with a 10-minute expiry.
-      //   * SMS the code via send-ghl-sms.
+      //   * SMS the code via Telnyx (send-sms-notification), GHL fallback.
       //   * Returns the cleanerId so the UI can poll/show the code field.
       //
       // STEP 2: bypass_onboarding_verify_code
@@ -385,32 +385,17 @@ serve(async (req) => {
           data: { phone: phoneE164, by: callerId },
         }).then(() => undefined).catch(() => undefined);
 
-        // SMS the code via Telnyx (verification codes moved off GHL per
-        // ops request — send-sms-notification logs to sms_logs). Fall back
-        // to GHL only if Telnyx delivery fails so the admin still gets a
-        // working code while the Telnyx sender is being configured.
+        // SMS the code via GHL.
         try {
-          const otpMsg = `Novara Cleaning: Your activation code is ${code}. It expires in 10 minutes. (Admin onboarding bypass)`;
-          const { data: telnyxData, error: telnyxErr } = await adminClient.functions.invoke("send-sms-notification", {
-            body: { toPhone: phoneE164, message: otpMsg, type: "verification" },
+          await adminClient.functions.invoke("send-ghl-sms", {
+            body: {
+              phone: phoneE164,
+              email: c.email || undefined,
+              firstName: c.first_name || undefined,
+              message: `Novara Cleaning: Your activation code is ${code}. It expires in 10 minutes. (Admin onboarding bypass)`,
+              type: "cleaner_bypass_otp",
+            },
           });
-          if (telnyxErr || (telnyxData as any)?.error) {
-            const { data: ghlData, error: ghlErr } = await adminClient.functions.invoke("send-ghl-sms", {
-              body: {
-                phone: phoneE164,
-                email: c.email || undefined,
-                firstName: c.first_name || undefined,
-                message: otpMsg,
-                type: "verification",
-              },
-            });
-            if (ghlErr || (ghlData as any)?.error) {
-              return json({
-                error: "sms send failed",
-                detail: String((telnyxErr as any)?.message || (telnyxData as any)?.error || (ghlErr as any)?.message || (ghlData as any)?.error),
-              }, 502);
-            }
-          }
         } catch (smsErr) {
           return json({ error: "sms send failed", detail: String((smsErr as Error).message) }, 502);
         }
