@@ -199,9 +199,10 @@ export default function AdminCleaners() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not signed in");
       const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
-        body: { action, cleaner_id: selected.id, ...extra },
+        body: { action, cleanerId: selected.id, ...extra },
       });
       if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
       toast.success(`${action} applied`);
       // Optimistic refresh.
       await load({ silent: true });
@@ -265,8 +266,10 @@ export default function AdminCleaners() {
         open={addOpen}
         onOpenChange={setAddOpen}
         onCreated={() => {
-          setAddOpen(false);
-          void load();
+          // Reload the directory but DON'T close the sheet — the full-
+          // account flow keeps the generated temp password visible so the
+          // admin can copy it. The bypass flow closes itself on activation.
+          void load({ silent: true });
         }}
       />
 
@@ -755,8 +758,8 @@ function ActionsBlock({
 // ─── Add cleaner dialog ───────────────────────────────────────────────
 //
 // Uses the existing `create-cleaner-account` edge function which:
-//   - creates a Supabase auth user (auto-generated password)
-//   - inserts the cleaner row with status='active', approved=true
+//   - creates (or reuses) a Supabase auth user (auto-generated password)
+//   - upserts the cleaner row with status='active', approved=true
 //   - returns the temporary password so the admin can share it
 //
 function AddCleanerDialog({
@@ -882,7 +885,11 @@ function AddCleanerDialog({
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Cleaner created — share the temp password below.`);
+      toast.success(
+        data?.reusedExistingLogin
+          ? "Existing login reused — temp password reset below."
+          : `Cleaner created — share the temp password below.`,
+      );
       setCreatedPassword(data?.password || null);
       onCreated();
     } catch (err) {
@@ -936,7 +943,7 @@ function AddCleanerDialog({
           <div className="mt-5 space-y-3">
             <p className="text-[12px] text-slate-500 leading-relaxed">
               {bypassStep === "send"
-                ? "Enter their phone number. We'll text a 6-digit code through GHL. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
+                ? "Enter their phone number. We'll text a 6-digit code via Telnyx. When they read it back to you, type it in the next step — the cleaner row becomes active, approved, and dispatch-ready (no portal walk-through required)."
                 : "Type the code they read back from the SMS. The cleaner row will be activated and made available for dispatch."}
             </p>
             {bypassStep === "send" ? (
