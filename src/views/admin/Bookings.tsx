@@ -128,7 +128,18 @@ export default function AdminBookings() {
           limit: 2000,
         },
       });
-      if (error) throw error;
+      if (error) {
+        const ctx = (error as { context?: Response })?.context;
+        if (ctx) {
+          try {
+            const body = await ctx.json();
+            if (body?.error) throw new Error(String(body.error));
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+          }
+        }
+        throw error;
+      }
       if ((data as { error?: string })?.error) {
         throw new Error((data as { error: string }).error);
       }
@@ -192,7 +203,7 @@ export default function AdminBookings() {
             <div className="relative">
               <RiSearch2Line className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search Maddie, email, phone, date…"
+                placeholder="Search name, email, phone, date…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -231,7 +242,7 @@ export default function AdminBookings() {
           </div>
           {filtersActive ? (
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-slate-500">Filters active — hidden rows may include Monday jobs on weekends.</span>
+              <span className="text-slate-500">Filters active — some bookings may be hidden.</span>
               <Button type="button" variant="outline" size="sm" className="h-7" onClick={clearFilters}>
                 Clear all filters
               </Button>
@@ -249,8 +260,7 @@ export default function AdminBookings() {
             </div>
           ) : bookings.length === 0 ? (
             <p className="p-12 text-center text-sm text-slate-500">
-              No bookings matched. Try <strong>All bookings</strong> or search{" "}
-              <strong>Maddie</strong> / customer email.
+              No bookings matched. Try <strong>All bookings</strong> or search by customer name or email.
             </p>
           ) : (
             <div className="divide-y divide-slate-100">

@@ -1,7 +1,6 @@
 // admin-list-bookings
 //
-// Admin/VA booking list with server-side filters + search so customers like
-// "Maddie" are never hidden by client-side caps or calendar-week edge cases.
+// Admin/VA booking list with server-side filters + search.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
@@ -42,7 +41,6 @@ function endOfWeekSunday(d = new Date()): string {
   return localYmd(copy);
 }
 
-/** Mon–Sun this week; on Sat/Sun extend through next Sunday so Monday jobs appear. */
 function thisWeekServiceRange(): { from: string; to: string } {
   const from = startOfWeekMonday();
   let to = endOfWeekSunday();
@@ -69,8 +67,31 @@ async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: stri
   if (!allowed) throw new Error("Admins or VAs only.");
 }
 
+// Only columns that exist on public.bookings (service_duration is not a DB column).
 const SELECT_COLS =
-  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, service_duration";
+  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason";
+
+function matchesSearch(row: Record<string, unknown>, term: string): boolean {
+  const q = term.toLowerCase();
+  const digits = q.replace(/\D/g, "");
+  const fields = [
+    row.first_name,
+    row.last_name,
+    row.email,
+    row.phone,
+    row.address,
+    row.city,
+    row.zip_code,
+    row.service_date,
+    row.service_type,
+    row.booking_number,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).toLowerCase());
+  if (fields.some((f) => f.includes(q))) return true;
+  if (digits && String(row.phone || "").replace(/\D/g, "").includes(digits)) return true;
+  return false;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -118,34 +139,25 @@ serve(async (req) => {
       q = q.gte("created_at", past.toISOString());
     }
 
-    if (search.length >= 1) {
-      const term = search.replace(/[%_,]/g, "").slice(0, 80);
-      const ilike = `%${term}%`;
-      q = q.or(
-        [
-          `first_name.ilike.${ilike}`,
-          `last_name.ilike.${ilike}`,
-          `email.ilike.${ilike}`,
-          `phone.ilike.${ilike}`,
-          `address.ilike.${ilike}`,
-          `city.ilike.${ilike}`,
-          `zip_code.ilike.${ilike}`,
-          `service_date.ilike.${ilike}`,
-        ].join(","),
-      );
-    }
-
     const { data, error, count } = await q
-      .order("service_date", { ascending: false, nullsFirst: false })
+      .order("service_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (error) throw error;
+    if (error) {
+      console.error("[admin-list-bookings] query error", error);
+      throw error;
+    }
+
+    let rows = (data || []) as Record<string, unknown>[];
+    if (search.length >= 1) {
+      rows = rows.filter((row) => matchesSearch(row, search));
+    }
 
     return json({
       success: true,
-      bookings: data || [],
-      total: count ?? (data || []).length,
+      bookings: rows,
+      total: search.length >= 1 ? rows.length : (count ?? rows.length),
       limit,
       filters: { search, status, dateRange },
     });
