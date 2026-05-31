@@ -93,6 +93,9 @@ verify_jwt = false
 [functions.dispatch-job]
 verify_jwt = true
 
+[functions.expire-job-offers]
+verify_jwt = false
+
 [functions.update-cleaner-availability]
 verify_jwt = false
 
