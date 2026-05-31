@@ -110,6 +110,8 @@ export interface MapperInputs {
   failedPaymentCount?: number | null;
   /** Number of past cancelled bookings on this customer (for churn risk model). */
   cancelledBookingCount?: number | null;
+  /** Planned cleaners from home_size when none assigned yet. */
+  plannedTeamSize?: number | null;
   /** Stripe customer id + subscription id for the Glow path. */
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
@@ -673,7 +675,14 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     billing_frequency: mapBillingFrequency(b.membership_plan),
 
     // ─── Operations / Dispatch ─────────────────────────────────
-    team_size_assigned: b.num_cleaners_assigned ?? input.cleaners.length ?? "",
+    team_size_assigned: (() => {
+      if (b.num_cleaners_assigned != null && b.num_cleaners_assigned > 0) {
+        return b.num_cleaners_assigned;
+      }
+      if (input.cleaners.length > 0) return input.cleaners.length;
+      if (input.plannedTeamSize != null && input.plannedTeamSize > 0) return input.plannedTeamSize;
+      return "";
+    })(),
     // Pay Tier SINGLE_OPTIONS: Foundation ($18/hr) | Proven
     // ($20/hr) | Elite ($22/hr). Uses the team's highest tier.
     assigned_cleaner_pay_tier: mapPayTier(topPayTier ?? topPayRate),

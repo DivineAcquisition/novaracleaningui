@@ -227,21 +227,36 @@ async function loadCustomFieldMap(cfg: GhlConfig): Promise<Record<string, string
   return await fieldIdCachePromise;
 }
 
+/** Ops/dispatch keys we always send (including empty) so GHL clears stale contractors. */
+export const GHL_OPS_CLEARABLE_KEYS = new Set([
+  "1_contractor",
+  "2_contractor",
+  "3_contractor",
+  "1_contractor_number",
+  "2_contractor_number",
+  "3_contractor_number",
+  "team_size_assigned",
+  "estimated_duration_hrs",
+]);
+
 function buildCustomFieldsArray(
   fieldMap: Record<string, string>,
   byKey?: Record<string, string | number | boolean | null | undefined>,
+  options?: { clearableKeys?: Set<string> },
 ): Array<{ id: string; field_value: string }> {
   if (!byKey) return [];
+  const clearable = options?.clearableKeys;
   const out: Array<{ id: string; field_value: string }> = [];
   for (const [key, raw] of Object.entries(byKey)) {
-    if (raw === undefined || raw === null || raw === "") continue;
+    const forceEmpty = clearable?.has(key) && (raw === "" || raw === null);
+    if ((raw === undefined || raw === null || raw === "") && !forceEmpty) continue;
     // Accept either bare key ("utm_content") or fully-qualified ("contact.utm_content")
     const id = fieldMap[key] ?? fieldMap[`contact.${key}`];
     if (!id) {
       log("custom-field key not found in GHL — skipping", { key });
       continue;
     }
-    out.push({ id, field_value: String(raw) });
+    out.push({ id, field_value: forceEmpty ? "" : String(raw) });
   }
   return out;
 }
@@ -269,7 +284,14 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
 
   try {
     const fieldMap = await loadCustomFieldMap(cfg);
-    const customFields = buildCustomFieldsArray(fieldMap, input.customFieldsByKey);
+    const usesOpsClear = Object.keys(input.customFieldsByKey || {}).some((k) =>
+      GHL_OPS_CLEARABLE_KEYS.has(k)
+    );
+    const customFields = buildCustomFieldsArray(
+      fieldMap,
+      input.customFieldsByKey,
+      usesOpsClear ? { clearableKeys: GHL_OPS_CLEARABLE_KEYS } : undefined,
+    );
 
     // Defensive split — if caller passed a full "Street, City, ST ZIP"
     // string as address1, lift City / State / ZIP out so each lands in
@@ -368,7 +390,14 @@ export async function createOpportunity(
 
   try {
     const fieldMap = await loadCustomFieldMap(cfg);
-    const customFields = buildCustomFieldsArray(fieldMap, input.customFieldsByKey);
+    const usesOpsClear = Object.keys(input.customFieldsByKey || {}).some((k) =>
+      GHL_OPS_CLEARABLE_KEYS.has(k)
+    );
+    const customFields = buildCustomFieldsArray(
+      fieldMap,
+      input.customFieldsByKey,
+      usesOpsClear ? { clearableKeys: GHL_OPS_CLEARABLE_KEYS } : undefined,
+    );
 
     const body: Json = {
       locationId: cfg.locationId,
@@ -492,7 +521,14 @@ export async function updateOpportunity(
   if (!cfg || !opportunityId) return false;
   try {
     const fieldMap = await loadCustomFieldMap(cfg);
-    const customFields = buildCustomFieldsArray(fieldMap, patch.customFieldsByKey);
+    const usesOpsClear = Object.keys(patch.customFieldsByKey || {}).some((k) =>
+      GHL_OPS_CLEARABLE_KEYS.has(k)
+    );
+    const customFields = buildCustomFieldsArray(
+      fieldMap,
+      patch.customFieldsByKey,
+      usesOpsClear ? { clearableKeys: GHL_OPS_CLEARABLE_KEYS } : undefined,
+    );
     const body: Json = {};
     if (patch.name !== undefined) body.name = patch.name;
     if (patch.status !== undefined) body.status = patch.status;

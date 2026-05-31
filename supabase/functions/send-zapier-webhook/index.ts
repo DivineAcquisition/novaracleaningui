@@ -8,6 +8,7 @@ import {
 } from "../_shared/payout-utils.ts";
 import { syncBookingLifecycle, splitFullAddress } from "../_shared/ghl-client.ts";
 import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
+import { loadTeamCleanersForBooking } from "../_shared/ghl-booking-team.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
@@ -291,6 +292,26 @@ async function handleJobDispatchWebhook(supabase: any, jobId: string) {
   } catch (mirrorErr) {
     logStep("LeadConnector mirror (dispatch) failed (non-critical)", mirrorErr);
   }
+
+  // Also refresh booking GHL ops fields (contractors 1–3, team size, duration).
+  try {
+    const { data: linkedBooking } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (linkedBooking?.id) {
+      await supabase.functions.invoke("send-zapier-webhook", {
+        body: { bookingId: linkedBooking.id },
+      });
+      logStep("Triggered booking GHL sync after dispatch", { bookingId: linkedBooking.id });
+    }
+  } catch (bookingSyncErr) {
+    logStep("Post-dispatch booking GHL sync failed (non-critical)", bookingSyncErr);
+  }
+
   return new Response(
     JSON.stringify({ success: true, jobId, payload }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
@@ -517,36 +538,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     // we can map to the 1)/2)/3) Contractor fields + assigned_cleaner
     // _pay_tier. Prefer job_assignments (multi-cleaner team), fall
     // back to booking.cleaners.
-    const teamCleaners: Array<{ name?: string; phone?: string; payTier?: string | null; payRate?: number }> = [];
-    if (booking.job_id) {
-      const { data: assigns } = await supabase
-        .from('job_assignments')
-        .select('cleaners (first_name, last_name, phone, pay_tier, pay_percentage)')
-        .eq('job_id', booking.job_id)
-        .in('status', ['Offered', 'Confirmed', 'Assigned'])
-        .limit(3);
-      if (assigns && assigns.length > 0) {
-        assigns.forEach((a: any) => {
-          const c = a?.cleaners;
-          if (c) {
-            teamCleaners.push({
-              name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
-              phone: c.phone ?? undefined,
-              payTier: c.pay_tier ?? null,
-              payRate: Number(c.pay_percentage) || undefined,
-            });
-          }
-        });
-      }
-    }
-    if (teamCleaners.length === 0 && booking.cleaners) {
-      teamCleaners.push({
-        name: `${booking.cleaners.first_name} ${booking.cleaners.last_name}`,
-        phone: booking.cleaners.phone,
-        payTier: (booking.cleaners as any).pay_tier ?? null,
-        payRate: Number((booking.cleaners as any).pay_percentage) || undefined,
-      });
-    }
+    const teamCleaners = await loadTeamCleanersForBooking(supabase, booking);
+    const plannedTeamSize = getTeamSize(booking.home_size_id || "");
 
     const totalChargedCentsForGhl = totalChargedCents;
     const depositCentsForGhl = booking.deposit_cents || 0;
@@ -839,6 +832,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       referralRevenueCents,
       referralCreditCents,
       publicOrigin: 'https://try.novaracleaning.com',
+      plannedTeamSize,
     });
     logStep("GHL custom fields built", { keys: Object.keys(ghlCustomFields).length });
 
@@ -898,14 +892,14 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     // sync-only column set so the trigger's "only sync columns
     // changed" guard short-circuits and does NOT recurse.
     try {
-      await supabase
-        .from("bookings")
-        .update({
-          ghl_synced_at: new Date().toISOString(),
-          ghl_sync_attempts: (booking.ghl_sync_attempts || 0) + 1,
-          ghl_sync_error: null,
-        })
-        .eq("id", booking.id);
+      const stamp: Record<string, unknown> = {
+        ghl_synced_at: new Date().toISOString(),
+        ghl_sync_attempts: (booking.ghl_sync_attempts || 0) + 1,
+        ghl_sync_error: null,
+      };
+      if (ghlResult.contactId) stamp.ghl_contact_id = ghlResult.contactId;
+      if (ghlResult.opportunityId) stamp.ghl_opportunity_id = ghlResult.opportunityId;
+      await supabase.from("bookings").update(stamp).eq("id", booking.id);
     } catch (stampErr) {
       logStep("ghl_synced_at stamp failed (non-critical)", {
         error: stampErr instanceof Error ? stampErr.message : String(stampErr),

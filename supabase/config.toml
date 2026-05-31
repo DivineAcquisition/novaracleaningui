@@ -240,3 +240,6 @@ verify_jwt = false
 # Admin/VA team-user provisioning (admin-only role check inside the fn).
 [functions.admin-create-team-user]
 verify_jwt = true
+
+[functions.admin-booking-assign]
+verify_jwt = true

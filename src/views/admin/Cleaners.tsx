@@ -189,6 +189,38 @@ export default function AdminCleaners() {
     return c;
   }, [cleaners]);
 
+  const deleteCleaner = async () => {
+    if (!selected) return;
+    const fullName = `${selected.first_name || ""} ${selected.last_name || ""}`.trim();
+    if (
+      !confirm(
+        `Permanently delete ${fullName} from the directory? This cannot be undone. Open jobs will be marked for reassignment.`,
+      )
+    ) {
+      return;
+    }
+    const typed = window.prompt(`Type "${fullName}" to confirm deletion:`);
+    if (!typed || typed.trim().toLowerCase() !== fullName.toLowerCase()) {
+      toast.error("Name did not match — deletion cancelled.");
+      return;
+    }
+    setActioning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
+        body: { action: "delete_cleaner", cleanerId: selected.id, confirmName: typed.trim() },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Cleaner removed from directory");
+      setSelectedId(null);
+      await load({ silent: true });
+    } catch (err: any) {
+      toast.error(err?.message || "Delete failed");
+    } finally {
+      setActioning(false);
+    }
+  };
+
   const runAction = async (
     action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
     extra: Record<string, unknown> = {},
@@ -413,6 +445,7 @@ export default function AdminCleaners() {
         cleaner={selected}
         onClose={() => setSelectedId(null)}
         onAction={runAction}
+        onDelete={deleteCleaner}
         onResyncGhl={resyncToGhl}
         actioning={actioning}
       />
@@ -435,6 +468,7 @@ function CleanerSheet({
   cleaner,
   onClose,
   onAction,
+  onDelete,
   onResyncGhl,
   actioning,
 }: {
@@ -444,6 +478,7 @@ function CleanerSheet({
     action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
     extra?: Record<string, unknown>,
   ) => void;
+  onDelete: () => void;
   onResyncGhl: () => void;
   actioning: boolean;
 }) {
@@ -496,6 +531,7 @@ function CleanerSheet({
               <ActionsBlock
                 cleaner={cleaner}
                 onAction={onAction}
+                onDelete={onDelete}
                 actioning={actioning}
               />
             </div>
@@ -633,6 +669,7 @@ function GhlBlock({
 function ActionsBlock({
   cleaner,
   onAction,
+  onDelete,
   actioning,
 }: {
   cleaner: CleanerRow;
@@ -640,6 +677,7 @@ function ActionsBlock({
     action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
     extra?: Record<string, unknown>,
   ) => void;
+  onDelete: () => void;
   actioning: boolean;
 }) {
   const s = (cleaner.status || "pending").toLowerCase();
@@ -744,6 +782,15 @@ function ActionsBlock({
         >
           <RiTimeLine className="w-4 h-4 mr-1.5" />
           Invite to Apploye
+        </Button>
+        <Button
+          variant="outline"
+          disabled={actioning}
+          onClick={onDelete}
+          className="border-rose-300 text-rose-900 bg-rose-50 hover:bg-rose-100"
+        >
+          <RiCloseLine className="w-4 h-4 mr-1.5" />
+          Delete from directory
         </Button>
       </div>
       {actioning ? (
