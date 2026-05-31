@@ -854,7 +854,34 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     // with every booking mutation we run (payment, assignment, cleaner
     // accept, complete, cancel, reschedule, modify) — none of those
     // paths produce duplicate opportunities anymore.
+    let jobStatus: string | null = null;
+    const assignmentStatuses: string[] = [];
+    if (booking.job_id) {
+      const { data: jobRow } = await supabase
+        .from("jobs")
+        .select("status")
+        .eq("id", booking.job_id)
+        .maybeSingle();
+      jobStatus = jobRow?.status ?? null;
+      const { data: assigns } = await supabase
+        .from("job_assignments")
+        .select("status")
+        .eq("job_id", booking.job_id);
+      for (const a of assigns || []) {
+        if (a?.status) assignmentStatuses.push(String(a.status));
+      }
+    }
+
     const ghlResult = await syncBookingLifecycle({
+      opportunityId: booking.ghl_opportunity_id || null,
+      dispatchStage: {
+        bookingStatus: booking.status,
+        jobStatus,
+        payoutStatus: booking.payout_status,
+        cleanerId: booking.cleaner_id,
+        assignmentStatuses,
+        serviceDate: booking.service_date,
+      },
       contact: {
         email: booking.email,
         phone: toE164US(booking.phone) || booking.phone,

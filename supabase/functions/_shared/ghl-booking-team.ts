@@ -12,6 +12,8 @@ export const GHL_ACTIVE_ASSIGNMENT_STATUSES = [
   "Accepted",
   "Assigned",
   "In Progress",
+  "Offered",
+  "Broadcast",
 ];
 
 export interface TeamCleanerForGhl {
@@ -41,14 +43,13 @@ export interface BookingLikeForTeam {
   } | null;
 }
 
-function perCleanerPayDisplay(c: TeamCleanerForGhl): string {
-  if (c.estimatedPayCents != null && c.estimatedPayCents > 0) {
-    return fmtMoney(c.estimatedPayCents);
+function perCleanerPayDisplay(c: TeamCleanerForGhl, revenueCents: number, teamCount: number): string {
+  let cents = c.estimatedPayCents != null ? Number(c.estimatedPayCents) : 0;
+  const pct = c.payPercentage ?? c.payRate ?? 35;
+  if (cents <= 0 && revenueCents > 0 && pct > 0) {
+    cents = Math.floor((revenueCents * pct) / 100 / Math.max(1, teamCount));
   }
-  const pct = c.payPercentage ?? c.payRate;
-  if (pct != null && pct > 0 && pct <= 100) {
-    return `${pct}% revenue share`;
-  }
+  if (cents > 0) return fmtMoney(cents);
   return "";
 }
 
@@ -150,6 +151,9 @@ export function buildGhlOpsCustomFields(
     : plannedTeamSizeForBooking(booking);
   const duration = estimatedDurationForBooking(booking);
 
+  const revenueCents = Number(booking.final_charge_cents || booking.total_estimate_cents || 0);
+  const payTeamCount = Math.max(1, cleaners.length);
+
   const out: Record<string, string> = {
     team_size_assigned: String(teamSize),
     estimated_duration_hrs: duration != null ? String(duration) : "",
@@ -159,9 +163,9 @@ export function buildGhlOpsCustomFields(
     "2_contractor_number": cleaners[1]?.phone || "",
     "3_contractor": cleaners[2]?.name || "",
     "3_contractor_number": cleaners[2]?.phone || "",
-    "1_contractor_pay": perCleanerPayDisplay(cleaners[0] || {}),
-    "2_contractor_pay": perCleanerPayDisplay(cleaners[1] || {}),
-    "3_contractor_pay": perCleanerPayDisplay(cleaners[2] || {}),
+    "1_contractor_pay": perCleanerPayDisplay(cleaners[0] || {}, revenueCents, payTeamCount),
+    "2_contractor_pay": perCleanerPayDisplay(cleaners[1] || {}, revenueCents, payTeamCount),
+    "3_contractor_pay": perCleanerPayDisplay(cleaners[2] || {}, revenueCents, payTeamCount),
     "1_contractor_pay_percentage": cleaners[0]?.payPercentage != null
       ? `${cleaners[0].payPercentage}%`
       : "",

@@ -18,6 +18,7 @@ import {
 } from "../_shared/ghl-booking-ops-sync.ts";
 import { scoreCleanerForJob, type RankedCleaner } from "../_shared/dispatch-scoring.ts";
 import { createContactTask } from "../_shared/ghl-tasks.ts";
+import { buildGhlTaskChecklistBody } from "../_shared/ghl-checklist-text.ts";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
 
 const corsHeaders = {
@@ -337,14 +338,18 @@ serve(async (req) => {
         let ghlTaskId: string | null = null;
 
         if (ghlContactId) {
-          const taskBody =
-            `Assigned (${role}): ${c.first_name} ${c.last_name}\n` +
-            `${customerName} · ${booking.service_date || "TBD"} ${booking.time_slot || ""}\n` +
-            `${booking.address || ""}, ${booking.city || ""} ${booking.state || ""}\n` +
-            `Checklist: ${checklistUrl(booking.service_type)}\n` +
-            `Booking #${booking.booking_number || bookingId.slice(0, 8)}`;
+          const taskBody = buildGhlTaskChecklistBody(booking.service_type, {
+            bookingLine:
+              `${customerName} · ${booking.service_date || "TBD"} ${booking.time_slot || ""}\n` +
+              `${booking.address || ""}, ${booking.city || ""} ${booking.state || ""}\n` +
+              `Booking #${booking.booking_number || bookingId.slice(0, 8)}`,
+            roleLine: `Assigned (${role}): ${c.first_name} ${c.last_name}`,
+          });
+          const serviceTitle = String(booking.service_type || "standard")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
           const taskRes = await createContactTask(ghlContactId, {
-            title: `Clean: ${customerName} — ${booking.service_date || "TBD"} (${role})`,
+            title: `${serviceTitle} — ${customerName} (${role})`,
             body: taskBody,
             dueDate: booking.service_date
               ? `${booking.service_date}T09:00:00.000Z`

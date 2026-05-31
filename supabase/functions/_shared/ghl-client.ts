@@ -13,6 +13,17 @@
 // id-map is cached per cold start.
 
 import { toE164US } from "./phone-format.ts";
+import {
+  expandGhlCustomFieldKeys,
+  GHL_FIELD_KEY_ALIASES,
+  resolveGhlFieldId,
+} from "./ghl-field-aliases.ts";
+import {
+  inferDispatchStage,
+  resolveJobDispatchPipeline,
+  stageIdForKey,
+  type DispatchStageContext,
+} from "./ghl-dispatch-pipeline.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -254,19 +265,43 @@ function buildCustomFieldsArray(
 ): Array<{ id: string; field_value: string }> {
   if (!byKey) return [];
   const clearable = options?.clearableKeys;
+  const expanded = expandGhlCustomFieldKeys(fieldMap, byKey);
   const out: Array<{ id: string; field_value: string }> = [];
-  for (const [key, raw] of Object.entries(byKey)) {
-    const forceEmpty = clearable?.has(key) && (raw === "" || raw === null);
+  const seenIds = new Set<string>();
+
+  for (const [key, raw] of Object.entries(expanded)) {
+    const forceEmpty = isClearableEmptyField(key, raw, clearable);
     if ((raw === undefined || raw === null || raw === "") && !forceEmpty) continue;
-    // Accept either bare key ("utm_content") or fully-qualified ("contact.utm_content")
-    const id = fieldMap[key] ?? fieldMap[`contact.${key}`];
+    const id = resolveGhlFieldId(fieldMap, key) ?? fieldMap[key] ?? fieldMap[`contact.${key}`];
     if (!id) {
-      log("custom-field key not found in GHL — skipping", { key });
+      if (!GHL_FIELD_KEY_ALIASES_SKIP_LOG.has(key)) {
+        log("custom-field key not found in GHL — skipping", { key });
+      }
       continue;
     }
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
     out.push({ id, field_value: forceEmpty ? "" : String(raw) });
   }
   return out;
+}
+
+const GHL_FIELD_KEY_ALIASES_SKIP_LOG = new Set(
+  Object.values(GHL_FIELD_KEY_ALIASES).flat().filter((k) => k.includes(".") || k.includes(" ")),
+);
+
+function isClearableEmptyField(
+  key: string,
+  raw: string | number | boolean | null | undefined,
+  clearable?: Set<string>,
+): boolean {
+  if (!clearable || (raw !== "" && raw !== null)) return false;
+  if (clearable.has(key)) return true;
+  for (const [canonical, aliases] of Object.entries(GHL_FIELD_KEY_ALIASES)) {
+    if (!clearable.has(canonical)) continue;
+    if (canonical === key || aliases.includes(key)) return true;
+  }
+  return false;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
@@ -387,6 +422,11 @@ export async function createOpportunity(
   let pipelineId = input.pipelineId || cfg.pipelineId;
   let pipelineStageId = input.pipelineStageId || cfg.pipelineStageId;
   if (!pipelineId || !pipelineStageId) {
+    const dispatchCfg = await resolveJobDispatchPipeline(cfg, ghlFetch);
+    if (dispatchCfg && !pipelineId) {
+      pipelineId = dispatchCfg.pipelineId;
+      pipelineStageId = pipelineStageId || dispatchCfg.stages.unassigned;
+    }
     const discovered = await autoDiscoverPipeline(cfg);
     if (discovered) {
       pipelineId = pipelineId || discovered.pipelineId;
@@ -477,6 +517,45 @@ export async function syncContactAndOpportunity(args: {
  * Find the most-recent opportunity for a contact. Returns null when the
  * contact has no opportunities or GHL isn't configured. Never throws.
  */
+/**
+ * Find the most-recent opportunity for a contact in a specific pipeline.
+ */
+export async function findOpportunityForContactInPipeline(
+  contactId: string,
+  pipelineId: string,
+): Promise<{ id: string; name?: string; status?: string } | null> {
+  const cfg = readConfig();
+  if (!cfg || !contactId || !pipelineId) return null;
+  try {
+    const url =
+      `/opportunities/search?location_id=${encodeURIComponent(cfg.locationId)}` +
+      `&contact_id=${encodeURIComponent(contactId)}` +
+      `&pipeline_id=${encodeURIComponent(pipelineId)}&limit=10`;
+    const res = await ghlFetch(cfg, url);
+    if (!res.ok) {
+      log("findOpportunityForContactInPipeline failed", { status: res.status });
+      return null;
+    }
+    const json = (await res.json()) as Json;
+    const opps = (json.opportunities ?? []) as Array<{
+      id?: string; name?: string; status?: string; updatedAt?: string; createdAt?: string;
+    }>;
+    if (opps.length === 0) return null;
+    opps.sort((a, b) => {
+      const aT = Date.parse(a.updatedAt || a.createdAt || "") || 0;
+      const bT = Date.parse(b.updatedAt || b.createdAt || "") || 0;
+      return bT - aT;
+    });
+    const top = opps[0];
+    return top.id ? { id: top.id, name: top.name, status: top.status } : null;
+  } catch (err) {
+    log("findOpportunityForContactInPipeline error", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 export async function findLatestOpportunityForContact(
   contactId: string,
 ): Promise<{ id: string; name?: string; status?: string } | null> {
@@ -579,22 +658,56 @@ export async function updateOpportunity(
 export async function syncBookingLifecycle(args: {
   contact: GhlContactInput;
   opportunity: Omit<GhlOpportunityInput, "contactId">;
+  /** Stored bookings.ghl_opportunity_id — preferred when still valid. */
+  opportunityId?: string | null;
+  /** When set, moves the opportunity on the Job Dispatch pipeline. */
+  dispatchStage?: DispatchStageContext;
 }): Promise<{ contactId: string | null; opportunityId: string | null; updated: boolean }> {
   const contactId = await upsertContact(args.contact);
   if (!contactId) return { contactId: null, opportunityId: null, updated: false };
 
-  const existing = await findLatestOpportunityForContact(contactId);
+  const cfg = readConfig();
+  let pipelineId: string | undefined;
+  let pipelineStageId: string | undefined;
+
+  if (cfg && args.dispatchStage) {
+    const dispatchCfg = await resolveJobDispatchPipeline(cfg, ghlFetch);
+    if (dispatchCfg) {
+      pipelineId = dispatchCfg.pipelineId;
+      const stageKey = inferDispatchStage(args.dispatchStage);
+      pipelineStageId = stageIdForKey(dispatchCfg, stageKey);
+      log("dispatch stage resolved", { stageKey, pipelineStageId });
+    }
+  }
+
+  let existing: { id: string } | null = null;
+  if (args.opportunityId) {
+    existing = { id: args.opportunityId };
+  } else if (pipelineId) {
+    existing = await findOpportunityForContactInPipeline(contactId, pipelineId);
+  }
+  if (!existing) {
+    existing = await findLatestOpportunityForContact(contactId);
+  }
+
   if (existing) {
     const ok = await updateOpportunity(existing.id, {
       name: args.opportunity.name,
       status: args.opportunity.status,
       monetaryValue: args.opportunity.monetaryValue,
       customFieldsByKey: args.opportunity.customFieldsByKey,
+      pipelineId,
+      pipelineStageId,
     });
     return { contactId, opportunityId: existing.id, updated: ok };
   }
 
-  const newOppId = await createOpportunity({ ...args.opportunity, contactId });
+  const newOppId = await createOpportunity({
+    ...args.opportunity,
+    contactId,
+    pipelineId: pipelineId || args.opportunity.pipelineId,
+    pipelineStageId: pipelineStageId || args.opportunity.pipelineStageId,
+  });
   return { contactId, opportunityId: newOppId, updated: false };
 }
 

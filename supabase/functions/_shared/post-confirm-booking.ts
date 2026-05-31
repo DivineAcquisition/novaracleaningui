@@ -33,6 +33,7 @@ import {
   DEFAULT_PAY_PERCENTAGE,
   getEstimatedHours,
 } from "./payout-utils.ts";
+import { notifyAllCleanersOfNewOpportunity } from "./notify-cleaners-new-opportunity.ts";
 
 const log = (step: string, details?: unknown) => {
   const tail = details ? ` - ${JSON.stringify(details)}` : "";
@@ -434,6 +435,25 @@ export async function runPostConfirmFanout(
   await reserveBookingSlot(supabase, booking);
   await sendConfirmationEmails(supabase, booking, opts);
   await sendCustomerSms(supabase, booking, opts);
+
+  try {
+    await notifyAllCleanersOfNewOpportunity(supabase, {
+      id: bookingId,
+      booking_number: booking.booking_number as string | number | null,
+      service_date: booking.service_date as string | null,
+      time_slot: booking.time_slot as string | null,
+      service_type: booking.service_type as string | null,
+      city: booking.city as string | null,
+      state: booking.state as string | null,
+      zip_code: booking.zip_code as string | null,
+      address: booking.address as string | null,
+    });
+  } catch (err) {
+    log("cleaner new-opportunity notify failed (non-blocking)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   await fanoutDownstream(supabase, bookingId);
 
   return { ok: true, bookingId, source: opts.source || "customer" };
