@@ -232,6 +232,13 @@ serve(async (req) => {
         locationId,
       );
     }
+    if (!phoneNumberId && body.type === "job_offer") {
+      const offerFrom = await resolveSecret(supabase, "GHL_JOB_OFFER_SMS_FROM_NUMBER");
+      const offerE164 = toE164(offerFrom || "+14432744402");
+      if (offerE164) {
+        phoneNumberId = await resolvePhoneNumberId(offerE164, token, locationId);
+      }
+    }
     if (!phoneNumberId) {
       const cfgId = await resolveSecret(supabase, "GHL_DEFAULT_SMS_NUMBER_ID");
       if (cfgId) phoneNumberId = cfgId;

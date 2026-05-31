@@ -186,8 +186,26 @@ serve(async (req) => {
       // updated.)
     }
 
-    if (job.status !== "Assigned" && job.status !== "In Progress") {
-      await supabase.from("jobs").update({ status: "Assigned" }).eq("id", job.id);
+    const { count: confirmedCount } = await supabase
+      .from("job_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", job.id)
+      .or("status.ilike.confirmed,status.ilike.accepted");
+
+    const { data: jobMeta } = await supabase
+      .from("jobs")
+      .select("min_cleaners_required")
+      .eq("id", job.id)
+      .maybeSingle();
+    const needCleaners = Number(jobMeta?.min_cleaners_required) || 1;
+    const haveCleaners = confirmedCount ?? 0;
+
+    if (haveCleaners >= needCleaners) {
+      if (job.status !== "Assigned" && job.status !== "In Progress") {
+        await supabase.from("jobs").update({ status: "Assigned" }).eq("id", job.id);
+      }
+    } else {
+      await supabase.from("jobs").update({ status: "Offered" }).eq("id", job.id);
     }
 
     // Bookkeeping on bookings table.
@@ -216,8 +234,15 @@ serve(async (req) => {
           .update({
             cleaner_id: assignment.cleaner_id,
             assigned_at: new Date().toISOString(),
-            status: "assigned",
+            status: haveCleaners >= needCleaners ? "assigned" : "confirmed",
           })
+          .eq("id", bookingRow.id)
+          .neq("status", "completed")
+          .neq("status", "cancelled");
+      } else if (bookingRow && haveCleaners >= needCleaners) {
+        await supabase
+          .from("bookings")
+          .update({ status: "assigned" })
           .eq("id", bookingRow.id)
           .neq("status", "completed")
           .neq("status", "cancelled");

@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import {
+  buildJobOfferSmsMessage,
+  offerExpiresAtFromNow,
+  sendJobOfferSms,
+} from "../_shared/job-offer-sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -231,8 +236,10 @@ serve(async (req) => {
   }
 
   try {
-    const { jobId } = await req.json();
-    logStep("Starting dispatch", { jobId });
+    const body = await req.json().catch(() => ({}));
+    const jobId = body?.jobId as string;
+    const backfill = body?.backfill === true;
+    logStep("Starting dispatch", { jobId, backfill });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -293,6 +300,36 @@ serve(async (req) => {
       datetime: job.start_datetime
     });
 
+    const { count: alreadyConfirmed } = await supabase
+      .from("job_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", jobId)
+      .or("status.ilike.confirmed,status.ilike.accepted");
+
+    const { data: existingOnJob } = await supabase
+      .from("job_assignments")
+      .select("cleaner_id, status")
+      .eq("job_id", jobId);
+
+    const blockedCleanerIds = new Set(
+      (existingOnJob || [])
+        .filter((a: { status: string }) => {
+          const s = String(a.status || "").toLowerCase();
+          return ["offered", "confirmed", "accepted", "in progress", "broadcast"].includes(s);
+        })
+        .map((a: { cleaner_id: string }) => a.cleaner_id),
+    );
+
+    let slotsToFill = Math.max(0, (job.min_cleaners_required || 1) - (alreadyConfirmed ?? 0));
+    if (backfill && slotsToFill === 0) {
+      logStep("Backfill skipped — team already confirmed", { alreadyConfirmed });
+      return new Response(
+        JSON.stringify({ success: true, assignedCleaners: alreadyConfirmed ?? 0, backfill: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+    if (slotsToFill === 0) slotsToFill = job.min_cleaners_required || 1;
+
     // Get current day of week
     const jobDate = new Date(job.start_datetime);
     const dayAbbrev = jobDate.toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3);
@@ -341,6 +378,7 @@ serve(async (req) => {
     const scoredCandidates = [];
 
     for (const cleaner of cleaners) {
+      if (blockedCleanerIds.has(cleaner.id)) continue;
       // Check preferred work days (soft filter)
       const worksToday = !cleaner.preferred_work_days || 
                          cleaner.preferred_work_days.length === 0 ||
@@ -422,12 +460,12 @@ serve(async (req) => {
     // STAGE 3: Sort by match score and select top N
     scoredCandidates.sort((a, b) => b.match_score - a.match_score);
 
-    const selectedCleaners = scoredCandidates.slice(0, job.min_cleaners_required);
+    const selectedCleaners = scoredCandidates.slice(0, slotsToFill);
 
     // Check if we have enough cleaners
-    if (selectedCleaners.length < job.min_cleaners_required) {
+    if (selectedCleaners.length < slotsToFill) {
       logStep("Insufficient cleaners", {
-        required: job.min_cleaners_required,
+        required: slotsToFill,
         available: selectedCleaners.length
       });
 
@@ -442,7 +480,7 @@ serve(async (req) => {
         .from("jobs")
         .update({ 
           status: "Dispatching",
-          dispatch_alert_reason: `Insufficient cleaners (${selectedCleaners.length}/${job.min_cleaners_required})`
+          dispatch_alert_reason: `Insufficient cleaners (${selectedCleaners.length}/${slotsToFill})`
         })
         .eq("id", jobId);
     }
@@ -485,18 +523,25 @@ serve(async (req) => {
     const poolCents = Math.floor((revenueCents * teamMaxPct) / 100);
     const perCleanerPayCents = Math.floor(poolCents / cleanerCount);
 
-    const assignments = selectedCleaners.map((cleaner, index) => ({
-      job_id: jobId,
-      cleaner_id: cleaner.id,
-      distance_miles: cleaner.distance_miles,
-      role: index === 0 ? "Lead" : "Support",
-      status: "Offered",
-      // pay_rate_hr kept on the row for legacy back-compat (it's no
-      // longer the source of truth — pay_percentage_snapshot is).
-      pay_rate_hr: cleaner.pay_rate_hr || 18,
-      pay_percentage_snapshot: teamMaxPct,
-      estimated_pay_cents: perCleanerPayCents,
-    }));
+    const expiresAtIso = offerExpiresAtFromNow();
+
+    const assignments = selectedCleaners.map((cleaner, index) => {
+      const tokenBytes = new Uint8Array(16);
+      crypto.getRandomValues(tokenBytes);
+      const responseToken = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+      return {
+        job_id: jobId,
+        cleaner_id: cleaner.id,
+        distance_miles: cleaner.distance_miles,
+        role: index === 0 && (alreadyConfirmed ?? 0) === 0 ? "Lead" : "Support",
+        status: "Offered",
+        pay_rate_hr: cleaner.pay_rate_hr || 18,
+        pay_percentage_snapshot: teamMaxPct,
+        estimated_pay_cents: perCleanerPayCents,
+        expires_at: expiresAtIso,
+        response_token: responseToken,
+      };
+    });
 
     const { data: createdAssignments, error: assignError } = await supabase
       .from("job_assignments")
@@ -507,74 +552,68 @@ serve(async (req) => {
       throw new Error(`Error creating assignments: ${assignError.message}`);
     }
 
-    // STAGE 5: Send SMS notifications to cleaners
-    logStep("Sending SMS notifications");
+    // STAGE 5: SMS proximity-selected cleaners (10 min window, dedicated from #)
+    logStep("Sending job-offer SMS to auto-selected cleaners");
+    const teamSize = cleanerCount;
+    const expiresAtDate = new Date(expiresAtIso);
+    const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+
     const smsPromises = createdAssignments.map(async (assignment: any) => {
-      if (!assignment.cleaners.sms_notifications_enabled) {
-        console.log(`[SMS] Skipping ${assignment.cleaners.first_name} - SMS disabled`);
+      const c = assignment.cleaners;
+      if (!c?.phone || c.sms_notifications_enabled === false) {
+        console.log(`[SMS] Skipping ${c?.first_name || "cleaner"} — no phone or SMS off`);
         return;
       }
 
-      const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
-      // SMS pay copy now reflects revenue share, not hourly. The
-      // assignment.estimated_pay_cents already accounts for cleaner
-      // count + tier %, so just format and ship.
-      const estimatedPay = ((assignment.estimated_pay_cents || 0) / 100).toFixed(2);
-      const sharePct = assignment.pay_percentage_snapshot
-        || assignment.cleaners?.pay_percentage
-        || 35;
-      const tokenBytes = new Uint8Array(16);
-      crypto.getRandomValues(tokenBytes);
-      const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      await supabase.from('job_assignments').update({ response_token: token }).eq('id', assignment.id);
-
-      // Point cleaners at the in-portal token page, NOT the legacy
-      // `respond-to-offer` HTML edge function. The portal page calls
-      // `accept-job-offer`, which actually flips `bookings.cleaner_id`
-      // for Lead roles — the legacy HTML accept path leaves that field
-      // null, so `complete-booking` later fails with "No cleaner
-      // assigned". Single source of truth, fewer edge cases.
+      const token = assignment.response_token;
       const offerUrl = `https://contractor.novaracleaning.com/cleaner/job-offer/${token}`;
+      const sharePct = assignment.pay_percentage_snapshot || c.pay_percentage || 35;
 
-      const message = `🧹 New Job Offer!
+      const message = buildJobOfferSmsMessage({
+        jobDateFormatted,
+        city: job.city || "",
+        zip: job.zip || "",
+        durationHours: Number(job.duration_est_hours) || 3,
+        distanceMiles: Number(assignment.distance_miles) || 0,
+        role: assignment.role || "Support",
+        teamSize,
+        perCleanerPayCents: assignment.estimated_pay_cents || perCleanerPayCents,
+        sharePct,
+        revenueCents,
+        teamPoolCents: poolCents,
+        offerUrl,
+        expiresAt: expiresAtDate,
+      });
 
-Date: ${jobDateFormatted}
-Location: ${job.city}, ${job.zip}
-Pay: $${estimatedPay} (${sharePct}% revenue share, ~${job.duration_est_hours}hrs)
-Distance: ${assignment.distance_miles.toFixed(1)} miles
-
-Respond within 15 min:
-${offerUrl}
-
-Open in the cleaner portal to accept or decline.`;
-
-      try {
-        await supabase.functions.invoke("send-ghl-sms", {
-          body: {
-            phone: assignment.cleaners.phone,
-            email: assignment.cleaners.email || undefined,
-            firstName: assignment.cleaners.first_name || undefined,
-            lastName: assignment.cleaners.last_name || undefined,
-            message,
-            type: "job_offer",
-          },
-        });
-      } catch (smsError) {
-        console.error(`[SMS] Failed to send to ${assignment.cleaners.first_name}:`, smsError);
+      const result = await sendJobOfferSms(supabase, {
+        phone: c.phone,
+        email: c.email,
+        firstName: c.first_name,
+        lastName: c.last_name,
+        message,
+        jobId,
+        assignmentId: assignment.id,
+      });
+      if (!result.ok) {
+        console.error(`[SMS] Offer failed for ${c.first_name}:`, result.error);
       }
+
     });
 
     await Promise.all(smsPromises);
-    logStep("SMS notifications sent");
+    logStep("Job-offer SMS sent", { count: createdAssignments.length, from: "+14432744402" });
 
-    // STAGE 6: Update job status
+    // STAGE 6: Job stays Offered until enough cleaners confirm (see accept-job-offer)
+    const totalOffered = (alreadyConfirmed ?? 0) + selectedCleaners.length;
     await supabase
       .from("jobs")
-      .update({ status: "Assigned" })
+      .update({
+        status: totalOffered >= (job.min_cleaners_required || 1) ? "Offered" : "Dispatching",
+      })
       .eq("id", jobId);
 
     // Trigger Zapier webhook
