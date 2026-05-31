@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { notifyStaffNoCleanersAvailable } from "../_shared/dispatch-backfill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -192,19 +193,24 @@ serve(async (req) => {
 
     if (dispatchError) {
       logStep("Dispatch failed", { error: dispatchError });
-      
-      // Create alert for admin
       await supabase.from("dispatch_alerts").insert({
         job_id: job.id,
         reason: `Auto-dispatch failed: ${dispatchError.message}`,
-        severity: "warning"
+        severity: "warning",
       });
-
       throw new Error(`Dispatch failed: ${dispatchError.message}`);
     }
 
-    logStep("Cleaners dispatched successfully", { 
-      cleanersAssigned: dispatchResult?.assigned || 0 
+    const dispatchPayload = (dispatchResult || {}) as Record<string, unknown>;
+    if (dispatchPayload.noCleanersAvailable === true) {
+      logStep("No cleaners available on initial dispatch");
+      await notifyStaffNoCleanersAvailable(supabase, job.id, {
+        reason: "Initial auto-dispatch found no eligible cleaners",
+      });
+    }
+
+    logStep("Cleaners dispatched successfully", {
+      offersSent: dispatchPayload.offersSent ?? dispatchPayload.assignedCleaners ?? 0,
     });
 
     // 8. Send Zapier webhook with cleaner data
@@ -223,7 +229,7 @@ serve(async (req) => {
         success: true,
         message: "Booking auto-dispatched successfully",
         jobId: job.id,
-        cleanersAssigned: dispatchResult?.assigned || 0
+        offersSent: dispatchPayload.offersSent ?? dispatchPayload.assignedCleaners ?? 0,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

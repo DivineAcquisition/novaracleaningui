@@ -16,6 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { runJobDispatchBackfill } from "../_shared/dispatch-backfill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,17 @@ serve(async (req) => {
           responded_at: new Date().toISOString(),
         })
         .eq("id", assignment.id);
+
+      try {
+        await runJobDispatchBackfill(
+          supabase,
+          assignment.job_id,
+          "Cleaner declined the job offer",
+        );
+      } catch (err) {
+        log("backfill after decline failed", err instanceof Error ? err.message : String(err));
+      }
+
       return new Response(JSON.stringify({ ok: true, status: "Declined" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,

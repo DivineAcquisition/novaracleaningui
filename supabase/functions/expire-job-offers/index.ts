@@ -1,11 +1,11 @@
 // expire-job-offers
 //
-// Cron / manual: mark Offered assignments past expires_at as Expired.
-// When a job no longer has enough Confirmed cleaners, set job back to
-// Dispatching and optionally re-invoke dispatch-job for backfill.
+// Cron: expire stale Offered rows, auto-offer the next closest cleaners,
+// email Admins + VAs when no one is left to offer.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { runJobDispatchBackfill, type BackfillResult } from "../_shared/dispatch-backfill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,49 +60,24 @@ serve(async (req) => {
     log("expired assignments", { count: expiredIds.length });
 
     const jobIds = [...new Set((stale || []).map((r: { job_id: string }) => r.job_id))];
+    const backfillResults: BackfillResult[] = [];
 
     for (const jobId of jobIds) {
-      const { data: job } = await supabase
-        .from("jobs")
-        .select("id, min_cleaners_required, status")
-        .eq("id", jobId)
-        .maybeSingle();
-      if (!job) continue;
-
-      const { count: confirmedCount } = await supabase
-        .from("job_assignments")
-        .select("id", { count: "exact", head: true })
-        .eq("job_id", jobId)
-        .or("status.ilike.confirmed,status.ilike.accepted");
-
-      const need = Number(job.min_cleaners_required) || 1;
-      const have = confirmedCount ?? 0;
-
-      if (have >= need) continue;
-
-      await supabase
-        .from("jobs")
-        .update({
-          status: "Dispatching",
-          dispatch_alert_reason: `Offer window closed — ${have}/${need} cleaners confirmed`,
-        })
-        .eq("id", jobId);
-
-      await supabase.from("dispatch_alerts").insert({
-        job_id: jobId,
-        reason: `Auto-offer expired: only ${have}/${need} cleaners confirmed within window`,
-        severity: "warning",
-      });
-
-      try {
-        await supabase.functions.invoke("dispatch-job", { body: { jobId, backfill: true } });
-      } catch (e) {
-        log("backfill dispatch failed", { jobId, err: e instanceof Error ? e.message : String(e) });
-      }
+      const result = await runJobDispatchBackfill(
+        supabase,
+        jobId,
+        "Offer not accepted within 10 minutes",
+      );
+      backfillResults.push(result);
     }
 
     return new Response(
-      JSON.stringify({ ok: true, expired: expiredIds.length, jobsChecked: jobIds.length }),
+      JSON.stringify({
+        ok: true,
+        expired: expiredIds.length,
+        jobsChecked: jobIds.length,
+        backfills: backfillResults,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {

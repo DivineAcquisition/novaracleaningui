@@ -315,7 +315,10 @@ serve(async (req) => {
       (existingOnJob || [])
         .filter((a: { status: string }) => {
           const s = String(a.status || "").toLowerCase();
-          return ["offered", "confirmed", "accepted", "in progress", "broadcast"].includes(s);
+          return [
+            "offered", "confirmed", "accepted", "assigned", "in progress", "broadcast",
+            "declined", "expired", "withdrawn", "broadcast_lost",
+          ].includes(s);
         })
         .map((a: { cleaner_id: string }) => a.cleaner_id),
     );
@@ -349,10 +352,14 @@ serve(async (req) => {
     }
 
     if (!cleaners || cleaners.length === 0) {
-      logStep("No available cleaners found — falling back to broadcast");
-      const bResult = await broadcastJob(supabase, job, "No active cleaners passed hard filters");
+      logStep("No active cleaners in directory");
       return new Response(
-        JSON.stringify({ success: true, broadcast: true, ...bResult }),
+        JSON.stringify({
+          success: false,
+          noCleanersAvailable: true,
+          offersSent: 0,
+          reason: "no_active_cleaners",
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -443,14 +450,15 @@ serve(async (req) => {
     }
 
     if (scoredCandidates.length === 0) {
-      logStep("No qualified candidates after scoring — falling back to broadcast");
-      const bResult = await broadcastJob(
-        supabase,
-        job,
-        "No cleaners met scoring filters (distance, capacity, conflicts)",
-      );
+      logStep("No new qualified candidates after scoring (pool exhausted for this job)");
       return new Response(
-        JSON.stringify({ success: true, broadcast: true, ...bResult }),
+        JSON.stringify({
+          success: false,
+          noCleanersAvailable: true,
+          offersSent: 0,
+          reason: "no_qualified_candidates",
+          openSlots: slotsToFill,
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -461,6 +469,19 @@ serve(async (req) => {
     scoredCandidates.sort((a, b) => b.match_score - a.match_score);
 
     const selectedCleaners = scoredCandidates.slice(0, slotsToFill);
+
+    if (selectedCleaners.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          noCleanersAvailable: true,
+          offersSent: 0,
+          reason: "no_selection",
+          openSlots: slotsToFill,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // Check if we have enough cleaners
     if (selectedCleaners.length < slotsToFill) {
@@ -640,7 +661,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        offersSent: createdAssignments?.length ?? selectedCleaners.length,
         assignedCleaners: selectedCleaners.length,
+        noCleanersAvailable: false,
+        backfill,
         required: job.min_cleaners_required,
         cleaners: selectedCleaners.map(c => ({
           id: c.id,
