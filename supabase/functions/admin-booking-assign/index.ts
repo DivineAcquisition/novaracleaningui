@@ -2,11 +2,13 @@
 //
 // Admin/VA manual assign or reassign cleaners from the directory to a booking.
 // Updates job_assignments + bookings, then syncs GHL ops fields via PIT.
+// Notifies cleaners (email + SMS) and creates a GHL contact task when configured.
 //
-// Body:
-//   { bookingId, cleanerIds: string[], mode?: "replace" | "add" }
-//   mode "replace" (default): withdraw open offers, set new Confirmed team
-//   mode "add": append Confirmed assignments (up to 3 total active)
+// Body (assign):
+//   { bookingId, cleanerIds: string[], mode?: "replace" | "add", notify?: boolean }
+//
+// Body (suggest):
+//   { action: "suggest_cleaners", bookingId, limit?: number }
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
@@ -14,6 +16,10 @@ import {
   invokeFullBookingGhlSync,
   syncBookingOpsFieldsToGhl,
 } from "../_shared/ghl-booking-ops-sync.ts";
+import { scoreCleanerForJob, type RankedCleaner } from "../_shared/dispatch-scoring.ts";
+import { createContactTask } from "../_shared/ghl-tasks.ts";
+import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -27,7 +33,7 @@ function json(payload: unknown, status = 200) {
   });
 }
 
-async function ensureAdminOrVa(admin: any, jwt: string) {
+async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: string) {
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -37,7 +43,7 @@ async function ensureAdminOrVa(admin: any, jwt: string) {
   const callerId = u?.user?.id;
   if (!callerId) throw new Error("Not signed in.");
   const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", callerId);
-  const allowed = (roles || []).some((r: any) => ["admin", "va"].includes(r.role));
+  const allowed = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
   if (!allowed) throw new Error("Admins or VAs only.");
   return callerId;
 }
@@ -49,6 +55,131 @@ function parseTimeSlot(timeSlot: string): string {
     afternoon: "15:00:00",
   };
   return map[String(timeSlot || "").toLowerCase()] || "09:00:00";
+}
+
+async function resolveJobCoordinates(
+  admin: ReturnType<typeof createClient>,
+  booking: Record<string, unknown>,
+  jobId: string | null,
+): Promise<{ lat: number; lng: number } | null> {
+  if (jobId) {
+    const { data: job } = await admin.from("jobs").select("lat, lng").eq("id", jobId).maybeSingle();
+    if (job?.lat && job?.lng) return { lat: Number(job.lat), lng: Number(job.lng) };
+  }
+  try {
+    const geo = await admin.functions.invoke("geocode-address", {
+      body: {
+        address: booking.address,
+        city: booking.city,
+        state: booking.state,
+        zip: booking.zip_code,
+      },
+    });
+    const g = (geo?.data as { lat?: number; lng?: number }) || {};
+    if (g.lat && g.lng) {
+      if (jobId) {
+        await admin.from("jobs").update({ lat: g.lat, lng: g.lng }).eq("id", jobId);
+      }
+      return { lat: g.lat, lng: g.lng };
+    }
+  } catch {
+    /* non-fatal */
+  }
+  return null;
+}
+
+async function suggestCleaners(
+  admin: ReturnType<typeof createClient>,
+  booking: Record<string, unknown>,
+  limit = 12,
+): Promise<RankedCleaner[]> {
+  const coords = await resolveJobCoordinates(
+    admin,
+    booking,
+    (booking.job_id as string | null) || null,
+  );
+
+  const serviceDate = String(booking.service_date || "");
+  const weekday = serviceDate
+    ? new Date(`${serviceDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })
+    : new Date().toLocaleDateString("en-US", { weekday: "short" });
+
+  const { data: cleaners } = await admin
+    .from("cleaners")
+    .select(
+      "id, first_name, last_name, email, phone, status, approved, available_for_bookings, home_lat, home_lng, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, preferred_work_days, max_travel_miles, max_weekly_bookings",
+    )
+    .eq("approved", true)
+    .eq("available_for_bookings", true)
+    .eq("status", "active");
+
+  if (!cleaners?.length) return [];
+
+  const cleanerIds = cleaners.map((c: { id: string }) => c.id);
+  const { data: upcomingJobsData } = await admin
+    .from("job_assignments")
+    .select("cleaner_id, jobs(start_datetime)")
+    .in("cleaner_id", cleanerIds)
+    .in("status", ["Offered", "Confirmed"])
+    .gte("jobs.start_datetime", new Date().toISOString());
+
+  const upcomingJobsMap = new Map<string, number>();
+  upcomingJobsData?.forEach((a: { cleaner_id: string }) => {
+    upcomingJobsMap.set(a.cleaner_id, (upcomingJobsMap.get(a.cleaner_id) || 0) + 1);
+  });
+
+  const ranked: RankedCleaner[] = [];
+
+  for (const c of cleaners) {
+    const upcoming = upcomingJobsMap.get(c.id) || 0;
+    let score = 0;
+    let distance: number | null = null;
+    let available = true;
+    let reason: string | undefined;
+
+    if (coords) {
+      const result = scoreCleanerForJob(
+        { ...c, upcoming_jobs_count: upcoming },
+        { lat: coords.lat, lng: coords.lng, weekday },
+      );
+      score = result.score;
+      distance = result.distance;
+      available = result.available;
+      reason = result.reason;
+    } else {
+      score = 50 - upcoming * 5;
+      available = upcoming < (c.max_weekly_bookings || 10);
+      reason = coords ? undefined : "job_location_unknown";
+    }
+
+    if (!available && coords) continue;
+
+    ranked.push({
+      id: c.id,
+      first_name: c.first_name,
+      last_name: c.last_name,
+      email: c.email,
+      phone: c.phone,
+      distance_miles: distance != null ? Math.round(distance * 10) / 10 : null,
+      match_score: score,
+      available,
+      reason,
+    });
+  }
+
+  ranked.sort((a, b) => b.match_score - a.match_score);
+  return ranked.slice(0, limit);
+}
+
+function checklistUrl(serviceType: string | null): string {
+  const key = String(serviceType || "standard").toLowerCase().replace(/-/g, "_");
+  const map: Record<string, string> = {
+    standard: "https://try.novaracleaning.com/checklist/standard-clean",
+    deep: "https://try.novaracleaning.com/checklist/deep-clean",
+    move_in_out: "https://try.novaracleaning.com/checklist/move-in-out",
+    recurring: "https://try.novaracleaning.com/checklist/recurring",
+  };
+  return map[key] || map.standard;
 }
 
 serve(async (req) => {
@@ -66,15 +197,10 @@ serve(async (req) => {
     const callerId = await ensureAdminOrVa(admin, jwt);
 
     const body = await req.json().catch(() => ({}));
+    const action = String(body?.action || "assign").toLowerCase();
     const bookingId = String(body?.bookingId || "").trim();
-    const cleanerIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
-      .map((id: unknown) => String(id).trim())
-      .filter(Boolean)
-      .slice(0, 3);
-    const mode = String(body?.mode || "replace").toLowerCase();
 
     if (!bookingId) return json({ error: "bookingId required" }, 400);
-    if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–3)" }, 400);
 
     const { data: booking, error: bErr } = await admin
       .from("bookings")
@@ -82,6 +208,20 @@ serve(async (req) => {
       .eq("id", bookingId)
       .maybeSingle();
     if (bErr || !booking) return json({ error: "booking not found" }, 404);
+
+    if (action === "suggest_cleaners") {
+      const suggestions = await suggestCleaners(admin, booking, Number(body?.limit) || 12);
+      return json({ success: true, bookingId, suggestions, hasCoordinates: suggestions.some((s) => s.distance_miles != null) });
+    }
+
+    const cleanerIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
+      .map((id: unknown) => String(id).trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    const mode = String(body?.mode || "replace").toLowerCase();
+    const shouldNotify = body?.notify !== false;
+
+    if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–3)" }, 400);
 
     const { data: cleaners } = await admin
       .from("cleaners")
@@ -127,6 +267,7 @@ serve(async (req) => {
       if (jobErr || !job) throw jobErr || new Error("job create failed");
       jobId = job.id;
       await admin.from("bookings").update({ job_id: jobId }).eq("id", bookingId);
+      booking.job_id = jobId;
     }
 
     if (mode === "replace") {
@@ -166,6 +307,8 @@ serve(async (req) => {
       })
       .eq("id", bookingId);
 
+    booking.num_cleaners_assigned = cleanerIds.length;
+
     await admin.from("jobs").update({ status: "Assigned" }).eq("id", jobId);
 
     await admin.from("events").insert({
@@ -173,23 +316,63 @@ serve(async (req) => {
       booking_id: bookingId,
       job_id: jobId,
       source: "admin-booking-assign",
-      summary: `Manual assign: ${cleaners.map((c: any) => `${c.first_name} ${c.last_name}`).join(", ")}`,
+      summary: `Manual assign: ${cleaners.map((c: { first_name: string; last_name: string }) => `${c.first_name} ${c.last_name}`).join(", ")}`,
       data: { cleanerIds, mode, by: callerId },
     });
 
     await syncBookingOpsFieldsToGhl(admin, bookingId);
     await invokeFullBookingGhlSync(admin, bookingId);
 
+    const notifications: Array<{ cleanerId: string; email?: boolean; sms?: boolean; ghlTaskId?: string | null }> = [];
+
+    if (shouldNotify) {
+      const customerName =
+        `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || "Customer";
+      const ghlContactId = (booking.ghl_contact_id as string | null) || "";
+
+      for (let i = 0; i < cleaners.length; i++) {
+        const c = cleaners[i];
+        const role = i === 0 ? "Lead" : "Support";
+        const notifyResult = await notifyCleanerOfAssignment(admin, booking, c, { role });
+        let ghlTaskId: string | null = null;
+
+        if (ghlContactId) {
+          const taskBody =
+            `Assigned (${role}): ${c.first_name} ${c.last_name}\n` +
+            `${customerName} · ${booking.service_date || "TBD"} ${booking.time_slot || ""}\n` +
+            `${booking.address || ""}, ${booking.city || ""} ${booking.state || ""}\n` +
+            `Checklist: ${checklistUrl(booking.service_type)}\n` +
+            `Booking #${booking.booking_number || bookingId.slice(0, 8)}`;
+          const taskRes = await createContactTask(ghlContactId, {
+            title: `Clean: ${customerName} — ${booking.service_date || "TBD"} (${role})`,
+            body: taskBody,
+            dueDate: booking.service_date
+              ? `${booking.service_date}T09:00:00.000Z`
+              : undefined,
+          });
+          ghlTaskId = taskRes.taskId;
+        }
+
+        notifications.push({
+          cleanerId: c.id,
+          email: notifyResult.email,
+          sms: notifyResult.sms,
+          ghlTaskId,
+        });
+      }
+    }
+
     return json({
       success: true,
       bookingId,
       jobId,
       cleanerIds,
-      assigned: cleaners.map((c: any) => ({
+      assigned: cleaners.map((c: { id: string; first_name: string; last_name: string; phone: string }) => ({
         id: c.id,
         name: `${c.first_name} ${c.last_name}`.trim(),
         phone: c.phone,
       })),
+      notifications,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

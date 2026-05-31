@@ -33,6 +33,10 @@ import {
   RiLoader4Line,
   RiCheckLine,
   RiAlertLine,
+  RiDeleteBinLine,
+  RiFileCopyLine,
+  RiEditLine,
+  RiBankCardLine,
 } from "@remixicon/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -62,6 +66,7 @@ interface Customer {
   state: string | null;
   address: string | null;
   referral_code: string | null;
+  stripe_customer_id: string | null;
   created_at: string;
 }
 
@@ -129,7 +134,7 @@ export default function AdminCustomers() {
     try {
       const { data, error } = await supabase
         .from("customers")
-        .select("id,first_name,last_name,email,phone,zip,city,state,address,referral_code,created_at")
+        .select("id,first_name,last_name,email,phone,zip,city,state,address,referral_code,stripe_customer_id,created_at")
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw error;
@@ -297,6 +302,9 @@ function CustomerSheet({
   const [loading, setLoading] = useState(false);
   const [actioning, setActioning] = useState<string | null>(null);
   const [grantOpen, setGrantOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmDeleteName, setConfirmDeleteName] = useState("");
 
   useEffect(() => {
     if (!customer) return;
@@ -393,6 +401,60 @@ function CustomerSheet({
     }
   };
 
+  const copyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  const openStripePortal = async () => {
+    if (!customer) return;
+    setActioning("stripe");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-customer-action", {
+        body: { action: "stripe_billing_portal", customerId: customer.id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const url = (data as { url?: string })?.url;
+      if (!url) throw new Error("No portal URL returned");
+      window.open(url, "_blank", "noopener,noreferrer");
+      toast.success("Stripe billing portal opened");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Stripe portal failed");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const deleteCustomer = async () => {
+    if (!customer) return;
+    setActioning("delete");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-customer-action", {
+        body: {
+          action: "delete_customer",
+          customerId: customer.id,
+          confirmName: confirmDeleteName,
+          force: true,
+        },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success("Customer deleted");
+      setDeleteOpen(false);
+      onClose();
+      onChange();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setActioning(null);
+    }
+  };
+
   const resyncToGhl = async () => {
     if (!customer) return;
     setActioning("ghl");
@@ -440,15 +502,57 @@ function CustomerSheet({
             <div className="py-4 space-y-5">
               {/* Contact + account-level actions */}
               <div className="grid sm:grid-cols-2 gap-3">
-                <ContactRow icon={RiMailLine} value={customer.email} href={`mailto:${customer.email}`} />
-                <ContactRow icon={RiPhoneLine} value={customer.phone || "—"} href={customer.phone ? `tel:${customer.phone}` : undefined} />
+                <ContactRow
+                  icon={RiMailLine}
+                  value={customer.email}
+                  href={`mailto:${customer.email}`}
+                  onCopy={() => copyText("Email", customer.email)}
+                />
+                <ContactRow
+                  icon={RiPhoneLine}
+                  value={customer.phone || "—"}
+                  href={customer.phone ? `tel:${customer.phone}` : undefined}
+                  onCopy={customer.phone ? () => copyText("Phone", customer.phone!) : undefined}
+                />
                 <ContactRow
                   icon={RiMapPinLine}
                   value={[customer.address, customer.city, customer.state, customer.zip].filter(Boolean).join(", ") || "—"}
+                  onCopy={
+                    customer.address
+                      ? () =>
+                          copyText(
+                            "Address",
+                            [customer.address, customer.city, customer.state, customer.zip]
+                              .filter(Boolean)
+                              .join(", "),
+                          )
+                      : undefined
+                  }
                 />
               </div>
 
               <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  className="border-slate-200 text-slate-700"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <RiEditLine className="w-4 h-4 mr-1.5" />
+                  Edit profile
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-slate-200 text-slate-700"
+                  onClick={openStripePortal}
+                  disabled={actioning === "stripe"}
+                >
+                  {actioning === "stripe" ? (
+                    <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <RiBankCardLine className="w-4 h-4 mr-1.5" />
+                  )}
+                  Stripe billing portal
+                </Button>
                 <Button
                   variant="outline"
                   className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
@@ -474,6 +578,17 @@ function CustomerSheet({
                     <RiExternalLinkLine className="w-4 h-4 mr-1.5" />
                   )}
                   Re-sync to GHL
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
+                  onClick={() => {
+                    setConfirmDeleteName("");
+                    setDeleteOpen(true);
+                  }}
+                >
+                  <RiDeleteBinLine className="w-4 h-4 mr-1.5" />
+                  Delete customer
                 </Button>
               </div>
 
@@ -630,6 +745,53 @@ function CustomerSheet({
                 if (customer) void loadDetail(customer);
               }}
             />
+
+            <EditCustomerDialog
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              customer={customer}
+              onSaved={() => {
+                onChange();
+                void loadDetail(customer);
+              }}
+            />
+
+            <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="text-rose-900">Delete customer</DialogTitle>
+                  <DialogDescription>
+                    Permanently removes <strong>{fullName(customer)}</strong> from the directory.
+                    Bookings by email are kept for history. Type their full name to confirm.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label className="text-sm">Type full name to confirm</Label>
+                  <Input
+                    value={confirmDeleteName}
+                    onChange={(e) => setConfirmDeleteName(e.target.value)}
+                    placeholder={fullName(customer)}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={actioning === "delete" || confirmDeleteName.trim().toLowerCase() !== fullName(customer).toLowerCase()}
+                    onClick={() => void deleteCustomer()}
+                  >
+                    {actioning === "delete" ? (
+                      <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <RiDeleteBinLine className="w-4 h-4 mr-1.5" />
+                    )}
+                    Delete permanently
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </SheetContent>
@@ -641,22 +803,151 @@ function ContactRow({
   icon: Icon,
   value,
   href,
+  onCopy,
 }: {
   icon: typeof RiMailLine;
   value: string;
   href?: string;
+  onCopy?: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2">
       <Icon className="w-4 h-4 text-slate-400 shrink-0" />
       {href ? (
-        <a className="truncate hover:text-emerald-700" href={href}>
+        <a className="truncate hover:text-emerald-700 flex-1" href={href}>
           {value}
         </a>
       ) : (
-        <span className="truncate">{value}</span>
+        <span className="truncate flex-1">{value}</span>
       )}
+      {onCopy ? (
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onCopy}>
+          <RiFileCopyLine className="w-3.5 h-3.5 text-slate-500" />
+        </Button>
+      ) : null}
     </div>
+  );
+}
+
+function EditCustomerDialog({
+  open,
+  onOpenChange,
+  customer,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  customer: Customer;
+  onSaved: () => void;
+}) {
+  const [firstName, setFirstName] = useState(customer.first_name || "");
+  const [lastName, setLastName] = useState(customer.last_name || "");
+  const [email, setEmail] = useState(customer.email);
+  const [phone, setPhone] = useState(customer.phone || "");
+  const [address, setAddress] = useState(customer.address || "");
+  const [city, setCity] = useState(customer.city || "");
+  const [state, setState] = useState(customer.state || "");
+  const [zip, setZip] = useState(customer.zip || "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setFirstName(customer.first_name || "");
+    setLastName(customer.last_name || "");
+    setEmail(customer.email);
+    setPhone(customer.phone || "");
+    setAddress(customer.address || "");
+    setCity(customer.city || "");
+    setState(customer.state || "");
+    setZip(customer.zip || "");
+  }, [open, customer]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-customer-action", {
+        body: {
+          action: "update_customer",
+          customerId: customer.id,
+          firstName,
+          lastName,
+          email,
+          phone,
+          address,
+          city,
+          state,
+          zip,
+        },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success("Customer updated");
+      onOpenChange(false);
+      onSaved();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit customer</DialogTitle>
+          <DialogDescription>Updates the directory record used across bookings and GHL sync.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-sm">First name</Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            </div>
+            <div>
+              <Label className="text-sm">Last name</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm">Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div>
+            <Label className="text-sm">Phone</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+          <div>
+            <Label className="text-sm">Address</Label>
+            <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <Label className="text-sm">City</Label>
+              <Input value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-sm">State</Label>
+              <Input value={state} onChange={(e) => setState(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm">ZIP</Label>
+            <Input value={zip} onChange={(e) => setZip(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

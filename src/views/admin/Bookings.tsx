@@ -93,6 +93,30 @@ const STATUS_OPTIONS = [
 const fmtMoney = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
+/** Local calendar date (YYYY-MM-DD) — avoids UTC midnight hiding Monday jobs in US timezones. */
+function localYmd(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function startOfWeekMonday(d = new Date()): string {
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = copy.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  copy.setDate(copy.getDate() + diff);
+  return localYmd(copy);
+}
+
+function endOfWeekSunday(d = new Date()): string {
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = copy.getDay();
+  const diff = dow === 0 ? 0 : 7 - dow;
+  copy.setDate(copy.getDate() + diff);
+  return localYmd(copy);
+}
+
 export default function AdminBookings() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
@@ -105,7 +129,9 @@ export default function AdminBookings() {
   // immediately regardless of their `service_date` (the old default
   // "upcoming" used `service_date >= today` which silently hid bookings
   // dated yesterday in UTC, or any booking still missing a service_date).
-  const [dateRange, setDateRange] = useState<"all" | "upcoming" | "past_30" | "last_7_created">("all");
+  const [dateRange, setDateRange] = useState<
+    "all" | "upcoming" | "this_week" | "past_30" | "last_7_created"
+  >("all");
   const [selected, setSelected] = useState<BookingRow | null>(null);
 
   const load = useCallback(async () => {
@@ -119,27 +145,38 @@ export default function AdminBookings() {
         // Order by created_at so the most-recently-booked row floats to
         // the top — that's what an operator opening the tab needs to see
         // first (especially right after an internal-booking submit).
+        .order("service_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(500);
-      const today = new Date().toISOString().slice(0, 10);
+        .limit(750);
+      const today = localYmd();
       if (dateRange === "upcoming") {
-        q = q.gte("service_date", today);
+        q = q.or(`service_date.gte.${today},service_date.is.null`);
+      } else if (dateRange === "this_week") {
+        q = q
+          .gte("service_date", startOfWeekMonday())
+          .lte("service_date", endOfWeekSunday());
       } else if (dateRange === "past_30") {
         const past = new Date();
         past.setDate(past.getDate() - 30);
-        q = q.gte("service_date", past.toISOString().slice(0, 10));
+        q = q.gte("service_date", localYmd(past));
       } else if (dateRange === "last_7_created") {
         const past = new Date();
         past.setDate(past.getDate() - 7);
         q = q.gte("created_at", past.toISOString());
       }
-      // dateRange === "all" → no date predicate; show everything.
       if (statusFilter !== "all") {
         q = q.eq("status", statusFilter);
       }
       const { data, error } = await q;
       if (error) throw error;
-      setBookings((data as unknown as BookingRow[]) || []);
+      const rows = ((data as unknown as BookingRow[]) || []).slice();
+      rows.sort((a, b) => {
+        const da = a.service_date || "";
+        const db = b.service_date || "";
+        if (da !== db) return db.localeCompare(da);
+        return (b.created_at || "").localeCompare(a.created_at || "");
+      });
+      setBookings(rows);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -173,6 +210,7 @@ export default function AdminBookings() {
         b.zip_code,
         String(b.booking_number ?? ""),
         b.service_type,
+        b.service_date,
       ]
         .filter(Boolean)
         .map((s) => String(s).toLowerCase());
@@ -233,8 +271,9 @@ export default function AdminBookings() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All bookings</SelectItem>
+                <SelectItem value="this_week">Service this week (Mon–Sun)</SelectItem>
                 <SelectItem value="last_7_created">Booked in last 7 days</SelectItem>
-                <SelectItem value="upcoming">Upcoming service date + today</SelectItem>
+                <SelectItem value="upcoming">Upcoming service date (local)</SelectItem>
                 <SelectItem value="past_30">Service date in last 30 days</SelectItem>
               </SelectContent>
             </Select>
@@ -327,6 +366,17 @@ interface CleanerOption {
   status: string | null;
 }
 
+interface SuggestedCleaner {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  distance_miles: number | null;
+  match_score: number;
+  available: boolean;
+  reason?: string;
+}
+
 function BookingAssignBlock({
   booking,
   working,
@@ -339,22 +389,36 @@ function BookingAssignBlock({
   onMutated: () => void;
 }) {
   const [cleaners, setCleaners] = useState<CleanerOption[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestedCleaner[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loadingCleaners, setLoadingCleaners] = useState(true);
+  const [loadingSuggest, setLoadingSuggest] = useState(true);
 
   useEffect(() => {
     void (async () => {
       setLoadingCleaners(true);
-      const { data } = await supabase
-        .from("cleaners")
-        .select("id, first_name, last_name, phone, status")
-        .eq("status", "active")
-        .eq("approved", true)
-        .order("last_name");
-      setCleaners((data || []) as CleanerOption[]);
+      setLoadingSuggest(true);
+      const [dir, sug] = await Promise.all([
+        supabase
+          .from("cleaners")
+          .select("id, first_name, last_name, phone, status")
+          .eq("status", "active")
+          .eq("approved", true)
+          .order("last_name"),
+        supabase.functions.invoke("admin-booking-assign", {
+          body: { action: "suggest_cleaners", bookingId: booking.id, limit: 8 },
+        }),
+      ]);
+      setCleaners((dir.data || []) as CleanerOption[]);
       setLoadingCleaners(false);
+      if (!sug.error && (sug.data as { suggestions?: SuggestedCleaner[] })?.suggestions) {
+        setSuggestions((sug.data as { suggestions: SuggestedCleaner[] }).suggestions);
+      } else {
+        setSuggestions([]);
+      }
+      setLoadingSuggest(false);
     })();
-  }, []);
+  }, [booking.id]);
 
   useEffect(() => {
     if (!booking.job_id) {
@@ -402,7 +466,12 @@ function BookingAssignBlock({
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Cleaners assigned — GHL contractor fields updated.");
+      const notes = (data as { notifications?: Array<{ email?: boolean; sms?: boolean }> })?.notifications;
+      const emailed = notes?.filter((n) => n.email).length ?? 0;
+      const texted = notes?.filter((n) => n.sms).length ?? 0;
+      toast.success(
+        `Assigned · GHL synced · ${emailed} email · ${texted} SMS · GHL task(s) created when contact is linked`,
+      );
       onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -421,13 +490,42 @@ function BookingAssignBlock({
           Assign / reassign cleaners
         </CardTitle>
         <CardDescription>
-          Maps Contractor 1–3, numbers, team size, and estimated duration to GHL via PIT.
+          Nearby / available cleaners are ranked first. Assigning emails + texts cleaners and
+          creates a GHL task on the customer contact when linked.
           {booking.num_cleaners_assigned
             ? ` Currently ${booking.num_cleaners_assigned} assigned.`
             : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {!loadingSuggest && suggestions.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wide">
+              Suggested (nearby &amp; available)
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {suggestions.slice(0, 6).map((s) => {
+                const on = selectedIds.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => toggle(s.id)}
+                    className={cn(
+                      "text-xs px-2 py-1 rounded-full border transition-colors",
+                      on
+                        ? "bg-indigo-600 text-white border-indigo-600"
+                        : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
+                    )}
+                  >
+                    {s.first_name} {s.last_name?.[0]}.
+                    {s.distance_miles != null ? ` · ${s.distance_miles} mi` : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         {loadingCleaners ? (
           <Skeleton className="h-24 w-full" />
         ) : (
@@ -468,7 +566,7 @@ function BookingAssignBlock({
               Saving &amp; syncing GHL…
             </>
           ) : (
-            "Save assignment & sync GHL"
+            "Save, notify cleaners & sync GHL"
           )}
         </Button>
       </CardContent>

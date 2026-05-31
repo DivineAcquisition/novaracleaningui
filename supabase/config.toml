@@ -243,3 +243,6 @@ verify_jwt = true
 
 [functions.admin-booking-assign]
 verify_jwt = true
+
+[functions.admin-customer-action]
+verify_jwt = true

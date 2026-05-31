@@ -101,6 +101,7 @@ export default function AdminPayroll() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [stripeLoginId, setStripeLoginId] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
@@ -148,6 +149,27 @@ export default function AdminPayroll() {
       { owed: 0, processing: 0, paid: 0, failed: 0 },
     );
   }, [rows]);
+
+  const openStripeExpress = async (row: PayrollRow) => {
+    if (!row.stripe_account_id) {
+      toast.error("Cleaner has not started Stripe Connect onboarding");
+      return;
+    }
+    setStripeLoginId(row.cleaner_id);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-stripe-login-link", {
+        body: { stripe_account_id: row.stripe_account_id },
+      });
+      if (error) throw error;
+      const url = (data as { url?: string })?.url;
+      if (!url) throw new Error("No Stripe URL returned");
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open Stripe dashboard");
+    } finally {
+      setStripeLoginId(null);
+    }
+  };
 
   const handlePayNow = async (row: PayrollRow) => {
     if (!row.stripe_account_id) {
@@ -227,8 +249,8 @@ export default function AdminPayroll() {
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Payroll</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Per-cleaner completed-job rollup. Owed = completed jobs with no
-            successful payout yet. "Pay now" releases via Stripe Connect.
+            Pay cleaners through Stripe Connect. Each cleaner needs an Express account with
+            payouts enabled before &quot;Pay now&quot; can transfer their share.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -236,6 +258,41 @@ export default function AdminPayroll() {
           Refresh
         </Button>
       </div>
+
+      <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+        <CardContent className="p-4 space-y-2 text-sm text-slate-700">
+          <p className="font-semibold text-emerald-900">How cleaner payouts work (Stripe Connect)</p>
+          <ol className="list-decimal list-inside space-y-1 text-slate-600">
+            <li>
+              Cleaners onboard at{" "}
+              <a
+                className="text-emerald-700 underline"
+                href="https://contractor.novaracleaning.com/cleaner/onboarding"
+                target="_blank"
+                rel="noreferrer"
+              >
+                contractor onboarding
+              </a>{" "}
+              — this creates their Connect Express account.
+            </li>
+            <li>
+              When a booking is marked complete,{" "}
+              <code className="text-[11px] px-1 py-0.5 rounded bg-slate-100">process-payout</code>{" "}
+              transfers their revenue share to that account.
+            </li>
+            <li>
+              Use <strong>Pay now</strong> below to retry failed transfers or release owed balances in bulk.
+            </li>
+            <li>
+              Open a cleaner&apos;s Stripe Express dashboard from the row badge when connected (admin view).
+            </li>
+          </ol>
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+            Multi-cleaner jobs: payroll currently pays the <strong>lead cleaner</strong> on the booking row.
+            Support teammates on the same job may need a manual adjustment until split payouts ship.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Totals tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -358,40 +415,53 @@ export default function AdminPayroll() {
                         {formatDate(r.last_paid_at)}
                       </TableCell>
                       <TableCell className="text-center">
-                        <StripeBadge
-                          accountId={r.stripe_account_id}
-                          payoutsEnabled={r.payouts_enabled}
-                        />
+                        <button
+                          type="button"
+                          disabled={!r.stripe_account_id || stripeLoginId === r.cleaner_id}
+                          onClick={() => void openStripeExpress(r)}
+                          className="inline-flex disabled:opacity-60"
+                          title={r.stripe_account_id ? "Open Stripe Express dashboard" : undefined}
+                        >
+                          <StripeBadge
+                            accountId={r.stripe_account_id}
+                            payoutsEnabled={r.payouts_enabled}
+                          />
+                        </button>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant={r.owed_cents > 0 ? "default" : "outline"}
-                          disabled={
-                            payingId === r.cleaner_id ||
-                            r.owed_cents <= 0 ||
-                            !r.stripe_account_id ||
-                            !r.payouts_enabled
-                          }
-                          onClick={() => handlePayNow(r)}
-                          className={cn(
-                            "h-8 text-xs whitespace-nowrap",
-                            r.owed_cents > 0 &&
-                              "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white",
-                          )}
-                        >
-                          {payingId === r.cleaner_id ? (
-                            <>
-                              <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" />
-                              Paying…
-                            </>
-                          ) : (
-                            <>
-                              <RiBankCardLine className="w-3.5 h-3.5 mr-1" />
-                              Pay now
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex flex-col gap-1 items-end">
+                          <Button
+                            size="sm"
+                            variant={r.owed_cents > 0 ? "default" : "outline"}
+                            disabled={
+                              payingId === r.cleaner_id ||
+                              r.owed_cents <= 0 ||
+                              !r.stripe_account_id ||
+                              !r.payouts_enabled
+                            }
+                            onClick={() => handlePayNow(r)}
+                            className={cn(
+                              "h-8 text-xs whitespace-nowrap",
+                              r.owed_cents > 0 &&
+                                "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white",
+                            )}
+                          >
+                            {payingId === r.cleaner_id ? (
+                              <>
+                                <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                Paying…
+                              </>
+                            ) : (
+                              <>
+                                <RiBankCardLine className="w-3.5 h-3.5 mr-1" />
+                                Pay now
+                              </>
+                            )}
+                          </Button>
+                          {!r.stripe_account_id ? (
+                            <span className="text-[10px] text-slate-400">Needs Connect</span>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
