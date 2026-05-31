@@ -32,6 +32,7 @@ export async function syncBookingOpsFieldsToGhl(
     .select(`
       id, email, phone, first_name, last_name, address, city, state, zip_code,
       job_id, cleaner_id, home_size_id, estimated_duration_hours, num_cleaners_assigned,
+      total_estimate_cents, final_charge_cents, deposit_cents, payment_option,
       ghl_contact_id, ghl_opportunity_id,
       cleaners:cleaner_id (first_name, last_name, phone, pay_tier, pay_percentage)
     `)

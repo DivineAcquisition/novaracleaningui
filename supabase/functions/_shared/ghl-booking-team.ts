@@ -1,15 +1,17 @@
 // ─── GHL booking team helpers ───────────────────────────────────────────
 //
 // Loads assigned cleaners from job_assignments (Cleaner directory rows)
-// for GHL ops fields: Contractor 1–3, Contractor Number 1–3,
-// Team Size (Assigned), Estimated Duration (hrs).
+// for GHL ops fields: Contractor 1–3, numbers, pay amounts, team size, duration.
 
 import { getEstimatedHours, getTeamSize } from "./payout-utils.ts";
+import { formatPhoneDisplayUS } from "./phone-format.ts";
+import { fmtMoney } from "./ghl-client.ts";
 
 export const GHL_ACTIVE_ASSIGNMENT_STATUSES = [
   "Confirmed",
   "Accepted",
   "Assigned",
+  "In Progress",
 ];
 
 export interface TeamCleanerForGhl {
@@ -17,6 +19,8 @@ export interface TeamCleanerForGhl {
   phone?: string;
   payTier?: string | null;
   payRate?: number;
+  payPercentage?: number | null;
+  estimatedPayCents?: number | null;
 }
 
 export interface BookingLikeForTeam {
@@ -26,6 +30,8 @@ export interface BookingLikeForTeam {
   home_size_id?: string | null;
   estimated_duration_hours?: number | null;
   num_cleaners_assigned?: number | null;
+  total_estimate_cents?: number | null;
+  final_charge_cents?: number | null;
   cleaners?: {
     first_name?: string | null;
     last_name?: string | null;
@@ -35,18 +41,30 @@ export interface BookingLikeForTeam {
   } | null;
 }
 
+function perCleanerPayDisplay(c: TeamCleanerForGhl): string {
+  if (c.estimatedPayCents != null && c.estimatedPayCents > 0) {
+    return fmtMoney(c.estimatedPayCents);
+  }
+  const pct = c.payPercentage ?? c.payRate;
+  if (pct != null && pct > 0 && pct <= 100) {
+    return `${pct}% revenue share`;
+  }
+  return "";
+}
+
 /** Load up to 3 cleaners for GHL contractor slots (Lead first). */
 export async function loadTeamCleanersForBooking(
   supabase: any,
   booking: BookingLikeForTeam,
 ): Promise<TeamCleanerForGhl[]> {
   const teamCleaners: TeamCleanerForGhl[] = [];
+  const revenueCents = Number(booking.final_charge_cents || booking.total_estimate_cents || 0);
 
   if (booking.job_id) {
     const { data: assigns } = await supabase
       .from("job_assignments")
       .select(
-        "role, accepted_at, status, cleaners (first_name, last_name, phone, pay_tier, pay_percentage)",
+        "role, accepted_at, status, estimated_pay_cents, pay_percentage_snapshot, cleaners (first_name, last_name, phone, pay_tier, pay_percentage)",
       )
       .eq("job_id", booking.job_id)
       .in("status", GHL_ACTIVE_ASSIGNMENT_STATUSES);
@@ -58,14 +76,23 @@ export async function loadTeamCleanersForBooking(
       return new Date(a.accepted_at || 0).getTime() - new Date(b.accepted_at || 0).getTime();
     });
 
+    const teamCount = Math.max(1, rows.length);
+
     for (const a of rows) {
       const c = a?.cleaners;
       if (!c) continue;
+      const payPct = Number(a.pay_percentage_snapshot ?? c.pay_percentage) || 35;
+      let estPay = a.estimated_pay_cents != null ? Number(a.estimated_pay_cents) : null;
+      if ((estPay == null || estPay <= 0) && revenueCents > 0) {
+        estPay = Math.floor((revenueCents * payPct) / 100 / teamCount);
+      }
       teamCleaners.push({
         name: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
-        phone: c.phone ?? undefined,
+        phone: formatPhoneDisplayUS(c.phone ?? undefined),
         payTier: c.pay_tier ?? null,
         payRate: Number(c.pay_percentage) || undefined,
+        payPercentage: payPct,
+        estimatedPayCents: estPay,
       });
       if (teamCleaners.length >= 3) break;
     }
@@ -73,11 +100,15 @@ export async function loadTeamCleanersForBooking(
 
   if (teamCleaners.length === 0 && booking.cleaners) {
     const c = booking.cleaners;
+    const payPct = Number(c.pay_percentage) || 35;
+    const estPay = revenueCents > 0 ? Math.floor((revenueCents * payPct) / 100) : null;
     teamCleaners.push({
       name: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
-      phone: c.phone ?? undefined,
+      phone: formatPhoneDisplayUS(c.phone ?? undefined),
       payTier: c.pay_tier ?? null,
-      payRate: Number(c.pay_percentage) || undefined,
+      payRate: payPct,
+      payPercentage: payPct,
+      estimatedPayCents: estPay,
     });
   }
 
@@ -100,6 +131,15 @@ export function estimatedDurationForBooking(booking: BookingLikeForTeam): number
   return null;
 }
 
+const CONTRACTOR_PAY_KEYS = [
+  "1_contractor_pay",
+  "2_contractor_pay",
+  "3_contractor_pay",
+  "1_contractor_pay_percentage",
+  "2_contractor_pay_percentage",
+  "3_contractor_pay_percentage",
+] as const;
+
 /** Ops-only custom fields for GHL (always includes 3 contractor slots for clearing). */
 export function buildGhlOpsCustomFields(
   booking: BookingLikeForTeam,
@@ -119,6 +159,20 @@ export function buildGhlOpsCustomFields(
     "2_contractor_number": cleaners[1]?.phone || "",
     "3_contractor": cleaners[2]?.name || "",
     "3_contractor_number": cleaners[2]?.phone || "",
+    "1_contractor_pay": perCleanerPayDisplay(cleaners[0] || {}),
+    "2_contractor_pay": perCleanerPayDisplay(cleaners[1] || {}),
+    "3_contractor_pay": perCleanerPayDisplay(cleaners[2] || {}),
+    "1_contractor_pay_percentage": cleaners[0]?.payPercentage != null
+      ? `${cleaners[0].payPercentage}%`
+      : "",
+    "2_contractor_pay_percentage": cleaners[1]?.payPercentage != null
+      ? `${cleaners[1].payPercentage}%`
+      : "",
+    "3_contractor_pay_percentage": cleaners[2]?.payPercentage != null
+      ? `${cleaners[2].payPercentage}%`
+      : "",
   };
   return out;
 }
+
+export { CONTRACTOR_PAY_KEYS };

@@ -12,6 +12,8 @@
 // All custom fields are looked up by `fieldKey` (not UUID) and the resolved
 // id-map is cached per cold start.
 
+import { toE164US } from "./phone-format.ts";
+
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
 
@@ -235,6 +237,12 @@ export const GHL_OPS_CLEARABLE_KEYS = new Set([
   "1_contractor_number",
   "2_contractor_number",
   "3_contractor_number",
+  "1_contractor_pay",
+  "2_contractor_pay",
+  "3_contractor_pay",
+  "1_contractor_pay_percentage",
+  "2_contractor_pay_percentage",
+  "3_contractor_pay_percentage",
   "team_size_assigned",
   "estimated_duration_hrs",
 ]);
@@ -304,10 +312,12 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
     const finalState = input.state || split.state || undefined;
     const finalZip = input.postalCode || split.zipCode || undefined;
 
+    const phoneE164 = toE164US(input.phone) || undefined;
+
     const body: Json = {
       locationId: cfg.locationId,
       email: input.email || undefined,
-      phone: input.phone || undefined,
+      phone: phoneE164,
       firstName: input.firstName || undefined,
       lastName: input.lastName || undefined,
       name: input.name || undefined,

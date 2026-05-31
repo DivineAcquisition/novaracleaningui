@@ -13,6 +13,7 @@
 // that need the GHL files API, or read-only computed fields.
 
 import { fmtMoney, ynBool } from "./ghl-client.ts";
+import { formatPhoneDisplayUS } from "./phone-format.ts";
 
 export interface BookingRowLike {
   id?: string;
@@ -91,6 +92,8 @@ export interface MapperCleaner {
    * back-compat where a row hasn't been migrated to pay_tier yet.
    */
   payRate?: number;
+  payPercentage?: number | null;
+  estimatedPayCents?: number | null;
 }
 
 export interface MapperInputs {
@@ -473,7 +476,22 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
   // names from a previous assignment.
   const cleaner = (idx: number): MapperCleaner | undefined => input.cleaners[idx];
   const cleanerName = (idx: number) => cleaner(idx)?.name || "";
-  const cleanerPhone = (idx: number) => cleaner(idx)?.phone || "";
+  const cleanerPhone = (idx: number) => formatPhoneDisplayUS(cleaner(idx)?.phone || "");
+  const cleanerPay = (idx: number) => {
+    const c = cleaner(idx);
+    if (!c) return "";
+    if (c.estimatedPayCents != null && c.estimatedPayCents > 0) {
+      return fmtMoney(c.estimatedPayCents);
+    }
+    const pct = c.payPercentage ?? c.payRate;
+    if (pct != null && pct > 0 && pct <= 100) return `${pct}% revenue share`;
+    return "";
+  };
+  const cleanerPayPct = (idx: number) => {
+    const c = cleaner(idx);
+    const pct = c?.payPercentage ?? c?.payRate;
+    return pct != null && pct > 0 ? `${pct}%` : "";
+  };
   // Pay tier: use the highest tier across assigned cleaners (lead
   // determines the team's posted tier on the contact record). Prefers
   // the explicit pay_tier string; falls back to the legacy hourly rate
@@ -688,10 +706,16 @@ export function buildGhlCustomFields(input: MapperInputs): Record<string, string
     assigned_cleaner_pay_tier: mapPayTier(topPayTier ?? topPayRate),
     "1_contractor": cleanerName(0),
     "1_contractor_number": cleanerPhone(0),
+    "1_contractor_pay": cleanerPay(0),
+    "1_contractor_pay_percentage": cleanerPayPct(0),
     "2_contractor": cleanerName(1),
     "2_contractor_number": cleanerPhone(1),
+    "2_contractor_pay": cleanerPay(1),
+    "2_contractor_pay_percentage": cleanerPayPct(1),
     "3_contractor": cleanerName(2),
     "3_contractor_number": cleanerPhone(2),
+    "3_contractor_pay": cleanerPay(2),
+    "3_contractor_pay_percentage": cleanerPayPct(2),
 
     // ─── Customer journey ──────────────────────────────────────
     manage_service_link: `${origin}/account`,

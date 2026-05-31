@@ -9,6 +9,7 @@ import {
 import { syncBookingLifecycle, splitFullAddress } from "../_shared/ghl-client.ts";
 import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
 import { loadTeamCleanersForBooking } from "../_shared/ghl-booking-team.ts";
+import { toE164US } from "../_shared/phone-format.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
 const corsHeaders = {
@@ -856,7 +857,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const ghlResult = await syncBookingLifecycle({
       contact: {
         email: booking.email,
-        phone: booking.phone,
+        phone: toE164US(booking.phone) || booking.phone,
         firstName: booking.first_name,
         lastName: booking.last_name,
         address1: ghlAddress1,
