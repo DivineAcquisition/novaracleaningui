@@ -93,30 +93,6 @@ const STATUS_OPTIONS = [
 const fmtMoney = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
-/** Local calendar date (YYYY-MM-DD) — avoids UTC midnight hiding Monday jobs in US timezones. */
-function localYmd(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function startOfWeekMonday(d = new Date()): string {
-  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dow = copy.getDay();
-  const diff = dow === 0 ? -6 : 1 - dow;
-  copy.setDate(copy.getDate() + diff);
-  return localYmd(copy);
-}
-
-function endOfWeekSunday(d = new Date()): string {
-  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dow = copy.getDay();
-  const diff = dow === 0 ? 0 : 7 - dow;
-  copy.setDate(copy.getDate() + diff);
-  return localYmd(copy);
-}
-
 export default function AdminBookings() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
@@ -124,65 +100,49 @@ export default function AdminBookings() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   // Default to "all" so brand-new internal or customer bookings show up
   // immediately regardless of their `service_date` (the old default
   // "upcoming" used `service_date >= today` which silently hid bookings
   // dated yesterday in UTC, or any booking still missing a service_date).
   const [dateRange, setDateRange] = useState<
-    "all" | "upcoming" | "this_week" | "past_30" | "last_7_created"
-  >("all");
+    "all" | "upcoming" | "next_14" | "this_week" | "past_30" | "last_7_created"
+  >("next_14");
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [selected, setSelected] = useState<BookingRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      let q = supabase
-        .from("bookings")
-        .select(
-          "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, service_duration",
-        )
-        // Order by created_at so the most-recently-booked row floats to
-        // the top — that's what an operator opening the tab needs to see
-        // first (especially right after an internal-booking submit).
-        .order("service_date", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
-        .limit(750);
-      const today = localYmd();
-      if (dateRange === "upcoming") {
-        q = q.or(`service_date.gte.${today},service_date.is.null`);
-      } else if (dateRange === "this_week") {
-        q = q
-          .gte("service_date", startOfWeekMonday())
-          .lte("service_date", endOfWeekSunday());
-      } else if (dateRange === "past_30") {
-        const past = new Date();
-        past.setDate(past.getDate() - 30);
-        q = q.gte("service_date", localYmd(past));
-      } else if (dateRange === "last_7_created") {
-        const past = new Date();
-        past.setDate(past.getDate() - 7);
-        q = q.gte("created_at", past.toISOString());
-      }
-      if (statusFilter !== "all") {
-        q = q.eq("status", statusFilter);
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      const rows = ((data as unknown as BookingRow[]) || []).slice();
-      rows.sort((a, b) => {
-        const da = a.service_date || "";
-        const db = b.service_date || "";
-        if (da !== db) return db.localeCompare(da);
-        return (b.created_at || "").localeCompare(a.created_at || "");
+      const { data, error } = await supabase.functions.invoke("admin-list-bookings", {
+        body: {
+          search: searchDebounced,
+          status: statusFilter,
+          dateRange,
+          limit: 2000,
+        },
       });
-      setBookings(rows);
+      if (error) throw error;
+      if ((data as { error?: string })?.error) {
+        throw new Error((data as { error: string }).error);
+      }
+      const payload = data as { bookings?: BookingRow[]; total?: number };
+      setBookings(payload.bookings || []);
+      setTotalCount(payload.total ?? payload.bookings?.length ?? 0);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
+      setBookings([]);
+      setTotalCount(null);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, dateRange]);
+  }, [statusFilter, dateRange, searchDebounced]);
 
   useEffect(() => {
     void load();
@@ -196,29 +156,14 @@ export default function AdminBookings() {
     if (match) setSelected(match);
   }, [highlightId, bookings]);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return bookings;
-    const q = search.toLowerCase();
-    const digits = q.replace(/\D/g, "");
-    return bookings.filter((b) => {
-      const fields = [
-        b.first_name,
-        b.last_name,
-        b.email,
-        b.address,
-        b.city,
-        b.zip_code,
-        String(b.booking_number ?? ""),
-        b.service_type,
-        b.service_date,
-      ]
-        .filter(Boolean)
-        .map((s) => String(s).toLowerCase());
-      if (fields.some((f) => f.includes(q))) return true;
-      if (digits && b.phone?.replace(/\D/g, "").includes(digits)) return true;
-      return false;
-    });
-  }, [bookings, search]);
+  const filtersActive =
+    statusFilter !== "all" || dateRange !== "all" || search.trim().length > 0;
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setDateRange("all");
+  };
 
   return (
     <div className="space-y-5">
@@ -229,7 +174,9 @@ export default function AdminBookings() {
             Bookings
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Cancel, reschedule, refund, or mark complete — admin control over every booking.
+            {totalCount != null
+              ? `${totalCount} booking${totalCount === 1 ? "" : "s"} match current filters`
+              : "Cancel, reschedule, refund, or mark complete — admin control over every booking."}
           </p>
         </div>
         <Button variant="outline" onClick={load} disabled={loading} className="border-slate-200">
@@ -245,9 +192,12 @@ export default function AdminBookings() {
             <div className="relative">
               <RiSearch2Line className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search name, email, phone, ZIP, booking #…"
+                placeholder="Search Maddie, email, phone, date…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setSearchDebounced(search.trim());
+                }}
                 className="pl-9"
               />
             </div>
@@ -270,14 +220,23 @@ export default function AdminBookings() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="next_14">Next 14 days (service date)</SelectItem>
                 <SelectItem value="all">All bookings</SelectItem>
-                <SelectItem value="this_week">Service this week (Mon–Sun)</SelectItem>
+                <SelectItem value="upcoming">All upcoming (incl. no date)</SelectItem>
+                <SelectItem value="this_week">This week + next Mon (weekend-safe)</SelectItem>
                 <SelectItem value="last_7_created">Booked in last 7 days</SelectItem>
-                <SelectItem value="upcoming">Upcoming service date (local)</SelectItem>
-                <SelectItem value="past_30">Service date in last 30 days</SelectItem>
+                <SelectItem value="past_30">Service in last 30 days</SelectItem>
               </SelectContent>
             </Select>
           </div>
+          {filtersActive ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-500">Filters active — hidden rows may include Monday jobs on weekends.</span>
+              <Button type="button" variant="outline" size="sm" className="h-7" onClick={clearFilters}>
+                Clear all filters
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -288,13 +247,14 @@ export default function AdminBookings() {
             <div className="p-6 space-y-3">
               {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : bookings.length === 0 ? (
             <p className="p-12 text-center text-sm text-slate-500">
-              No bookings matched. Try a different filter.
+              No bookings matched. Try <strong>All bookings</strong> or search{" "}
+              <strong>Maddie</strong> / customer email.
             </p>
           ) : (
             <div className="divide-y divide-slate-100">
-              {filtered.map((b) => {
+              {bookings.map((b) => {
                 const statusKey = (b.status || "").toLowerCase();
                 return (
                   <button
