@@ -277,6 +277,47 @@ serve(async (req) => {
         return json({ ok: true, flag: updated });
       }
 
+      case "delete_cleaner": {
+        // Hard-remove from the directory (admin only). Reassign open jobs first.
+        const { data: adminRoles } = await adminClient
+          .from("user_roles").select("role").eq("user_id", callerId);
+        const isAdmin = (adminRoles || []).some((r: any) => r.role === "admin");
+        if (!isAdmin) return json({ error: "Only admins can permanently delete cleaners" }, 403);
+
+        const confirm = String(body.confirmName || "").trim().toLowerCase();
+        const expected = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim().toLowerCase();
+        if (!confirm || confirm !== expected) {
+          return json({
+            error: "Type the cleaner's full name in confirmName to confirm permanent deletion",
+            expectedName: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
+          }, 400);
+        }
+
+        const reassigned = await markFutureAssignmentsForReassignment(
+          adminClient, cleanerId, callerId, "cleaner_deleted",
+        );
+
+        if (cleaner.user_id) {
+          try {
+            await adminClient.auth.admin.deleteUser(cleaner.user_id);
+          } catch (authErr) {
+            console.warn("[cleaner-admin-action] auth user delete failed", authErr);
+          }
+        }
+
+        const { error: delErr } = await adminClient.from("cleaners").delete().eq("id", cleanerId);
+        if (delErr) throw delErr;
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.deleted",
+          source: "cleaner-admin-action",
+          summary: `Cleaner permanently removed from directory: ${cleaner.first_name || ""} ${cleaner.last_name || ""}`,
+          data: { cleaner_id: cleanerId, by: callerId, reassigned_jobs: reassigned.length },
+        });
+
+        return json({ ok: true, deleted: true, reassignedJobs: reassigned });
+      }
+
       case "update_compliance": {
         const c = body.compliance || {};
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };

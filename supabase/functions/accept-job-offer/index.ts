@@ -22,31 +22,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GHL_BASE = "https://services.leadconnectorhq.com";
-const GHL_VERSION = "2021-07-28";
-
 const log = (s: string, d?: unknown) =>
   console.log(`[ACCEPT-OFFER] ${s}${d ? ` ${JSON.stringify(d)}` : ""}`);
-
-async function loadCustomFieldMap(token: string, locationId: string): Promise<Record<string, string>> {
-  try {
-    const r = await fetch(`${GHL_BASE}/locations/${encodeURIComponent(locationId)}/customFields`, {
-      headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION, Accept: "application/json" },
-    });
-    if (!r.ok) return {};
-    const j = await r.json();
-    const map: Record<string, string> = {};
-    for (const f of (j.customFields ?? []) as Array<any>) {
-      if (!f?.id) continue;
-      const raw = (f.fieldKey || f.key || "") as string;
-      const bare = raw.split(".").pop() || raw;
-      if (bare) map[bare] = f.id;
-      if (raw) map[raw] = f.id;
-      if (f.name) map[f.name] = f.id;
-    }
-    return map;
-  } catch { return {}; }
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -280,62 +257,16 @@ serve(async (req) => {
       log("acceptance metric update failed", err instanceof Error ? err.message : String(err));
     }
 
-    // GHL custom field updates on the customer contact.
-    try {
-      const ghlToken = (Deno.env.get("GHL_PIT_TOKEN") || "").trim();
-      const ghlLocation = (Deno.env.get("GHL_LOCATION_ID") || "").trim();
-      const customerContactId = (bookingRow as any)?.ghl_contact_id as string | undefined;
-      if (ghlToken && ghlLocation && customerContactId) {
-        const { data: allAssignments } = await supabase
-          .from("job_assignments")
-          .select("id, cleaner_id, role, accepted_at")
-          .eq("job_id", job.id)
-          .or("status.ilike.confirmed,status.ilike.accepted")
-          .order("accepted_at", { ascending: true });
-        const cleanerIds = (allAssignments || []).map((a: any) => a.cleaner_id);
-        const { data: cleanerRows } = cleanerIds.length
-          ? await supabase.from("cleaners").select("id, first_name, last_name, phone").in("id", cleanerIds)
-          : ({ data: [] as any[] } as any);
-        const cleanerById: Record<string, any> = {};
-        (cleanerRows || []).forEach((c: any) => (cleanerById[c.id] = c));
-        const ordered = (allAssignments || [])
-          .slice()
-          .sort((a: any, b: any) => {
-            const ra = String(a.role || "").toLowerCase() === "lead" ? 0 : 1;
-            const rb = String(b.role || "").toLowerCase() === "lead" ? 0 : 1;
-            if (ra !== rb) return ra - rb;
-            return new Date(a.accepted_at || 0).getTime() - new Date(b.accepted_at || 0).getTime();
-          });
-        const fieldMap = await loadCustomFieldMap(ghlToken, ghlLocation);
-        const desired: Record<string, string> = { team_size_assigned: String(ordered.length) };
-        ordered.slice(0, 3).forEach((row: any, idx: number) => {
-          const slot = idx + 1;
-          const c = cleanerById[row.cleaner_id];
-          if (!c) return;
-          desired[`${slot}_contractor`] = [c.first_name, c.last_name].filter(Boolean).join(" ") || "Cleaner";
-          desired[`${slot}_contractor_number`] = c.phone || "";
+    // Refresh GHL contractor / team size / duration fields via full booking sync.
+    if (bookingRow?.id) {
+      try {
+        await supabase.functions.invoke("send-zapier-webhook", {
+          body: { bookingId: bookingRow.id },
         });
-        const customFields: Array<{ id: string; field_value: string }> = [];
-        for (const [key, val] of Object.entries(desired)) {
-          const fid = fieldMap[key] ?? fieldMap[`contact.${key}`];
-          if (fid && val) customFields.push({ id: fid, field_value: val });
-        }
-        if (customFields.length > 0) {
-          await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(customerContactId)}`, {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${ghlToken}`,
-              Version: GHL_VERSION,
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({ customFields }),
-          });
-          log("GHL custom fields updated", { contact: customerContactId, fields: customFields.length });
-        }
+        log("GHL booking sync triggered after accept", { bookingId: bookingRow.id });
+      } catch (err) {
+        log("GHL sync invoke failed (non-fatal)", err instanceof Error ? err.message : String(err));
       }
-    } catch (err) {
-      log("GHL update failed (non-fatal)", err instanceof Error ? err.message : String(err));
     }
 
     try {

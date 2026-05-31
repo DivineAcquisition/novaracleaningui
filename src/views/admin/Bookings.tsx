@@ -61,6 +61,9 @@ interface BookingRow {
   final_charge_cents: number | null;
   payment_intent_id: string | null;
   cleaner_id: string | null;
+  job_id: string | null;
+  num_cleaners_assigned: number | null;
+  estimated_duration_hours: number | null;
   created_at: string;
   uses_credit: boolean | null;
   cancel_reason: string | null;
@@ -111,7 +114,7 @@ export default function AdminBookings() {
       let q = supabase
         .from("bookings")
         .select(
-          "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, created_at, uses_credit, cancel_reason, service_duration",
+          "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, service_duration",
         )
         // Order by created_at so the most-recently-booked row floats to
         // the top — that's what an operator opening the tab needs to see
@@ -314,6 +317,165 @@ export default function AdminBookings() {
   );
 }
 
+// ─── Manual cleaner assign (GHL contractor fields) ───────────────────
+
+interface CleanerOption {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  status: string | null;
+}
+
+function BookingAssignBlock({
+  booking,
+  working,
+  setWorking,
+  onMutated,
+}: {
+  booking: BookingRow;
+  working: string | null;
+  setWorking: (v: string | null) => void;
+  onMutated: () => void;
+}) {
+  const [cleaners, setCleaners] = useState<CleanerOption[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [loadingCleaners, setLoadingCleaners] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      setLoadingCleaners(true);
+      const { data } = await supabase
+        .from("cleaners")
+        .select("id, first_name, last_name, phone, status")
+        .eq("status", "active")
+        .eq("approved", true)
+        .order("last_name");
+      setCleaners((data || []) as CleanerOption[]);
+      setLoadingCleaners(false);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!booking.job_id) {
+      setSelectedIds(booking.cleaner_id ? [booking.cleaner_id] : []);
+      return;
+    }
+    void (async () => {
+      const { data } = await supabase
+        .from("job_assignments")
+        .select("cleaner_id, role, status")
+        .eq("job_id", booking.job_id)
+        .in("status", ["Confirmed", "Accepted", "Assigned", "Offered"]);
+      const ids = (data || [])
+        .slice()
+        .sort((a: any, b: any) =>
+          String(a.role || "").toLowerCase() === "lead" ? -1 : 1,
+        )
+        .map((a: any) => a.cleaner_id as string)
+        .filter(Boolean)
+        .slice(0, 3);
+      setSelectedIds(ids.length ? ids : booking.cleaner_id ? [booking.cleaner_id] : []);
+    })();
+  }, [booking.id, booking.job_id, booking.cleaner_id]);
+
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) {
+        toast.error("Select up to 3 cleaners.");
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
+  const assign = async () => {
+    if (selectedIds.length === 0) {
+      toast.error("Pick at least one cleaner from the directory.");
+      return;
+    }
+    setWorking("assign");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
+        body: { bookingId: booking.id, cleanerIds: selectedIds, mode: "replace" },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Cleaners assigned — GHL contractor fields updated.");
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  if (booking.status === "cancelled" || booking.status === "completed") return null;
+
+  return (
+    <Card className="border-indigo-200 bg-indigo-50/20">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-1.5 text-indigo-900">
+          <RiUserSmileLine className="w-4 h-4" />
+          Assign / reassign cleaners
+        </CardTitle>
+        <CardDescription>
+          Maps Contractor 1–3, numbers, team size, and estimated duration to GHL via PIT.
+          {booking.num_cleaners_assigned
+            ? ` Currently ${booking.num_cleaners_assigned} assigned.`
+            : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loadingCleaners ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 rounded-md bg-white p-2">
+            {cleaners.map((c) => {
+              const checked = selectedIds.includes(c.id);
+              return (
+                <label
+                  key={c.id}
+                  className={cn(
+                    "flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer",
+                    checked ? "bg-indigo-50" : "hover:bg-slate-50",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(c.id)}
+                    className="rounded border-slate-300"
+                  />
+                  <span className="font-medium text-slate-900">
+                    {c.first_name} {c.last_name}
+                  </span>
+                  <span className="text-xs text-slate-500 ml-auto">{c.phone || ""}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <Button
+          onClick={assign}
+          disabled={working === "assign"}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+        >
+          {working === "assign" ? (
+            <>
+              <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+              Saving &amp; syncing GHL…
+            </>
+          ) : (
+            "Save assignment & sync GHL"
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Side sheet with admin actions ───────────────────────────────────
 
 function BookingSheet({
@@ -425,6 +587,13 @@ function BookingSheet({
                 </span>
               </CardContent>
             </Card>
+
+            <BookingAssignBlock
+              booking={booking}
+              working={working}
+              setWorking={setWorking}
+              onMutated={onMutated}
+            />
 
             {/* Reschedule */}
             <Card className="border-slate-200">
