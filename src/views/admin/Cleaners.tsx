@@ -44,7 +44,21 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const CLEANER_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "terminated", label: "Terminated" },
+] as const;
 
 interface CleanerRow {
   id: string;
@@ -86,6 +100,7 @@ const STATUS_FILTERS = [
   { id: "active", label: "Active" },
   { id: "pending", label: "Pending" },
   { id: "inactive", label: "Inactive" },
+  { id: "terminated", label: "Terminated" },
 ] as const;
 
 const STATUS_BADGE: Record<string, string> = {
@@ -222,7 +237,13 @@ export default function AdminCleaners() {
   };
 
   const runAction = async (
-    action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
+    action:
+      | "deactivate"
+      | "terminate"
+      | "reactivate"
+      | "flag"
+      | "update_compliance"
+      | "set_status",
     extra: Record<string, unknown> = {},
   ) => {
     if (!selected) return;
@@ -475,7 +496,13 @@ function CleanerSheet({
   cleaner: CleanerRow | null;
   onClose: () => void;
   onAction: (
-    action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
+    action:
+      | "deactivate"
+      | "terminate"
+      | "reactivate"
+      | "flag"
+      | "update_compliance"
+      | "set_status",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -674,16 +701,143 @@ function ActionsBlock({
 }: {
   cleaner: CleanerRow;
   onAction: (
-    action: "deactivate" | "terminate" | "reactivate" | "flag" | "update_compliance",
+    action:
+      | "deactivate"
+      | "terminate"
+      | "reactivate"
+      | "flag"
+      | "update_compliance"
+      | "set_status",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
   actioning: boolean;
 }) {
   const s = (cleaner.status || "pending").toLowerCase();
+  const [statusDraft, setStatusDraft] = useState(s);
+  const [statusReason, setStatusReason] = useState("");
+  const [availableForBookings, setAvailableForBookings] = useState(
+    Boolean(cleaner.available_for_bookings),
+  );
+  const [approved, setApproved] = useState(Boolean(cleaner.approved));
+  const [skipCompliance, setSkipCompliance] = useState(false);
+
+  useEffect(() => {
+    setStatusDraft((cleaner.status || "pending").toLowerCase());
+    setAvailableForBookings(Boolean(cleaner.available_for_bookings));
+    setApproved(Boolean(cleaner.approved));
+    setStatusReason("");
+    setSkipCompliance(false);
+  }, [cleaner.id, cleaner.status, cleaner.available_for_bookings, cleaner.approved]);
+
+  const applyStatus = () => {
+    if (statusDraft === s) {
+      toast.info("Status is already set to " + statusDraft);
+      return;
+    }
+    if (
+      (statusDraft === "inactive" || statusDraft === "terminated") &&
+      !statusReason.trim()
+    ) {
+      toast.error("Add a short reason for inactive or terminated status.");
+      return;
+    }
+    if (
+      statusDraft === "terminated" &&
+      !confirm("Set status to terminated? They will lose booking eligibility.")
+    ) {
+      return;
+    }
+    onAction("set_status", {
+      status: statusDraft,
+      reason: statusReason.trim() || "admin_manual_status_change",
+      availableForBookings: availableForBookings,
+      approved,
+      skipComplianceCheck: skipCompliance,
+    });
+  };
+
   return (
     <div className="space-y-3">
-      <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Lifecycle</p>
+      <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+        Status (manual)
+      </p>
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <Label className="text-xs text-slate-600">Directory status</Label>
+            <Select value={statusDraft} onValueChange={setStatusDraft} disabled={actioning}>
+              <SelectTrigger className="bg-white mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CLEANER_STATUSES.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-slate-600">Reason (inactive / terminated)</Label>
+            <Input
+              className="bg-white mt-1"
+              value={statusReason}
+              onChange={(e) => setStatusReason(e.target.value)}
+              placeholder="e.g. seasonal pause"
+              disabled={actioning}
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={availableForBookings}
+              onChange={(e) => setAvailableForBookings(e.target.checked)}
+              disabled={actioning}
+              className="rounded border-slate-300"
+            />
+            <span className="text-slate-700">Available for bookings</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={approved}
+              onChange={(e) => setApproved(e.target.checked)}
+              disabled={actioning}
+              className="rounded border-slate-300"
+            />
+            <span className="text-slate-700">Approved</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={skipCompliance}
+              onChange={(e) => setSkipCompliance(e.target.checked)}
+              disabled={actioning}
+              className="rounded border-slate-300"
+            />
+            <span className="text-slate-700">Skip compliance (admin)</span>
+          </label>
+        </div>
+        <Button
+          type="button"
+          disabled={actioning || statusDraft === s}
+          onClick={applyStatus}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white"
+        >
+          {actioning ? (
+            <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+          ) : (
+            <RiCheckLine className="w-4 h-4 mr-1.5" />
+          )}
+          Update status
+        </Button>
+      </div>
+
+      <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Lifecycle shortcuts</p>
       <div className="flex flex-wrap gap-2">
         {s === "active" || s === "pending" ? (
           <Button

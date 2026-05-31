@@ -196,6 +196,114 @@ serve(async (req) => {
         return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
       }
 
+      case "set_status": {
+        const ALLOWED = new Set(["pending", "active", "inactive", "terminated"]);
+        const newStatus = String(body.status || "").trim().toLowerCase();
+        if (!ALLOWED.has(newStatus)) {
+          return json({ error: `status must be one of: ${[...ALLOWED].join(", ")}` }, 400);
+        }
+        const prevStatus = String(cleaner.status || "pending").toLowerCase();
+        if (newStatus === prevStatus) {
+          return json({ ok: true, cleaner, unchanged: true });
+        }
+
+        const reason = String(body.reason || "admin_manual_status_change").trim();
+        const skipCompliance = Boolean(body.skipComplianceCheck);
+
+        if (newStatus === "active" && !skipCompliance) {
+          const today = new Date().toISOString().slice(0, 10);
+          const blockers: string[] = [];
+          if (!cleaner.background_check_expires_at) blockers.push("background_check_not_on_file");
+          else if (cleaner.background_check_expires_at < today) blockers.push("background_check_expired");
+          if (!cleaner.insurance_verified) blockers.push("insurance_not_verified");
+          else if (cleaner.insurance_expires_at && cleaner.insurance_expires_at < today) {
+            blockers.push("insurance_expired");
+          }
+          if (blockers.length > 0) {
+            return json({
+              error: "compliance blockers prevent setting active — use skipComplianceCheck to override",
+              blockers,
+            }, 409);
+          }
+        }
+
+        if (skipCompliance) {
+          const { data: adminRoles } = await adminClient
+            .from("user_roles").select("role").eq("user_id", callerId);
+          const isAdmin = (adminRoles || []).some((r: any) => r.role === "admin");
+          if (!isAdmin) {
+            return json({ error: "Only admins can skip compliance checks" }, 403);
+          }
+        }
+
+        const patch: Record<string, unknown> = {
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (body.approved !== undefined) patch.approved = Boolean(body.approved);
+        if (body.availableForBookings !== undefined) {
+          patch.available_for_bookings = Boolean(body.availableForBookings);
+        }
+
+        if (newStatus === "active") {
+          patch.available_for_bookings = body.availableForBookings ?? true;
+          patch.approved = body.approved ?? true;
+          patch.deactivated_at = null;
+          patch.deactivation_reason = null;
+          if (!cleaner.activated_at) patch.activated_at = new Date().toISOString();
+        } else if (newStatus === "pending") {
+          patch.available_for_bookings = body.availableForBookings ?? false;
+          if (body.approved === undefined) patch.approved = false;
+        } else if (newStatus === "inactive") {
+          patch.available_for_bookings = false;
+          patch.deactivated_at = new Date().toISOString();
+          patch.deactivation_reason = reason;
+        } else if (newStatus === "terminated") {
+          patch.available_for_bookings = false;
+          patch.approved = false;
+          patch.terminated_at = new Date().toISOString();
+          patch.termination_reason = reason;
+          patch.deactivated_at = cleaner.deactivated_at ?? new Date().toISOString();
+          patch.deactivation_reason = cleaner.deactivation_reason ?? reason;
+        }
+
+        const { data: updated, error: upErr } = await adminClient
+          .from("cleaners")
+          .update(patch)
+          .eq("id", cleanerId)
+          .select()
+          .maybeSingle();
+        if (upErr) throw upErr;
+
+        let reassigned: unknown[] = [];
+        if (newStatus === "inactive" || newStatus === "terminated") {
+          reassigned = await markFutureAssignmentsForReassignment(
+            adminClient, cleanerId, callerId, `cleaner_status_${newStatus}:${reason}`,
+          );
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.status_changed",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary: `Cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""}: ${prevStatus} → ${newStatus}`,
+          data: {
+            from: prevStatus,
+            to: newStatus,
+            reason,
+            by: callerId,
+            skip_compliance: skipCompliance,
+            reassigned_jobs: reassigned.length,
+          },
+        });
+
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
+
+        return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
+      }
+
       case "reactivate": {
         if (cleaner.status === "terminated") {
           return json({ error: "cannot reactivate a terminated cleaner; create a new record instead", code: "TERMINATED" }, 409);
