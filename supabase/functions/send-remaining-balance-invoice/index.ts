@@ -1,27 +1,16 @@
 // ─── send-remaining-balance-invoice ──────────────────────────────────────
 //
 // Creates and sends a Stripe Invoice for the remaining balance on a
-// deposit-paid booking. Intended as a safety net for the new flow where
-// stripe-webhook is supposed to off-session-charge the saved card when
-// the cleaner marks the booking complete, but the customer wants/needs
-// a hosted invoice link emailed to them (e.g. waiting for a check, or
-// preferring a manual click-to-pay flow).
-//
-// Idempotent: if the booking row already has `stripe_invoice_id`, the
-// function returns the existing `hosted_invoice_url` without creating
-// a duplicate invoice.
+// deposit-paid booking, or charges the saved card off-session when
+// chargeOffSession is true.
 //
 // Body:
-//   { bookingId: "uuid" }
-// Response:
-//   { success: true, invoiceId, hostedInvoiceUrl }
-//
-// Reads the Stripe secret via the DB-override layer (`app_secrets`) so
-// a key rotation propagates on next cold start.
+//   { bookingId, lineItems?, amountCents?, daysUntilDue?, chargeOffSession? }
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
+import { invoicePaymentSettingsSaveCard } from "../_shared/stripe-invoice-save-card.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,19 +23,19 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[REMAINING-BALANCE-INVOICE] ${step}${tail}`);
 };
 
+interface InvoiceLineItem {
+  amountCents: number;
+  description: string;
+}
+
 interface InvoiceRequest {
   bookingId: string;
-  /** When true, charge saved card off-session instead of sending invoice. */
   chargeOffSession?: boolean;
-  /** Optional override — when omitted, uses total - deposit. */
   amountCents?: number;
-  /** Optional override for the auto-collect days. Defaults to days
-   *  until the service date (capped at 30). */
+  lineItems?: InvoiceLineItem[];
   daysUntilDue?: number;
 }
 
-// Inline copy of resolveSecret so the function has no relative
-// dependencies — keeps deployment simple via the MCP deploy tool.
 async function resolveStripeKey(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -71,11 +60,7 @@ serve(async (req) => {
 
   try {
     const body: InvoiceRequest = await req.json();
-<<<<<<< HEAD
-    const { bookingId, amountCents, daysUntilDue } = body;
-=======
-    const { bookingId, amountCents, daysUntilDue, chargeOffSession } = body;
->>>>>>> origin/cursor/stripe-account-charge-maddie-f411
+    const { bookingId, amountCents, daysUntilDue, lineItems, chargeOffSession } = body;
     if (!bookingId) {
       return new Response(JSON.stringify({ error: "bookingId required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -102,12 +87,30 @@ serve(async (req) => {
       });
     }
 
+    const normalizedLineItems = Array.isArray(lineItems)
+      ? lineItems
+          .map((item) => ({
+            amountCents: Number(item.amountCents),
+            description: String(item.description || "").trim(),
+          }))
+          .filter((item) =>
+            Number.isFinite(item.amountCents) && item.amountCents > 0 &&
+            item.description.length > 0
+          )
+      : [];
 
-    const remaining = amountCents ??
-      Math.max(
-        0,
-        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-      );
+    const remainingFromLines = normalizedLineItems.reduce(
+      (sum, item) => sum + item.amountCents,
+      0,
+    );
+
+    const remaining = normalizedLineItems.length > 0
+      ? remainingFromLines
+      : (amountCents ??
+        Math.max(
+          0,
+          (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+        ));
 
     if (chargeOffSession) {
       if (remaining <= 0) {
@@ -145,12 +148,10 @@ serve(async (req) => {
       if (!customerId) throw new Error(`No Stripe customer for ${booking.email}`);
       await stripe.customers.retrieve(customerId);
 
-      const pms = await stripe.paymentMethods.list({
-        customer: customerId,
-        type: "card",
-        limit: 1,
-      });
-      const pmId = pms.data[0]?.id;
+      const { resolveOffSessionPaymentMethod } = await import(
+        "../_shared/resolve-off-session-payment-method.ts"
+      );
+      const pmId = await resolveOffSessionPaymentMethod(stripe, customerId);
       if (!pmId) throw new Error("No saved card on file for off-session charge");
 
       const bookingRef = booking.booking_number
@@ -189,12 +190,6 @@ serve(async (req) => {
         .eq("booking_id", bookingId)
         .eq("webhook_url", "stripe:balance_auto_charge");
 
-      logStep("Off-session charge succeeded", {
-        paymentIntentId: charge.id,
-        amountCents: remaining,
-        customerId,
-      });
-
       return new Response(
         JSON.stringify({
           success: true,
@@ -207,12 +202,8 @@ serve(async (req) => {
       );
     }
 
-    // Already invoiced? Return the existing url so the UI can show it
-    // without spamming Stripe (and the customer's inbox).
     if (booking.stripe_invoice_id && booking.hosted_invoice_url) {
-      logStep("Invoice already exists", {
-        invoiceId: booking.stripe_invoice_id,
-      });
+      logStep("Invoice already exists", { invoiceId: booking.stripe_invoice_id });
       return new Response(
         JSON.stringify({
           success: true,
@@ -220,35 +211,14 @@ serve(async (req) => {
           hostedInvoiceUrl: booking.hosted_invoice_url,
           existing: true,
         }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        },
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }
 
-<<<<<<< HEAD
-    // Compute remaining balance. Member-credit bookings have no
-    // balance, paid-in-full bookings have no balance, otherwise
-    // total - deposit.
-    const remaining = amountCents ??
-      Math.max(
-        0,
-        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-      );
-=======
->>>>>>> origin/cursor/stripe-account-charge-maddie-f411
     if (remaining <= 0) {
-      logStep("No remaining balance", {
-        total: booking.total_estimate_cents,
-        deposit: booking.deposit_cents,
-      });
       return new Response(
         JSON.stringify({ success: true, skipped: true, reason: "no-balance" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        },
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }
 
@@ -261,10 +231,6 @@ serve(async (req) => {
     }
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
-    // Resolve / create the Stripe customer so the invoice has a
-    // billing target. If the booking row already has a customer_id
-    // that starts with cus_ we reuse it; otherwise we look up by
-    // email and create if missing.
     let customerId: string | null = null;
     if (
       booking.customer_id && typeof booking.customer_id === "string" &&
@@ -272,32 +238,24 @@ serve(async (req) => {
     ) {
       customerId = booking.customer_id;
     } else {
-      const found = await stripe.customers.list({
-        email: booking.email,
-        limit: 1,
-      });
+      const found = await stripe.customers.list({ email: booking.email, limit: 1 });
       if (found.data.length > 0) {
         customerId = found.data[0].id;
       } else {
         const created = await stripe.customers.create({
           email: booking.email,
-          name: `${booking.first_name || ""} ${booking.last_name || ""}`.trim() ||
-            undefined,
+          name: `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || undefined,
           phone: booking.phone || undefined,
         });
         customerId = created.id;
       }
     }
 
-    // Default: due in N days, where N = days between today and the
-    // service date (rounded up, capped between 0 and 30). For
-    // services already in the past, we send `due_date = today`.
     const computedDays = (() => {
       if (typeof daysUntilDue === "number") return Math.max(0, daysUntilDue);
       if (booking.service_date) {
         const svc = new Date(`${booking.service_date}T12:00:00`).getTime();
-        const now = Date.now();
-        const diffDays = Math.ceil((svc - now) / 86400000);
+        const diffDays = Math.ceil((svc - Date.now()) / 86400000);
         return Math.min(30, Math.max(0, diffDays));
       }
       return 7;
@@ -310,19 +268,28 @@ serve(async (req) => {
       ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
       : `BK-${String(bookingId).slice(0, 8)}`;
 
-    // 1. Add an upcoming invoice item, then create the invoice with
-    //    pending_invoice_items_behavior='include'. This is the
-    //    standard Stripe pattern for billing a custom amount.
-    await stripe.invoiceItems.create({
-      customer: customerId!,
-      amount: remaining,
-      currency: "usd",
-      description: `${bookingRef} — ${description}`,
-    });
+    if (normalizedLineItems.length > 0) {
+      for (const item of normalizedLineItems) {
+        await stripe.invoiceItems.create({
+          customer: customerId!,
+          amount: item.amountCents,
+          currency: "usd",
+          description: item.description,
+          metadata: {
+            booking_id: String(bookingId),
+            booking_number: booking.booking_number ? String(booking.booking_number) : "",
+          },
+        });
+      }
+    } else {
+      await stripe.invoiceItems.create({
+        customer: customerId!,
+        amount: remaining,
+        currency: "usd",
+        description: `${bookingRef} — ${description}`,
+      });
+    }
 
-    const { invoicePaymentSettingsSaveCard } = await import(
-      "../_shared/stripe-invoice-save-card.ts"
-    );
     const invoice = await stripe.invoices.create({
       customer: customerId!,
       collection_method: "send_invoice",
@@ -331,20 +298,15 @@ serve(async (req) => {
       description,
       metadata: {
         booking_id: String(bookingId),
-        booking_number: booking.booking_number
-          ? String(booking.booking_number)
-          : "",
+        booking_number: booking.booking_number ? String(booking.booking_number) : "",
         purpose: "remaining_balance",
       },
       auto_advance: true,
       payment_settings: invoicePaymentSettingsSaveCard,
     });
 
-    if (!invoice.id) {
-      throw new Error("Stripe did not return an invoice id");
-    }
+    if (!invoice.id) throw new Error("Stripe did not return an invoice id");
 
-    // Finalize so the hosted url is generated, then send.
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
       auto_advance: true,
     });
@@ -352,8 +314,6 @@ serve(async (req) => {
 
     const hostedInvoiceUrl = finalized.hosted_invoice_url || null;
 
-    // Persist on the booking row so the confirmation page (and the
-    // admin tools) can deep-link to the hosted invoice.
     await supabase
       .from("bookings")
       .update({
@@ -366,6 +326,7 @@ serve(async (req) => {
       invoiceId: invoice.id,
       hostedInvoiceUrl,
       amountCents: remaining,
+      lineItemCount: normalizedLineItems.length,
     });
 
     return new Response(
@@ -375,10 +336,7 @@ serve(async (req) => {
         hostedInvoiceUrl,
         amountCents: remaining,
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      },
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
