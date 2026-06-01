@@ -225,10 +225,7 @@ verify_jwt = false
 [functions.submit-rating]
 verify_jwt = false
 
-[functions.send-rating-reminders]
-verify_jwt = false
-
-[functions.escalate-overdue-bookings]
+[functions.adjust-booking-invoice]
 verify_jwt = false
 
 # Token-only cleaner endpoints — the response_token / photo token IS the
