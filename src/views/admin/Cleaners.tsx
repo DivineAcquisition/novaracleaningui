@@ -7,7 +7,7 @@
 // - Filter by status (active / pending / inactive) and ZIP
 // - Click a row → side sheet with:
 //     * Profile (name, phone, email, home zip, pay tier)
-//     * Onboarding progress (the 5 ob_* flags + phone_verified)
+//     * Onboarding progress (phone verified + Stripe) + intro profile fields
 //     * Performance metrics (accept rate, on-time, rating, completed)
 //     * Actions: approve, deactivate, terminate, reactivate, resync to GHL,
 //                resend onboarding link, flag
@@ -84,11 +84,17 @@ interface CleanerRow {
   jobs_assigned_last_7d: number | null;
   onboarding_complete: boolean | null;
   phone_verified: boolean | null;
-  ob_agreement_signed: boolean | null;
-  ob_google_chat_joined: boolean | null;
-  ob_supplies_checklist_viewed: boolean | null;
   ob_payouts_setup: boolean | null;
-  ob_training_accessed: boolean | null;
+  payouts_enabled: boolean | null;
+  stripe_account_id: string | null;
+  home_address: string | null;
+  home_city: string | null;
+  home_zip: string | null;
+  service_zip_codes: string[] | null;
+  max_travel_miles: number | null;
+  preferred_work_days: string[] | null;
+  skillset: string[] | null;
+  available_for_bookings: boolean | null;
   ghl_synced_at: string | null;
   ghl_sync_error: string | null;
   created_at: string;
@@ -113,15 +119,11 @@ const STATUS_BADGE: Record<string, string> = {
 const fullName = (c: CleanerRow) =>
   [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
 
+const stripeOnboardingDone = (c: CleanerRow): boolean =>
+  Boolean(c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id);
+
 const onboardingProgress = (c: CleanerRow): number => {
-  const flags = [
-    c.phone_verified,
-    c.ob_agreement_signed,
-    c.ob_google_chat_joined,
-    c.ob_supplies_checklist_viewed,
-    c.ob_payouts_setup,
-    c.ob_training_accessed,
-  ];
+  const flags = [c.phone_verified, stripeOnboardingDone(c)];
   const done = flags.filter(Boolean).length;
   return Math.round((done / flags.length) * 100);
 };
@@ -160,7 +162,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_agreement_signed,ob_google_chat_joined,ob_supplies_checklist_viewed,ob_payouts_setup,ob_training_accessed,ghl_synced_at,ghl_sync_error,created_at,activated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -597,41 +599,77 @@ function ContactSection({ cleaner }: { cleaner: CleanerRow }) {
   );
 }
 
-const OB_STEPS: Array<{ key: keyof CleanerRow; label: string }> = [
-  { key: "phone_verified", label: "Phone verified" },
-  { key: "ob_agreement_signed", label: "Independent contractor agreement signed" },
-  { key: "ob_google_chat_joined", label: "Joined the team Google Chat" },
-  { key: "ob_supplies_checklist_viewed", label: "Viewed supplies checklist" },
-  { key: "ob_payouts_setup", label: "Stripe payouts connected" },
-  { key: "ob_training_accessed", label: "Accessed training portal" },
+const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string }> = [
+  { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
+  { done: stripeOnboardingDone, label: "Stripe payouts connected" },
 ];
 
 function OnboardingChecklist({ cleaner }: { cleaner: CleanerRow }) {
+  const introReady =
+    Boolean(cleaner.phone_verified) && stripeOnboardingDone(cleaner);
+
   return (
-    <ul className="space-y-1.5">
-      {OB_STEPS.map((s) => {
-        const done = Boolean((cleaner as any)[s.key]);
-        return (
-          <li
-            key={String(s.key)}
-            className={cn(
-              "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm",
-              done ? "bg-emerald-50 text-emerald-900" : "bg-slate-50 text-slate-600",
-            )}
-          >
-            {done ? (
-              <RiCheckboxCircleFill className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <RiCircleLine className="w-4 h-4 text-slate-400 shrink-0" />
-            )}
-            <span>{s.label}</span>
-          </li>
-        );
-      })}
-      <li className="text-[11px] text-slate-500 px-1 pt-2">
-        Onboarding complete flag: {cleaner.onboarding_complete ? "yes" : "no"}
-      </li>
-    </ul>
+    <div className="space-y-4">
+      <ul className="space-y-1.5">
+        {OB_STEPS.map((s) => {
+          const done = s.done(cleaner);
+          return (
+            <li
+              key={s.label}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm",
+                done ? "bg-emerald-50 text-emerald-900" : "bg-slate-50 text-slate-600",
+              )}
+            >
+              {done ? (
+                <RiCheckboxCircleFill className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <RiCircleLine className="w-4 h-4 text-slate-400 shrink-0" />
+              )}
+              <span>{s.label}</span>
+            </li>
+          );
+        })}
+        <li className="text-[11px] text-slate-500 px-1 pt-2">
+          Portal ready (phone + Stripe): {introReady ? "yes" : "no"}
+          {cleaner.onboarding_complete ? " · DB onboarding_complete: yes" : ""}
+        </li>
+      </ul>
+
+      <IntroProfileSection cleaner={cleaner} />
+    </div>
+  );
+}
+
+function IntroProfileSection({ cleaner }: { cleaner: CleanerRow }) {
+  const days = cleaner.preferred_work_days?.length
+    ? cleaner.preferred_work_days.join(", ")
+    : "—";
+  const zips = cleaner.service_zip_codes?.length
+    ? cleaner.service_zip_codes.join(", ")
+    : cleaner.home_zip || "—";
+  const skills = cleaner.skillset?.length ? cleaner.skillset.join(", ") : "—";
+  const address = [cleaner.home_address, cleaner.home_city, cleaner.home_zip, cleaner.state]
+    .filter(Boolean)
+    .join(", ") || "—";
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+        Intro / onboarding profile
+      </p>
+      <dl className="grid grid-cols-1 gap-y-2 text-sm">
+        <Cell label="Home address" value={address} />
+        <Cell label="Travel radius" value={cleaner.max_travel_miles != null ? `${cleaner.max_travel_miles} mi` : "—"} />
+        <Cell label="Preferred days" value={days} />
+        <Cell label="Service ZIPs" value={zips} />
+        <Cell label="Skillset" value={skills} />
+        <Cell
+          label="Available for bookings"
+          value={cleaner.available_for_bookings ? "Yes" : "No"}
+        />
+      </dl>
+    </div>
   );
 }
 
