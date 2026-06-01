@@ -36,6 +36,8 @@ const logStep = (step: string, details?: unknown) => {
 
 interface InvoiceRequest {
   bookingId: string;
+  /** When true, charge saved card off-session instead of sending invoice. */
+  chargeOffSession?: boolean;
   /** Optional override — when omitted, uses total - deposit. */
   amountCents?: number;
   /** Optional override for the auto-collect days. Defaults to days
@@ -69,7 +71,11 @@ serve(async (req) => {
 
   try {
     const body: InvoiceRequest = await req.json();
+<<<<<<< HEAD
     const { bookingId, amountCents, daysUntilDue } = body;
+=======
+    const { bookingId, amountCents, daysUntilDue, chargeOffSession } = body;
+>>>>>>> origin/cursor/stripe-account-charge-maddie-f411
     if (!bookingId) {
       return new Response(JSON.stringify({ error: "bookingId required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -96,6 +102,111 @@ serve(async (req) => {
       });
     }
 
+
+    const remaining = amountCents ??
+      Math.max(
+        0,
+        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+      );
+
+    if (chargeOffSession) {
+      if (remaining <= 0) {
+        return new Response(
+          JSON.stringify({ success: true, skipped: true, reason: "no-balance" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
+      }
+
+      const stripeKey = await resolveStripeKey(supabase);
+      if (!stripeKey) {
+        return new Response(JSON.stringify({ error: "STRIPE_SECRET_KEY missing" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        });
+      }
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+      let customerId: string | null = null;
+      if (booking.customer_id && String(booking.customer_id).startsWith("cus_")) {
+        customerId = booking.customer_id;
+      }
+      const { data: custRow } = await supabase
+        .from("customers")
+        .select("stripe_customer_id")
+        .eq("email", booking.email)
+        .maybeSingle();
+      if (!customerId && custRow?.stripe_customer_id?.startsWith("cus_")) {
+        customerId = custRow.stripe_customer_id;
+      }
+      if (!customerId) {
+        const found = await stripe.customers.list({ email: booking.email, limit: 1 });
+        customerId = found.data[0]?.id ?? null;
+      }
+      if (!customerId) throw new Error(`No Stripe customer for ${booking.email}`);
+      await stripe.customers.retrieve(customerId);
+
+      const pms = await stripe.paymentMethods.list({
+        customer: customerId,
+        type: "card",
+        limit: 1,
+      });
+      const pmId = pms.data[0]?.id;
+      if (!pmId) throw new Error("No saved card on file for off-session charge");
+
+      const bookingRef = booking.booking_number
+        ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+        : `BK-${String(bookingId).slice(0, 8)}`;
+
+      const charge = await stripe.paymentIntents.create({
+        amount: remaining,
+        currency: "usd",
+        customer: customerId,
+        payment_method: pmId,
+        off_session: true,
+        confirm: true,
+        description: `${bookingRef} — Remaining balance (${booking.service_type || "cleaning"} on ${booking.service_date})`,
+        metadata: {
+          booking_id: String(bookingId),
+          booking_number: String(booking.booking_number ?? ""),
+          chargeType: "balance_auto_charge",
+        },
+      });
+
+      if (charge.status !== "succeeded") {
+        throw new Error(`Charge status: ${charge.status}`);
+      }
+
+      await supabase.from("bookings").update({
+        customer_id: customerId,
+        payment_intent_id: charge.id,
+        final_charge_cents: booking.total_estimate_cents,
+        payment_received_at: booking.payment_received_at || new Date().toISOString(),
+      }).eq("id", bookingId);
+
+      await supabase
+        .from("webhook_failures")
+        .update({ resolved: true })
+        .eq("booking_id", bookingId)
+        .eq("webhook_url", "stripe:balance_auto_charge");
+
+      logStep("Off-session charge succeeded", {
+        paymentIntentId: charge.id,
+        amountCents: remaining,
+        customerId,
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          charged: true,
+          paymentIntentId: charge.id,
+          amountCents: remaining,
+          customerId,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
     // Already invoiced? Return the existing url so the UI can show it
     // without spamming Stripe (and the customer's inbox).
     if (booking.stripe_invoice_id && booking.hosted_invoice_url) {
@@ -116,6 +227,7 @@ serve(async (req) => {
       );
     }
 
+<<<<<<< HEAD
     // Compute remaining balance. Member-credit bookings have no
     // balance, paid-in-full bookings have no balance, otherwise
     // total - deposit.
@@ -124,6 +236,8 @@ serve(async (req) => {
         0,
         (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
       );
+=======
+>>>>>>> origin/cursor/stripe-account-charge-maddie-f411
     if (remaining <= 0) {
       logStep("No remaining balance", {
         total: booking.total_estimate_cents,

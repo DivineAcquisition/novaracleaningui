@@ -225,9 +225,6 @@ verify_jwt = false
 [functions.submit-rating]
 verify_jwt = false
 
-[functions.adjust-booking-invoice]
-verify_jwt = false
-
 # Token-only cleaner endpoints — the response_token / photo token IS the
 # credential, so these must be reachable from the public SMS-link pages
 # without a Supabase session.
@@ -255,3 +252,6 @@ verify_jwt = true
 
 [functions.admin-list-bookings]
 verify_jwt = true
+
+[functions.admin-charge-booking-balance]
+verify_jwt = false
