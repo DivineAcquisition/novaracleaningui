@@ -168,16 +168,40 @@ serve(async (req) => {
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
     const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
 
-    // Promo codes are no longer honored — the only discounts in v4 are
-    // the per-service-tier rules in _shared/pricing.ts. A code on the
-    // payload is logged for analytics but never reduces the charge.
+    // v4: generic promo codes disabled — except testimonial VID-* rewards.
     let promoDiscountCents = 0;
     let promoCode = '';
     if (bookingData.promoCode) {
-      logStep("Promo code received but discounts are disabled in v4", {
-        code: String(bookingData.promoCode).toUpperCase(),
-      });
-      promoCode = String(bookingData.promoCode).toUpperCase();
+      promoCode = String(bookingData.promoCode).toUpperCase().trim();
+      if (promoCode.startsWith("VID-")) {
+        const { data: offer } = await supabaseClient
+          .from("testimonial_offers")
+          .select("id, status, customer_email, promo_code, redeemed_booking_id")
+          .eq("promo_code", promoCode)
+          .maybeSingle();
+        const emailNorm = customerEmail.toLowerCase();
+        if (!offer || offer.customer_email?.toLowerCase() !== emailNorm) {
+          logStep("Testimonial promo rejected — email mismatch", { promoCode });
+        } else if (offer.status !== "submitted") {
+          logStep("Testimonial promo rejected — video not submitted yet", { promoCode });
+        } else if (offer.redeemed_booking_id) {
+          logStep("Testimonial promo rejected — already redeemed", { promoCode });
+        } else {
+          const { count: completedCount } = await supabaseClient
+            .from("bookings")
+            .select("id", { count: "exact", head: true })
+            .eq("email", emailNorm)
+            .eq("status", "completed");
+          if ((completedCount ?? 0) < 1) {
+            logStep("Testimonial promo rejected — need a completed clean first", { promoCode, completedCount });
+          } else {
+            promoDiscountCents = Math.floor(subtotal * 0.5);
+            logStep("Testimonial promo applied (50% off 2nd clean)", { promoCode, promoDiscountCents });
+          }
+        }
+      } else {
+        logStep("Promo code received but discounts are disabled in v4", { code: promoCode });
+      }
     }
 
     logStep("Customer booking history", { 
@@ -225,7 +249,7 @@ serve(async (req) => {
 
     // v4: total is whatever the pricing module said, minus any wallet
     // credit. All "discounts" are already baked into calc.totalCents.
-    let totalAmount = Math.max(0, calc.totalCents - walletCreditCents);
+    let totalAmount = Math.max(0, calc.totalCents - promoDiscountCents - walletCreditCents);
     logStep("Base calculation (v4)", {
       subtotal,
       serviceTierDiscount,
@@ -450,6 +474,22 @@ serve(async (req) => {
     }
 
     logStep("Booking created successfully", { bookingId: booking.id });
+
+    if (promoDiscountCents > 0 && promoCode.startsWith("VID-")) {
+      await supabaseClient
+        .from("testimonial_offers")
+        .update({
+          status: "redeemed",
+          redeemed_booking_id: booking.id,
+        })
+        .eq("promo_code", promoCode);
+      await supabaseClient.rpc("increment_promo_use", { _code: promoCode }).catch(() => {
+        supabaseClient
+          .from("promo_codes")
+          .update({ total_uses: 1 })
+          .eq("code", promoCode);
+      });
+    }
 
     return new Response(
       JSON.stringify({

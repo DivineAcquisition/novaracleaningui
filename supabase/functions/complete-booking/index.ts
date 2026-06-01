@@ -384,10 +384,8 @@ serve(async (req) => {
             throw new Error(`No Stripe customer found for ${booking.email}`);
           }
 
-          const { resolveOffSessionPaymentMethod } = await import(
-            "../_shared/resolve-off-session-payment-method.ts"
-          );
-          const pmId = await resolveOffSessionPaymentMethod(stripe, customerId);
+          const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
+          const pmId = pms.data[0]?.id;
           if (!pmId) {
             throw new Error("No saved card on file for off-session charge");
           }
@@ -588,6 +586,21 @@ serve(async (req) => {
     } catch (smsErr) {
       logStep("Customer completion SMS failed (non-blocking)", {
         error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+      });
+    }
+
+    try {
+      const { submitUrl } = await sendTestimonialOffer(supabase, {
+        id: bookingId,
+        email: booking.email,
+        first_name: booking.first_name,
+        phone: booking.phone,
+        booking_number: booking.booking_number,
+      });
+      logStep("Testimonial offer sent", { submitUrl });
+    } catch (testimonialErr) {
+      logStep("Testimonial offer failed (non-blocking)", {
+        error: testimonialErr instanceof Error ? testimonialErr.message : String(testimonialErr),
       });
     }
 
