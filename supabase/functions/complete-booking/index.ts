@@ -564,12 +564,17 @@ serve(async (req) => {
       if (booking.phone) {
         const dateLabel = formatServiceDate(booking.service_date);
         let smsBody = `Novara Cleaning: Your cleaning${dateLabel ? ` on ${dateLabel}` : ""} is complete — thank you!`;
-        if (balanceChargeStatus === "charged") {
+        if (
+          balanceChargeStatus === "charged"
+          || balanceChargeStatus === "captured_hold"
+        ) {
           const remainingCents = Math.max(
             0,
             (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
           );
           smsBody += ` Your remaining balance of $${(remainingCents / 100).toFixed(2)} has been charged to the card on file.`;
+        } else if (balanceChargeStatus === "already_charged") {
+          smsBody += ` Your remaining balance was already charged to the card on file.`;
         } else if (balanceChargeStatus === "skipped_full_payment") {
           smsBody += ` Paid in full at booking — nothing more to do.`;
         } else if (balanceChargeStatus === "failed") {

@@ -681,13 +681,20 @@ export async function syncBookingLifecycle(args: {
   }
 
   let existing: { id: string } | null = null;
-  if (args.opportunityId) {
-    existing = { id: args.opportunityId };
-  } else if (pipelineId) {
+
+  // Job Dispatch sync must never hijack a Sales Pipeline opportunity.
+  // Only look up / create opportunities on the dispatch pipeline.
+  if (args.dispatchStage && pipelineId) {
     existing = await findOpportunityForContactInPipeline(contactId, pipelineId);
-  }
-  if (!existing) {
-    existing = await findLatestOpportunityForContact(contactId);
+  } else {
+    if (args.opportunityId) {
+      existing = { id: args.opportunityId };
+    } else if (pipelineId) {
+      existing = await findOpportunityForContactInPipeline(contactId, pipelineId);
+    }
+    if (!existing) {
+      existing = await findLatestOpportunityForContact(contactId);
+    }
   }
 
   if (existing) {

@@ -613,6 +613,20 @@ serve(async (req) => {
     const { contactId: ghlContactId, opportunityId: ghlOpportunityId } =
       await ghlPushBooking(supabase, booking, totalCents, ghlToken, ghlLocation);
 
+    if (ghlContactId || ghlOpportunityId) {
+      await supabase
+        .from("bookings")
+        .update({
+          ghl_contact_id: ghlContactId,
+          ghl_sales_opportunity_id: ghlOpportunityId,
+        })
+        .eq("id", bookingId);
+      logStep("GHL sales pipeline stamped on booking", {
+        ghlContactId,
+        ghlOpportunityId,
+      });
+    }
+
     // 5b. Book the appointment in the GHL Calendar so the contact's
     // calendar block shows the visit. Idempotent — book-ghl-appointment
     // updates an existing GHL appointment if one is already on the row.

@@ -9,6 +9,7 @@ import {
 import { syncBookingLifecycle, splitFullAddress } from "../_shared/ghl-client.ts";
 import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
 import { loadTeamCleanersForBooking } from "../_shared/ghl-booking-team.ts";
+import { syncBookingSalesPipeline } from "../_shared/ghl-sales-pipeline.ts";
 import { toE164US } from "../_shared/phone-format.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 
@@ -913,6 +914,25 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         customFieldsByKey: ghlCustomFields,
       },
     });
+
+    // Sales Pipeline — keep VA/lead card in sync (separate from Job Dispatch).
+    try {
+      const salesSync = await syncBookingSalesPipeline(supabase, {
+        booking,
+        monetaryValue: Math.round(totalChargedCentsForGhl / 100),
+      });
+      if (salesSync.salesOpportunityId) {
+        await supabase.from("bookings").update({
+          ghl_sales_opportunity_id: salesSync.salesOpportunityId,
+        }).eq("id", booking.id);
+        logStep("GHL sales pipeline sync", salesSync);
+      }
+    } catch (salesErr) {
+      logStep("GHL sales pipeline sync failed (non-critical)", {
+        error: salesErr instanceof Error ? salesErr.message : String(salesErr),
+      });
+    }
+
     logStep("GHL PIT sync complete", ghlResult);
 
     // Stamp the booking row as synced so the reconcile cron + the

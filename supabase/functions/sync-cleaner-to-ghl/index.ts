@@ -20,6 +20,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { provisionGhlUserFromTemplate } from "../_shared/ghl-users.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -309,6 +310,26 @@ serve(async (req) => {
       opportunityId = await upsertContractorOpportunity(token, locationId, contactId, cleaner, pipelineId, stageMap);
     }
 
+
+    // Provision GHL sub-account user (same permissions as template user).
+    let ghlUserId: string | null = (cleaner as { ghl_user_id?: string | null }).ghl_user_id || null;
+    if (!ghlUserId && cleaner.email && cleaner.first_name && cleaner.last_name) {
+      const password = `${String(cleaner.first_name)[0].toLowerCase()}${String(cleaner.last_name).replace(/\s+/g, "")}nv2025!`;
+      const userResult = await provisionGhlUserFromTemplate(supabase, {
+        email: cleaner.email,
+        firstName: cleaner.first_name,
+        lastName: cleaner.last_name,
+        phone: cleaner.phone,
+        password,
+      });
+      ghlUserId = userResult.ghlUserId;
+      if (ghlUserId) {
+        await supabase.from("cleaners").update({ ghl_user_id: ghlUserId }).eq("id", cleanerId);
+      } else if (userResult.error) {
+        console.warn("[sync-cleaner-to-ghl] GHL user provision:", userResult.error);
+      }
+    }
+
     await supabase
       .from("cleaners")
       .update({ ghl_synced_at: new Date().toISOString(), ghl_sync_error: null })
@@ -321,7 +342,7 @@ serve(async (req) => {
       data: { contact_id: contactId, opportunity_id: opportunityId, tags, custom_field_count: customFields.length },
     }).then(() => undefined).catch(() => undefined);
 
-    return json({ ok: true, ghl_contact_id: contactId, opportunity_id: opportunityId, tags, custom_field_count: customFields.length });
+    return json({ ok: true, ghl_contact_id: contactId, opportunity_id: opportunityId, ghl_user_id: ghlUserId, tags, custom_field_count: customFields.length });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[sync-cleaner-to-ghl] failed", cleanerId, message);

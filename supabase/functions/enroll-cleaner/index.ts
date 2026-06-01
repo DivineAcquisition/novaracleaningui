@@ -160,6 +160,15 @@ serve(async (req) => {
     }
 
     logStep("Cleaner enrolled successfully", { cleanerId: cleanerData.id });
+    try {
+      await supabaseAdmin.functions.invoke("sync-cleaner-to-ghl", {
+        body: { cleanerId: cleanerData.id },
+      });
+      logStep("GHL sync invoked");
+    } catch (ghlErr) {
+      logStep("GHL sync failed (non-critical)", ghlErr);
+    }
+
 
     return new Response(
       JSON.stringify({

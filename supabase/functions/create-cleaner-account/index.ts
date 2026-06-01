@@ -204,6 +204,19 @@ serve(async (req) => {
       logStep("Cleaner record created", { cleanerId: cleanerData.id });
     }
 
+
+    // GHL contact + contractor pipeline + location user (non-blocking).
+    try {
+      await supabaseAdmin.functions.invoke("sync-cleaner-to-ghl", {
+        body: { cleanerId: cleanerData.id },
+      });
+      logStep("GHL sync invoked");
+    } catch (ghlErr) {
+      logStep("GHL sync invoke failed (non-critical)", {
+        error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),
+      });
+    }
+
     return json({
       success: true,
       cleanerId: cleanerData.id,
