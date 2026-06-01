@@ -353,9 +353,11 @@ serve(async (req) => {
         home_size_id: homeSizeId,
         is_membership_signup: 'false',
       },
+      payment_intent_data: {
+        setup_future_usage: "off_session",
+      },
       ...(isMemberUsingCredit && {
-        payment_method_collection: 'always',
-        setup_future_usage: 'off_session',
+        payment_method_collection: "always",
       }),
     });
 

@@ -1220,6 +1220,56 @@ serve(async (req) => {
         break;
       }
 
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = typeof invoice.customer === "string"
+          ? invoice.customer
+          : invoice.customer?.id;
+        const bookingId = invoice.metadata?.booking_id;
+        const purpose = invoice.metadata?.purpose;
+
+        if (customerId && invoice.payment_intent) {
+          const piId = typeof invoice.payment_intent === "string"
+            ? invoice.payment_intent
+            : invoice.payment_intent.id;
+          try {
+            const pi = await stripe.paymentIntents.retrieve(piId);
+            const pmId = typeof pi.payment_method === "string"
+              ? pi.payment_method
+              : pi.payment_method?.id;
+            if (pmId) {
+              const pm = await stripe.paymentMethods.retrieve(pmId);
+              if (pm.customer && pm.customer !== customerId) {
+                logStep("Invoice PM on different customer — skip save", { pmId, customerId });
+              } else {
+                if (!pm.customer) {
+                  await stripe.paymentMethods.attach(pmId, { customer: customerId });
+                }
+                await stripe.customers.update(customerId, {
+                  invoice_settings: { default_payment_method: pmId },
+                });
+                logStep("Card saved from invoice for off-session balance charges", {
+                  customerId, pmId, purpose,
+                });
+              }
+            }
+          } catch (saveErr) {
+            logStep("Save card from invoice failed (non-blocking)", {
+              error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+            });
+          }
+        }
+
+        if (bookingId && customerId && (purpose === "deposit" || purpose === "full_payment")) {
+          await supabase.from("bookings").update({
+            customer_id: customerId,
+            payment_received_at: new Date().toISOString(),
+          }).eq("id", bookingId);
+          logStep("Booking updated from deposit/full invoice payment", { bookingId, purpose });
+        }
+        break;
+      }
+
       case 'account.updated': {
         const account = event.data.object as Stripe.Account;
         const accountId = account.id;

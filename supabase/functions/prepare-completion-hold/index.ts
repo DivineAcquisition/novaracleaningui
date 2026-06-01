@@ -377,8 +377,10 @@ async function processBooking(
   if (!customerId) {
     return await markFailed(supabase, booking, attempt, "missing_customer", "No Stripe customer found");
   }
-  const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
-  const pmId = pms.data[0]?.id;
+  const { resolveOffSessionPaymentMethod } = await import(
+    "../_shared/resolve-off-session-payment-method.ts"
+  );
+  const pmId = await resolveOffSessionPaymentMethod(stripe, customerId);
   if (!pmId) {
     return await markFailed(supabase, booking, attempt, "missing_payment_method", "No saved card on file");
   }

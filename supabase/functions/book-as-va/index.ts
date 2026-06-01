@@ -179,6 +179,9 @@ async function createAndSendInvoice(
     currency: "usd",
     description,
   });
+  const { invoicePaymentSettingsSaveCard } = await import(
+    "../_shared/stripe-invoice-save-card.ts"
+  );
   const invoice = await stripe.invoices.create({
     customer: customerId,
     collection_method: "send_invoice",
@@ -187,6 +190,7 @@ async function createAndSendInvoice(
     description,
     metadata,
     auto_advance: true,
+    payment_settings: invoicePaymentSettingsSaveCard,
   });
   if (!invoice.id) throw new Error("Stripe did not return invoice id");
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
@@ -612,20 +616,6 @@ serve(async (req) => {
     const ghlLocation = (Deno.env.get("GHL_LOCATION_ID") || "").trim();
     const { contactId: ghlContactId, opportunityId: ghlOpportunityId } =
       await ghlPushBooking(supabase, booking, totalCents, ghlToken, ghlLocation);
-
-    if (ghlContactId || ghlOpportunityId) {
-      await supabase
-        .from("bookings")
-        .update({
-          ghl_contact_id: ghlContactId,
-          ghl_sales_opportunity_id: ghlOpportunityId,
-        })
-        .eq("id", bookingId);
-      logStep("GHL sales pipeline stamped on booking", {
-        ghlContactId,
-        ghlOpportunityId,
-      });
-    }
 
     // 5b. Book the appointment in the GHL Calendar so the contact's
     // calendar block shows the visit. Idempotent — book-ghl-appointment

@@ -234,7 +234,7 @@ serve(async (req) => {
     // For paid-in-full bookings, this is a no-op. Idempotent: if we've
     // already charged (balance_payment_intent_id set), skip.
     let balanceChargeStatus: "skipped_full_payment" | "skipped_no_balance" |
-      "already_charged" | "charged" | "captured_hold" | "failed" = "skipped_no_balance";
+      "already_charged" | "charged" | "failed" = "skipped_no_balance";
     let balanceChargeError: string | null = null;
     try {
       const remainingCents = Math.max(
@@ -384,8 +384,10 @@ serve(async (req) => {
             throw new Error(`No Stripe customer found for ${booking.email}`);
           }
 
-          const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
-          const pmId = pms.data[0]?.id;
+          const { resolveOffSessionPaymentMethod } = await import(
+            "../_shared/resolve-off-session-payment-method.ts"
+          );
+          const pmId = await resolveOffSessionPaymentMethod(stripe, customerId);
           if (!pmId) {
             throw new Error("No saved card on file for off-session charge");
           }
@@ -564,17 +566,12 @@ serve(async (req) => {
       if (booking.phone) {
         const dateLabel = formatServiceDate(booking.service_date);
         let smsBody = `Novara Cleaning: Your cleaning${dateLabel ? ` on ${dateLabel}` : ""} is complete — thank you!`;
-        if (
-          balanceChargeStatus === "charged"
-          || balanceChargeStatus === "captured_hold"
-        ) {
+        if (balanceChargeStatus === "charged") {
           const remainingCents = Math.max(
             0,
             (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
           );
           smsBody += ` Your remaining balance of $${(remainingCents / 100).toFixed(2)} has been charged to the card on file.`;
-        } else if (balanceChargeStatus === "already_charged") {
-          smsBody += ` Your remaining balance was already charged to the card on file.`;
         } else if (balanceChargeStatus === "skipped_full_payment") {
           smsBody += ` Paid in full at booking — nothing more to do.`;
         } else if (balanceChargeStatus === "failed") {

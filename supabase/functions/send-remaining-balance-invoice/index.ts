@@ -12,7 +12,7 @@
 // a duplicate invoice.
 //
 // Body:
-//   { bookingId: "uuid", lineItems?: [{ amountCents, description }] }
+//   { bookingId: "uuid" }
 // Response:
 //   { success: true, invoiceId, hostedInvoiceUrl }
 //
@@ -34,17 +34,10 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[REMAINING-BALANCE-INVOICE] ${step}${tail}`);
 };
 
-interface InvoiceLineItem {
-  amountCents: number;
-  description: string;
-}
-
 interface InvoiceRequest {
   bookingId: string;
   /** Optional override — when omitted, uses total - deposit. */
   amountCents?: number;
-  /** Optional itemized lines (e.g. remaining balance + deep clean add-on). */
-  lineItems?: InvoiceLineItem[];
   /** Optional override for the auto-collect days. Defaults to days
    *  until the service date (capped at 30). */
   daysUntilDue?: number;
@@ -76,7 +69,7 @@ serve(async (req) => {
 
   try {
     const body: InvoiceRequest = await req.json();
-    const { bookingId, amountCents, daysUntilDue, lineItems } = body;
+    const { bookingId, amountCents, daysUntilDue } = body;
     if (!bookingId) {
       return new Response(JSON.stringify({ error: "bookingId required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -123,33 +116,14 @@ serve(async (req) => {
       );
     }
 
-    const normalizedLineItems = Array.isArray(lineItems)
-      ? lineItems
-          .map((item) => ({
-            amountCents: Number(item.amountCents),
-            description: String(item.description || "").trim(),
-          }))
-          .filter((item) =>
-            Number.isFinite(item.amountCents) && item.amountCents > 0 &&
-            item.description.length > 0
-          )
-      : [];
-
-    const remainingFromLines = normalizedLineItems.reduce(
-      (sum, item) => sum + item.amountCents,
-      0,
-    );
-
     // Compute remaining balance. Member-credit bookings have no
     // balance, paid-in-full bookings have no balance, otherwise
-    // total - deposit (or explicit line items).
-    const remaining = normalizedLineItems.length > 0
-      ? remainingFromLines
-      : (amountCents ??
-        Math.max(
-          0,
-          (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-        ));
+    // total - deposit.
+    const remaining = amountCents ??
+      Math.max(
+        0,
+        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
+      );
     if (remaining <= 0) {
       logStep("No remaining balance", {
         total: booking.total_estimate_cents,
@@ -222,32 +196,19 @@ serve(async (req) => {
       ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
       : `BK-${String(bookingId).slice(0, 8)}`;
 
-    // 1. Add upcoming invoice item(s), then create the invoice with
-    //    pending_invoice_items_behavior='include'.
-    if (normalizedLineItems.length > 0) {
-      for (const item of normalizedLineItems) {
-        await stripe.invoiceItems.create({
-          customer: customerId!,
-          amount: item.amountCents,
-          currency: "usd",
-          description: item.description,
-          metadata: {
-            booking_id: String(bookingId),
-            booking_number: booking.booking_number
-              ? String(booking.booking_number)
-              : "",
-          },
-        });
-      }
-    } else {
-      await stripe.invoiceItems.create({
-        customer: customerId!,
-        amount: remaining,
-        currency: "usd",
-        description: `${bookingRef} — ${description}`,
-      });
-    }
+    // 1. Add an upcoming invoice item, then create the invoice with
+    //    pending_invoice_items_behavior='include'. This is the
+    //    standard Stripe pattern for billing a custom amount.
+    await stripe.invoiceItems.create({
+      customer: customerId!,
+      amount: remaining,
+      currency: "usd",
+      description: `${bookingRef} — ${description}`,
+    });
 
+    const { invoicePaymentSettingsSaveCard } = await import(
+      "../_shared/stripe-invoice-save-card.ts"
+    );
     const invoice = await stripe.invoices.create({
       customer: customerId!,
       collection_method: "send_invoice",
@@ -262,6 +223,7 @@ serve(async (req) => {
         purpose: "remaining_balance",
       },
       auto_advance: true,
+      payment_settings: invoicePaymentSettingsSaveCard,
     });
 
     if (!invoice.id) {
@@ -290,7 +252,6 @@ serve(async (req) => {
       invoiceId: invoice.id,
       hostedInvoiceUrl,
       amountCents: remaining,
-      lineItemCount: normalizedLineItems.length,
     });
 
     return new Response(
