@@ -589,20 +589,6 @@ serve(async (req) => {
       });
     }
 
-    try {
-      const { submitUrl } = await sendTestimonialOffer(supabase, {
-        id: bookingId,
-        email: booking.email,
-        first_name: booking.first_name,
-        phone: booking.phone,
-        booking_number: booking.booking_number,
-      });
-      logStep("Testimonial offer sent", { submitUrl });
-    } catch (testimonialErr) {
-      logStep("Testimonial offer failed (non-blocking)", {
-        error: testimonialErr instanceof Error ? testimonialErr.message : String(testimonialErr),
-      });
-    }
 
     // Trigger Zapier webhook for completed booking — this fans out to
     // GHL PIT (syncBookingLifecycle marks the opportunity won + updates

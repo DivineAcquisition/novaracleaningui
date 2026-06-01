@@ -256,9 +256,5 @@ verify_jwt = true
 [functions.admin-charge-booking-balance]
 verify_jwt = false
 
-[functions.get-testimonial-form]
-verify_jwt = false
 
-[functions.submit-testimonial]
-verify_jwt = false
 

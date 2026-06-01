@@ -18,7 +18,7 @@ import {
   RiStarLine,
   RiTimeLine
 } from "@remixicon/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -93,6 +93,8 @@ export default function BookingCheckout() {
     user
   } = useAuth();
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
+  const stripePromise = useMemo(() => getStripePromise(), []);
+  const paymentInitStarted = useRef(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [bookingId, setBookingId] = useState<string | null>(null);
@@ -117,18 +119,27 @@ export default function BookingCheckout() {
   // optionally apply their account credit balance toward this booking.
   const [walletBalanceCents, setWalletBalanceCents] = useState(0);
   const [applyWallet, setApplyWallet] = useState(true);
+  const [walletBalanceReady, setWalletBalanceReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
     async function loadBalance() {
       const email = bookingData.email?.trim();
-      if (!email) return;
+      if (!email) {
+        setWalletBalanceCents(0);
+        setWalletBalanceReady(true);
+        return;
+      }
+      setWalletBalanceReady(false);
       try {
         const { data: cust } = await supabase
           .from("customers")
           .select("id")
           .eq("email", email)
           .maybeSingle();
-        if (!cust?.id) return;
+        if (!cust?.id) {
+          setWalletBalanceCents(0);
+          return;
+        }
         const { data: bal } = await (supabase.rpc as any)(
           "get_customer_credit_balance",
           { _customer_id: cust.id },
@@ -138,6 +149,8 @@ export default function BookingCheckout() {
         setWalletBalanceCents(cents);
       } catch (e) {
         console.warn("[Checkout] wallet balance lookup failed", e);
+      } finally {
+        if (!cancelled) setWalletBalanceReady(true);
       }
     }
     loadBalance();
@@ -279,6 +292,7 @@ export default function BookingCheckout() {
     setClientSecret(null);
     setBookingId(null);
     setPaymentAmount(0);
+    paymentInitStarted.current = false;
     toast.info('Referral code removed');
   };
 
@@ -334,6 +348,7 @@ export default function BookingCheckout() {
     setClientSecret(null);
     setBookingId(null);
     setPaymentAmount(0);
+    paymentInitStarted.current = false;
     toast.info('Promo code removed');
   };
   // handlePaymentOptionChange removed — the customer no longer chooses a
@@ -366,13 +381,13 @@ export default function BookingCheckout() {
     }
   };
   const handleInitializePayment = async (attempt = 0) => {
-    if (isCreatingIntent) return; // Prevent duplicate calls
-
     const email = bookingData.email?.trim();
     if (!email || !bookingData.homeSizeId) {
       console.log('[Checkout] Missing required data, skipping payment init');
+      paymentInitStarted.current = false;
       return;
     }
+    if (isCreatingIntent && attempt === 0) return;
     setIsCreatingIntent(true);
     if (attempt === 0) setInitError(null);
 
@@ -481,12 +496,14 @@ export default function BookingCheckout() {
       toast.error("Payment setup failed. Please try again.");
       setRetryCount(0);
       setIsCreatingIntent(false);
+      paymentInitStarted.current = false;
     }
   };
   const handleRetryPayment = () => {
     setClientSecret(null);
     setInitError(null);
     setRetryCount(0);
+    paymentInitStarted.current = false;
     handleInitializePayment(0);
   };
   const handlePaymentSuccess = () => {
@@ -499,27 +516,6 @@ export default function BookingCheckout() {
     router.push("/book/details?booking_id=" + bookingId);
   };
 
-  // Defensive: if a priced input changes after the PaymentIntent has
-  // been created (promo / referral apply or remove, useCredit toggle,
-  // serviceType change), reset clientSecret so the Stripe Pay button
-  // re-mounts with the new amount. The explicit setClientSecret(null)
-  // calls inside each handler are the primary path; this is the safety
-  // net.
-  useEffect(() => {
-    if (!clientSecret) return;
-    if (paymentAmount === 0) return;
-    const expectedCents = Math.max(100, Math.round(depositPricing.deposit * 100));
-    if (Math.abs(expectedCents - paymentAmount) > 1) {
-      console.log('[Checkout] Priced inputs changed — re-initializing PaymentIntent', {
-        expectedCents,
-        paymentAmount,
-      });
-      setClientSecret(null);
-      setBookingId(null);
-      setPaymentAmount(0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depositPricing.deposit, bookingData.serviceType, bookingData.useCredit, promoDiscount, referralDiscount]);
 
   // Initialize payment when all required fields are present
   useEffect(() => {
@@ -536,9 +532,11 @@ export default function BookingCheckout() {
     }
 
     if (clientSecret) return;
-    if (!isCreatingIntent && !initError) {
-      handleInitializePayment();
-    }
+    if (!walletBalanceReady) return;
+    if (isCreatingIntent || initError) return;
+    if (paymentInitStarted.current) return;
+    paymentInitStarted.current = true;
+    handleInitializePayment();
   }, [
     bookingData.paymentOption,
     bookingData.email,
@@ -546,8 +544,9 @@ export default function BookingCheckout() {
     bookingData.serviceDate,
     bookingData.timeSlot,
     clientSecret,
-    applyWallet,
-    walletBalanceCents,
+    walletBalanceReady,
+    isCreatingIntent,
+    initError,
   ]);
   const currentAmount = depositPricing.deposit;
   const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
@@ -879,7 +878,13 @@ export default function BookingCheckout() {
                           <input
                             type="checkbox"
                             checked={applyWallet}
-                            onChange={(e) => setApplyWallet(e.target.checked)}
+                            onChange={(e) => {
+                              setApplyWallet(e.target.checked);
+                              setClientSecret(null);
+                              setBookingId(null);
+                              setPaymentAmount(0);
+                              paymentInitStarted.current = false;
+                            }}
                             className="h-5 w-5 accent-emerald-600"
                           />
                         </label>
@@ -1007,8 +1012,8 @@ export default function BookingCheckout() {
                     </div>
                   )}
 
-                  {clientSecret && paymentAmount > 0 && !initError && !isCreatingIntent && (
-                    <Elements stripe={getStripePromise()} options={{ clientSecret }}>
+                  {clientSecret && paymentAmount > 0 && !initError && (
+                    <Elements stripe={stripePromise} options={{ clientSecret }}>
                       <StripePaymentForm
                         amount={paymentAmount}
                         onSuccess={handlePaymentSuccess}
