@@ -225,6 +225,9 @@ verify_jwt = false
 [functions.submit-rating]
 verify_jwt = false
 
+[functions.send-rating-reminders]
+verify_jwt = false
+
 # Token-only cleaner endpoints — the response_token / photo token IS the
 # credential, so these must be reachable from the public SMS-link pages
 # without a Supabase session.

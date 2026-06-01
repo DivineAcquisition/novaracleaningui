@@ -416,6 +416,7 @@ export type Database = {
           platform_fee_cents?: number | null
           rated_at?: string | null
           rating?: number | null
+          rating_reminder_sent_at?: string | null
           rating_submitted?: boolean | null
           review_text?: string | null
           sdr_rep_name?: string | null
