@@ -44,8 +44,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Elements } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
+import { getStripePromise } from "@/lib/stripe-client";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
@@ -92,10 +92,9 @@ export default function BookingCheckout() {
   const {
     user
   } = useAuth();
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
-  const [stripePromise, setStripePromise] = useState<any>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   // Default to true so the initial render shows the 50%-off price that
@@ -192,48 +191,15 @@ export default function BookingCheckout() {
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
 
-  // Initialize Stripe.
-  // ALWAYS overwrite paymentOption to 'deposit' on mount — the
-  // Pay-in-Full UI was retired, but BookingContext persists in
-  // localStorage and any returning visitor whose previous session set
-  // paymentOption='full' would otherwise have the server charge them
-  // the full amount instead of the 50% deposit. Hard-overwrite so a
-  // stale value can't slip through.
+  // ALWAYS overwrite paymentOption to 'deposit' on mount.
   useEffect(() => {
     if (bookingData.paymentOption !== 'deposit') {
-      updateBookingData({
-        paymentOption: 'deposit'
-      });
+      updateBookingData({ paymentOption: 'deposit' });
     }
-    const init = async () => {
-      try {
-        const {
-          data,
-          error
-        } = await supabase.functions.invoke('get-stripe-publishable-key');
-        if (error || !data?.key) {
-          const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co';
-          const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
-          const response = await fetch(`${sbUrl}/functions/v1/get-stripe-publishable-key`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': sbKey
-            }
-          });
-          if (!response.ok) throw new Error('Failed to fetch Stripe key');
-          const fallbackData = await response.json();
-          if (!fallbackData?.key) throw new Error('No Stripe key in response');
-          setStripePromise(loadStripe(fallbackData.key));
-          return;
-        }
-        setStripePromise(loadStripe(data.key));
-      } catch (err: any) {
-        console.error('Stripe initialization failed:', err);
-        setInitError('Unable to load payment system. Please try again.');
-      }
-    };
-    init();
+    getStripePromise().catch((err: unknown) => {
+      console.error('Stripe initialization failed:', err);
+      setInitError('Unable to load payment system. Please try again.');
+    });
   }, []);
 
   // Check if new customer and auto-apply best promo
@@ -374,7 +340,7 @@ export default function BookingCheckout() {
   // payment option. The deposit amount is fixed at 50% of the total.
   const handleBack = () => router.push("/book/offer");
   const handleMembershipCheckout = async () => {
-    setIsProcessing(true);
+    setIsCreatingIntent(true);
     setInitError(null);
     try {
       const {
@@ -396,18 +362,18 @@ export default function BookingCheckout() {
       setInitError(error.message || "Failed to create checkout session");
       toast.error("Failed to start checkout. Please try again.");
     } finally {
-      setIsProcessing(false);
+      setIsCreatingIntent(false);
     }
   };
   const handleInitializePayment = async (attempt = 0) => {
-    if (isProcessing) return; // Prevent duplicate calls
+    if (isCreatingIntent) return; // Prevent duplicate calls
 
     const email = bookingData.email?.trim();
     if (!email || !bookingData.homeSizeId) {
       console.log('[Checkout] Missing required data, skipping payment init');
       return;
     }
-    setIsProcessing(true);
+    setIsCreatingIntent(true);
     if (attempt === 0) setInitError(null);
 
     // Pull attribution from localStorage (populated by UTMTracker
@@ -494,7 +460,7 @@ export default function BookingCheckout() {
       setBookingId(data.bookingId);
       trackInitiateCheckout(data.amount / 100);
       setRetryCount(0); // Reset retry count on success
-      setIsProcessing(false);
+      setIsCreatingIntent(false);
     } catch (error: any) {
       console.error('[Checkout] Payment init error:', error);
 
@@ -504,7 +470,7 @@ export default function BookingCheckout() {
         console.log(`[Checkout] Retrying in ${delay}ms...`);
         setRetryCount(attempt + 1);
         setTimeout(() => {
-          setIsProcessing(false);
+          setIsCreatingIntent(false);
           handleInitializePayment(attempt + 1);
         }, delay);
         return;
@@ -514,7 +480,7 @@ export default function BookingCheckout() {
       setInitError(error.message || "Payment service unavailable. Please try again.");
       toast.error("Payment setup failed. Please try again.");
       setRetryCount(0);
-      setIsProcessing(false);
+      setIsCreatingIntent(false);
     }
   };
   const handleRetryPayment = () => {
@@ -569,15 +535,20 @@ export default function BookingCheckout() {
       return;
     }
 
-    // Reset clientSecret when payment option changes to force re-init
     if (clientSecret) return;
-    const timer = setTimeout(() => {
-      if (!isProcessing && !initError) {
-        handleInitializePayment();
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [bookingData.paymentOption, bookingData.email, bookingData.homeSizeId, bookingData.serviceDate, bookingData.timeSlot, clientSecret]);
+    if (!isCreatingIntent && !initError) {
+      handleInitializePayment();
+    }
+  }, [
+    bookingData.paymentOption,
+    bookingData.email,
+    bookingData.homeSizeId,
+    bookingData.serviceDate,
+    bookingData.timeSlot,
+    clientSecret,
+    applyWallet,
+    walletBalanceCents,
+  ]);
   const currentAmount = depositPricing.deposit;
   const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
@@ -995,8 +966,8 @@ export default function BookingCheckout() {
                     </p>
                   </div>
                   
-                  <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isProcessing}>
-                    {isProcessing ? <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
+                  <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isCreatingIntent}>
+                    {isCreatingIntent ? <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
                   </Button>
                 </div>}
 
@@ -1015,7 +986,7 @@ export default function BookingCheckout() {
               {/* Regular Stripe Payment */}
               {!isNewMembershipSignup && !isMemberUsingCredit && <>
                   {/* Error State */}
-                  {initError && !isProcessing && <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
+                  {initError && !isCreatingIntent && <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
                       <RiErrorWarningLine className="w-8 h-8 text-destructive mx-auto mb-2" />
                       <p className="text-sm text-destructive font-medium mb-3">{initError}</p>
                       <Button variant="outline" size="sm" onClick={handleRetryPayment}>
@@ -1024,18 +995,29 @@ export default function BookingCheckout() {
                       </Button>
                     </div>}
 
-                  {/* Loading State */}
-                  {isProcessing && <div className="text-center py-8">
-                      <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
-                      <p className="text-sm text-muted-foreground">Setting up secure payment...</p>
-                    </div>}
+                  {isCreatingIntent && !clientSecret && !initError && (
+                    <div className="space-y-3 py-4">
+                      <Skeleton className="h-12 w-full rounded-lg" />
+                      <Skeleton className="h-12 w-full rounded-lg" />
+                      <Skeleton className="h-14 w-full rounded-lg" />
+                      <p className="text-sm text-muted-foreground text-center flex items-center justify-center gap-2">
+                        <RiLoader4Line className="w-4 h-4 animate-spin text-primary" />
+                        Preparing secure checkout…
+                      </p>
+                    </div>
+                  )}
 
-                  {/* Stripe Payment Form */}
-                  {stripePromise && clientSecret && paymentAmount > 0 && !initError && !isProcessing && <Elements stripe={stripePromise} options={{
-                  clientSecret
-                }}>
-                      <StripePaymentForm amount={paymentAmount} onSuccess={handlePaymentSuccess} onRetry={handleRetryPayment} customerEmail={bookingData.email} bookingId={bookingId} />
-                    </Elements>}
+                  {clientSecret && paymentAmount > 0 && !initError && !isCreatingIntent && (
+                    <Elements stripe={getStripePromise()} options={{ clientSecret }}>
+                      <StripePaymentForm
+                        amount={paymentAmount}
+                        onSuccess={handlePaymentSuccess}
+                        onRetry={handleRetryPayment}
+                        customerEmail={bookingData.email}
+                        bookingId={bookingId}
+                      />
+                    </Elements>
+                  )}
                 </>}
 
               {/* Trust Badges */}
@@ -1080,7 +1062,7 @@ export default function BookingCheckout() {
 
           {/* Desktop Back Button */}
           <div className="hidden md:block">
-            <Button variant="outline" onClick={handleBack} disabled={isProcessing}>
+            <Button variant="outline" onClick={handleBack} disabled={isCreatingIntent}>
               <RiArrowLeftLine className="mr-2 w-4 h-4" />
               Back to Service Selection
             </Button>

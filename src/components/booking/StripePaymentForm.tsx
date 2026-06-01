@@ -39,30 +39,28 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [saveForFuture, setSaveForFuture] = useState(true);
 
-  // Load saved payment methods for returning customers
+  // Defer saved-card lookup so PaymentElement can mount first.
   useEffect(() => {
-    const loadPaymentMethods = async () => {
-      if (!user || !customerEmail) return;
-      
+    if (!user || !customerEmail) return;
+
+    const timer = window.setTimeout(async () => {
       setLoadingPaymentMethods(true);
       try {
         const { data, error } = await supabase.functions.invoke("get-saved-payment-methods", {
-          body: { email: customerEmail }
+          body: { email: customerEmail },
         });
-
         if (error) throw error;
-        
-        if (data && data.paymentMethods && data.paymentMethods.length > 0) {
+        if (data?.paymentMethods?.length > 0) {
           setSavedPaymentMethods(data.paymentMethods);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Error loading payment methods:", error);
       } finally {
         setLoadingPaymentMethods(false);
       }
-    };
+    }, 0);
 
-    loadPaymentMethods();
+    return () => window.clearTimeout(timer);
   }, [user, customerEmail]);
 
   const getErrorMessage = (error: any): { title: string; message: string; type: string } => {

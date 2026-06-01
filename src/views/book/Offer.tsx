@@ -35,6 +35,7 @@ import {
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { preloadStripe } from "@/lib/stripe-client";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location", path: "/book/zip" },
@@ -176,9 +177,17 @@ export default function BookingOffer() {
       toast.error("Please select a date and time");
       return;
     }
+    preloadStripe();
     setCurrentStep(4);
     router.push("/book/checkout");
   };
+
+  // Warm Stripe.js while the customer is still on the offer step.
+  useEffect(() => {
+    if (bookingData.serviceDate && bookingData.timeSlot) {
+      preloadStripe();
+    }
+  }, [bookingData.serviceDate, bookingData.timeSlot]);
 
   const handleBack = () => {
     setCurrentStep(2);
