@@ -385,7 +385,7 @@ serve(async (req) => {
         uses_credit: useCredit,
         service_date: serviceDate,
         time_slot: timeSlot,
-        base_price_cents: basePrice * 100,
+        base_price_cents: Math.round(totalServicePrice * 100),
         deposit_cents: depositCents,
         total_estimate_cents: totalEstimateCents,
         checkout_session_id: session.id,

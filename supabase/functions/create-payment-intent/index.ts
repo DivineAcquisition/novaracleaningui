@@ -385,7 +385,7 @@ serve(async (req) => {
         home_size_id: bookingData.homeSizeId,
         service_type: bookingData.serviceType,
         offer_type: bookingData.serviceType, // 'combo' / 'standard' / 'deep' — used by reports + GHL sync
-        add_ons: relevantAddOns,
+        add_ons: incomingAddOns,
         service_date: bookingData.serviceDate,
         time_slot: bookingData.timeSlot,
         membership_plan: membershipPlan,

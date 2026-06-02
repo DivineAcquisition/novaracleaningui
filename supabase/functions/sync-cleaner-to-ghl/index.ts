@@ -315,7 +315,15 @@ serve(async (req) => {
     let ghlUserId: string | null = (cleaner as { ghl_user_id?: string | null }).ghl_user_id || null;
     if (!ghlUserId && cleaner.email && cleaner.first_name && cleaner.last_name) {
       const password = `${String(cleaner.first_name)[0].toLowerCase()}${String(cleaner.last_name).replace(/\s+/g, "")}nv2025!`;
-      const userResult = await provisionGhlUserFromTemplate(supabase, {
+      // ghl-users.ts types its supabase param with a deeply-nested
+      // structural shape; cast the fn to loose params so TS doesn't try
+      // to instantiate that type against the full SupabaseClient.
+      // deno-lint-ignore no-explicit-any
+      const provision = provisionGhlUserFromTemplate as (s: any, i: {
+        email: string; firstName: string; lastName: string;
+        phone?: string | null; password: string; templateEmail?: string;
+      }) => Promise<{ ghlUserId: string | null; created: boolean; error?: string; skipped?: string }>;
+      const userResult = await provision(supabase, {
         email: cleaner.email,
         firstName: cleaner.first_name,
         lastName: cleaner.last_name,
@@ -340,7 +348,7 @@ serve(async (req) => {
       source: "sync-cleaner-to-ghl",
       summary: `Synced ${cleaner.first_name || "contractor"} ${cleaner.last_name || ""} → GHL (${tags.length} tags, ${customFields.length} fields)`.trim(),
       data: { contact_id: contactId, opportunity_id: opportunityId, tags, custom_field_count: customFields.length },
-    }).then(() => undefined).catch(() => undefined);
+    }).then(() => undefined, () => undefined);
 
     return json({ ok: true, ghl_contact_id: contactId, opportunity_id: opportunityId, ghl_user_id: ghlUserId, tags, custom_field_count: customFields.length });
   } catch (error) {

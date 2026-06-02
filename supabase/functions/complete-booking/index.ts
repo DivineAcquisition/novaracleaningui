@@ -234,7 +234,7 @@ serve(async (req) => {
     // For paid-in-full bookings, this is a no-op. Idempotent: if we've
     // already charged (balance_payment_intent_id set), skip.
     let balanceChargeStatus: "skipped_full_payment" | "skipped_no_balance" |
-      "already_charged" | "charged" | "failed" = "skipped_no_balance";
+      "already_charged" | "charged" | "captured_hold" | "failed" = "skipped_no_balance";
     let balanceChargeError: string | null = null;
     try {
       const remainingCents = Math.max(

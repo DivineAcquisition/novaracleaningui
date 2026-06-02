@@ -67,7 +67,7 @@ export async function syncBookingSalesPipeline(
 
   let pipelineId = await resolveSecret(supabase, "GHL_SALES_PIPELINE_ID");
   if (!pipelineId) {
-    pipelineId = (Deno.env.get("GHL_PIPELINE_ID") || "").trim() || undefined;
+    pipelineId = (Deno.env.get("GHL_PIPELINE_ID") || "").trim();
   }
 
   if (!salesOppId && contactId && pipelineId) {
