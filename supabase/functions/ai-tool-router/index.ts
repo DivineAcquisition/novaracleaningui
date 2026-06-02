@@ -32,7 +32,7 @@ const log = (step: string, details?: unknown) => {
 // ─── Pricing (delegates to _shared/pricing.ts — v4 single SOT) ────────────
 import { calculatePriceCents } from "../_shared/pricing.ts";
 
-const ACCOUNT_PORTAL_URL = "https://try.novaracleaning.com/account";
+const ACCOUNT_PORTAL_URL = "https://app.novaracleaning.com/account";
 
 function calcPrice(args: {
   homeSizeId: string;
@@ -304,7 +304,7 @@ async function toolCreateBooking(supabase: any, body: any): Promise<unknown> {
     const link: any = await stripe.paymentLinks.create({
       line_items: [{ price: price.id, quantity: 1 }],
       metadata: { booking_id: booking.id, kind: "deposit", source: "ai_assistant" },
-      after_completion: { type: "redirect", redirect: { url: `https://try.novaracleaning.com/account?payment=success` } },
+      after_completion: { type: "redirect", redirect: { url: `https://app.novaracleaning.com/account?payment=success` } },
     });
     paymentLinkUrl = link.url;
   } catch (e) {

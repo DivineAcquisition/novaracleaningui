@@ -100,7 +100,7 @@ serve(async (req) => {
             depositAmount: booking.deposit_cents,
             paymentOption: booking.payment_option,
             reminderType,
-            checkoutUrl: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://book.novaracleaning.com'}/book/checkout`,
+            checkoutUrl: `https://try.novaracleaning.com/book/checkout`,
           };
 
           const response = await fetch(
@@ -130,7 +130,7 @@ serve(async (req) => {
           // routed reminders through the broken Telnyx-only path.
           if (booking.phone) {
             try {
-              const checkoutUrl = `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://book.novaracleaning.com'}/book/checkout`;
+              const checkoutUrl = `https://try.novaracleaning.com/book/checkout`;
 
               const smsMessage = reminderType === "24_hour"
                 ? `⚠️ Last chance ${booking.first_name}! Your booking expires soon. Complete now & save $30: ${checkoutUrl}`

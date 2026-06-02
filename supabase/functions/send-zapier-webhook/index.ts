@@ -698,7 +698,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
               const link: any = await sk.paymentLinks.create({
                 line_items: [{ price: price.id, quantity: 1 }],
                 metadata: { booking_id: booking.id, kind: 'balance' },
-                after_completion: { type: 'redirect', redirect: { url: 'https://try.novaracleaning.com/account?payment=success' } },
+                after_completion: { type: 'redirect', redirect: { url: 'https://app.novaracleaning.com/account?payment=success' } },
               });
               paymentLinkUrl = link.url;
             } catch (linkErr) {

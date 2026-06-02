@@ -43,7 +43,7 @@ interface ReminderRequest {
 }
 
 const COMPLETE_DETAILS_URL = (bookingId: string) =>
-  `https://app.novaracleaning.com/book/details?booking_id=${bookingId}`;
+  `https://try.novaracleaning.com/book/details?booking_id=${bookingId}`;
 
 const MAX_REMINDERS = 6;
 // Minimum grace window after payment before the FIRST reminder fires.

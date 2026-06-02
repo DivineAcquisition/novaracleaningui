@@ -46,7 +46,7 @@ const log = (step: string, details?: unknown) => {
 // Account self-service portal — where the customer picks a new date /
 // time. Keep this in env so a staging deploy can point at staging.
 const ACCOUNT_PORTAL_URL =
-  Deno.env.get("ACCOUNT_PORTAL_URL") || "https://try.novaracleaning.com/account";
+  Deno.env.get("ACCOUNT_PORTAL_URL") || "https://app.novaracleaning.com/account";
 
 // Acceptable variations of each verb. Comparing against the trimmed,
 // uppercased customer text.
@@ -302,7 +302,7 @@ serve(async (req) => {
           : "";
         return finalize(
           "cancel_executed",
-          `Novara Cleaning: Cancelled.${feeLine}${refundLine} We'd love to see you again — book anytime at ${ACCOUNT_PORTAL_URL.replace("/account", "/book/zip")}. Help? Call ${SUPPORT_PHONE_DISPLAY}.`,
+          `Novara Cleaning: Cancelled.${feeLine}${refundLine} We'd love to see you again — book anytime at https://try.novaracleaning.com/book/zip. Help? Call ${SUPPORT_PHONE_DISPLAY}.`,
           intent.booking_id,
         );
       } catch (e) {

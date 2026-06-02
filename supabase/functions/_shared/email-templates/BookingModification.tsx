@@ -141,7 +141,7 @@ export const BookingModification = ({ bookingData }: BookingModificationProps) =
           )}
 
           <Section style={ctaSection}>
-            <Button href={`${Deno.env.get('SUPABASE_URL')?.replace('supabase.co', 'lovable.app') || 'https://novaracleaning.com'}/account`}>
+            <Button href={`https://app.novaracleaning.com/account`}>
               View My Account
             </Button>
           </Section>

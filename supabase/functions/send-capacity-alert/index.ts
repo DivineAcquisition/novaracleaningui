@@ -94,7 +94,7 @@ serve(async (req) => {
               </p>
 
               <div style="text-align: center;">
-                <a href="https://book.novaracleaning.com/admin/intake" class="action-button">View Admin Dashboard</a>
+                <a href="https://admin.novaracleaning.com/admin/csr" class="action-button">View Admin Dashboard</a>
               </div>
 
               <div class="footer">

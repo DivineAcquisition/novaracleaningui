@@ -201,7 +201,7 @@ export async function notifyStaffNoCleanersAvailable(
         <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Location</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${location || "—"}</td></tr>
         <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Team needed</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${team?.confirmed ?? 0} / ${team?.need ?? job.min_cleaners_required} confirmed</td></tr>
       </table>
-      <p><a href="https://try.novaracleaning.com/admin/bookings">Open Admin Bookings</a> · <a href="https://try.novaracleaning.com/admin/map">Dispatch map</a></p>
+      <p><a href="https://admin.novaracleaning.com/admin/bookings">Open Admin Bookings</a> · <a href="https://admin.novaracleaning.com/admin/map">Dispatch map</a></p>
     </div>`;
 
   try {
