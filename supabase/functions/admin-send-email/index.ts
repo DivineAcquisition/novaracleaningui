@@ -39,6 +39,16 @@ serve(async (req) => {
     const subject = String(body.subject || "").trim();
     const html = String(body.html || "");
     const from = String(body.from || "Novara Cleaning <hello@novaracleaning.com>");
+    // Optional file attachments: [{ filename, content }] where content is
+    // base64 (Resend's format). Passed straight through when provided.
+    const attachments = Array.isArray(body.attachments) && body.attachments.length > 0
+      ? body.attachments
+          .map((a: { filename?: string; content?: string }) => ({
+            filename: String(a?.filename || "attachment"),
+            content: String(a?.content || ""),
+          }))
+          .filter((a: { content: string }) => a.content.length > 0)
+      : undefined;
     if (!to || !subject || !html) {
       return new Response(JSON.stringify({ error: "to, subject, and html are required" }), {
         status: 400,
@@ -51,7 +61,7 @@ serve(async (req) => {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to: [to], subject, html }),
+      body: JSON.stringify({ from, to: [to], subject, html, ...(attachments ? { attachments } : {}) }),
     });
     const text = await res.text();
     if (!res.ok) {
