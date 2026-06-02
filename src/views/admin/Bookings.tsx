@@ -111,9 +111,13 @@ export default function AdminBookings() {
   // immediately regardless of their `service_date` (the old default
   // "upcoming" used `service_date >= today` which silently hid bookings
   // dated yesterday in UTC, or any booking still missing a service_date).
+  // Default to "all" so recently-completed or past-dated jobs (e.g. a
+  // booking from yesterday) are never hidden — defaulting to a forward
+  // date window made completed/past bookings look "deleted". Admins can
+  // still narrow with the date filter.
   const [dateRange, setDateRange] = useState<
     "all" | "upcoming" | "next_14" | "this_week" | "past_30" | "last_7_created"
-  >("next_14");
+  >("all");
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [selected, setSelected] = useState<BookingRow | null>(null);
 
