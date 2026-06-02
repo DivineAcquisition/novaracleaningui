@@ -38,6 +38,26 @@ export async function sendSms(
 
   const type: SmsType = args.type && SUPPORTED_TYPES.includes(args.type) ? args.type : "confirmation";
 
+  // Primary transport: GoHighLevel Conversations API (send-ghl-sms).
+  // Telnyx (send-sms-notification) is only a fallback — its toll-free /
+  // 10DLC senders are not reliably provisioned on the account (every
+  // Telnyx send currently fails with an invalid-`from` error), so GHL is
+  // the canonical SMS channel for Novara. We still fall back to Telnyx so
+  // a transient GHL failure doesn't drop the message entirely.
+  try {
+    const { data, error } = await supabase.functions.invoke("send-ghl-sms", {
+      body: { phone, message: args.message, type },
+    });
+    const ghlError = error || (data && (data as { error?: string }).error);
+    if (!ghlError) return true;
+    console.warn("[sendSms] GHL send failed, falling back to Telnyx", ghlError);
+  } catch (err) {
+    console.warn(
+      "[sendSms] GHL send threw, falling back to Telnyx",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
   try {
     const { error } = await supabase.functions.invoke("send-sms-notification", {
       body: {
@@ -48,12 +68,12 @@ export async function sendSms(
       },
     });
     if (error) {
-      console.error("[sendSms] invoke error", error);
+      console.error("[sendSms] Telnyx fallback invoke error", error);
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[sendSms] threw", err instanceof Error ? err.message : String(err));
+    console.error("[sendSms] Telnyx fallback threw", err instanceof Error ? err.message : String(err));
     return false;
   }
 }

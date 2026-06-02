@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendSms } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,25 +125,25 @@ serve(async (req) => {
 
           logStep("Email sent successfully", { bookingId: booking.id, email: booking.email });
 
-          // Send SMS reminder
+          // Send SMS reminder via the shared transport (GHL primary,
+          // Telnyx fallback). Calling send-sms-notification directly here
+          // routed reminders through the broken Telnyx-only path.
           if (booking.phone) {
             try {
               const checkoutUrl = `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://book.novaracleaning.com'}/book/checkout`;
-              
+
               const smsMessage = reminderType === "24_hour"
                 ? `⚠️ Last chance ${booking.first_name}! Your booking expires soon. Complete now & save $30: ${checkoutUrl}`
                 : `Hi ${booking.first_name}, you're almost done! Complete your Novara cleaning booking and save $30. Finish here: ${checkoutUrl}`;
 
-              const smsResponse = await supabase.functions.invoke('send-sms-notification', {
-                body: {
-                  toPhone: booking.phone,
-                  message: smsMessage,
-                  type: 'reminder'
-                }
+              const smsOk = await sendSms(supabase, {
+                toPhone: booking.phone,
+                message: smsMessage,
+                type: 'reminder',
               });
 
-              if (smsResponse.error) {
-                logStep("SMS send failed", { bookingId: booking.id, error: smsResponse.error });
+              if (!smsOk) {
+                logStep("SMS send failed", { bookingId: booking.id });
               } else {
                 logStep("SMS sent successfully", { bookingId: booking.id, phone: booking.phone });
               }

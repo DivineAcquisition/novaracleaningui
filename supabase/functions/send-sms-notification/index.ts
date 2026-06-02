@@ -9,21 +9,8 @@ const corsHeaders = {
 const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
 
 // Active Telnyx numbers on the Novara account (May 2026):
-//   • +18334432004 — toll-free (PRIMARY — Telnyx Toll-Free Verification
-//                   submitted and pending approval. Once approved, every
-//                   customer SMS routes through here on the first try.)
-//   • +14433838055 — local MD long-code (FALLBACK — needs 10DLC Brand +
-//                   Campaign registration before US carriers accept it.
-//                   Until then, sending via this number silently fails
-//                   at the carrier layer with a 10DLC rejection.)
-//
-// Order is intentional: the API-level fallback retry only fires when the
-// FIRST Telnyx /v2/messages call returns a 4xx with a sender-specific
-// error. In our case Telnyx returns 200 + queued for both numbers — the
-// carrier rejection is async via the delivery webhook. So we must put the
-// number most likely to actually DELIVER first; the fallback only saves
-// us if Telnyx itself outright refuses a sender (e.g. number released).
-//
+//   • +18334432004 — toll-free (PRIMARY)
+//   • +14433838055 — local MD long-code (FALLBACK)
 // env override → toll-free → local. Update TELNYX_PHONE_NUMBER in Supabase
 // secrets to a different number if ops moves the primary sender.
 const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
@@ -110,13 +97,7 @@ serve(async (req) => {
       ? explicitSenders
       : (TELNYX_MESSAGING_PROFILE_ID ? [null] : []);
 
-    if (senders.length === 0) {
-      throw new Error(
-        "No Telnyx sender configured. Set TELNYX_PHONE_NUMBER or TELNYX_MESSAGING_PROFILE_ID.",
-      );
-    }
-
-    let lastErrorDetail = "No sender configured";
+    let lastErrorDetail = "No Telnyx sender configured";
     let succeeded = false;
     let messageId: string | undefined;
     let messageCost: number = 0;
@@ -162,8 +143,36 @@ serve(async (req) => {
       if (!isSenderError) break;
     }
 
+    // Telnyx failed (or no usable sender). Fall back to GoHighLevel's
+    // Conversations API so the message still goes out. GHL is Novara's
+    // primary verified SMS transport; the Telnyx toll-free / 10DLC
+    // senders are frequently not provisioned on the account, which makes
+    // every Telnyx attempt fail with an invalid-`from` error. Routing the
+    // fallback here means EVERY caller of send-sms-notification gets GHL
+    // delivery without each one needing to know about GHL.
     if (!succeeded) {
-      throw new Error(`Telnyx error: ${lastErrorDetail}`);
+      try {
+        const { data: ghlData, error: ghlError } = await supabase.functions.invoke(
+          "send-ghl-sms",
+          { body: { phone: recipient, message, type } },
+        );
+        const ghlFail = ghlError || (ghlData && (ghlData as { error?: string }).error);
+        if (!ghlFail) {
+          succeeded = true;
+          usedSender = "ghl";
+          messageId = (ghlData as { messageId?: string })?.messageId || undefined;
+          messageStatus = "sent";
+          console.log("[SMS] Sent via GHL fallback");
+        } else {
+          lastErrorDetail = `Telnyx: ${lastErrorDetail}; GHL: ${typeof ghlFail === "string" ? ghlFail : JSON.stringify(ghlFail)}`;
+        }
+      } catch (ghlErr) {
+        lastErrorDetail = `Telnyx: ${lastErrorDetail}; GHL threw: ${ghlErr instanceof Error ? ghlErr.message : String(ghlErr)}`;
+      }
+    }
+
+    if (!succeeded) {
+      throw new Error(`SMS failed via all transports — ${lastErrorDetail}`);
     }
 
     if (logEntry) {
