@@ -151,7 +151,15 @@ export default function CleanerAuth() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/cleaner/auth/callback`,
+          // In the native app, route OAuth back through the universal link
+          // (contractor.novaracleaning.com) which the app intercepts via
+          // appUrlOpen and exchanges for a session. On web, use the origin.
+          redirectTo: `${
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (window as any).Capacitor?.isNativePlatform?.()
+              ? "https://contractor.novaracleaning.com"
+              : window.location.origin
+          }/cleaner/auth/callback`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
