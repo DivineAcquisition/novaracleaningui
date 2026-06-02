@@ -87,6 +87,19 @@ export async function notifyAllCleanersOfNewOpportunity(
       log("sms failed", { cleanerId: c.id, err: e instanceof Error ? e.message : String(e) });
       skipped++;
     }
+
+    // Best-effort native push to the Novara Pro app (no-ops when the
+    // cleaner has no registered device or push creds aren't configured).
+    try {
+      await supabase.functions.invoke("send-push", {
+        body: {
+          cleanerId: c.id,
+          title: `New ${service} job — ${ref}`,
+          body: `${date}${booking.time_slot ? ` · ${booking.time_slot}` : ""}${location ? ` · ${location}` : ""}. Open Novara Pro to claim it.`,
+          data: { type: "new_opportunity", bookingId: booking.id },
+        },
+      });
+    } catch (_) { /* push is best-effort */ }
   }
 
   log("done", { sent, skipped, bookingId: booking.id });

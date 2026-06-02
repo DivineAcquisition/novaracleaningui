@@ -1,8 +1,12 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
+import { Capacitor } from "@capacitor/core";
+import { SplashScreen } from "@capacitor/splash-screen";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 // Reuse the existing cleaner screens verbatim (default exports).
 const Auth = lazy(() => import("@/views/cleaner/Auth"));
@@ -31,10 +35,27 @@ function Splash() {
   );
 }
 
+// Native shell bootstrap: registers push (persists the device token),
+// hides the splash once React has mounted, and styles the status bar.
+// All no-ops on web.
+function NativeBootstrap() {
+  usePushNotifications();
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+    const t = setTimeout(() => {
+      SplashScreen.hide().catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, []);
+  return null;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <NativeBootstrap />
         <HashRouter>
           <Suspense fallback={<Splash />}>
             <Routes>

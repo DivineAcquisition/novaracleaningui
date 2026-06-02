@@ -74,6 +74,7 @@
         "npm:@types/node@^22.16.5",
         "npm:@types/react-dom@^18.3.7",
         "npm:@types/react@^18.3.23",
+        "npm:@vitejs/plugin-react@^4.7.0",
         "npm:autoprefixer@^10.4.21",
         "npm:browser-image-compression@^2.0.2",
         "npm:class-variance-authority@~0.7.1",
@@ -92,6 +93,7 @@
         "npm:react-dom@^18.3.1",
         "npm:react-hook-form@^7.61.1",
         "npm:react-resizable-panels@^2.1.9",
+        "npm:react-router-dom@^6.30.4",
         "npm:react-swipeable@^7.0.2",
         "npm:react@^18.3.1",
         "npm:recharts@^2.15.4",
@@ -101,6 +103,7 @@
         "npm:tailwindcss@^3.4.17",
         "npm:typescript@^5.8.3",
         "npm:vaul@~0.9.9",
+        "npm:vite@^5.4.21",
         "npm:zod@^3.25.76"
       ]
     }
