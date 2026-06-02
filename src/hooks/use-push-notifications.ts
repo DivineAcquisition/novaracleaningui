@@ -40,6 +40,20 @@ async function persistDeviceToken(token: string) {
   }
 }
 
+// Map a tapped push to an in-app route. Uses the hash router so a hard
+// navigation works inside the bundled SPA.
+function routeFromPushData(data: Record<string, unknown> | undefined) {
+  if (!data) return;
+  const type = String(data.type || '');
+  if (type === 'new_opportunity' || type === 'job_offer') {
+    window.location.hash = '#/cleaner/job-offers';
+  } else if (type === 'assignment' || type === 'job_assigned') {
+    window.location.hash = '#/cleaner/dashboard';
+  } else if (typeof data.route === 'string' && data.route.startsWith('/')) {
+    window.location.hash = `#${data.route}`;
+  }
+}
+
 export function usePushNotifications() {
   const [token, setToken] = useState<string | null>(null);
   const isNative = Capacitor.isNativePlatform();
@@ -81,8 +95,10 @@ export function usePushNotifications() {
       });
     });
 
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('Push notification action performed:', notification);
+    PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+      console.log('Push notification action performed:', action);
+      // Tapping the notification deep-links into the relevant screen.
+      routeFromPushData(action?.notification?.data as Record<string, unknown> | undefined);
     });
 
     setupPushNotifications();

@@ -157,6 +157,37 @@ export default function MobileDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ─── Offline cache ──────────────────────────────────────────────────
+  // Seed the dashboard from the last saved snapshot on mount so the screen
+  // is useful with no connection, then persist fresh data whenever it loads.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("novara_pro_dashboard");
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (c.cleaner) setCleaner((prev: any) => prev ?? c.cleaner);
+        if (Array.isArray(c.offers)) setOffers((prev: any[]) => (prev.length ? prev : c.offers));
+        if (Array.isArray(c.upcomingJobs)) setUpcomingJobs((prev: any[]) => (prev.length ? prev : c.upcomingJobs));
+        if (c.stats) setStats((prev: any) => prev ?? c.stats);
+      }
+    } catch {
+      /* ignore cache read errors */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!cleaner && offers.length === 0 && upcomingJobs.length === 0) return;
+    try {
+      localStorage.setItem(
+        "novara_pro_dashboard",
+        JSON.stringify({ cleaner, offers, upcomingJobs, stats }),
+      );
+    } catch {
+      /* storage may be unavailable */
+    }
+  }, [cleaner, offers, upcomingJobs, stats]);
+
   const handleRefresh = async () => {
     await fetchData();
   };

@@ -1,12 +1,15 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { App as CapApp } from "@capacitor/app";
+import { Network } from "@capacitor/network";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { supabase } from "@/integrations/supabase/client";
 
 // Reuse the existing cleaner screens verbatim (default exports).
 const Auth = lazy(() => import("@/views/cleaner/Auth"));
@@ -35,20 +38,86 @@ function Splash() {
   );
 }
 
-// Native shell bootstrap: registers push (persists the device token),
-// hides the splash once React has mounted, and styles the status bar.
-// All no-ops on web.
+// Handle deep links: OAuth callbacks (exchange the PKCE code for a session)
+// and generic app links (route into the hash router). Tapping a push that
+// carries a route is handled inside use-push-notifications.
+async function handleDeepLink(url: string) {
+  try {
+    const parsed = new URL(url);
+    const code = parsed.searchParams.get("code");
+    if (code && (url.includes("/auth/callback") || url.includes("code="))) {
+      try {
+        await supabase.auth.exchangeCodeForSession(code);
+      } catch (e) {
+        console.warn("[deeplink] code exchange failed", e);
+      }
+      window.location.hash = "#/cleaner/auth/callback";
+      return;
+    }
+    const path = (parsed.pathname || "/") + (parsed.search || "");
+    if (path && path !== "/") window.location.hash = `#${path}`;
+  } catch {
+    /* ignore malformed urls */
+  }
+}
+
+// Native shell bootstrap: registers push, hides the splash, styles the
+// status bar, and wires deep links. All no-ops on web.
 function NativeBootstrap() {
   usePushNotifications();
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-    const t = setTimeout(() => {
-      SplashScreen.hide().catch(() => {});
-    }, 300);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => SplashScreen.hide().catch(() => {}), 300);
+
+    let urlSub: { remove: () => void } | undefined;
+    CapApp.addListener("appUrlOpen", ({ url }) => void handleDeepLink(url))
+      .then((h) => {
+        urlSub = h;
+      })
+      .catch(() => {});
+
+    return () => {
+      clearTimeout(t);
+      try {
+        urlSub?.remove();
+      } catch {
+        /* noop */
+      }
+    };
   }, []);
   return null;
+}
+
+// Thin offline indicator. The dashboard separately caches its last payload
+// so the screen stays useful with no connection.
+function NetworkBanner() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    let sub: { remove: () => void } | undefined;
+    Network.getStatus()
+      .then((s) => setOnline(s.connected))
+      .catch(() => {});
+    Network.addListener("networkStatusChange", (s) => setOnline(s.connected))
+      .then((h) => {
+        sub = h;
+      })
+      .catch(() => {});
+    return () => {
+      try {
+        sub?.remove();
+      } catch {
+        /* noop */
+      }
+    };
+  }, []);
+
+  if (online) return null;
+  return (
+    <div className="fixed inset-x-0 top-0 z-[60] bg-amber-500 py-1 text-center text-xs font-medium text-white">
+      You&apos;re offline — showing last saved data
+    </div>
+  );
 }
 
 export function App() {
@@ -56,6 +125,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <NativeBootstrap />
+        <NetworkBanner />
         <HashRouter>
           <Suspense fallback={<Splash />}>
             <Routes>
