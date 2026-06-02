@@ -278,7 +278,7 @@ async function toolCreateBooking(supabase: any, body: any): Promise<unknown> {
       service_date: body.service_date,
       time_slot: body.time_slot,
       membership_plan: membershipPlan,
-      base_price_cents: HOME_SIZE_PRICE[homeSizeId] * SERVICE_MULT[serviceType] * 100,
+      base_price_cents: p.subtotalCents,
       total_estimate_cents: p.totalCents,
       deposit_cents: p.depositCents,
       payment_option: "deposit",

@@ -122,7 +122,7 @@ serve(async (req) => {
     });
     if (!upsert.ok) {
       return new Response(JSON.stringify({
-        ok: false, stage: "upsert", ...upsert, custom_fields_attempted: cf,
+        ...upsert, ok: false, stage: "upsert", custom_fields_attempted: cf,
       }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 

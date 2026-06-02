@@ -48,7 +48,10 @@ interface Body {
   firstName?: string;
   lastName?: string;
   message: string;
-  type?: "SMS" | "WhatsApp";
+  /** GHL channel ("SMS"/"WhatsApp") OR an internal category label used
+   *  for routing/logging (e.g. "job_offer", "verification"). Anything that
+   *  isn't a real GHL channel is mapped to "SMS" before sending. */
+  type?: string;
   /** Override the default verified phone number for this send. Accept
    *  either the GHL phoneNumberId or the E.164 'from' string. */
   fromNumberId?: string;

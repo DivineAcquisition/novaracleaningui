@@ -27,6 +27,11 @@ const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
 // env override → toll-free → local. Update TELNYX_PHONE_NUMBER in Supabase
 // secrets to a different number if ops moves the primary sender.
 const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
+// Optional Telnyx messaging-profile id. When set (and no explicit `from`
+// number is available), Telnyx picks a sender from the profile's number
+// pool. Referenced below; must be declared or every send throws a
+// ReferenceError before the message is ever dispatched.
+const TELNYX_MESSAGING_PROFILE_ID = Deno.env.get("TELNYX_MESSAGING_PROFILE_ID");
 const TELNYX_SENDERS: string[] = Array.from(new Set([
   ENV_TELNYX_FROM,
   "+18334432004",
