@@ -168,7 +168,9 @@ serve(async (req) => {
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
     const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
 
-    // Promo codes are no longer honored — discounts are per-service-tier in pricing.ts.
+    // Promo codes are no longer honored — the only discounts in v4 are
+    // the per-service-tier rules in _shared/pricing.ts. A code on the
+    // payload is logged for analytics but never reduces the charge.
     let promoDiscountCents = 0;
     let promoCode = '';
     if (bookingData.promoCode) {
@@ -448,7 +450,6 @@ serve(async (req) => {
     }
 
     logStep("Booking created successfully", { bookingId: booking.id });
-
 
     return new Response(
       JSON.stringify({
