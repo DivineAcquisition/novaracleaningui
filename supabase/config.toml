@@ -256,5 +256,9 @@ verify_jwt = true
 [functions.admin-charge-booking-balance]
 verify_jwt = false
 
+# Day-before appointment reminder sweep (invoked by pg_cron with no JWT).
+[functions.send-appointment-reminders]
+verify_jwt = false
+
 
 
