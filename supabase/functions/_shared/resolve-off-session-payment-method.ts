@@ -13,9 +13,11 @@ export async function resolveOffSessionPaymentMethod(
   if (attached.data[0]?.id) return attached.data[0].id;
 
   const intents = await stripe.paymentIntents.list({ customer: customerId, limit: 20 });
-  const succeeded = intents.data
-    .filter((pi) => pi.status === "succeeded" && (pi.payment_method || pi.latest_charge))
-    .sort((a, b) => (b.created || 0) - (a.created || 0));
+  const succeeded = (intents.data as Stripe.PaymentIntent[])
+    .filter((pi: Stripe.PaymentIntent) =>
+      pi.status === "succeeded" && (pi.payment_method || pi.latest_charge))
+    .sort((a: Stripe.PaymentIntent, b: Stripe.PaymentIntent) =>
+      (b.created || 0) - (a.created || 0));
 
   for (const pi of succeeded) {
     let pmId = typeof pi.payment_method === "string"
