@@ -172,7 +172,7 @@ async function sendWorkspaceInviteEmail(
       subject,
       html,
       text,
-      reply_to: BRAND.supportEmail,
+      replyTo: BRAND.supportEmail,
     });
     if ((result as any)?.error) {
       return { sent: false, error: String((result as any).error?.message || (result as any).error) };

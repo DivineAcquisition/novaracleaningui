@@ -980,8 +980,9 @@ function GrantCreditDialog({
     try {
       const { error } = await supabase.functions.invoke("admin-grant-credit", {
         body: {
-          customer_id: customer.id,
-          amount_cents: cents,
+          action: "grant",
+          customerId: customer.id,
+          amountCents: cents,
           source,
           reason: reason || `Manual grant by admin`,
         },
