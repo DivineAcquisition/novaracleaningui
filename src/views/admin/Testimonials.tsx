@@ -27,7 +27,7 @@ interface TestimonialOffer {
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-slate-100 text-slate-700 border-slate-200",
   submitted: "bg-violet-100 text-violet-800 border-violet-200",
-  redeemed: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  redeemed: "bg-violet-100 text-violet-800 border-violet-200",
 };
 
 export default function AdminTestimonials() {

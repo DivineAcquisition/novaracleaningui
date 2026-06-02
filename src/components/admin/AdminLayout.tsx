@@ -187,7 +187,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 min-w-0">
             {active ? (
               <>
-                <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 inline-flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-700 inline-flex items-center justify-center shrink-0">
                   <active.icon className="w-4 h-4" />
                 </span>
                 <h1 className="font-jakarta text-sm font-semibold text-slate-900 truncate tracking-tight">
@@ -225,7 +225,7 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
         compact && "border-0 py-0",
       )}
     >
-      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(16,163,74,0.4)]">
+      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(16,163,74,0.4)]">
         <RiShieldStarLine className="w-5 h-5 text-white" />
       </div>
       <div className="leading-tight">
@@ -255,7 +255,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
             className={cn(
               "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
               isActive
-                ? "bg-gradient-to-r from-emerald-50 to-emerald-50/40 text-emerald-900 font-semibold shadow-[inset_0_0_0_1px_rgba(16,163,74,0.15)]"
+                ? "bg-gradient-to-r from-violet-50 to-violet-50/40 text-violet-900 font-semibold shadow-[inset_0_0_0_1px_rgba(16,163,74,0.15)]"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70",
             )}
           >
@@ -263,7 +263,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
               className={cn(
                 "w-8 h-8 rounded-md flex items-center justify-center transition-all",
                 isActive
-                  ? "bg-emerald-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
+                  ? "bg-violet-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
                   : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700",
               )}
             >
@@ -275,7 +275,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
                 className={cn(
                   "text-[11px] leading-tight truncate",
                   isActive
-                    ? "text-emerald-700/70"
+                    ? "text-violet-700/70"
                     : "text-slate-400 group-hover:text-slate-500",
                 )}
               >
