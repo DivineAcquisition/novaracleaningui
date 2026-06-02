@@ -16,7 +16,7 @@ function log(step: string, details?: unknown) {
 }
 
 async function resolveSecret(
-  supabase: { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { value?: string } | null }> } } } } },
+  supabase: { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { value?: string } | null }> } } } },
   key: string,
 ): Promise<string> {
   try {

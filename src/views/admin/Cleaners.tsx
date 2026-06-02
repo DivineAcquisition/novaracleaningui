@@ -89,12 +89,10 @@ interface CleanerRow {
   stripe_account_id: string | null;
   home_address: string | null;
   home_city: string | null;
-  home_zip: string | null;
   service_zip_codes: string[] | null;
   max_travel_miles: number | null;
   preferred_work_days: string[] | null;
   skillset: string[] | null;
-  available_for_bookings: boolean | null;
   ghl_synced_at: string | null;
   ghl_sync_error: string | null;
   created_at: string;
