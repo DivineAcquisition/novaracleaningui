@@ -589,6 +589,22 @@ serve(async (req) => {
       });
     }
 
+    // Post-clean testimonial video offer (50% off the 2nd clean once a
+    // video + answers are submitted). Non-blocking — dynamic import keeps
+    // this isolated from the completion path.
+    try {
+      const { sendTestimonialOffer } = await import("../_shared/testimonial-offer.ts");
+      const { submitUrl } = await sendTestimonialOffer(supabase, {
+        id: bookingId,
+        email: booking.email,
+        first_name: booking.first_name,
+      });
+      logStep("Testimonial offer sent", { submitUrl });
+    } catch (testimonialErr) {
+      logStep("Testimonial offer failed (non-blocking)", {
+        error: testimonialErr instanceof Error ? testimonialErr.message : String(testimonialErr),
+      });
+    }
 
     // Trigger Zapier webhook for completed booking — this fans out to
     // GHL PIT (syncBookingLifecycle marks the opportunity won + updates

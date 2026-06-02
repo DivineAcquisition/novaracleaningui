@@ -73,7 +73,7 @@ interface BookingRow {
 const STATUS_COLORS: Record<string, string> = {
   pending_payment: "bg-amber-100 text-amber-900 border-amber-200",
   pending_details: "bg-amber-100 text-amber-900 border-amber-200",
-  confirmed: "bg-emerald-100 text-emerald-900 border-emerald-200",
+  confirmed: "bg-violet-100 text-violet-900 border-violet-200",
   assigned: "bg-indigo-100 text-indigo-900 border-indigo-200",
   in_progress: "bg-blue-100 text-blue-900 border-blue-200",
   completed: "bg-blue-100 text-blue-900 border-blue-200",
@@ -185,7 +185,7 @@ export default function AdminBookings() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <RiCalendarCheckLine className="w-6 h-6 text-emerald-700" />
+            <RiCalendarCheckLine className="w-6 h-6 text-violet-700" />
             Bookings
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -276,7 +276,7 @@ export default function AdminBookings() {
                     onClick={() => setSelected(b)}
                     className={cn(
                       "w-full text-left grid grid-cols-12 gap-2 px-5 py-3 hover:bg-slate-50 transition-colors items-center",
-                      highlightId === b.id && "bg-emerald-50/50",
+                      highlightId === b.id && "bg-violet-50/50",
                     )}
                   >
                     <div className="col-span-12 md:col-span-3">
@@ -671,7 +671,7 @@ function BookingSheet({
             <Card className="border-slate-200">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-1.5">
-                  <RiCalendarEventLine className="w-4 h-4 text-emerald-700" />
+                  <RiCalendarEventLine className="w-4 h-4 text-violet-700" />
                   Reschedule
                 </CardTitle>
                 <CardDescription>
@@ -695,7 +695,7 @@ function BookingSheet({
               <Card className="border-slate-200">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-1.5">
-                    <RiUserSmileLine className="w-4 h-4 text-emerald-700" />
+                    <RiUserSmileLine className="w-4 h-4 text-violet-700" />
                     Mark complete
                   </CardTitle>
                   <CardDescription>
@@ -706,7 +706,7 @@ function BookingSheet({
                   <Button
                     onClick={markCompleted}
                     disabled={working === "complete"}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="w-full bg-violet-600 hover:bg-violet-700 text-white"
                   >
                     {working === "complete" ? (
                       <>
@@ -751,7 +751,7 @@ function BookingSheet({
                       variant="outline"
                       onClick={() => adminCancelWithRefund("full")}
                       disabled={Boolean(working)}
-                      className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+                      className="border-violet-200 text-violet-800 bg-violet-50 hover:bg-violet-100"
                     >
                       <RiMoneyDollarCircleLine className="w-4 h-4 mr-1.5" />
                       Full refund

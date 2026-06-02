@@ -99,7 +99,7 @@ interface CreditBalance {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  confirmed: "bg-violet-100 text-violet-800 border-violet-200",
   completed: "bg-blue-100 text-blue-800 border-blue-200",
   cancelled: "bg-rose-100 text-rose-800 border-rose-200",
   pending_payment: "bg-amber-100 text-amber-800 border-amber-200",
@@ -189,7 +189,7 @@ export default function AdminCustomers() {
         </div>
         <Button
           onClick={() => setCreateOpen(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="bg-violet-600 hover:bg-violet-700 text-white"
         >
           <RiUserAddLine className="w-4 h-4 mr-1.5" />
           New customer
@@ -258,7 +258,7 @@ export default function AdminCustomers() {
                       {new Date(c.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="ghost" className="text-emerald-700">
+                      <Button size="sm" variant="ghost" className="text-violet-700">
                         Open
                       </Button>
                     </td>
@@ -555,7 +555,7 @@ function CustomerSheet({
                 </Button>
                 <Button
                   variant="outline"
-                  className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+                  className="border-violet-200 text-violet-800 bg-violet-50 hover:bg-violet-100"
                   onClick={sendPasswordReset}
                   disabled={actioning === "password"}
                 >
@@ -641,7 +641,7 @@ function CustomerSheet({
                           </div>
                         </div>
                         {(b.applied_credit_cents || 0) > 0 ? (
-                          <p className="text-[11px] text-emerald-700">
+                          <p className="text-[11px] text-violet-700">
                             Wallet credit applied: {dollars(b.applied_credit_cents)}
                           </p>
                         ) : null}
@@ -677,23 +677,23 @@ function CustomerSheet({
                 </TabsContent>
 
                 <TabsContent value="wallet" className="pt-4 space-y-3">
-                  <Card className="border-emerald-200 bg-emerald-50">
+                  <Card className="border-violet-200 bg-violet-50">
                     <CardContent className="p-4 flex items-center justify-between gap-2">
                       <div>
-                        <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">
+                        <p className="text-[11px] uppercase tracking-wide text-violet-700 font-semibold">
                           Available credit
                         </p>
-                        <p className="text-2xl font-bold text-emerald-800">
+                        <p className="text-2xl font-bold text-violet-800">
                           {dollars(balance?.balance_cents || 0)}
                         </p>
-                        <p className="text-[11px] text-emerald-700/80">
+                        <p className="text-[11px] text-violet-700/80">
                           Lifetime granted {dollars(balance?.lifetime_granted_cents || 0)} ·
                           applied {dollars(balance?.lifetime_applied_cents || 0)}
                         </p>
                       </div>
                       <Button
                         onClick={() => setGrantOpen(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        className="bg-violet-600 hover:bg-violet-700 text-white"
                       >
                         <RiGift2Line className="w-4 h-4 mr-1.5" />
                         Grant credit
@@ -716,7 +716,7 @@ function CustomerSheet({
                             <span
                               className={cn(
                                 "font-medium",
-                                w.amount_cents > 0 ? "text-emerald-700" : "text-rose-700",
+                                w.amount_cents > 0 ? "text-violet-700" : "text-rose-700",
                               )}
                             >
                               {w.amount_cents > 0 ? "+" : ""}
@@ -814,7 +814,7 @@ function ContactRow({
     <div className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2">
       <Icon className="w-4 h-4 text-slate-400 shrink-0" />
       {href ? (
-        <a className="truncate hover:text-emerald-700 flex-1" href={href}>
+        <a className="truncate hover:text-violet-700 flex-1" href={href}>
           {value}
         </a>
       ) : (
@@ -940,7 +940,7 @@ function EditCustomerDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 text-white">
               {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
               Save changes
             </Button>
@@ -1045,7 +1045,7 @@ function GrantCreditDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 text-white">
               {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
               Grant ${amount || "0"}
             </Button>
@@ -1159,7 +1159,7 @@ function CreateCustomerDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 text-white">
               {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiUserAddLine className="w-4 h-4 mr-1.5" />}
               Create customer
             </Button>

@@ -83,7 +83,7 @@ export const WebhookPayloadInspector = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       {entry.response.status >= 200 && entry.response.status < 300 ? (
-                        <RiCheckboxCircleLine className="h-4 w-4 text-green-500" />
+                        <RiCheckboxCircleLine className="h-4 w-4 text-violet-500" />
                       ) : (
                         <RiCloseCircleLine className="h-4 w-4 text-red-500" />
                       )}

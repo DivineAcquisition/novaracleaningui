@@ -16,6 +16,7 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { ZipGallery } from "@/components/booking/ZipGallery";
 import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
@@ -668,6 +669,8 @@ export default function BookingZip() {
           )}
         </div>
       </section>
+
+      <ZipGallery />
 
       {/* Footer */}
       <BookingFooter />

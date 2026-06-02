@@ -119,7 +119,7 @@ export default function AdminAuth() {
       <div className="w-full max-w-[400px]">
         {/* Brand + heading */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-md shadow-emerald-700/20 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 shadow-md shadow-violet-700/20 mb-4">
             <RiShieldStarLine className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-[22px] font-bold text-slate-900">Novara Admin</h1>
@@ -166,7 +166,7 @@ export default function AdminAuth() {
                     placeholder="you@novaracleaning.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500"
+                    className="pl-10 h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-violet-500/30 focus-visible:border-violet-500"
                     disabled={isLoading}
                     autoComplete="email"
                     required
@@ -186,7 +186,7 @@ export default function AdminAuth() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500"
+                    className="pl-10 h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-violet-500/30 focus-visible:border-violet-500"
                     disabled={isLoading}
                     autoComplete="current-password"
                     required
@@ -196,7 +196,7 @@ export default function AdminAuth() {
 
               <Button
                 type="submit"
-                className="w-full h-11 bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white font-semibold shadow-sm shadow-emerald-700/20 border-0"
+                className="w-full h-11 bg-gradient-to-br from-violet-500 to-violet-700 hover:from-violet-600 hover:to-violet-800 text-white font-semibold shadow-sm shadow-violet-700/20 border-0"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -215,7 +215,7 @@ export default function AdminAuth() {
 
             <p className="mt-5 text-xs text-center text-slate-500">
               Admin access only · Lost access? Email{" "}
-              <a className="text-emerald-700 underline" href="mailto:support@novaracleaning.com">
+              <a className="text-violet-700 underline" href="mailto:support@novaracleaning.com">
                 support@novaracleaning.com
               </a>
             </p>

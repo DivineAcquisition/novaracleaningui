@@ -246,12 +246,12 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
                   <div>
                     <p className="text-slate-400">Background Check</p>
                     <p className="text-white">{scorecard.background_check_status} {scorecard.background_check_expires_at ? `(exp ${format(new Date(scorecard.background_check_expires_at), "MMM d, yyyy")})` : ""}</p>
-                    <Badge className={`mt-1 ${compliance.background_check_flag === "ok" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{compliance.background_check_flag}</Badge>
+                    <Badge className={`mt-1 ${compliance.background_check_flag === "ok" ? "bg-violet-500/20 text-violet-300" : "bg-amber-500/20 text-amber-300"}`}>{compliance.background_check_flag}</Badge>
                   </div>
                   <div>
                     <p className="text-slate-400">Insurance</p>
                     <p className="text-white">{scorecard.insurance_verified ? "Verified" : "Not verified"} {scorecard.insurance_expires_at ? `(exp ${format(new Date(scorecard.insurance_expires_at), "MMM d, yyyy")})` : ""}</p>
-                    <Badge className={`mt-1 ${compliance.insurance_flag === "ok" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{compliance.insurance_flag}</Badge>
+                    <Badge className={`mt-1 ${compliance.insurance_flag === "ok" ? "bg-violet-500/20 text-violet-300" : "bg-amber-500/20 text-amber-300"}`}>{compliance.insurance_flag}</Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -267,13 +267,13 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
                     const t = (tier as any)[k];
                     if (!t) return null;
                     return (
-                      <div key={k} className={`p-3 rounded border ${t.eligible ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10"}`}>
-                        <p className="font-semibold text-sm mb-2">{label} {t.eligible && <span className="text-emerald-400">ELIGIBLE</span>}</p>
+                      <div key={k} className={`p-3 rounded border ${t.eligible ? "border-violet-500/40 bg-violet-500/5" : "border-white/10"}`}>
+                        <p className="font-semibold text-sm mb-2">{label} {t.eligible && <span className="text-violet-400">ELIGIBLE</span>}</p>
                         {([["months_tenure", "Months"], ["jobs", "Jobs"], ["on_time", "On-Time%"], ["rating", "Rating"]] as const).map(([f, fl]) => {
                           const met = t[`${f}_met`];
                           return (
                             <div key={f} className="flex justify-between text-xs">
-                              <span className={met ? "text-emerald-400" : "text-slate-400"}>{met ? "✓" : "✗"} {fl}</span>
+                              <span className={met ? "text-violet-400" : "text-slate-400"}>{met ? "✓" : "✗"} {fl}</span>
                               <span className="text-slate-400">{t[`${f}_actual` as any] ?? "—"} / {t[`${f}_required` as any] ?? t[`${f}_required_pct` as any]}</span>
                             </div>
                           );
@@ -301,7 +301,7 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className={`text-xs ${f.severity === "high" || f.severity === "urgent" ? "border-red-500/40 text-red-300" : "border-amber-500/30 text-amber-300"}`}>{f.severity}</Badge>
                             <span className="text-white">{f.issue_type}</span>
-                            {f.resolved && <Badge className="bg-emerald-500/20 text-emerald-300 text-xs">resolved</Badge>}
+                            {f.resolved && <Badge className="bg-violet-500/20 text-violet-300 text-xs">resolved</Badge>}
                           </div>
                           {f.details && <p className="text-xs text-slate-400 mt-1">{f.details}</p>}
                           <p className="text-[10px] text-slate-600 mt-1">{format(new Date(f.created_at), "MMM d, yyyy h:mm a")}</p>
@@ -327,7 +327,7 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
                 ) : (
                   <div className="grid grid-cols-7 gap-1 text-xs">
                     {calendar.map((d) => (
-                      <div key={d.date} className={`p-1 rounded text-center ${d.exceptions?.length > 0 ? "bg-amber-500/20 text-amber-300" : d.job_count > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-700/30 text-slate-500"}`}>
+                      <div key={d.date} className={`p-1 rounded text-center ${d.exceptions?.length > 0 ? "bg-amber-500/20 text-amber-300" : d.job_count > 0 ? "bg-violet-500/20 text-violet-300" : "bg-slate-700/30 text-slate-500"}`}>
                         <div className="text-[10px] uppercase">{d.weekday?.slice(0, 3)}</div>
                         <div className="text-sm font-bold">{format(new Date(d.date + "T00:00:00"), "d")}</div>
                         {d.job_count > 0 && <div className="text-[10px]">{d.job_count}j</div>}
@@ -350,7 +350,7 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
                   </Button>
                 </>
               ) : scorecard.status === "inactive" ? (
-                <Button variant="outline" size="sm" className="border-emerald-500/40 text-emerald-300" onClick={() => setActionDialog("reactivate")}>
+                <Button variant="outline" size="sm" className="border-violet-500/40 text-violet-300" onClick={() => setActionDialog("reactivate")}>
                   <RiUserFollowLine className="w-4 h-4 mr-1" /> Reactivate
                 </Button>
               ) : (

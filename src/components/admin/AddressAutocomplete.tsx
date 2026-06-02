@@ -366,7 +366,7 @@ export function AddressAutocomplete({
       )}
 
       {geocodedLocation && !validationError && (
-        <div className="flex items-start gap-1.5 text-[11px] text-emerald-700">
+        <div className="flex items-start gap-1.5 text-[11px] text-violet-700">
           <RiCheckboxCircleLine className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>Confirmed: {geocodedLocation}</span>
         </div>
@@ -386,7 +386,7 @@ function StatusBadge({ state }: { state: LoadState }) {
     },
     ready: {
       label: "Google Places · ready",
-      cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      cls: "bg-violet-50 text-violet-700 border-violet-200",
       icon: <RiCheckboxCircleLine className="w-3 h-3" />,
     },
     manual: {

@@ -82,7 +82,7 @@ export default function AdminAuthCallback() {
     >
       <SEO title="Admin Sign-in" noindex />
       <div className="text-center space-y-4">
-        <RiLoader4Line className="w-10 h-10 animate-spin text-emerald-700 mx-auto" />
+        <RiLoader4Line className="w-10 h-10 animate-spin text-violet-700 mx-auto" />
         <p className="text-sm text-slate-600">Verifying admin access…</p>
       </div>
     </div>

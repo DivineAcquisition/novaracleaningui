@@ -125,8 +125,8 @@ export function IntakePricingSidebar({
             </div>
 
             <div className="flex justify-between text-sm">
-              <span className="text-green-600">Custom Discount</span>
-              <span className="text-green-600 font-medium">-${customDiscount.toFixed(2)}</span>
+              <span className="text-violet-600">Custom Discount</span>
+              <span className="text-violet-600 font-medium">-${customDiscount.toFixed(2)}</span>
             </div>
           </div>
         )}
@@ -194,7 +194,7 @@ export function IntakePricingSidebar({
               
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Company Profit</span>
-                <span className="font-semibold text-green-600">
+                <span className="font-semibold text-violet-600">
                   ${companyProfit.toFixed(2)}
                 </span>
               </div>

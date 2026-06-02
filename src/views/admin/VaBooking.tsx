@@ -11,7 +11,7 @@
 //     reads like a guided checkout, not a wall of cards
 //   * replaces the Service Type Select with 4 visual radio cards that
 //     show price + multiplier at a glance
-//   * ships its own emerald-themed compact schedule picker (the
+//   * ships its own violet-themed compact schedule picker (the
 //     customer-flow SchedulePicker is purple-themed and breaks the
 //     admin visual rhythm when embedded)
 //   * lead lookup is collapsed by default — no noise on mount
@@ -560,12 +560,12 @@ export default function VaBooking() {
       <div className="max-w-2xl mx-auto">
         <SEO title="Novara Internal Booking" noindex />
         <Card className="border border-slate-200 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] rounded-2xl overflow-hidden">
-          <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400" />
+          <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-teal-400" />
           <CardHeader className="text-center pt-10">
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center ring-1 ring-emerald-200">
-              <RiCheckboxCircleLine className="w-7 h-7 text-emerald-600" />
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center ring-1 ring-violet-200">
+              <RiCheckboxCircleLine className="w-7 h-7 text-violet-600" />
             </div>
-            <Badge className="mx-auto mt-3 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50 font-medium">
+            <Badge className="mx-auto mt-3 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-50 font-medium">
               Internal booking created
             </Badge>
             <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
@@ -639,7 +639,7 @@ export default function VaBooking() {
                 Book another
               </Button>
               <Button
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
                 onClick={() =>
                   router.push(`/admin/bookings?highlight=${result.bookingId}`)
                 }
@@ -662,7 +662,7 @@ export default function VaBooking() {
       {/* Page header — SaaS eyebrow + title + actions */}
       <header className="mb-7">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-emerald-700/80 bg-emerald-50 border border-emerald-200/70 rounded-full px-2 py-0.5">
+          <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-violet-700/80 bg-violet-50 border border-violet-200/70 rounded-full px-2 py-0.5">
             Workspace · Internal
           </span>
           {linkedLead && (
@@ -721,7 +721,7 @@ export default function VaBooking() {
                   onClick={() => applyLead(l as LeadHydration)}
                   className={cn(
                     "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between transition-colors",
-                    linkedLead?.id === l.id && "bg-emerald-50/60",
+                    linkedLead?.id === l.id && "bg-violet-50/60",
                   )}
                 >
                   <div className="min-w-0">
@@ -893,19 +893,19 @@ export default function VaBooking() {
                       className={cn(
                         "group relative text-left rounded-xl border p-3 transition-all",
                         active
-                          ? "border-emerald-500 bg-emerald-50 shadow-[0_0_0_3px_rgba(16,163,74,0.12)]"
-                          : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50",
+                          ? "border-violet-500 bg-violet-50 shadow-[0_0_0_3px_rgba(16,163,74,0.12)]"
+                          : "border-slate-200 bg-white hover:border-violet-300 hover:bg-slate-50",
                       )}
                     >
                       {active && (
-                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center">
+                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-violet-600 text-white inline-flex items-center justify-center">
                           <RiCheckLine className="w-2.5 h-2.5" />
                         </span>
                       )}
                       <p
                         className={cn(
                           "text-sm font-semibold leading-tight",
-                          active ? "text-emerald-900" : "text-slate-900",
+                          active ? "text-violet-900" : "text-slate-900",
                         )}
                       >
                         {opt.label}
@@ -916,7 +916,7 @@ export default function VaBooking() {
                       <p
                         className={cn(
                           "text-sm font-bold tabular-nums mt-2",
-                          active ? "text-emerald-700" : "text-slate-700",
+                          active ? "text-violet-700" : "text-slate-700",
                         )}
                       >
                         {fmtMoney(previewCents)}
@@ -948,15 +948,15 @@ export default function VaBooking() {
                       className={cn(
                         "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
                         checked
-                          ? "border-emerald-500 bg-emerald-50 text-emerald-900"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300",
+                          ? "border-violet-500 bg-violet-50 text-violet-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-violet-300",
                       )}
                     >
                       <span
                         className={cn(
                           "w-4 h-4 rounded-full inline-flex items-center justify-center border",
                           checked
-                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            ? "bg-violet-600 border-violet-600 text-white"
                             : "border-slate-300",
                         )}
                       >
@@ -1080,8 +1080,8 @@ export default function VaBooking() {
                             className={cn(
                               "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
                               checked
-                                ? "bg-emerald-600 border-emerald-600 text-white"
-                                : "bg-white border-slate-200 text-slate-700 hover:border-emerald-300",
+                                ? "bg-violet-600 border-violet-600 text-white"
+                                : "bg-white border-slate-200 text-slate-700 hover:border-violet-300",
                             )}
                           >
                             {f.label}
@@ -1117,8 +1117,8 @@ export default function VaBooking() {
                           className={cn(
                             "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors",
                             suppliesProvidedBy === opt.id
-                              ? "border-emerald-500 bg-emerald-50"
-                              : "border-slate-200 bg-white hover:border-emerald-300",
+                              ? "border-violet-500 bg-violet-50"
+                              : "border-slate-200 bg-white hover:border-violet-300",
                           )}
                         >
                           <RadioGroupItem value={opt.id} />
@@ -1146,7 +1146,7 @@ export default function VaBooking() {
             </div>
           </FormSection>
 
-          {/* 3 — Schedule (custom emerald-themed inline picker) */}
+          {/* 3 — Schedule (custom violet-themed inline picker) */}
           <FormSection
             number={3}
             title="Schedule"
@@ -1206,8 +1206,8 @@ export default function VaBooking() {
                     className={cn(
                       "flex items-start gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors",
                       invoiceMode === m.id
-                        ? "border-emerald-500 bg-emerald-50"
-                        : "border-slate-200 bg-white hover:border-emerald-300",
+                        ? "border-violet-500 bg-violet-50"
+                        : "border-slate-200 bg-white hover:border-violet-300",
                     )}
                   >
                     <RadioGroupItem value={m.id} className="mt-0.5" />
@@ -1247,7 +1247,7 @@ export default function VaBooking() {
                   />
                 </Field>
                 {invoiceMode === "deposit_plus_preauth" && (
-                  <div className="col-span-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-900 leading-relaxed">
+                  <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
                     A hosted Stripe Checkout link will be sent to the customer
                     that collects the deposit AND saves their card off-session.
                     A pre-auth hold for the remaining balance is placed a few
@@ -1263,7 +1263,7 @@ export default function VaBooking() {
               <Field
                 label={
                   <span className="flex items-center gap-1.5">
-                    <RiPriceTag3Line className="w-3.5 h-3.5 text-emerald-600" />
+                    <RiPriceTag3Line className="w-3.5 h-3.5 text-violet-600" />
                     Promo code
                   </span>
                 }
@@ -1316,7 +1316,7 @@ export default function VaBooking() {
         <aside className="xl:col-span-4">
           <div className="xl:sticky xl:top-6 space-y-4">
             <Card className="border border-slate-200 rounded-2xl overflow-hidden shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)]">
-              <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 py-5 text-white">
+              <div className="relative bg-gradient-to-br from-violet-600 via-violet-500 to-teal-500 px-5 py-5 text-white">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -translate-y-8 translate-x-8" />
                 <div className="relative flex items-center gap-2">
                   <RiSparklingLine className="w-4 h-4" />
@@ -1368,7 +1368,7 @@ export default function VaBooking() {
                 </div>
 
                 {walletCreditCents > 0 && (
-                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800 flex items-center gap-1.5 mt-2">
+                  <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-800 flex items-center gap-1.5 mt-2">
                     <RiWalletLine className="w-3.5 h-3.5 shrink-0" />
                     <span>
                       {fmtMoney(walletCreditCents)} wallet credit applied
@@ -1434,7 +1434,7 @@ export default function VaBooking() {
   );
 }
 
-// ─── Inline schedule picker (emerald-themed, admin-compact) ────────────
+// ─── Inline schedule picker (violet-themed, admin-compact) ────────────
 
 function InlineSchedulePicker({
   selectedDate,
@@ -1550,10 +1550,10 @@ function InlineSchedulePicker({
                   className={cn(
                     "aspect-square rounded-lg text-xs font-medium transition-all relative flex items-center justify-center",
                     disabled && "text-slate-300 cursor-not-allowed",
-                    !disabled && !isSel && "text-slate-700 hover:bg-emerald-50 hover:text-emerald-900",
-                    isSel && "bg-emerald-600 text-white shadow-[0_2px_8px_-2px_rgba(16,163,74,0.5)]",
+                    !disabled && !isSel && "text-slate-700 hover:bg-violet-50 hover:text-violet-900",
+                    isSel && "bg-violet-600 text-white shadow-[0_2px_8px_-2px_rgba(16,163,74,0.5)]",
                     !inMonth && !isSel && "text-slate-300",
-                    isToday && !isSel && "ring-1 ring-emerald-300",
+                    isToday && !isSel && "ring-1 ring-violet-300",
                   )}
                 >
                   {format(day, "d")}
@@ -1616,9 +1616,9 @@ function InlineSchedulePicker({
                             className={cn(
                               "h-8 rounded-md text-xs font-semibold transition-all tabular-nums",
                               isSel
-                                ? "bg-emerald-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
+                                ? "bg-violet-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
                                 : available
-                                  ? "bg-slate-50 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200"
+                                  ? "bg-slate-50 text-slate-700 hover:bg-violet-50 hover:text-violet-900 border border-slate-200"
                                   : "bg-slate-100 text-slate-400 line-through cursor-not-allowed border border-slate-100",
                             )}
                           >
@@ -1657,12 +1657,12 @@ function FormSection({
     <Card className="border border-slate-200 rounded-2xl shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]">
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
-          <span className="relative shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white inline-flex items-center justify-center font-jakarta font-bold text-sm shadow-[0_2px_8px_-2px_rgba(16,163,74,0.45)]">
+          <span className="relative shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white inline-flex items-center justify-center font-jakarta font-bold text-sm shadow-[0_2px_8px_-2px_rgba(16,163,74,0.45)]">
             {number}
           </span>
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="text-emerald-700">{icon}</span>
+              <span className="text-violet-700">{icon}</span>
               <CardTitle className="font-jakarta text-base font-bold text-slate-900 tracking-tight">
                 {title}
               </CardTitle>
@@ -1698,10 +1698,10 @@ function Field({
       <div className="flex items-center justify-between">
         <Label className="text-xs font-semibold text-slate-700">
           {label}
-          {required && <span className="text-emerald-600 ml-0.5">*</span>}
+          {required && <span className="text-violet-600 ml-0.5">*</span>}
         </Label>
         {rightHint && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-700 bg-violet-50 border border-violet-200 rounded-full px-1.5 py-0.5">
             <RiWalletLine className="w-3 h-3" />
             {rightHint}
           </span>
@@ -1770,7 +1770,7 @@ function InvoiceCard({
           </Button>
           <Button
             size="sm"
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
             onClick={() => window.open(url, "_blank", "noopener")}
           >
             Open

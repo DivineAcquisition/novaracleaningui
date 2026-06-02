@@ -106,6 +106,12 @@ const NAV_ITEMS: NavItem[] = [
     description: "Per-VA leads & revenue",
   },
   {
+    title: "Testimonials",
+    url: "/admin/testimonials",
+    icon: RiShieldStarLine,
+    description: "Customer video reviews",
+  },
+  {
     title: "Team",
     url: "/admin/team",
     icon: RiTeamLine,

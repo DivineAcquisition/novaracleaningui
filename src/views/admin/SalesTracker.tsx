@@ -248,7 +248,7 @@ export default function AdminSalesTracker() {
                       <TableRow key={r.va_name} className="hover:bg-slate-50/60">
                         <TableCell>
                           <div className="flex items-center gap-2.5">
-                            <span className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 text-emerald-700 flex items-center justify-center text-xs font-bold">
+                            <span className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-100 to-violet-200 text-violet-700 flex items-center justify-center text-xs font-bold">
                               {(r.va_name || "?")
                                 .split(" ")
                                 .filter(Boolean)
@@ -292,7 +292,7 @@ export default function AdminSalesTracker() {
                               className={cn(
                                 "font-semibold",
                                 r.conversion_rate_pct >= 25
-                                  ? "text-emerald-700"
+                                  ? "text-violet-700"
                                   : r.conversion_rate_pct >= 10
                                     ? "text-amber-700"
                                     : "text-slate-600",
@@ -372,9 +372,9 @@ function KpiTile({
       icon: "bg-amber-100 text-amber-700",
     },
     emerald: {
-      bg: "border-emerald-200 bg-emerald-50",
-      text: "text-emerald-900",
-      icon: "bg-emerald-100 text-emerald-700",
+      bg: "border-violet-200 bg-violet-50",
+      text: "text-violet-900",
+      icon: "bg-violet-100 text-violet-700",
     },
     sky: {
       bg: "border-sky-200 bg-sky-50",
@@ -451,7 +451,7 @@ function VaBadge({
     return (
       <Badge
         variant="outline"
-        className="bg-emerald-50 text-emerald-800 border-emerald-200"
+        className="bg-violet-50 text-violet-800 border-violet-200"
       >
         <RiCheckLine className="w-3 h-3 mr-1" />
         On shift

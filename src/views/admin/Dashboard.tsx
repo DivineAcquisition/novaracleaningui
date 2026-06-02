@@ -57,15 +57,15 @@ const dollars = (cents: number) =>
   (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 const EVENT_BADGE: Record<string, { label: string; className: string }> = {
-  "booking.created":   { label: "Booking",  className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
-  "booking.confirmed": { label: "Confirmed",className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  "booking.created":   { label: "Booking",  className: "bg-violet-100 text-violet-800 border-violet-200" },
+  "booking.confirmed": { label: "Confirmed",className: "bg-violet-100 text-violet-800 border-violet-200" },
   "booking.completed": { label: "Completed",className: "bg-blue-100 text-blue-800 border-blue-200" },
   "booking.cancelled": { label: "Cancelled",className: "bg-rose-100 text-rose-800 border-rose-200" },
   "lead.created":      { label: "Lead",     className: "bg-amber-100 text-amber-800 border-amber-200" },
   "sms.sent":          { label: "SMS out",  className: "bg-slate-100 text-slate-700 border-slate-200" },
   "sms.received":      { label: "SMS in",   className: "bg-slate-100 text-slate-700 border-slate-200" },
   "job.assignment.offered":   { label: "Offer sent",   className: "bg-indigo-100 text-indigo-800 border-indigo-200" },
-  "job.assignment.accepted":  { label: "Job accepted", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  "job.assignment.accepted":  { label: "Job accepted", className: "bg-violet-100 text-violet-800 border-violet-200" },
   "job.assignment.declined":  { label: "Declined",     className: "bg-rose-100 text-rose-800 border-rose-200" },
 };
 
@@ -272,8 +272,8 @@ export default function AdminDashboard() {
               <CardTitle className="text-base">Live activity</CardTitle>
               <CardDescription>Realtime stream from public.events</CardDescription>
             </div>
-            <span className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-[11px] text-violet-700 font-medium">
+              <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
               Live
             </span>
           </CardHeader>
@@ -348,7 +348,7 @@ function KpiTile({
   tone: "emerald" | "amber" | "slate";
 }) {
   const toneStyles = {
-    emerald: "bg-emerald-50 text-emerald-700",
+    emerald: "bg-violet-50 text-violet-700",
     amber: "bg-amber-50 text-amber-700",
     slate: "bg-slate-100 text-slate-700",
   }[tone];
@@ -392,11 +392,11 @@ function TrendStrip({ rows }: { rows: DailyRow[] }) {
           return (
             <div key={r.day} className="flex-1 flex flex-col items-center justify-end gap-0.5" title={r.day}>
               <div
-                className="w-full rounded-t-sm bg-emerald-500/80"
+                className="w-full rounded-t-sm bg-violet-500/80"
                 style={{ height: `${heightBookings}%` }}
               />
               <div
-                className="w-full rounded-t-sm bg-emerald-200"
+                className="w-full rounded-t-sm bg-violet-200"
                 style={{ height: `${heightRevenue}%` }}
               />
             </div>
@@ -407,10 +407,10 @@ function TrendStrip({ rows }: { rows: DailyRow[] }) {
         <span>{rows[0]?.day}</span>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-emerald-500/80" /> Bookings
+            <span className="w-2 h-2 rounded-sm bg-violet-500/80" /> Bookings
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-emerald-200" /> Revenue
+            <span className="w-2 h-2 rounded-sm bg-violet-200" /> Revenue
           </span>
         </div>
         <span>{rows[rows.length - 1]?.day}</span>

@@ -366,7 +366,7 @@ export default function AdminMap() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <RiMapPin2Line className="w-6 h-6 text-emerald-700" />
+            <RiMapPin2Line className="w-6 h-6 text-violet-700" />
             Operational map
           </h1>
           <p className="text-sm text-slate-500">
@@ -447,7 +447,7 @@ export default function AdminMap() {
           <Card className="border-slate-200">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-1.5">
-                <RiTrophyLine className="w-4 h-4 text-emerald-700" />
+                <RiTrophyLine className="w-4 h-4 text-violet-700" />
                 Top booking ZIPs (next 14d)
               </CardTitle>
               <CardDescription>Where the demand actually is</CardDescription>
@@ -476,7 +476,7 @@ export default function AdminMap() {
                       className={cn(
                         "text-[10px] font-medium border",
                         z.cleaners > 0
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          ? "bg-violet-50 text-violet-700 border-violet-200"
                           : "bg-rose-50 text-rose-700 border-rose-200",
                       )}
                     >
@@ -502,7 +502,7 @@ export default function AdminMap() {
               {loading ? (
                 <Skeleton className="h-20 w-full" />
               ) : insight.gaps.length === 0 ? (
-                <p className="text-xs text-emerald-700 text-center py-3">
+                <p className="text-xs text-violet-700 text-center py-3">
                   ✓ Every booking ZIP has at least one active cleaner.
                 </p>
               ) : (

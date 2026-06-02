@@ -259,14 +259,14 @@ export default function AdminPayroll() {
         </Button>
       </div>
 
-      <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+      <Card className="border-violet-200 bg-gradient-to-br from-violet-50 to-white">
         <CardContent className="p-4 space-y-2 text-sm text-slate-700">
-          <p className="font-semibold text-emerald-900">How cleaner payouts work (Stripe Connect)</p>
+          <p className="font-semibold text-violet-900">How cleaner payouts work (Stripe Connect)</p>
           <ol className="list-decimal list-inside space-y-1 text-slate-600">
             <li>
               Cleaners onboard at{" "}
               <a
-                className="text-emerald-700 underline"
+                className="text-violet-700 underline"
                 href="https://contractor.novaracleaning.com/cleaner/onboarding"
                 target="_blank"
                 rel="noreferrer"
@@ -408,7 +408,7 @@ export default function AdminPayroll() {
                       <TableCell className="text-right text-sm text-slate-600">
                         {r.processing_cents > 0 ? usd(r.processing_cents) : "—"}
                       </TableCell>
-                      <TableCell className="text-right text-sm text-emerald-700 font-medium">
+                      <TableCell className="text-right text-sm text-violet-700 font-medium">
                         {usd(r.paid_cents)}
                       </TableCell>
                       <TableCell className="text-right text-xs text-slate-500">
@@ -443,7 +443,7 @@ export default function AdminPayroll() {
                             className={cn(
                               "h-8 text-xs whitespace-nowrap",
                               r.owed_cents > 0 &&
-                                "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white",
+                                "bg-gradient-to-br from-violet-500 to-violet-700 text-white",
                             )}
                           >
                             {payingId === r.cleaner_id ? (
@@ -502,9 +502,9 @@ function KpiTile({
       icon: "bg-amber-100 text-amber-700",
     },
     emerald: {
-      bg: "border-emerald-200 bg-emerald-50",
-      text: "text-emerald-900",
-      icon: "bg-emerald-100 text-emerald-700",
+      bg: "border-violet-200 bg-violet-50",
+      text: "text-violet-900",
+      icon: "bg-violet-100 text-violet-700",
     },
     sky: {
       bg: "border-sky-200 bg-sky-50",
@@ -560,7 +560,7 @@ function StripeBadge({
     );
   }
   return (
-    <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200">
+    <Badge variant="outline" className="bg-violet-50 text-violet-800 border-violet-200">
       <RiCheckboxCircleFill className="w-3 h-3 mr-1" />
       Connected
     </Badge>

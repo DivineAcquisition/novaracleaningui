@@ -138,7 +138,7 @@ export default function AdminMessages() {
     <div className="space-y-5">
       <div>
         <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <RiChat3Line className="w-6 h-6 text-emerald-700" />
+          <RiChat3Line className="w-6 h-6 text-violet-700" />
           Messages
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">
@@ -162,7 +162,7 @@ export default function AdminMessages() {
         <Card className="border-slate-200 shadow-sm rounded-2xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-1.5">
-              <RiUser3Line className="w-4 h-4 text-emerald-700" />
+              <RiUser3Line className="w-4 h-4 text-violet-700" />
               Recipient
             </CardTitle>
             <CardDescription>
@@ -215,7 +215,7 @@ export default function AdminMessages() {
                     className={cn(
                       "text-[10px]",
                       c.kind === "customer"
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        ? "bg-violet-50 text-violet-800 border-violet-200"
                         : "bg-slate-100 text-slate-700 border-slate-200",
                     )}
                   >
@@ -356,7 +356,7 @@ function SmsComposer({ target }: { target: { phone: string; email?: string; firs
         <Button
           onClick={send}
           disabled={sending || !target.phone || !body.trim()}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="w-full bg-violet-600 hover:bg-violet-700 text-white"
         >
           {sending ? (
             <>
@@ -469,7 +469,7 @@ function EmailComposer({ target }: { target: { email: string; firstName: string 
         <Button
           onClick={send}
           disabled={sending || !target.email || !subject.trim() || !body.trim()}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="w-full bg-violet-600 hover:bg-violet-700 text-white"
         >
           {sending ? (
             <>
@@ -619,7 +619,7 @@ function GhlInboxPanel({ onPick }: { onPick: (c: GhlContact) => void }) {
     <Card className="border-slate-200 shadow-sm rounded-2xl">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-1.5">
-          <RiChat3Line className="w-4 h-4 text-emerald-700" />
+          <RiChat3Line className="w-4 h-4 text-violet-700" />
           GHL Conversations (2-way)
         </CardTitle>
         <CardDescription>
@@ -648,7 +648,7 @@ function GhlInboxPanel({ onPick }: { onPick: (c: GhlContact) => void }) {
               onClick={() => openContact(c)}
               className={cn(
                 "w-full text-left p-3 hover:bg-slate-50 border-b border-slate-100",
-                activeContactId === c.id && "bg-emerald-50/60",
+                activeContactId === c.id && "bg-violet-50/60",
               )}
             >
               <p className="text-sm font-medium text-slate-900 truncate">
@@ -713,7 +713,7 @@ function GhlInboxPanel({ onPick }: { onPick: (c: GhlContact) => void }) {
                     className={cn(
                       "max-w-[80%] rounded-lg px-3 py-1.5 text-sm whitespace-pre-wrap break-words",
                       m.direction === "outbound"
-                        ? "ml-auto bg-emerald-600 text-white"
+                        ? "ml-auto bg-violet-600 text-white"
                         : "mr-auto bg-white border border-slate-200",
                     )}
                   >
@@ -721,7 +721,7 @@ function GhlInboxPanel({ onPick }: { onPick: (c: GhlContact) => void }) {
                     <div
                       className={cn(
                         "text-[9px] mt-0.5",
-                        m.direction === "outbound" ? "text-emerald-100" : "text-slate-400",
+                        m.direction === "outbound" ? "text-violet-100" : "text-slate-400",
                       )}
                     >
                       {new Date(m.dateAdded).toLocaleString()}
@@ -740,7 +740,7 @@ function GhlInboxPanel({ onPick }: { onPick: (c: GhlContact) => void }) {
                 <Button
                   onClick={sendReply}
                   disabled={sending || !reply.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white self-end"
+                  className="bg-violet-600 hover:bg-violet-700 text-white self-end"
                 >
                   {sending ? (
                     <RiLoader4Line className="w-4 h-4 animate-spin" />

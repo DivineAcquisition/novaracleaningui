@@ -226,7 +226,7 @@ export default function AdminTeam() {
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as "va" | "admin")}
-                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500"
+                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-500"
               >
                 <option value="va">VA (virtual assistant)</option>
                 <option value="admin">Admin</option>
@@ -236,7 +236,7 @@ export default function AdminTeam() {
               <Button
                 onClick={createUser}
                 disabled={busy}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="w-full bg-violet-600 hover:bg-violet-700 text-white"
               >
                 {busy ? (
                   <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
@@ -248,11 +248,11 @@ export default function AdminTeam() {
             </div>
           </div>
           {inviteSent && createdEmail && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs">
-              <p className="font-semibold text-emerald-900 mb-1">
+            <div className="rounded-md border border-violet-200 bg-violet-50 p-3 text-xs">
+              <p className="font-semibold text-violet-900 mb-1">
                 Invite sent to {createdEmail}
               </p>
-              <p className="text-emerald-800">
+              <p className="text-violet-800">
                 They received an email to accept workspace access at{" "}
                 <span className="font-medium">admin.novaracleaning.com</span>. The link
                 lets them set a password (new accounts) or sign in (existing accounts).
@@ -322,7 +322,7 @@ export default function AdminTeam() {
                           {isAdmin && (
                             <Badge
                               variant="outline"
-                              className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                              className="bg-violet-50 text-violet-700 border-violet-200"
                             >
                               <RiShieldStarLine className="w-3 h-3 mr-1" /> admin
                             </Badge>
@@ -356,7 +356,7 @@ export default function AdminTeam() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-emerald-200 text-emerald-700"
+                              className="border-violet-200 text-violet-700"
                               onClick={() => changeRole("set_role", u.userId, "admin")}
                             >
                               Make admin

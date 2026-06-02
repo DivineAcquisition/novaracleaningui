@@ -108,7 +108,7 @@ const STATUS_FILTERS = [
 ] as const;
 
 const STATUS_BADGE: Record<string, string> = {
-  active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  active: "bg-violet-100 text-violet-800 border-violet-200",
   pending: "bg-amber-100 text-amber-800 border-amber-200",
   inactive: "bg-slate-100 text-slate-600 border-slate-200",
   terminated: "bg-rose-100 text-rose-800 border-rose-200",
@@ -296,7 +296,7 @@ export default function AdminCleaners() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
               <RiCheckLine className="w-3 h-3" /> {counts.active} active
             </span>
             <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
@@ -308,7 +308,7 @@ export default function AdminCleaners() {
           </div>
           <Button
             onClick={() => setAddOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-violet-600 hover:bg-violet-700 text-white"
           >
             + Add cleaner
           </Button>
@@ -429,7 +429,7 @@ export default function AdminCleaners() {
                             <div
                               className={cn(
                                 "h-full rounded-full",
-                                progress === 100 ? "bg-emerald-500" : "bg-amber-400",
+                                progress === 100 ? "bg-violet-500" : "bg-amber-400",
                               )}
                               style={{ width: `${progress}%` }}
                             />
@@ -449,7 +449,7 @@ export default function AdminCleaners() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button size="sm" variant="ghost" className="text-emerald-700">
+                        <Button size="sm" variant="ghost" className="text-violet-700">
                           View
                         </Button>
                       </td>
@@ -574,17 +574,17 @@ function ContactSection({ cleaner }: { cleaner: CleanerRow }) {
     <div className="grid grid-cols-1 gap-2 text-sm">
       <div className="flex items-center gap-2 text-slate-700">
         <RiMailLine className="w-4 h-4 text-slate-400 shrink-0" />
-        <a href={`mailto:${cleaner.email}`} className="truncate hover:text-emerald-700">
+        <a href={`mailto:${cleaner.email}`} className="truncate hover:text-violet-700">
           {cleaner.email || "—"}
         </a>
       </div>
       <div className="flex items-center gap-2 text-slate-700">
         <RiPhoneLine className="w-4 h-4 text-slate-400 shrink-0" />
-        <a href={`tel:${cleaner.phone}`} className="hover:text-emerald-700">
+        <a href={`tel:${cleaner.phone}`} className="hover:text-violet-700">
           {cleaner.phone || "—"}
         </a>
         {cleaner.phone_verified ? (
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+          <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 text-[10px]">
             verified
           </Badge>
         ) : null}
@@ -616,11 +616,11 @@ function OnboardingChecklist({ cleaner }: { cleaner: CleanerRow }) {
               key={s.label}
               className={cn(
                 "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm",
-                done ? "bg-emerald-50 text-emerald-900" : "bg-slate-50 text-slate-600",
+                done ? "bg-violet-50 text-violet-900" : "bg-slate-50 text-slate-600",
               )}
             >
               {done ? (
-                <RiCheckboxCircleFill className="w-4 h-4 text-emerald-600 shrink-0" />
+                <RiCheckboxCircleFill className="w-4 h-4 text-violet-600 shrink-0" />
               ) : (
                 <RiCircleLine className="w-4 h-4 text-slate-400 shrink-0" />
               )}
@@ -721,7 +721,7 @@ function GhlBlock({
           {cleaner.ghl_sync_error}
         </div>
       ) : null}
-      <Button onClick={onResync} disabled={actioning} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+      <Button onClick={onResync} disabled={actioning} className="bg-violet-600 hover:bg-violet-700 text-white">
         {actioning ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : <RiRefreshLine className="w-4 h-4 mr-2" />}
         Resync to GHL now
       </Button>
@@ -925,7 +925,7 @@ function ActionsBlock({
             variant="outline"
             disabled={actioning}
             onClick={() => onAction("reactivate")}
-            className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+            className="border-violet-200 text-violet-800 bg-violet-50 hover:bg-violet-100"
           >
             <RiArrowGoBackLine className="w-4 h-4 mr-1.5" />
             Reactivate
@@ -1159,7 +1159,7 @@ function AddCleanerDialog({
             onClick={() => { setMode("full"); setBypassStep("send"); setBypassCleanerId(null); setBypassCode(""); }}
             className={cn(
               "flex-1 text-xs font-semibold py-2 rounded-lg transition-colors",
-              mode === "full" ? "bg-white shadow-sm text-emerald-700" : "text-slate-600 hover:text-slate-900",
+              mode === "full" ? "bg-white shadow-sm text-violet-700" : "text-slate-600 hover:text-slate-900",
             )}
           >
             Full account
@@ -1169,7 +1169,7 @@ function AddCleanerDialog({
             onClick={() => setMode("bypass")}
             className={cn(
               "flex-1 text-xs font-semibold py-2 rounded-lg transition-colors",
-              mode === "bypass" ? "bg-white shadow-sm text-emerald-700" : "text-slate-600 hover:text-slate-900",
+              mode === "bypass" ? "bg-white shadow-sm text-violet-700" : "text-slate-600 hover:text-slate-900",
             )}
           >
             Bypass onboarding (phone verify)
@@ -1212,7 +1212,7 @@ function AddCleanerDialog({
                 <Button
                   onClick={sendBypassCode}
                   disabled={busy}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
                 >
                   {busy ? (
                     <>
@@ -1247,7 +1247,7 @@ function AddCleanerDialog({
                   <Button
                     onClick={verifyBypassCode}
                     disabled={busy || bypassCode.length < 4}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
                   >
                     {busy ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
                     Verify + activate
@@ -1290,7 +1290,7 @@ function AddCleanerDialog({
               <select
                 value={payTier}
                 onChange={(e) => setPayTier(e.target.value as "foundation" | "proven" | "elite")}
-                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500"
+                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-500"
               >
                 <option value="foundation">Foundation (35%)</option>
                 <option value="proven">Proven (40%)</option>
@@ -1309,7 +1309,7 @@ function AddCleanerDialog({
           <Button
             onClick={submit}
             disabled={busy}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
           >
             {busy ? (
               <>
@@ -1320,12 +1320,12 @@ function AddCleanerDialog({
             )}
           </Button>
           {createdPassword && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs">
-              <p className="font-semibold text-emerald-900 mb-1">
+            <div className="rounded-md border border-violet-200 bg-violet-50 p-3 text-xs">
+              <p className="font-semibold text-violet-900 mb-1">
                 Temporary password (share this)
               </p>
-              <p className="font-mono text-sm break-all text-emerald-900">{createdPassword}</p>
-              <p className="text-[11px] text-emerald-700 mt-2">
+              <p className="font-mono text-sm break-all text-violet-900">{createdPassword}</p>
+              <p className="text-[11px] text-violet-700 mt-2">
                 Tell them to sign in at app.novaracleaning.com/contractor and change it.
               </p>
             </div>
