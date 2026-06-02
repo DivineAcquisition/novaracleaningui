@@ -1,0 +1,16 @@
+/* Pull in the web app's full design system (Tailwind layers + CSS tokens). */
+@import "../../src/app/globals.css";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  /* Honour iOS safe areas inside the native shell. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
