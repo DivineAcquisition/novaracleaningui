@@ -76,6 +76,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -327,6 +328,7 @@ export default function VaBooking() {
 
   // Payment
   const [csrName, setCsrName] = useState("");
+  const [vaAgreedOnPhone, setVaAgreedOnPhone] = useState(false);
   const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>(
     "deposit_plus_remaining",
   );
@@ -473,8 +475,9 @@ export default function VaBooking() {
     if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
     if (!selectedDate) list.push("Service date");
     if (!selectedTime) list.push("Time slot");
+    if (!vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
     return list;
-  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime]);
+  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone]);
 
   const canSubmit = requirements.length === 0;
 
@@ -541,6 +544,35 @@ export default function VaBooking() {
       toast.success(
         `Booking created — ${data?.bookingNumber || data?.bookingId}`,
       );
+
+      // One-Time Service Agreement — verbally agreed over the phone. The
+      // customer always receives their mapped copy by email.
+      try {
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || email.trim();
+        const pdfBase64 = await buildSignedAgreementBase64({
+          name: fullName,
+          email: email.trim().toLowerCase(),
+          serviceType,
+          serviceDate,
+          totalCents: typeof data?.totalCents === "number" ? data.totalCents : (overrideTotal.trim() ? Math.round(parseFloat(overrideTotal) * 100) : undefined),
+          depositCents: typeof data?.depositCents === "number" ? data.depositCents : undefined,
+          balanceCents: typeof data?.balanceCents === "number" ? data.balanceCents : undefined,
+          verbalNote: `Verbally agreed over the phone — recorded by ${csrName.trim() || "Novara VA"} on ${new Date().toLocaleString()}`,
+        });
+        await supabase.functions.invoke("store-service-agreement", {
+          body: {
+            bookingId: data?.bookingId,
+            email: email.trim().toLowerCase(),
+            name: fullName,
+            serviceType,
+            source: "va_phone",
+            agreed: { terms: true, disclaimer: true, refund: true, serviceAgreement: true },
+            pdfBase64,
+          },
+        });
+      } catch (agErr) {
+        console.error("[VaBooking] agreement store failed", agErr);
+      }
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to book: ${m}`);
@@ -1376,6 +1408,11 @@ export default function VaBooking() {
                     </span>
                   </div>
                 )}
+
+                <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-lg border border-primary/20 bg-primary/[0.03] p-3 mt-3">
+                  <Checkbox checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
+                  <span>I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy &amp; One-Time Service Agreement over the phone. A signed copy will be emailed to them with their details.</span>
+                </label>
 
                 <Button
                   onClick={handleSubmit}

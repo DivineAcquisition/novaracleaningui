@@ -12,7 +12,8 @@ export interface AgreementFields {
   totalCents?: number;
   depositCents?: number;
   balanceCents?: number;
-  signatureDataUrl: string; // PNG data URL from SignaturePad
+  signatureDataUrl?: string; // PNG data URL from SignaturePad (customer e-sign)
+  verbalNote?: string; // used when agreed over the phone (no signature)
 }
 
 const SOURCE_PDF_URL = "/agreements/one-time-service-agreement.pdf";
@@ -68,15 +69,19 @@ export async function buildSignedAgreementBase64(fields: AgreementFields): Promi
   line("By signing below, Client agrees to the One-Time Service Agreement, Terms of Service,", { size: 9, color: gray, dy: 12 });
   line("Disclaimer, and Refund Policy, and authorizes the deposit + post-service balance charge.", { size: 9, color: gray, dy: 24 });
 
-  page.drawText("Client Signature", { x: 56, y, size: 9, font: bold, color: gray });
+  page.drawText("Client Acceptance", { x: 56, y, size: 9, font: bold, color: gray });
   y -= 8;
-  try {
-    const png = await pdf.embedPng(fields.signatureDataUrl);
-    const w = 220;
-    const scaled = png.scaleToFit(w, 70);
-    page.drawImage(png, { x: 56, y: y - scaled.height, width: scaled.width, height: scaled.height });
-    y -= scaled.height + 6;
-  } catch {
+  if (fields.signatureDataUrl) {
+    try {
+      const png = await pdf.embedPng(fields.signatureDataUrl);
+      const scaled = png.scaleToFit(220, 70);
+      page.drawImage(png, { x: 56, y: y - scaled.height, width: scaled.width, height: scaled.height });
+      y -= scaled.height + 6;
+    } catch {
+      y -= 40;
+    }
+  } else {
+    page.drawText(fields.verbalNote || "Agreed verbally", { x: 56, y: y - 16, size: 11, font, color: dark });
     y -= 40;
   }
   page.drawLine({ start: { x: 56, y }, end: { x: 320, y }, thickness: 1, color: gray });

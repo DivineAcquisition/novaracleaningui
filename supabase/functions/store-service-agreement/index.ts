@@ -2,8 +2,8 @@
 //
 // Receives a customer's signed One-Time Service Agreement (generated in the
 // browser), stores the PDF in the private service-agreements bucket, records
-// the acceptance in public.service_agreements, and emails a copy to the
-// customer so they ALWAYS receive their agreement with their details mapped.
+// the acceptance in public.service_agreements, and uploads a copy to Google
+// Drive (best-effort). Customer delivery of the agreement is handled by GHL.
 //
 // Body: {
 //   bookingId?, email, name, serviceType?, source?,
@@ -30,6 +30,102 @@ function json(payload: unknown, status = 200) {
   });
 }
 
+function b64url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function pemToDer(pem: string): Uint8Array {
+  const body = pem
+    .replace(/\\n/g, "\n")
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  const bin = atob(body);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Upload the agreement PDF to a shared Google Drive folder. No-ops unless the
+// Google service account + GDRIVE_AGREEMENTS_FOLDER_ID are configured.
+async function uploadToDrive(bytes: Uint8Array, filename: string): Promise<string | null> {
+  const saEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+  const saKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
+  const folderId = Deno.env.get("GDRIVE_AGREEMENTS_FOLDER_ID");
+  if (!saEmail || !saKey || !folderId) {
+    log("drive skipped — not configured");
+    return null;
+  }
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+    const claim = b64url(
+      new TextEncoder().encode(JSON.stringify({
+        iss: saEmail,
+        scope: "https://www.googleapis.com/auth/drive",
+        aud: "https://oauth2.googleapis.com/token",
+        iat: now,
+        exp: now + 3600,
+      })),
+    );
+    const key = await crypto.subtle.importKey(
+      "pkcs8",
+      pemToDer(saKey) as unknown as ArrayBuffer,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = new Uint8Array(
+      await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${header}.${claim}`)),
+    );
+    const jwt = `${header}.${claim}.${b64url(sig)}`;
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    });
+    const { access_token } = await tokenRes.json();
+    if (!access_token) {
+      log("drive token failed");
+      return null;
+    }
+    const boundary = "novara" + crypto.randomUUID();
+    const meta = JSON.stringify({ name: filename, parents: [folderId] });
+    const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`;
+    const tail = `\r\n--${boundary}--`;
+    const enc = new TextEncoder();
+    const headBytes = enc.encode(head);
+    const tailBytes = enc.encode(tail);
+    const bodyBytes = new Uint8Array(headBytes.length + bytes.length + tailBytes.length);
+    bodyBytes.set(headBytes, 0);
+    bodyBytes.set(bytes, headBytes.length);
+    bodyBytes.set(tailBytes, headBytes.length + bytes.length);
+    const upRes = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body: bodyBytes,
+      },
+    );
+    if (!upRes.ok) {
+      log("drive upload failed", { status: upRes.status, body: (await upRes.text()).slice(0, 200) });
+      return null;
+    }
+    const file = await upRes.json();
+    log("drive uploaded", { id: file.id });
+    return file.id || null;
+  } catch (e) {
+    log("drive threw", { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -38,7 +134,6 @@ serve(async (req) => {
     const email = String(body?.email || "").trim().toLowerCase();
     const name = String(body?.name || "").trim();
     const bookingId = body?.bookingId ? String(body.bookingId) : null;
-    const serviceType = body?.serviceType ? String(body.serviceType) : null;
     const source = String(body?.source || "checkout");
     const agreed = body?.agreed || {};
     const pdfBase64 = String(body?.pdfBase64 || "");
@@ -51,7 +146,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    // Insert the acceptance record first to get an id for the file path.
     const { data: row, error: insErr } = await supabase
       .from("service_agreements")
       .insert({
@@ -73,7 +167,8 @@ serve(async (req) => {
 
     const agreementId = row.id as string;
     const bytes = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
-    const path = `${(bookingId || email).replace(/[^a-zA-Z0-9._@-]/g, "_")}/${agreementId}.pdf`;
+    const safe = (bookingId || email).replace(/[^a-zA-Z0-9._@-]/g, "_");
+    const path = `${safe}/${agreementId}.pdf`;
 
     const { error: upErr } = await supabase.storage
       .from("service-agreements")
@@ -84,30 +179,12 @@ serve(async (req) => {
       await supabase.from("service_agreements").update({ pdf_path: path }).eq("id", agreementId);
     }
 
-    // Email a copy to the customer (best-effort, always attempted).
-    try {
-      const firstName = name.split(/\s+/)[0] || "there";
-      const html =
-        `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1e1b2e">` +
-        `<h2 style="color:#7C3AED;margin:0 0 8px">Your Novara Cleaning Service Agreement</h2>` +
-        `<p>Hi ${firstName}, thanks for booking with Novara Cleaning. Your signed One-Time Service ` +
-        `Agreement is attached for your records. It reflects the details you entered at checkout.</p>` +
-        `<p style="color:#555;font-size:13px">Terms of Service: https://novaracleaning.com/terms · ` +
-        `Disclaimer: https://novaracleaning.com/disclaimer · Refund Policy: https://novaracleaning.com/refund-policy</p>` +
-        `<p style="color:#7C3AED;font-weight:600">— Novara Cleaning</p></div>`;
-      await supabase.functions.invoke("admin-send-email", {
-        body: {
-          to: email,
-          subject: "Your Novara Cleaning Service Agreement",
-          html,
-          attachments: [{ filename: "Novara-Service-Agreement.pdf", content: pdfBase64 }],
-        },
-      });
-    } catch (mailErr) {
-      log("email copy failed (non-blocking)", {
-        error: mailErr instanceof Error ? mailErr.message : String(mailErr),
-      });
-    }
+    // Google Drive copy (best-effort).
+    const fileName = `Novara Service Agreement - ${name || email} - ${new Date().toISOString().slice(0, 10)}.pdf`;
+    await uploadToDrive(bytes, fileName);
+
+    // NOTE: the agreement is intentionally NOT emailed from here — delivery to
+    // the customer is handled by GoHighLevel.
 
     return json({ ok: true, id: agreementId, path });
   } catch (e) {
