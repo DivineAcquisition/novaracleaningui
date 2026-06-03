@@ -7,6 +7,8 @@ import {
   RiCheckLine,
   RiCheckboxCircleLine,
   RiErrorWarningLine,
+  RiExternalLinkLine,
+  RiFileTextLine,
   RiGiftLine,
   RiLoader4Line,
   RiLockLine,
@@ -46,9 +48,6 @@ import { cn } from "@/lib/utils";
 import { Elements } from "@stripe/react-stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { getStripePromise } from "@/lib/stripe-client";
-import { Checkbox } from "@/components/ui/checkbox";
-import { SignaturePad } from "@/components/booking/SignaturePad";
-import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
@@ -110,12 +109,6 @@ export default function BookingCheckout() {
   // (un-discounted) amount so the Pay button stays in sync.
   const [isNewCustomer, setIsNewCustomer] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
-  // Service agreement + policy acceptance (gates payment).
-  const [agreedTerms, setAgreedTerms] = useState(false);
-  const [agreedDisclaimer, setAgreedDisclaimer] = useState(false);
-  const [agreedRefund, setAgreedRefund] = useState(false);
-  const [agreedAgreement, setAgreedAgreement] = useState(false);
-  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const MAX_RETRIES = 3;
 
   // Referral Code state
@@ -515,41 +508,8 @@ export default function BookingCheckout() {
     paymentInitStarted.current = false;
     handleInitializePayment(0);
   };
-  const persistServiceAgreement = async () => {
-    if (!signatureDataUrl) return;
-    try {
-      const fullName = `${bookingData.firstName || ""} ${bookingData.lastName || ""}`.trim() || (bookingData.email || "");
-      const pdfBase64 = await buildSignedAgreementBase64({
-        name: fullName,
-        email: bookingData.email || "",
-        serviceType: serviceTier?.label || bookingData.serviceType,
-        serviceDate: bookingData.serviceDate
-          ? format(new Date(bookingData.serviceDate + "T12:00:00"), "EEEE, MMM d, yyyy")
-          : undefined,
-        totalCents: Math.round((depositPricing.total || 0) * 100),
-        depositCents: Math.round((depositPricing.deposit || 0) * 100),
-        balanceCents: Math.round((depositPricing.balanceDue || 0) * 100),
-        signatureDataUrl,
-      });
-      await supabase.functions.invoke("store-service-agreement", {
-        body: {
-          bookingId,
-          email: bookingData.email,
-          name: fullName,
-          serviceType: serviceTier?.label || bookingData.serviceType,
-          source: "checkout",
-          agreed: { terms: agreedTerms, disclaimer: agreedDisclaimer, refund: agreedRefund, serviceAgreement: agreedAgreement },
-          pdfBase64,
-        },
-      });
-    } catch (err) {
-      console.error("[Checkout] service agreement store failed", err);
-    }
-  };
-
   const handlePaymentSuccess = () => {
     toast.success("Payment successful!");
-    void persistServiceAgreement();
     if (bookingId) {
       updateBookingData({
         bookingId
@@ -1056,48 +1016,68 @@ export default function BookingCheckout() {
 
                   {clientSecret && paymentAmount > 0 && !initError && (
                     <div className="space-y-4">
+                      {/* Stripe payment form — ALWAYS loaded. The signed
+                          One-Time Service Agreement is captured on the next
+                          (Details) step, so nothing here gates payment. */}
+                      <Elements stripe={stripePromise} options={{ clientSecret }}>
+                        <StripePaymentForm
+                          amount={paymentAmount}
+                          onSuccess={handlePaymentSuccess}
+                          onRetry={handleRetryPayment}
+                          customerEmail={bookingData.email}
+                          bookingId={bookingId}
+                        />
+                      </Elements>
+
+                      {/* View-only policies + agreement preview. No
+                          checkboxes — the policies are listed for review and
+                          the customer signs the One-Time Service Agreement on
+                          the next step. */}
                       <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4 space-y-3">
                         <p className="font-semibold text-sm flex items-center gap-2">
                           <RiShieldLine className="w-4 h-4 text-primary" />
                           Service Agreement &amp; Policies
                         </p>
-                        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
-                          <Checkbox checked={agreedTerms} onCheckedChange={(v) => setAgreedTerms(v === true)} className="mt-0.5" />
-                          <span>I agree to the <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">Terms of Service</a>.</span>
-                        </label>
-                        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
-                          <Checkbox checked={agreedDisclaimer} onCheckedChange={(v) => setAgreedDisclaimer(v === true)} className="mt-0.5" />
-                          <span>I have read the <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline">Disclaimer</a>.</span>
-                        </label>
-                        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
-                          <Checkbox checked={agreedRefund} onCheckedChange={(v) => setAgreedRefund(v === true)} className="mt-0.5" />
-                          <span>I agree to the <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Refund Policy</a> (deposits are non-refundable once scheduled).</span>
-                        </label>
-                        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
-                          <Checkbox checked={agreedAgreement} onCheckedChange={(v) => setAgreedAgreement(v === true)} className="mt-0.5" />
-                          <span>I hereby agree to the <strong>One-Time Service Agreement</strong> and authorize the 50% deposit today plus the remaining balance after my cleaning is complete. A signed copy will be emailed to me.</span>
-                        </label>
-                        <div className="pt-1">
-                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Your signature</p>
-                          <SignaturePad onChange={setSignatureDataUrl} />
-                        </div>
-                      </div>
+                        <ul className="text-sm space-y-1.5">
+                          <li className="flex items-center gap-2">
+                            <RiFileTextLine className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                            <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">Terms of Service</a>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <RiFileTextLine className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                            <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline">Disclaimer</a>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <RiFileTextLine className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                            <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Refund Policy</a>
+                          </li>
+                        </ul>
 
-                      {agreedTerms && agreedDisclaimer && agreedRefund && agreedAgreement && !!signatureDataUrl ? (
-                        <Elements stripe={stripePromise} options={{ clientSecret }}>
-                          <StripePaymentForm
-                            amount={paymentAmount}
-                            onSuccess={handlePaymentSuccess}
-                            onRetry={handleRetryPayment}
-                            customerEmail={bookingData.email}
-                            bookingId={bookingId}
+                        {/* One-Time Service Agreement preview */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground">One-Time Service Agreement (preview)</p>
+                            <a
+                              href="/agreements/one-time-service-agreement.pdf"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary underline inline-flex items-center gap-1"
+                            >
+                              <RiExternalLinkLine className="w-3.5 h-3.5" />
+                              Open full agreement
+                            </a>
+                          </div>
+                          <iframe
+                            src="/agreements/one-time-service-agreement.pdf#view=FitH&toolbar=0"
+                            title="One-Time Service Agreement preview"
+                            className="w-full h-56 rounded-md border border-primary/15 bg-white"
                           />
-                        </Elements>
-                      ) : (
-                        <div className="rounded-lg border border-dashed border-primary/30 p-4 text-center text-sm text-muted-foreground">
-                          Please check each box and sign above to enable payment.
                         </div>
-                      )}
+
+                        <p className="text-xs text-muted-foreground">
+                          By paying your deposit you agree to the Terms of Service, Disclaimer, Refund Policy, and the One-Time Service Agreement. You&apos;ll add your signature on the next step.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </>}

@@ -19,9 +19,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
+import { SignaturePad } from "@/components/booking/SignaturePad";
 import { SEO } from "@/components/SEO";
 import { US_STATES, parseAddressString } from "@/lib/address-formatter";
 import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
+import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
+import { format } from "date-fns";
 
 // Customer-facing arrival windows. Mirrors the windows offered on
 // /book/offer's SchedulePicker so the second-visit slot uses the same
@@ -92,6 +95,19 @@ export default function PropertyDetails() {
   const [pets, setPets] = useState<string>("none");
   const [accessNotes, setAccessNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Signed One-Time Service Agreement — captured here on the Details step
+  // (moved off the Checkout page). The signature gates "Complete Booking".
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  // Authoritative figures + identity pulled from the booking row so the
+  // generated agreement PDF maps the same totals the customer was charged.
+  const [agreementMeta, setAgreementMeta] = useState<{
+    totalCents: number;
+    depositCents: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+  }>({ totalCents: 0, depositCents: 0, firstName: "", lastName: "", email: "" });
 
   // Second-visit (Standard Clean follow-up) state — only used when the
   // booking is the Deep + Standard Combo offer. Defaulted to the first
@@ -166,7 +182,7 @@ export default function PropertyDetails() {
     (async () => {
       const { data } = await supabase
         .from("bookings")
-        .select("service_type, service_date")
+        .select("service_type, service_date, total_estimate_cents, deposit_cents, first_name, last_name, email")
         .eq("id", bookingId)
         .maybeSingle();
       if (cancelled || !data) return;
@@ -175,6 +191,13 @@ export default function PropertyDetails() {
         serviceType: data.service_type,
         serviceDate: data.service_date,
         isCombo,
+      });
+      setAgreementMeta({
+        totalCents: Number(data.total_estimate_cents || 0),
+        depositCents: Number(data.deposit_cents || 0),
+        firstName: data.first_name || "",
+        lastName: data.last_name || "",
+        email: data.email || "",
       });
       // Default the second visit to deep date + 7 days for convenience.
       if (isCombo && data.service_date && !secondVisitDate) {
@@ -222,11 +245,73 @@ export default function PropertyDetails() {
     if (nextZip) setZipCode(nextZip);
   };
 
+  // Human-readable service label for the agreement PDF.
+  const serviceLabel = (() => {
+    switch (bookingMeta.serviceType) {
+      case "combo": return "Deep + Standard Combo";
+      case "deep": return "Deep Clean";
+      case "standard": return "Standard Clean";
+      default: return bookingMeta.serviceType || "Cleaning";
+    }
+  })();
+
+  // Build the signed One-Time Service Agreement in-browser and hand it to
+  // store-service-agreement (stores PDF + records acceptance + emails the
+  // customer). Fire-and-forget so navigation to confirmation never blocks
+  // on the PDF build / Edge Function cold-start.
+  const persistServiceAgreement = async () => {
+    if (!signatureDataUrl || !bookingId) return;
+    try {
+      const fullName =
+        `${bookingData.firstName || agreementMeta.firstName || ""} ${bookingData.lastName || agreementMeta.lastName || ""}`.trim() ||
+        bookingData.email ||
+        agreementMeta.email ||
+        "";
+      const email = bookingData.email || agreementMeta.email || "";
+      const total = agreementMeta.totalCents || undefined;
+      const deposit = agreementMeta.depositCents || undefined;
+      const balance =
+        total != null && deposit != null ? Math.max(0, total - deposit) : undefined;
+      const pdfBase64 = await buildSignedAgreementBase64({
+        name: fullName,
+        email,
+        serviceType: serviceLabel,
+        serviceDate: bookingMeta.serviceDate
+          ? format(new Date(`${bookingMeta.serviceDate}T12:00:00`), "EEEE, MMM d, yyyy")
+          : undefined,
+        totalCents: total,
+        depositCents: deposit,
+        balanceCents: balance,
+        signatureDataUrl,
+      });
+      await supabase.functions.invoke("store-service-agreement", {
+        body: {
+          bookingId,
+          email,
+          name: fullName,
+          serviceType: serviceLabel,
+          source: "details",
+          // Policies are presented for review on the checkout step and the
+          // customer accepts them by signing here, so each is recorded true.
+          agreed: { terms: true, disclaimer: true, refund: true, serviceAgreement: true },
+          pdfBase64,
+        },
+      });
+    } catch (err) {
+      console.error("[PropertyDetails] service agreement store failed", err);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!address || !city || !state || !bedrooms || !bathrooms || !dwellingType) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    if (!signatureDataUrl) {
+      toast.error("Please sign the One-Time Service Agreement to complete your booking");
       return;
     }
 
@@ -319,6 +404,10 @@ export default function PropertyDetails() {
       }).catch((finalizeErr) => {
         console.warn("[PropertyDetails] finalize-booking invoke failed (non-blocking)", finalizeErr);
       });
+
+      // Generate + store the signed One-Time Service Agreement (and email a
+      // copy). Fire-and-forget so confirmation navigation isn't blocked.
+      void persistServiceAgreement();
 
       toast.success("Details saved! Finalizing your booking…");
       router.push("/book/confirmation?booking_id=" + bookingId);
@@ -643,10 +732,33 @@ export default function PropertyDetails() {
               </div>
             </div>
 
+            {/* Sign Your Service Agreement — moved here from the Checkout
+                step. Customer reviews the policies on checkout, then signs
+                the One-Time Service Agreement here to finalize the booking. */}
+            <div className="space-y-4 border-t pt-6">
+              <div className="flex items-center gap-2">
+                <RiSparklingLine className="w-5 h-5 text-primary" />
+                <h3 className="text-base md:text-lg font-semibold">Sign Your Service Agreement</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                By signing you agree to the{" "}
+                <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">Terms of Service</a>,{" "}
+                <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline">Disclaimer</a>,{" "}
+                <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Refund Policy</a>, and the{" "}
+                <a href="/agreements/one-time-service-agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-primary underline">One-Time Service Agreement</a>. A signed copy is emailed to you.
+              </p>
+              <div className="space-y-1.5">
+                <Label>
+                  Your signature <span className="text-destructive">*</span>
+                </Label>
+                <SignaturePad onChange={setSignatureDataUrl} />
+              </div>
+            </div>
+
             <Button
               type="submit"
               size="lg"
-              disabled={isSubmitting || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType}
+              disabled={isSubmitting || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType || !signatureDataUrl}
               className="w-full h-12 md:h-14 text-base font-semibold"
             >
               {isSubmitting ? "Saving..." : "Complete Booking"}
