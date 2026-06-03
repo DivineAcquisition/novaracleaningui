@@ -112,6 +112,12 @@ const NAV_ITEMS: NavItem[] = [
     description: "Customer video reviews",
   },
   {
+    title: "Agreements",
+    url: "/admin/agreements",
+    icon: RiFileEditLine,
+    description: "Signed service agreements",
+  },
+  {
     title: "Team",
     url: "/admin/team",
     icon: RiTeamLine,
