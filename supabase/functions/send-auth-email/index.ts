@@ -189,7 +189,19 @@ async function generateLink(
       if (password) payload.password = password;
       opts.data = metadata;
     }
-    const { data, error } = await adminClient.auth.admin.generateLink(payload);
+    let { data, error } = await adminClient.auth.admin.generateLink(payload);
+    // On signup, the auth user may already exist (common on retry, or an
+    // unconfirmed account whose first email was missed). generateLink
+    // type:'signup' errors for existing users, which previously meant NO
+    // email was ever sent again. Fall back to a magic link so every attempt
+    // delivers a working sign-in/confirm email.
+    if (error && type === "signup" && /regist|exist|already/i.test(error.message)) {
+      ({ data, error } = await adminClient.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: { redirectTo },
+      }));
+    }
     if (error) return { error: error.message };
     const link = data?.properties?.action_link as string | undefined;
     if (!link) return { error: "no action_link in generateLink response" };
@@ -268,7 +280,7 @@ serve(async (req) => {
       subject: cfg.subject,
       html,
       text: cfg.textVersion,
-      reply_to: BRAND.supportEmail,
+      replyTo: BRAND.supportEmail,
     });
     if ((result as any)?.error) {
       console.error("[send-auth-email] resend error", kind, email, (result as any).error);
