@@ -116,29 +116,27 @@ export default function CleanerAuth() {
 
     setIsLoading(true);
     try {
-      // Route signup through send-auth-email so the confirmation email is
-      // branded (green Novara theme) and reliably delivered via Resend.
-      // The function calls admin.generateLink({type:'signup'}) which both
-      // creates the auth user AND returns the confirmation link in one
-      // call. The link's redirectTo is pinned to
-      // contractor.novaracleaning.com/cleaner/auth/callback. We never get
-      // back whether the email was already on file (no enumeration), so
-      // the UX is "we sent you an email — check your inbox" regardless.
-      const { error } = await supabase.functions.invoke("send-auth-email", {
-        body: {
-          kind: "signup_contractor",
-          email,
-          password,
-          metadata: { is_cleaner: true },
-        },
+      // Auto-confirm contractor signup: contractor-signup creates the
+      // auth user ALREADY email-confirmed (email_confirm: true), so we can
+      // sign them in immediately with no confirmation email. This removes
+      // the dependency on email deliverability for cleaner onboarding.
+      const { data, error } = await supabase.functions.invoke("contractor-signup", {
+        body: { email, password },
       });
-
-      if (error) {
-        toast.error(error.message || "Failed to start signup");
+      const fnErr = error || (data as { error?: string } | null)?.error;
+      if (fnErr) {
+        toast.error(typeof fnErr === "string" ? fnErr : "Failed to create your account");
         return;
       }
 
-      toast.success("Check your email — we've sent a confirmation link.");
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        toast.error("An account with this email already exists — please sign in with your password.");
+        return;
+      }
+
+      toast.success("Account created!");
+      await handlePostAuth();
     } catch (error: any) {
       toast.error(error.message || "An error occurred");
     } finally {
