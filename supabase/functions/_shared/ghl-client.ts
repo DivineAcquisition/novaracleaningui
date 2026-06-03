@@ -24,6 +24,7 @@ import {
   stageIdForKey,
   type DispatchStageContext,
 } from "./ghl-dispatch-pipeline.ts";
+import { normalizeTag, normalizeTags, LEAD_STAGE_TAG_SET } from "./ghl-tags.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -56,6 +57,7 @@ export interface GhlOpportunityInput {
   monetaryValue?: number;
   source?: string;
   assignedTo?: string;
+  followers?: string[];
   customFieldsByKey?: Record<string, string | number | boolean | null | undefined>;
 }
 
@@ -84,6 +86,184 @@ function readConfig(): GhlConfig | null {
 function log(step: string, details?: unknown) {
   const suffix = details === undefined ? "" : ` ${JSON.stringify(details)}`;
   console.log(`[GHL] ${step}${suffix}`);
+}
+
+// ─── Owner / location-user resolution ─────────────────────────────────────
+let ownerIdCache: string | null | undefined; // undefined = not yet resolved
+let locationUsersCache:
+  | Array<{ id: string; email: string; name: string }>
+  | null = null;
+let locationUsersPromise:
+  | Promise<Array<{ id: string; email: string; name: string }>>
+  | null = null;
+
+async function loadLocationUsers(
+  cfg: GhlConfig,
+): Promise<Array<{ id: string; email: string; name: string }>> {
+  if (locationUsersCache) return locationUsersCache;
+  if (locationUsersPromise) return await locationUsersPromise;
+  locationUsersPromise = (async () => {
+    try {
+      const res = await ghlFetch(
+        cfg,
+        `/users/?locationId=${encodeURIComponent(cfg.locationId)}`,
+      );
+      if (!res.ok) {
+        log("loadLocationUsers failed", { status: res.status });
+        return [];
+      }
+      const json = (await res.json()) as Json;
+      const users = (json.users ?? []) as Array<Record<string, unknown>>;
+      const mapped = users
+        .map((u) => ({
+          id: String(u.id || ""),
+          email: String(u.email || "").trim().toLowerCase(),
+          name: (`${u.firstName || ""} ${u.lastName || ""}`.trim() ||
+            String(u.name || "")).toLowerCase(),
+        }))
+        .filter((u) => u.id);
+      locationUsersCache = mapped;
+      return mapped;
+    } catch (err) {
+      log("loadLocationUsers error", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }
+  })();
+  return await locationUsersPromise;
+}
+
+/** Resolve a GHL location user id by email (preferred) or full name. */
+export async function resolveLocationUserId(
+  opts: { email?: string | null; name?: string | null },
+): Promise<string | null> {
+  const cfg = readConfig();
+  if (!cfg) return null;
+  const email = (opts.email || "").trim().toLowerCase();
+  const name = (opts.name || "").trim().toLowerCase();
+  if (!email && !name) return null;
+  const users = await loadLocationUsers(cfg);
+  if (email) {
+    const m = users.find((u) => u.email === email);
+    if (m) return m.id;
+  }
+  if (name) {
+    const m = users.find((u) => u.name === name);
+    if (m) return m.id;
+  }
+  return null;
+}
+
+/**
+ * Resolve the default opportunity owner (Malik). GHL_OWNER_USER_ID wins;
+ * otherwise GHL_OWNER_EMAIL (default maliksannie7@gmail.com) is matched
+ * against the location user list. Cached for the cold start.
+ */
+export async function resolveOwnerUserId(): Promise<string | null> {
+  if (ownerIdCache !== undefined) return ownerIdCache;
+  const cfg = readConfig();
+  if (!cfg) {
+    ownerIdCache = null;
+    return null;
+  }
+  // deno-lint-ignore no-explicit-any
+  const env = (globalThis as any).Deno?.env;
+  const explicit = (env?.get("GHL_OWNER_USER_ID") || "").trim();
+  if (explicit) {
+    ownerIdCache = explicit;
+    return explicit;
+  }
+  const ownerEmail = (env?.get("GHL_OWNER_EMAIL") || "maliksannie7@gmail.com").trim();
+  const resolved = await resolveLocationUserId({ email: ownerEmail });
+  ownerIdCache = resolved;
+  log("owner resolved", { ownerEmail, ownerId: resolved });
+  return resolved;
+}
+
+/** Add followers to an opportunity (separate GHL endpoint). Never throws. */
+export async function addOpportunityFollowers(
+  opportunityId: string,
+  userIds: string[],
+): Promise<boolean> {
+  const cfg = readConfig();
+  const ids = (userIds || []).filter(Boolean);
+  if (!cfg || !opportunityId || ids.length === 0) return false;
+  try {
+    const res = await ghlFetch(
+      cfg,
+      `/opportunities/${encodeURIComponent(opportunityId)}/followers`,
+      { method: "POST", body: JSON.stringify({ followers: ids }) },
+    );
+    if (!res.ok) {
+      log("addOpportunityFollowers failed", { status: res.status });
+      return false;
+    }
+    log("addOpportunityFollowers ok", { opportunityId, count: ids.length });
+    return true;
+  } catch (err) {
+    log("addOpportunityFollowers error", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+/** Add canonical-normalized tags to a contact. Never throws. */
+export async function addContactTags(
+  contactId: string,
+  tags: string[],
+): Promise<boolean> {
+  const cfg = readConfig();
+  if (!cfg || !contactId) return false;
+  const clean = normalizeTags(tags);
+  if (clean.length === 0) return false;
+  try {
+    const res = await ghlFetch(
+      cfg,
+      `/contacts/${encodeURIComponent(contactId)}/tags`,
+      { method: "POST", body: JSON.stringify({ tags: clean }) },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove tags from a contact. Never throws. */
+export async function removeContactTags(
+  contactId: string,
+  tags: string[],
+): Promise<boolean> {
+  const cfg = readConfig();
+  const list = (tags || []).filter(Boolean);
+  if (!cfg || !contactId || list.length === 0) return false;
+  try {
+    const res = await ghlFetch(
+      cfg,
+      `/contacts/${encodeURIComponent(contactId)}/tags`,
+      { method: "DELETE", body: JSON.stringify({ tags: list }) },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Move a contact to a single canonical lead stage, removing any other
+ * lead-* stage tags so the lead funnel reflects exactly one stage.
+ */
+export async function setContactLeadStage(
+  contactId: string,
+  stage: string,
+): Promise<boolean> {
+  const cfg = readConfig();
+  if (!cfg || !contactId) return false;
+  const target = normalizeTag(stage);
+  const toRemove = [...LEAD_STAGE_TAG_SET].filter((t) => t !== target);
+  await removeContactTags(contactId, toRemove);
+  return await addContactTags(contactId, [target]);
 }
 
 // Retry-on-failure wrapper for every GHL API call. Network blips +
@@ -362,7 +542,7 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
       postalCode: finalZip,
       country: input.country || "US",
       source: input.source || "Novara Booking",
-      tags: input.tags && input.tags.length > 0 ? input.tags : undefined,
+      tags: input.tags && input.tags.length > 0 ? normalizeTags(input.tags) : undefined,
       customFields: customFields.length > 0 ? customFields : undefined,
     };
 
@@ -449,6 +629,7 @@ export async function createOpportunity(
       usesOpsClear ? { clearableKeys: GHL_OPS_CLEARABLE_KEYS } : undefined,
     );
 
+    const ownerId = input.assignedTo || (await resolveOwnerUserId()) || undefined;
     const body: Json = {
       locationId: cfg.locationId,
       contactId: input.contactId,
@@ -458,7 +639,7 @@ export async function createOpportunity(
       status: input.status || "open",
       monetaryValue: input.monetaryValue,
       source: input.source || "Novara Booking",
-      assignedTo: input.assignedTo,
+      assignedTo: ownerId,
       customFields: customFields.length > 0 ? customFields : undefined,
     };
 
@@ -476,6 +657,9 @@ export async function createOpportunity(
     const opp = (parsed.opportunity as Json | undefined) ?? parsed;
     const id = (opp?.id as string | undefined) || null;
     log("createOpportunity ok", { id });
+    if (id && input.followers && input.followers.length > 0) {
+      await addOpportunityFollowers(id, input.followers);
+    }
     return id;
   } catch (err) {
     log("createOpportunity error", { message: err instanceof Error ? err.message : String(err) });
@@ -595,6 +779,7 @@ export interface GhlOpportunityUpdate {
   pipelineStageId?: string;
   monetaryValue?: number;
   assignedTo?: string;
+  followers?: string[];
   customFieldsByKey?: Record<string, string | number | boolean | null | undefined>;
 }
 
@@ -637,6 +822,9 @@ export async function updateOpportunity(
       return false;
     }
     log("updateOpportunity ok", { id: opportunityId, status: patch.status });
+    if (patch.followers && patch.followers.length > 0) {
+      await addOpportunityFollowers(opportunityId, patch.followers);
+    }
     return true;
   } catch (err) {
     log("updateOpportunity error", { message: err instanceof Error ? err.message : String(err) });
@@ -662,9 +850,13 @@ export async function syncBookingLifecycle(args: {
   opportunityId?: string | null;
   /** When set, moves the opportunity on the Job Dispatch pipeline. */
   dispatchStage?: DispatchStageContext;
+  /** GHL user ids to add as opportunity followers (e.g. the booking VA). */
+  followers?: string[];
 }): Promise<{ contactId: string | null; opportunityId: string | null; updated: boolean }> {
   const contactId = await upsertContact(args.contact);
   if (!contactId) return { contactId: null, opportunityId: null, updated: false };
+
+  const ownerId = args.opportunity.assignedTo || (await resolveOwnerUserId()) || undefined;
 
   const cfg = readConfig();
   let pipelineId: string | undefined;
@@ -703,6 +895,8 @@ export async function syncBookingLifecycle(args: {
       status: args.opportunity.status,
       monetaryValue: args.opportunity.monetaryValue,
       customFieldsByKey: args.opportunity.customFieldsByKey,
+      assignedTo: ownerId,
+      followers: args.followers,
       pipelineId,
       pipelineStageId,
     });
@@ -712,6 +906,8 @@ export async function syncBookingLifecycle(args: {
   const newOppId = await createOpportunity({
     ...args.opportunity,
     contactId,
+    assignedTo: args.opportunity.assignedTo || ownerId,
+    followers: args.followers,
     pipelineId: pipelineId || args.opportunity.pipelineId,
     pipelineStageId: pipelineStageId || args.opportunity.pipelineStageId,
   });

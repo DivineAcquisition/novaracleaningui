@@ -119,7 +119,7 @@ serve(async (req) => {
                 Version: GHL_VERSION,
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ tags: ["lead-escalated", "speed-to-lead-miss"] }),
+              body: JSON.stringify({ tags: ["lead - follow-up", "alert - speed to lead miss"] }),
             },
           );
           await fetch(

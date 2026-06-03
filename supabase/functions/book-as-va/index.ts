@@ -231,9 +231,11 @@ async function ghlPushBooking(
     source: "Novara Admin Booking",
     tags: [
       "booking",
-      "admin-booked",
-      bookingRow.service_type ? `service-${bookingRow.service_type}` : null,
-      bookingRow.zip_code ? `zip-${bookingRow.zip_code}` : null,
+      "source - admin",
+      bookingRow.service_type
+        ? `service - ${String(bookingRow.service_type).replace(/[-_]+/g, " ").toLowerCase()}`
+        : null,
+      bookingRow.zip_code ? `zip - ${bookingRow.zip_code}` : null,
     ].filter(Boolean),
   };
   let contactId: string | null = null;

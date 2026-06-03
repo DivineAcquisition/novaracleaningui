@@ -1,9 +1,18 @@
 // ─── Sales pipeline opportunity sync (parallel to Job Dispatch) ────────────
 //
-// Keeps the Sales Pipeline card in sync when bookings are created/updated
-// without moving that card onto the Job Dispatch pipeline.
+// Keeps the Sales Pipeline card in lockstep with a booking — for BOTH the
+// customer funnel and internal VA bookings — without moving that card onto
+// the Job Dispatch pipeline. Mirrors the full custom-field map onto the
+// opportunity, assigns Malik as owner, adds the booking VA as a follower,
+// and creates the card if one doesn't exist yet.
 
-import { ghlIsConfigured, updateOpportunity, findOpportunityForContactInPipeline } from "./ghl-client.ts";
+import {
+  createOpportunity,
+  findOpportunityForContactInPipeline,
+  ghlIsConfigured,
+  resolveOwnerUserId,
+  updateOpportunity,
+} from "./ghl-client.ts";
 
 type SupabaseLike = {
   from: (table: string) => {
@@ -36,18 +45,25 @@ export interface SyncSalesPipelineArgs {
   booking: Record<string, unknown>;
   leadId?: string | null;
   monetaryValue?: number;
+  /** Full GHL custom-field map — mirrored onto the sales opportunity. */
+  customFieldsByKey?: Record<string, string | number | boolean | null | undefined>;
+  /** Opportunity owner (defaults to Malik via resolveOwnerUserId). */
+  assignedTo?: string;
+  /** GHL user ids to add as followers (e.g. the booking VA). */
+  followers?: string[];
 }
 
 /**
- * Update (or resolve) the Sales Pipeline opportunity for a booking.
+ * Update (or create) the Sales Pipeline opportunity for a booking.
  * Never throws.
  */
 export async function syncBookingSalesPipeline(
   supabase: SupabaseLike,
   args: SyncSalesPipelineArgs,
-): Promise<{ salesOpportunityId: string | null; updated: boolean }> {
-  
-  if (!ghlIsConfigured()) return { salesOpportunityId: null, updated: false };
+): Promise<{ salesOpportunityId: string | null; updated: boolean; created: boolean }> {
+  if (!ghlIsConfigured()) {
+    return { salesOpportunityId: null, updated: false, created: false };
+  }
 
   let salesOppId = (args.booking.ghl_sales_opportunity_id as string | null) || null;
   const contactId = (args.booking.ghl_contact_id as string | null) || null;
@@ -75,27 +91,61 @@ export async function syncBookingSalesPipeline(
     if (found?.id) salesOppId = found.id;
   }
 
-  if (!salesOppId) {
-    return { salesOpportunityId: null, updated: false };
-  }
-
   const statusRaw = String(args.booking.status || "").toLowerCase();
   let status: "open" | "won" | "lost" | "abandoned" = "open";
   if (statusRaw === "completed") status = "won";
   else if (statusRaw === "cancelled") status = "lost";
 
-  const name = `Novara Booking — ${args.booking.first_name || ""} ${args.booking.last_name || ""}`
-    .trim();
+  // Optional stage progression — only applied when the stage id is configured
+  // so we never guess GHL stage UUIDs.
+  const stageWon = await resolveSecret(supabase, "GHL_SALES_STAGE_WON");
+  const stageLost = await resolveSecret(supabase, "GHL_SALES_STAGE_LOST");
+  const stageBooked = await resolveSecret(supabase, "GHL_SALES_STAGE_BOOKED");
+  let pipelineStageId: string | undefined;
+  if (status === "won" && stageWon) pipelineStageId = stageWon;
+  else if (status === "lost" && stageLost) pipelineStageId = stageLost;
+  else if (status === "open" && stageBooked) pipelineStageId = stageBooked;
+
+  const name =
+    `Novara Booking — ${args.booking.first_name || ""} ${args.booking.last_name || ""}`
+      .trim();
   const monetaryValue = args.monetaryValue ??
     Math.round(Number(args.booking.total_estimate_cents || 0) / 100);
+  const assignedTo = args.assignedTo || (await resolveOwnerUserId()) || undefined;
+
+  // No existing sales card — create one so EVERY booking lands in the sales
+  // pipeline (customer-funnel bookings that never had a prior lead included).
+  if (!salesOppId) {
+    if (!contactId || !pipelineId) {
+      return { salesOpportunityId: null, updated: false, created: false };
+    }
+    const createStage = await resolveSecret(supabase, "GHL_SALES_PIPELINE_STAGE_ID");
+    const newId = await createOpportunity({
+      contactId,
+      pipelineId,
+      pipelineStageId: pipelineStageId || createStage || undefined,
+      name,
+      status,
+      monetaryValue,
+      source: "Novara Booking",
+      assignedTo,
+      followers: args.followers,
+      customFieldsByKey: args.customFieldsByKey,
+    });
+    return { salesOpportunityId: newId, updated: false, created: Boolean(newId) };
+  }
 
   const ok = await updateOpportunity(salesOppId, {
     name,
     status,
     monetaryValue,
+    pipelineStageId,
+    assignedTo,
+    followers: args.followers,
+    customFieldsByKey: args.customFieldsByKey,
   });
 
-  return { salesOpportunityId: salesOppId, updated: ok };
+  return { salesOpportunityId: salesOppId, updated: ok, created: false };
 }
 
 /** True when a pipeline name looks like Sales (not hiring/dispatch). */

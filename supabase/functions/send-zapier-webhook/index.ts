@@ -6,7 +6,8 @@ import {
   getSqftRange,
   getTeamSize,
 } from "../_shared/payout-utils.ts";
-import { syncBookingLifecycle, splitFullAddress } from "../_shared/ghl-client.ts";
+import { syncBookingLifecycle, splitFullAddress, resolveLocationUserId } from "../_shared/ghl-client.ts";
+import { serviceTag, memberTag, zipTag } from "../_shared/ghl-tags.ts";
 import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
 import { loadTeamCleanersForBooking } from "../_shared/ghl-booking-team.ts";
 import { syncBookingSalesPipeline } from "../_shared/ghl-sales-pipeline.ts";
@@ -873,7 +874,17 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       }
     }
 
+    // Resolve the booking VA (sdr_rep_name) to a GHL user so they follow the
+    // opportunity. Malik is set as owner automatically by the client.
+    let vaFollowers: string[] | undefined;
+    const vaName = (booking.sdr_rep_name as string | null) || null;
+    if (vaName) {
+      const vaId = await resolveLocationUserId({ name: vaName });
+      if (vaId) vaFollowers = [vaId];
+    }
+
     const ghlResult = await syncBookingLifecycle({
+      followers: vaFollowers,
       opportunityId: booking.ghl_opportunity_id || null,
       dispatchStage: {
         bookingStatus: booking.status,
@@ -895,11 +906,13 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         source: "Novara Booking",
         tags: [
           "booking",
-          `service-${booking.service_type}`,
-          booking.membership_plan && booking.membership_plan !== 'none'
-            ? `member-${booking.membership_plan}`
-            : null,
-          booking.zip_code ? `zip-${booking.zip_code}` : null,
+          serviceTag(booking.service_type),
+          memberTag(
+            booking.membership_plan && booking.membership_plan !== 'none'
+              ? booking.membership_plan
+              : null,
+          ),
+          zipTag(booking.zip_code),
         ].filter(Boolean) as string[],
         customFieldsByKey: ghlCustomFields,
       },
@@ -920,6 +933,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       const salesSync = await syncBookingSalesPipeline(supabase, {
         booking,
         monetaryValue: Math.round(totalChargedCentsForGhl / 100),
+        customFieldsByKey: ghlCustomFields,
+        followers: vaFollowers,
       });
       if (salesSync.salesOpportunityId) {
         await supabase.from("bookings").update({
