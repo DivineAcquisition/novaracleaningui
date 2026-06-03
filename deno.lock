@@ -2,6 +2,11 @@
   "version": "5",
   "redirects": {
     "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.106.2",
+    "https://esm.sh/@types/html-to-text@~9.0.4/index.d.ts": "https://esm.sh/@types/html-to-text@9.0.4/index.d.ts",
+    "https://esm.sh/@types/prismjs@~1.26.5/index.d.ts": "https://esm.sh/@types/prismjs@1.26.6/index.d.ts",
+    "https://esm.sh/@types/react@~18.3.18/index.d.ts": "https://esm.sh/@types/react@18.3.30/index.d.ts",
+    "https://esm.sh/@types/react@~18.3.18/jsx-runtime.d.ts": "https://esm.sh/@types/react@18.3.30/jsx-runtime.d.ts",
+    "https://esm.sh/@types/react@~18.3.26/index.d.ts": "https://esm.sh/@types/react@18.3.30/index.d.ts",
     "https://esm.sh/@types/react@~19.0.7/index.d.ts": "https://esm.sh/@types/react@19.0.14/index.d.ts"
   },
   "remote": {
@@ -17,9 +22,12 @@
     "https://deno.land/std@0.190.0/async/retry.ts": "c9248325ec08cc2cceb7618472e77589a51a25cee460e07b6096be34966c2ead",
     "https://deno.land/std@0.190.0/async/tee.ts": "47e42d35f622650b02234d43803d0383a89eb4387e1b83b5a40106d18ae36757",
     "https://deno.land/std@0.190.0/http/server.ts": "1b23463b5b36e4eebc495417f6af47a6f7d52e3294827a1226d2a1aab23d9d20",
+    "https://esm.sh/@react-email/components@0.0.22": "998753b4b97783fa1dad5e34e1f67368d5d7ad28ce27148b6dc128d15f3a8734",
     "https://esm.sh/@supabase/supabase-js@2.106.2": "239a7bd494d2521e29f1b25f00b2dfb595a6b8eb4694543db239073eaecf8d32",
     "https://esm.sh/@supabase/supabase-js@2.57.2": "ae34123f923ca1622834de1b1e20b4ec735cd183d0fbf8fd7c3d67ce2f358909",
     "https://esm.sh/@supabase/supabase-js@2.80.0": "7e8c0e7bf0b1f0f781300b3cf4f13334846075d2afc9b7f236a7ffb698b53886",
+    "https://esm.sh/react@18.3.1": "336090fd1f03fdb9530dce4ac761717b5e1e1a630c775bac184ec4ee0809cf89",
+    "https://esm.sh/resend@2.0.0": "b222433340dc6655ed294a343815916b5a5ceeac999f07f627a5614a87cd9fe4",
     "https://esm.sh/resend@4.0.0": "304b5edd6b05ffb21d29b90b4b3afb4ed6b4ca1df4f7a4c9a177866f429ed88a",
     "https://esm.sh/stripe@18.5.0": "da8bd0bec3e31938500a0f96624f2d8372a1566cd6595d2bfdbbab22d3164e04"
   },
