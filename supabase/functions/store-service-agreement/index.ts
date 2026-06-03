@@ -2,9 +2,8 @@
 //
 // Receives a customer's signed One-Time Service Agreement (generated in the
 // browser), stores the PDF in the private service-agreements bucket, records
-// the acceptance in public.service_agreements, uploads a copy to Google Drive
-// (best-effort), and emails a copy to the customer so they ALWAYS receive
-// their agreement with their details mapped.
+// the acceptance in public.service_agreements, and uploads a copy to Google
+// Drive (best-effort). Customer delivery of the agreement is handled by GHL.
 //
 // Body: {
 //   bookingId?, email, name, serviceType?, source?,
@@ -184,30 +183,8 @@ serve(async (req) => {
     const fileName = `Novara Service Agreement - ${name || email} - ${new Date().toISOString().slice(0, 10)}.pdf`;
     await uploadToDrive(bytes, fileName);
 
-    // Email a copy to the customer (always attempted).
-    try {
-      const firstName = name.split(/\s+/)[0] || "there";
-      const html =
-        `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1e1b2e">` +
-        `<h2 style="color:#7C3AED;margin:0 0 8px">Your Novara Cleaning Service Agreement</h2>` +
-        `<p>Hi ${firstName}, thanks for booking with Novara Cleaning. Your One-Time Service ` +
-        `Agreement is attached for your records. It reflects the details on your booking.</p>` +
-        `<p style="color:#555;font-size:13px">Terms of Service: https://novaracleaning.com/terms · ` +
-        `Disclaimer: https://novaracleaning.com/disclaimer · Refund Policy: https://novaracleaning.com/refund-policy</p>` +
-        `<p style="color:#7C3AED;font-weight:600">— Novara Cleaning</p></div>`;
-      await supabase.functions.invoke("admin-send-email", {
-        body: {
-          to: email,
-          subject: "Your Novara Cleaning Service Agreement",
-          html,
-          attachments: [{ filename: "Novara-Service-Agreement.pdf", content: pdfBase64 }],
-        },
-      });
-    } catch (mailErr) {
-      log("email copy failed (non-blocking)", {
-        error: mailErr instanceof Error ? mailErr.message : String(mailErr),
-      });
-    }
+    // NOTE: the agreement is intentionally NOT emailed from here — delivery to
+    // the customer is handled by GoHighLevel.
 
     return json({ ok: true, id: agreementId, path });
   } catch (e) {
