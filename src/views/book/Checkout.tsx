@@ -1053,26 +1053,21 @@ export default function BookingCheckout() {
                           </li>
                         </ul>
 
-                        {/* One-Time Service Agreement preview */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-medium text-muted-foreground">One-Time Service Agreement (preview)</p>
+                        {/* One-Time Service Agreement — link to view if needed */}
+                        <ul className="text-sm">
+                          <li className="flex items-center gap-2">
+                            <RiFileTextLine className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                             <a
                               href="/agreements/one-time-service-agreement.pdf"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-primary underline inline-flex items-center gap-1"
+                              className="text-primary underline inline-flex items-center gap-1"
                             >
+                              One-Time Service Agreement
                               <RiExternalLinkLine className="w-3.5 h-3.5" />
-                              Open full agreement
                             </a>
-                          </div>
-                          <iframe
-                            src="/agreements/one-time-service-agreement.pdf#view=FitH&toolbar=0"
-                            title="One-Time Service Agreement preview"
-                            className="w-full h-56 rounded-md border border-primary/15 bg-white"
-                          />
-                        </div>
+                          </li>
+                        </ul>
 
                         <p className="text-xs text-muted-foreground">
                           By paying your deposit you agree to the Terms of Service, Disclaimer, Refund Policy, and the One-Time Service Agreement. You&apos;ll add your signature on the next step.
