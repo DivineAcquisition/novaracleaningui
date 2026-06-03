@@ -114,7 +114,12 @@ export default function AdminAgreements() {
                     {row.customer_name || row.customer_email || "Unknown"}
                   </CardTitle>
                   <Badge variant="outline" className="text-xs">
-                    {row.source} · {new Date(row.accepted_at).toLocaleDateString()}
+                    {row.source === "va_phone"
+                      ? "Phone (VA)"
+                      : row.source === "checkout"
+                        ? "Online"
+                        : row.source}{" "}
+                    · {new Date(row.accepted_at).toLocaleDateString()}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{row.customer_email}</p>
