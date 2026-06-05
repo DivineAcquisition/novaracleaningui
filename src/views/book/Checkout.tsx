@@ -40,7 +40,6 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
-import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -54,6 +53,12 @@ import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
+import {
+  clearCheckoutSnapshot,
+  hasCheckoutPrerequisites,
+  loadCheckoutSnapshot,
+  saveCheckoutSnapshot,
+} from "@/lib/checkout-funnel-guard";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -89,7 +94,8 @@ export default function BookingCheckout() {
   const {
     bookingData,
     currentStep,
-    updateBookingData
+    updateBookingData,
+    setCurrentStep,
   } = useBooking();
   const {
     user
@@ -206,15 +212,88 @@ export default function BookingCheckout() {
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
 
-  // ALWAYS overwrite paymentOption to 'deposit' on mount.
+  // Pin funnel step + persist a session snapshot so schedule/service
+  // selections survive idle time on this page (browser back, tab discard,
+  // or accidental BookingContext churn).
   useEffect(() => {
-    if (bookingData.paymentOption !== 'deposit') {
-      updateBookingData({ paymentOption: 'deposit' });
+    setCurrentStep(4);
+
+    if (bookingData.paymentOption !== "deposit") {
+      updateBookingData({ paymentOption: "deposit" });
     }
+
+    if (hasCheckoutPrerequisites(bookingData)) {
+      saveCheckoutSnapshot(bookingData);
+      return;
+    }
+
+    const snap = loadCheckoutSnapshot();
+    if (snap?.serviceDate && snap?.timeSlot) {
+      updateBookingData(snap);
+      return;
+    }
+
+    toast.error("Please choose your service and appointment time first.");
+    router.replace("/book/offer");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (hasCheckoutPrerequisites(bookingData)) {
+      saveCheckoutSnapshot(bookingData);
+    }
+  }, [
+    bookingData.zipCode,
+    bookingData.city,
+    bookingData.state,
+    bookingData.homeSizeId,
+    bookingData.serviceType,
+    bookingData.serviceDate,
+    bookingData.timeSlot,
+    bookingData.startTime,
+    bookingData.endTime,
+    bookingData.firstName,
+    bookingData.lastName,
+    bookingData.email,
+    bookingData.phone,
+    bookingData.addOns,
+    bookingData.membershipPlan,
+  ]);
+
+  // If schedule fields disappear while still on checkout, restore from
+  // the snapshot instead of showing "pick a date" and nudging to offer.
+  useEffect(() => {
+    if (bookingData.serviceDate && bookingData.timeSlot) return;
+    const snap = loadCheckoutSnapshot();
+    if (snap?.serviceDate && snap?.timeSlot) {
+      updateBookingData(snap);
+    }
+  }, [bookingData.serviceDate, bookingData.timeSlot, updateBookingData]);
+
+  useEffect(() => {
     getStripePromise().catch((err: unknown) => {
-      console.error('Stripe initialization failed:', err);
-      setInitError('Unable to load payment system. Please try again.');
+      console.error("Stripe initialization failed:", err);
+      setInitError("Unable to load payment system. Please try again.");
     });
+  }, []);
+
+  // Discourage accidental browser-back / trackpad swipe away from checkout.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = window.location.href;
+    history.pushState({ checkoutGuard: true }, "", url);
+
+    const onPopState = () => {
+      const leave = window.confirm(
+        "Leave checkout? Your appointment is not reserved until you pay the deposit.",
+      );
+      if (!leave) {
+        history.pushState({ checkoutGuard: true }, "", url);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   // Check if new customer and auto-apply best promo
@@ -239,11 +318,15 @@ export default function BookingCheckout() {
     return;
   };
 
-  // Swipe handlers
-  const swipeHandlers = useBookingSwipe({
-    onSwipeRight: () => router.push("/book/offer"),
-    step: 4
-  });
+  const confirmLeaveCheckout = () =>
+    window.confirm(
+      "Go back to service selection? Your appointment is not reserved until you pay the deposit.",
+    );
+
+  const handleBack = () => {
+    if (!confirmLeaveCheckout()) return;
+    router.push("/book/offer");
+  };
 
   // Get pricing data
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
@@ -355,7 +438,6 @@ export default function BookingCheckout() {
   };
   // handlePaymentOptionChange removed — the customer no longer chooses a
   // payment option. The deposit amount is fixed at 50% of the total.
-  const handleBack = () => router.push("/book/offer");
   const handleMembershipCheckout = async () => {
     setIsCreatingIntent(true);
     setInitError(null);
@@ -510,12 +592,16 @@ export default function BookingCheckout() {
   };
   const handlePaymentSuccess = () => {
     toast.success("Payment successful!");
-    if (bookingId) {
-      updateBookingData({
-        bookingId
-      });
+    const id = bookingId || bookingData.bookingId;
+    if (id) {
+      updateBookingData({ bookingId: id });
     }
-    router.push("/book/details?booking_id=" + bookingId);
+    clearCheckoutSnapshot();
+    if (!id) {
+      toast.error("Payment received but booking id is missing — contact support@novaracleaning.com");
+      return;
+    }
+    router.replace(`/book/details?booking_id=${id}`);
   };
 
 
@@ -549,12 +635,29 @@ export default function BookingCheckout() {
     walletBalanceReady,
     isCreatingIntent,
     initError,
+    isNewCustomer,
+    applyWallet,
+    walletBalanceCents,
   ]);
+
+  // Re-mount Stripe when priced inputs change after the PI was created
+  // (e.g. returning-customer check finishes, wallet toggle).
+  useEffect(() => {
+    if (!clientSecret || paymentAmount <= 0) return;
+    const expectedCents = Math.max(100, Math.round(depositPricing.deposit * 100));
+    if (Math.abs(expectedCents - paymentAmount) > 1) {
+      setClientSecret(null);
+      setBookingId(null);
+      setPaymentAmount(0);
+      paymentInitStarted.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depositPricing.deposit, isNewCustomer, applyWallet, walletBalanceCents]);
   const currentAmount = depositPricing.deposit;
   const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
   return <PageTransition direction="forward">
-      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8" {...swipeHandlers}>
+      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
         <SEO title="Checkout" description="Complete your booking with a secure 50% deposit. Balance auto-charged after service." noindex />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         

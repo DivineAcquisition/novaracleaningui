@@ -52,6 +52,30 @@ const PETS_OPTIONS = [
   { value: 'other', label: 'Other Pets' },
 ];
 
+type BookingDetailsRow = {
+  service_type: string | null;
+  service_date: string | null;
+  total_estimate_cents: number | null;
+  deposit_cents: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  dwelling_type: string | null;
+  flooring_type: string | null;
+  pets: string | null;
+  access_notes: string | null;
+  second_visit_date: string | null;
+  second_visit_time_slot: string | null;
+  status: string | null;
+  payment_intent_id: string | null;
+};
+
 const FLOORING_TYPES = [
   { value: 'hardwood', label: 'Hardwood' },
   { value: 'carpet', label: 'Carpet' },
@@ -120,16 +144,19 @@ export default function PropertyDetails() {
   }>({ serviceType: null, serviceDate: null, isCombo: false });
   const [secondVisitDate, setSecondVisitDate] = useState<string>("");
   const [secondVisitSlot, setSecondVisitSlot] = useState<string>("");
+  const [detailsReady, setDetailsReady] = useState(false);
 
+  // Require a paid booking id (URL or context after Stripe redirect).
   useEffect(() => {
-    if (!bookingId) {
-      if (bookingData.bookingId) {
+    const id = bookingId || bookingData.bookingId;
+    if (id) {
+      if (!bookingId && bookingData.bookingId) {
         router.replace(`/book/details?booking_id=${bookingData.bookingId}`);
-        return;
       }
-      toast.error("No booking ID found. Please complete checkout first.");
-      router.push("/book/checkout");
+      return;
     }
+    toast.error("No booking ID found. Please complete checkout first.");
+    router.replace("/book/checkout");
   }, [bookingId, bookingData.bookingId, router]);
 
   // Keep address chain in sync — if the context updates (e.g. user
@@ -173,19 +200,35 @@ export default function PropertyDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zipCode]);
 
-  // Pull the booking row so we know whether to surface the second-visit
-  // picker (combo only) and what the deep-clean date is so we can bound
-  // the follow-up window to +1..+14 days.
+  // Hydrate the form from the booking row (refresh-safe after payment).
   useEffect(() => {
-    if (!bookingId) return;
+    const id = bookingId || bookingData.bookingId;
+    if (!id) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data: raw, error } = await supabase
         .from("bookings")
-        .select("service_type, service_date, total_estimate_cents, deposit_cents, first_name, last_name, email")
-        .eq("id", bookingId)
+        .select(
+          "service_type, service_date, total_estimate_cents, deposit_cents, first_name, last_name, email, address, city, state, zip_code, bedrooms, bathrooms, dwelling_type, flooring_type, pets, access_notes, second_visit_date, second_visit_time_slot, status, payment_intent_id",
+        )
+        .eq("id", id)
         .maybeSingle();
-      if (cancelled || !data) return;
+      const data = raw as unknown as BookingDetailsRow | null;
+      if (cancelled) return;
+      if (error || !data) {
+        toast.error("Could not load your booking. Please return to checkout.");
+        router.replace("/book/checkout");
+        return;
+      }
+
+      // Stripe may still be confirming — only send back to checkout when
+      // no payment has been attached yet.
+      if (data.status === "pending_payment" && !data.payment_intent_id) {
+        toast.info("Complete your deposit on checkout before adding home details.");
+        router.replace("/book/checkout");
+        return;
+      }
+
       const isCombo = data.service_type === "combo";
       setBookingMeta({
         serviceType: data.service_type,
@@ -199,16 +242,35 @@ export default function PropertyDetails() {
         lastName: data.last_name || "",
         email: data.email || "",
       });
-      // Default the second visit to deep date + 7 days for convenience.
-      if (isCombo && data.service_date && !secondVisitDate) {
+
+      if (data.address) setAddress(data.address);
+      else if (bookingData.address) setAddress(bookingData.address);
+      if (data.city) setCity(data.city);
+      else if (bookingData.city) setCity(bookingData.city);
+      if (data.state) setState(data.state);
+      else if (bookingData.state) setState(bookingData.state);
+      if (data.zip_code) setZipCode(data.zip_code);
+      else if (bookingData.zipCode) setZipCode(bookingData.zipCode);
+      if (data.bedrooms != null) setBedrooms(String(data.bedrooms));
+      if (data.bathrooms != null) setBathrooms(String(data.bathrooms));
+      if (data.dwelling_type) setDwellingType(data.dwelling_type);
+      if (data.flooring_type) setFlooringType(data.flooring_type);
+      if (data.pets) setPets(data.pets);
+      if (data.access_notes) setAccessNotes(data.access_notes);
+
+      if (data.second_visit_date) setSecondVisitDate(data.second_visit_date);
+      else if (isCombo && data.service_date) {
         const d = new Date(`${data.service_date}T12:00:00`);
         d.setDate(d.getDate() + 7);
         setSecondVisitDate(d.toISOString().slice(0, 10));
       }
+      if (data.second_visit_time_slot) setSecondVisitSlot(data.second_visit_time_slot);
+
+      setDetailsReady(true);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookingId]);
+  }, [bookingId, bookingData.bookingId]);
 
   // Compute the allowed +1..+14 day range for the follow-up Standard.
   const secondVisitMin = bookingMeta.serviceDate ? (() => {
@@ -243,6 +305,12 @@ export default function PropertyDetails() {
     if (nextCity) setCity(nextCity);
     if (nextState) setState(nextState);
     if (nextZip) setZipCode(nextZip);
+    updateBookingData({
+      address: street,
+      city: nextCity || city,
+      state: nextState || state,
+      zipCode: nextZip || zipCode,
+    });
   };
 
   // Human-readable service label for the agreement PDF.
@@ -260,7 +328,8 @@ export default function PropertyDetails() {
   // customer). Fire-and-forget so navigation to confirmation never blocks
   // on the PDF build / Edge Function cold-start.
   const persistServiceAgreement = async () => {
-    if (!signatureDataUrl || !bookingId) return;
+    const id = bookingId || bookingData.bookingId;
+    if (!signatureDataUrl || !id) return;
     try {
       const fullName =
         `${bookingData.firstName || agreementMeta.firstName || ""} ${bookingData.lastName || agreementMeta.lastName || ""}`.trim() ||
@@ -286,7 +355,7 @@ export default function PropertyDetails() {
       });
       await supabase.functions.invoke("store-service-agreement", {
         body: {
-          bookingId,
+          bookingId: id,
           email,
           name: fullName,
           serviceType: serviceLabel,
@@ -333,7 +402,8 @@ export default function PropertyDetails() {
       }
     }
 
-    if (!bookingId) {
+    const id = bookingId || bookingData.bookingId;
+    if (!id) {
       toast.error("Invalid booking");
       return;
     }
@@ -373,7 +443,7 @@ export default function PropertyDetails() {
           ...(bookingMeta.serviceType ? { offer_type: bookingMeta.serviceType } : {}),
           ...secondVisitFields,
         })
-        .eq("id", bookingId);
+        .eq("id", id);
 
       if (error) throw error;
 
@@ -400,7 +470,7 @@ export default function PropertyDetails() {
       // backstop DB trigger + the confirmation page's polling + cron
       // all converge on the same end state, so it's safe to not block.
       supabase.functions.invoke("finalize-booking", {
-        body: { bookingId, trigger: "property_details_save" },
+        body: { bookingId: id, trigger: "property_details_save" },
       }).catch((finalizeErr) => {
         console.warn("[PropertyDetails] finalize-booking invoke failed (non-blocking)", finalizeErr);
       });
@@ -410,7 +480,7 @@ export default function PropertyDetails() {
       void persistServiceAgreement();
 
       toast.success("Details saved! Finalizing your booking…");
-      router.push("/book/confirmation?booking_id=" + bookingId);
+      router.push(`/book/confirmation?booking_id=${id}`);
     } catch (error) {
       console.error("Error saving details:", error);
       toast.error("Failed to save details. Please try again.");
@@ -418,6 +488,15 @@ export default function PropertyDetails() {
       setIsSubmitting(false);
     }
   };
+
+  if (!detailsReady) {
+    return (
+      <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
+        <SEO title="Property Details" description="Provide details about your home for a customized cleaning experience." noindex />
+        <p className="text-sm text-muted-foreground">Loading your booking…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
