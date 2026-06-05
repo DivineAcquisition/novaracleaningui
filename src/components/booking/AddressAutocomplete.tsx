@@ -57,10 +57,27 @@ export function AddressAutocomplete({
   const [showHistory, setShowHistory] = useState(false);
   const [geocodedLocation, setGeocodedLocation] = useState<string | null>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
+  const [googleBlocked, setGoogleBlocked] = useState(false);
 
   // Load address history
   useEffect(() => {
     setAddressHistory(getAddressHistory());
+  }, []);
+
+  // Referrer-restricted keys call gm_authFailure instead of showing suggestions.
+  useEffect(() => {
+    if (window.__novaraGmAuthFailureHooked) return;
+    window.__novaraGmAuthFailureHooked = true;
+    const prior = (window as { gm_authFailure?: () => void }).gm_authFailure;
+    (window as { gm_authFailure?: () => void }).gm_authFailure = () => {
+      console.warn("[google-places] gm_authFailure — domain likely not allow-listed");
+      window.__novaraGmAuthFailed = true;
+      try {
+        prior?.();
+      } catch {
+        /* ignore */
+      }
+    };
   }, []);
 
   // Wire up Google Places Autocomplete. Falls back silently to the
@@ -70,6 +87,11 @@ export function AddressAutocomplete({
     (async () => {
       const places = await loadGooglePlaces();
       if (cancelled) return;
+      if (window.__novaraGmAuthFailed) {
+        setGoogleBlocked(true);
+        setGoogleLoaded(false);
+        return;
+      }
       if (!places || !inputRef.current) {
         setGoogleLoaded(false);
         return;
@@ -114,6 +136,22 @@ export function AddressAutocomplete({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // gm_authFailure can fire after Autocomplete is wired but before the user types.
+  useEffect(() => {
+    if (!googleLoaded || googleBlocked) return;
+    let ticks = 0;
+    const t = setInterval(() => {
+      ticks++;
+      if (window.__novaraGmAuthFailed) {
+        setGoogleBlocked(true);
+        setGoogleLoaded(false);
+        clearInterval(t);
+      }
+      if (ticks > 6) clearInterval(t);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [googleLoaded, googleBlocked]);
+
   const handleHistorySelect = (item: AddressHistoryItem) => {
     // Clear validation error when selecting from history
     setValidationError(null);
@@ -144,7 +182,7 @@ export function AddressAutocomplete({
     // When Google Places is active, place_changed already pushed
     // the validated address. Skip the legacy onBlur geocode so we
     // don't clobber the canonical street with a partial parse.
-    if (googleLoaded) return;
+    if (googleLoaded && !googleBlocked) return;
     const value = inputRef.current?.value?.trim();
     if (!value) return;
 

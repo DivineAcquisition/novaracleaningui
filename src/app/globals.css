@@ -310,3 +310,8 @@
   }
 }
 
+/* Google Places suggestions must sit above booking funnel cards/modals */
+.pac-container {
+  z-index: 10000 !important;
+}
+

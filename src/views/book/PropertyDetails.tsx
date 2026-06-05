@@ -422,7 +422,7 @@ export default function PropertyDetails() {
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
       <SEO title="Property Details" description="Provide details about your home for a customized cleaning experience." noindex />
-      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in overflow-hidden">
+      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in overflow-visible">
         {/* Brand gradient strip — visually ties the details step to the
             rest of the funnel (zip → offer → checkout → THIS → confirm). */}
         <div className="h-1.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
