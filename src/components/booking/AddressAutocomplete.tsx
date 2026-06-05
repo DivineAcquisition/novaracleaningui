@@ -37,8 +37,6 @@ interface AddressComponents {
 
 interface AddressAutocompleteProps {
   onAddressSelect: (address: AddressComponents) => void;
-  /** Fires on every keystroke so parents can enable submit while typing. */
-  onStreetInput?: (street: string) => void;
   initialValue?: string;
   label?: string;
   placeholder?: string;
@@ -47,7 +45,6 @@ interface AddressAutocompleteProps {
 
 export function AddressAutocomplete({
   onAddressSelect,
-  onStreetInput,
   initialValue = "",
   label = "Street Address *",
   placeholder = "Start typing address...",
@@ -55,6 +52,10 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  // Google Places Autocomplete must own the input (uncontrolled). Parent
+  // state updates on every keystroke cause React/Google to fight and the
+  // field appears disabled/greyed out.
+  const initialStreetRef = useRef(initialValue);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -175,11 +176,21 @@ export function AddressAutocomplete({
     setShowHistory(false);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValidationError(null);
-    setGeocodedLocation(null);
-    onStreetInput?.(e.target.value);
+  const handleInputChange = () => {
+    // Avoid re-rendering on every keystroke — Google Places fights React
+    // updates and the street field can look disabled/grey.
+    if (validationError) setValidationError(null);
+    if (geocodedLocation) setGeocodedLocation(null);
   };
+
+  // Hydrate street from parent once (booking row load); do not tie to keystrokes.
+  useEffect(() => {
+    if (!initialValue || !inputRef.current) return;
+    if (!inputRef.current.value.trim()) {
+      inputRef.current.value = initialValue;
+      initialStreetRef.current = initialValue;
+    }
+  }, [initialValue]);
 
   const handleInputBlur = async () => {
     // Only skip manual geocode when the user already picked a Places
@@ -299,9 +310,10 @@ export function AddressAutocomplete({
           id="customer-address-autocomplete"
           type="text"
           placeholder={placeholder}
-          defaultValue={initialValue}
+          defaultValue={initialStreetRef.current}
           className="pr-10"
-          onChange={(e) => handleInputChange(e)}
+          onChange={handleInputChange}
+          autoComplete="off"
           onBlur={handleInputBlur}
           onFocus={() => {
             setShowHistory(false);

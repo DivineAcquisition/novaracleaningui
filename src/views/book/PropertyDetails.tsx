@@ -565,10 +565,10 @@ export default function PropertyDetails() {
               <h3 className="text-base md:text-lg font-semibold">Service Address</h3>
               
               <AddressAutocomplete
+                key={bookingId || bookingData.bookingId || "details-address"}
                 label="Street Address *"
                 placeholder="Start typing your address..."
                 initialValue={address}
-                onStreetInput={setAddress}
                 onAddressSelect={handleAddressSelect}
               />
               {isHydrating && (
@@ -851,7 +851,7 @@ export default function PropertyDetails() {
             <Button
               type="submit"
               size="lg"
-              disabled={isSubmitting || isHydrating || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType || !signatureDataUrl}
+              disabled={isSubmitting || isHydrating || !city || !state || !bedrooms || !bathrooms || !dwellingType || !signatureDataUrl}
               className="w-full h-12 md:h-14 text-base font-semibold"
             >
               {isSubmitting ? "Saving..." : "Complete Booking"}
