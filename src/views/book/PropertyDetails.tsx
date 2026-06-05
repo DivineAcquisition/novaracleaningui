@@ -144,7 +144,7 @@ export default function PropertyDetails() {
   }>({ serviceType: null, serviceDate: null, isCombo: false });
   const [secondVisitDate, setSecondVisitDate] = useState<string>("");
   const [secondVisitSlot, setSecondVisitSlot] = useState<string>("");
-  const [detailsReady, setDetailsReady] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(true);
 
   // Require a paid booking id (URL or context after Stripe redirect).
   useEffect(() => {
@@ -216,14 +216,21 @@ export default function PropertyDetails() {
       const data = raw as unknown as BookingDetailsRow | null;
       if (cancelled) return;
       if (error || !data) {
+        setIsHydrating(false);
         toast.error("Could not load your booking. Please return to checkout.");
         router.replace("/book/checkout");
         return;
       }
 
-      // Stripe may still be confirming — only send back to checkout when
-      // no payment has been attached yet.
-      if (data.status === "pending_payment" && !data.payment_intent_id) {
+      // Only block when checkout was never started (no Stripe PI on file).
+      const paidOrInProgress =
+        data.payment_intent_id ||
+        data.status === "pending_details" ||
+        data.status === "confirmed" ||
+        data.status === "booked" ||
+        data.status === "assigned";
+      if (data.status === "pending_payment" && !paidOrInProgress) {
+        setIsHydrating(false);
         toast.info("Complete your deposit on checkout before adding home details.");
         router.replace("/book/checkout");
         return;
@@ -266,8 +273,10 @@ export default function PropertyDetails() {
       }
       if (data.second_visit_time_slot) setSecondVisitSlot(data.second_visit_time_slot);
 
-      setDetailsReady(true);
-    })();
+      setIsHydrating(false);
+    })().catch(() => {
+      if (!cancelled) setIsHydrating(false);
+    });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId, bookingData.bookingId]);
@@ -374,7 +383,13 @@ export default function PropertyDetails() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!address || !city || !state || !bedrooms || !bathrooms || !dwellingType) {
+    // Street uses an uncontrolled input when Google Places is active —
+    // read the live DOM value so manual typing still submits.
+    const streetInput = document.getElementById("customer-address-autocomplete") as HTMLInputElement | null;
+    const street = (address || streetInput?.value || "").trim();
+    if (street && street !== address) setAddress(street);
+
+    if (!street || !city || !state || !bedrooms || !bathrooms || !dwellingType) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -428,7 +443,7 @@ export default function PropertyDetails() {
       const { error } = await supabase
         .from("bookings")
         .update({
-          address,
+          address: street,
           city,
           state,
           zip_code: zipCode || bookingData.zipCode,
@@ -453,7 +468,7 @@ export default function PropertyDetails() {
       // confirmation). The Success page also re-hydrates from the row
       // as a safety net for deep-linked landings.
       updateBookingData({
-        address,
+        address: street,
         city,
         state,
         zipCode: zipCode || bookingData.zipCode,
@@ -481,22 +496,17 @@ export default function PropertyDetails() {
 
       toast.success("Details saved! Finalizing your booking…");
       router.push(`/book/confirmation?booking_id=${id}`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error saving details:", error);
-      toast.error("Failed to save details. Please try again.");
+      const msg =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message: string }).message)
+          : "Failed to save details. Please try again.";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  if (!detailsReady) {
-    return (
-      <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
-        <SEO title="Property Details" description="Provide details about your home for a customized cleaning experience." noindex />
-        <p className="text-sm text-muted-foreground">Loading your booking…</p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
@@ -558,8 +568,12 @@ export default function PropertyDetails() {
                 label="Street Address *"
                 placeholder="Start typing your address..."
                 initialValue={address}
+                onStreetInput={setAddress}
                 onAddressSelect={handleAddressSelect}
               />
+              {isHydrating && (
+                <p className="text-xs text-muted-foreground">Loading your booking…</p>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -837,7 +851,7 @@ export default function PropertyDetails() {
             <Button
               type="submit"
               size="lg"
-              disabled={isSubmitting || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType || !signatureDataUrl}
+              disabled={isSubmitting || isHydrating || !address || !city || !state || !bedrooms || !bathrooms || !dwellingType || !signatureDataUrl}
               className="w-full h-12 md:h-14 text-base font-semibold"
             >
               {isSubmitting ? "Saving..." : "Complete Booking"}

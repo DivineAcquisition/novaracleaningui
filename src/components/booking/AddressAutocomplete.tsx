@@ -37,6 +37,8 @@ interface AddressComponents {
 
 interface AddressAutocompleteProps {
   onAddressSelect: (address: AddressComponents) => void;
+  /** Fires on every keystroke so parents can enable submit while typing. */
+  onStreetInput?: (street: string) => void;
   initialValue?: string;
   label?: string;
   placeholder?: string;
@@ -45,6 +47,7 @@ interface AddressAutocompleteProps {
 
 export function AddressAutocomplete({
   onAddressSelect,
+  onStreetInput,
   initialValue = "",
   label = "Street Address *",
   placeholder = "Start typing address...",
@@ -172,17 +175,17 @@ export function AddressAutocomplete({
     setShowHistory(false);
   };
 
-  const handleInputChange = () => {
-    // Clear validation error on input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValidationError(null);
     setGeocodedLocation(null);
+    onStreetInput?.(e.target.value);
   };
 
   const handleInputBlur = async () => {
-    // When Google Places is active, place_changed already pushed
-    // the validated address. Skip the legacy onBlur geocode so we
-    // don't clobber the canonical street with a partial parse.
-    if (googleLoaded && !googleBlocked) return;
+    // Only skip manual geocode when the user already picked a Places
+    // suggestion (place_changed set geocodedLocation). If they typed
+    // manually while Google is loaded, we still need to parse/geocode.
+    if (googleLoaded && !googleBlocked && geocodedLocation) return;
     const value = inputRef.current?.value?.trim();
     if (!value) return;
 
@@ -298,7 +301,7 @@ export function AddressAutocomplete({
           placeholder={placeholder}
           defaultValue={initialValue}
           className="pr-10"
-          onChange={handleInputChange}
+          onChange={(e) => handleInputChange(e)}
           onBlur={handleInputBlur}
           onFocus={() => {
             setShowHistory(false);
