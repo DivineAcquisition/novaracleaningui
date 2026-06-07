@@ -839,7 +839,9 @@ export default function VaBooking() {
                 />
               </Field>
             </div>
+            <div className="relative overflow-visible">
             <AddressAutocomplete
+              key="va-service-address"
               label="Service address *"
               placeholder="Start typing the customer's address…"
               initialValue={address}
@@ -852,6 +854,7 @@ export default function VaBooking() {
                 setAddressLng(typeof addr.lng === "number" ? addr.lng : null);
               }}
             />
+            </div>
             <div className="grid grid-cols-12 gap-4">
               <div className="col-span-12 md:col-span-6">
                 <Field label="City">

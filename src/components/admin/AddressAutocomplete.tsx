@@ -74,6 +74,9 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  // Google Places must own an uncontrolled input — parent re-renders on
+  // every keystroke make the field look disabled/grey and break search.
+  const initialStreetRef = useRef(initialValue);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -111,7 +114,14 @@ export function AddressAutocomplete({
         setLoadState("blocked");
         return;
       }
-      if (!places || !inputRef.current) {
+      if (!places) {
+        setLoadState("manual");
+        return;
+      }
+      if (!inputRef.current) {
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
+      if (!inputRef.current) {
         setLoadState("manual");
         return;
       }
@@ -188,9 +198,18 @@ export function AddressAutocomplete({
   };
 
   const handleInputChange = () => {
-    setValidationError(null);
-    setGeocodedLocation(null);
+    if (validationError) setValidationError(null);
+    if (geocodedLocation) setGeocodedLocation(null);
   };
+
+  // Hydrate from parent once (e.g. lead load) without tying to keystrokes.
+  useEffect(() => {
+    if (!initialValue || !inputRef.current) return;
+    if (!inputRef.current.value.trim()) {
+      inputRef.current.value = initialValue;
+      initialStreetRef.current = initialValue;
+    }
+  }, [initialValue]);
 
   // Manual parse path — always runs whether Google loaded or not. Used by
   // onBlur when the user typed but didn't pick from the Google dropdown,
@@ -257,7 +276,9 @@ export function AddressAutocomplete({
   };
 
   const handleInputBlur = async () => {
-    if (loadState === "ready") return; // Google already pushed via place_changed
+    // Only skip when the user already picked a Places suggestion.
+    // If they typed manually while Google is "ready", still geocode.
+    if (loadState === "ready" && geocodedLocation) return;
     await parseManualEntry();
   };
 
@@ -318,7 +339,7 @@ export function AddressAutocomplete({
           id="address-autocomplete"
           type="text"
           placeholder={placeholder}
-          defaultValue={initialValue}
+          defaultValue={initialStreetRef.current}
           className="pr-10"
           onChange={handleInputChange}
           onBlur={handleInputBlur}
