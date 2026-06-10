@@ -86,8 +86,18 @@ export function decideCancelFee(args: {
 
 export function decideRescheduleFee(args: {
   serviceDate?: string | null;
+  /** Admin/VA reschedules from the internal portal never charge a fee. */
+  waiveFee?: boolean;
 }): RescheduleFeeDecision {
   const hrs = hoursUntil(args.serviceDate);
+  if (args.waiveFee) {
+    return {
+      feeCents: 0,
+      basis: "outside_window",
+      hoursUntilService: hrs,
+      copy: "No fee — rescheduled by Novara team.",
+    };
+  }
   if (hrs < SHORT_NOTICE_WINDOW_HOURS && hrs > 0) {
     return {
       feeCents: RESCHEDULE_SHORT_NOTICE_FEE_CENTS,

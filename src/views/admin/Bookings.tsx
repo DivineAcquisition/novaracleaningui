@@ -675,7 +675,7 @@ function BookingSheet({
                   Reschedule
                 </CardTitle>
                 <CardDescription>
-                  Pick a new date & time. Customer gets a confirmation email + SMS automatically.
+                  Reschedule to any date — including weekends and short notice. Customer gets SMS + email; GHL pipelines update automatically.
                 </CardDescription>
               </CardHeader>
               <CardContent>
