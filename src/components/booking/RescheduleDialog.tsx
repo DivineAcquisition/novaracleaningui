@@ -97,9 +97,16 @@ export function RescheduleDialog({
       }
 
       const feeNote = data?.rescheduleFeeCents
-        ? ` A $${(data.rescheduleFeeCents / 100).toFixed(0)} short-notice fee was added to your invoice.`
+        ? ` A $${(data.rescheduleFeeCents / 100).toFixed(0)} short-notice fee was added to the invoice.`
         : "";
-      toast.success(`Booking rescheduled! Confirmation sent.${feeNote}`);
+      if (source === "admin") {
+        toast.success(
+          `Booking rescheduled to ${format(selectedDate, "MMM d, yyyy")} · ${selectedTime}. ` +
+            `Customer notified via SMS & email; GHL pipelines updated.${feeNote}`,
+        );
+      } else {
+        toast.success(`Booking rescheduled! Confirmation sent.${feeNote}`);
+      }
       onSuccess();
       onOpenChange(false);
     } catch (error) {
@@ -136,7 +143,11 @@ export function RescheduleDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Reschedule Booking"
-      description="Pick a new date and time for your appointment."
+      description={
+        source === "admin"
+          ? "Pick any new date and time. The customer is notified via SMS and GHL is updated automatically."
+          : "Pick a new date and time for your appointment."
+      }
       desktopMaxWidthClass="max-w-2xl"
       footer={footer}
     >
@@ -165,6 +176,7 @@ export function RescheduleDialog({
           slots, same availability hook. Keeps the reschedule UX 1:1 with
           the original checkout experience. */}
       <SchedulePicker
+        mode={source === "admin" ? "admin" : "customer"}
         selectedDate={selectedDate}
         selectedTime={selectedTime}
         onDateSelect={(date) => {

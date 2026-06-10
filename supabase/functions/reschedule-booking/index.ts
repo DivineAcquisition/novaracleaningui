@@ -5,8 +5,9 @@ import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
 import { syncBookingLifecycle } from '../_shared/ghl-client.ts';
+import { buildGhlCustomFields } from '../_shared/ghl-field-map.ts';
 import { sendSms, formatServiceDate, formatTimeSlot } from '../_shared/sms.ts';
-import { decideRescheduleFee, SUPPORT_PHONE_DISPLAY, smsActionTail } from '../_shared/booking-policy.ts';
+import { decideRescheduleFee, smsActionTail } from '../_shared/booking-policy.ts';
 import { mirrorToLeadConnector } from '../_shared/leadconnector-mirror.ts';
 
 const corsHeaders = {
@@ -26,6 +27,88 @@ interface RescheduleRequest {
   source?: string;
 }
 
+function parseTimeSlot(slot: string): { start: string | null; end: string | null } {
+  if (!slot) return { start: null, end: null };
+  const m = slot.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)?\s*-\s*(\d{1,2}):?(\d{2})?\s*(AM|PM)?/i);
+  if (!m) return { start: null, end: null };
+  const toClock = (h: string, mm: string | undefined, mer: string | undefined) => {
+    let hour = parseInt(h, 10);
+    if (mer) {
+      const u = mer.toUpperCase();
+      if (u === "PM" && hour < 12) hour += 12;
+      if (u === "AM" && hour === 12) hour = 0;
+    }
+    return `${String(hour).padStart(2, "0")}:${(mm || "00").padStart(2, "0")}:00`;
+  };
+  return { start: toClock(m[1], m[2], m[3]), end: toClock(m[4], m[5], m[6]) };
+}
+
+async function ensureAdminOrVa(
+  supabase: ReturnType<typeof createClient>,
+  req: Request,
+): Promise<void> {
+  const auth = req.headers.get("Authorization");
+  if (!auth) throw new Error("Admin authorization required");
+  const userClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    { global: { headers: { Authorization: auth } } },
+  );
+  const { data: u } = await userClient.auth.getUser();
+  if (!u?.user?.id) throw new Error("Not signed in");
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", u.user.id);
+  const allowed = (roles || []).some((r: { role: string }) =>
+    ["admin", "va"].includes(r.role)
+  );
+  if (!allowed) throw new Error("Admins or VAs only");
+}
+
+async function adjustAvailabilitySlot(
+  supabase: ReturnType<typeof createClient>,
+  args: {
+    date: string;
+    slot: string;
+    delta: number;
+    adminOverride?: boolean;
+  },
+): Promise<void> {
+  const { start, end } = parseTimeSlot(args.slot);
+  if (!start || !end || args.delta === 0) return;
+
+  const { data: existing } = await supabase
+    .from("availability_slots")
+    .select("id, current_bookings, max_capacity")
+    .eq("service_date", args.date)
+    .eq("start_time", start)
+    .maybeSingle();
+
+  if (existing) {
+    const next = Math.max(0, (existing.current_bookings || 0) + args.delta);
+    await supabase
+      .from("availability_slots")
+      .update({ current_bookings: next, updated_at: new Date().toISOString() })
+      .eq("id", existing.id);
+    return;
+  }
+
+  if (args.delta > 0) {
+    await supabase.from("availability_slots").upsert(
+      {
+        service_date: args.date,
+        time_slot: args.slot,
+        start_time: start,
+        end_time: end,
+        max_capacity: args.adminOverride ? 99 : 5,
+        current_bookings: args.delta,
+      },
+      { onConflict: "service_date,start_time", ignoreDuplicates: false },
+    );
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -38,8 +121,13 @@ serve(async (req) => {
     );
 
     const { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source = 'customer_portal' }: RescheduleRequest = await req.json();
+    const isAdmin = source === "admin";
 
     console.log('Reschedule request:', { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source });
+
+    if (isAdmin) {
+      await ensureAdminOrVa(supabase, req);
+    }
 
     // 1. Get booking details
     const { data: booking, error: bookingError } = await supabase
@@ -53,27 +141,39 @@ serve(async (req) => {
       throw new Error('Booking not found');
     }
 
-    // 2. Check availability for new slot (soft check - proceed even if no row)
-    const { data: newSlot } = await supabase
-      .from('availability')
-      .select('capacity')
-      .eq('service_date', newDate)
-      .eq('time_window', newTimeSlot)
-      .maybeSingle();
+    // 2. Check availability for new slot (customer portal only — admin can override)
+    if (!isAdmin) {
+      const { start, end } = parseTimeSlot(newTimeSlot);
+      if (start && end) {
+        const { data: newSlot } = await supabase
+          .from("availability_slots")
+          .select("current_bookings, max_capacity, is_available")
+          .eq("service_date", newDate)
+          .eq("start_time", start)
+          .maybeSingle();
 
-    if (newSlot && newSlot.capacity <= 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Selected time slot is not available' 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
+        if (
+          newSlot &&
+          (newSlot.is_available === false ||
+            (newSlot.current_bookings ?? 0) >= (newSlot.max_capacity ?? 0))
+        ) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              message: "Selected time slot is not available",
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+          );
+        }
+      }
     }
 
     // Decide reschedule fee BEFORE we mutate the row (so the fee is
     // calculated against the ORIGINAL service date, not the new one).
-    const feeDecision = decideRescheduleFee({ serviceDate: booking.service_date });
+    const feeDecision = decideRescheduleFee({
+      serviceDate: booking.service_date,
+      waiveFee: isAdmin,
+    });
     console.log('Reschedule fee decided:', feeDecision);
 
     // 3. Update booking with new date/time + audit columns
@@ -158,44 +258,30 @@ serve(async (req) => {
       }
     }
 
-    // 4. Release old availability slot
+    // 4. Release old availability slot (availability_slots table)
     try {
-      const { data: oldSlot } = await supabase
-        .from('availability')
-        .select('capacity')
-        .eq('service_date', oldDate)
-        .eq('time_window', oldTimeSlot)
-        .maybeSingle();
-
-      if (oldSlot) {
-        await supabase
-          .from('availability')
-          .update({ capacity: oldSlot.capacity + 1 })
-          .eq('service_date', oldDate)
-          .eq('time_window', oldTimeSlot);
-        console.log('Old slot released, new capacity:', oldSlot.capacity + 1);
-      }
+      await adjustAvailabilitySlot(supabase, {
+        date: oldDate,
+        slot: oldTimeSlot,
+        delta: -1,
+        adminOverride: isAdmin,
+      });
+      console.log("Old availability_slots row released");
     } catch (e) {
-      console.error('Release old slot failed (non-critical):', e);
+      console.error("Release old slot failed (non-critical):", e);
     }
 
     // 5. Reserve new availability slot
     try {
-      if (newSlot) {
-        await supabase
-          .from('availability')
-          .update({ capacity: Math.max(0, newSlot.capacity - 1) })
-          .eq('service_date', newDate)
-          .eq('time_window', newTimeSlot);
-      } else {
-        await supabase.rpc('reserve_availability', {
-          _date: newDate,
-          _time_window: newTimeSlot,
-        });
-      }
-      console.log('New slot reserved');
+      await adjustAvailabilitySlot(supabase, {
+        date: newDate,
+        slot: newTimeSlot,
+        delta: 1,
+        adminOverride: isAdmin,
+      });
+      console.log("New availability_slots row reserved");
     } catch (e) {
-      console.error('Reserve new slot failed (non-critical):', e);
+      console.error("Reserve new slot failed (non-critical):", e);
     }
 
     // 6. Send confirmation email
@@ -315,13 +401,52 @@ serve(async (req) => {
       console.error('GHL webhook failed (non-critical):', ghlError);
     }
 
-    // GHL: tag the contact as rescheduled but DON'T overwrite the
-    // financial / scheduling fields here — send-zapier-webhook (fired
-    // below) owns the authoritative refresh via buildGhlCustomFields,
-    // which keeps the contact's state consistent across the many
-    // bookings a single email can have.
+    // GHL: immediate contact + pipeline refresh with updated schedule
+    // fields. send-zapier-webhook (below) runs the full 60+ field sync;
+    // this pass ensures scheduling custom fields + dispatch stage move
+    // without waiting on the heavier webhook handler.
     try {
+      const updatedBooking = {
+        ...booking,
+        service_date: newDate,
+        time_slot: newTimeSlot,
+        reschedule_fee_cents: (booking.reschedule_fee_cents || 0) + feeDecision.feeCents,
+        reschedule_count: (booking.reschedule_count || 0) + 1,
+      };
+      const ghlCustomFields = buildGhlCustomFields({
+        booking: updatedBooking,
+        cleaners: [],
+        publicOrigin: "https://try.novaracleaning.com",
+      });
+
+      let jobStatus: string | null = null;
+      const assignmentStatuses: string[] = [];
+      if (booking.job_id) {
+        const { data: jobRow } = await supabase
+          .from("jobs")
+          .select("status")
+          .eq("id", booking.job_id)
+          .maybeSingle();
+        jobStatus = jobRow?.status ?? null;
+        const { data: assigns } = await supabase
+          .from("job_assignments")
+          .select("status")
+          .eq("job_id", booking.job_id);
+        for (const a of assigns || []) {
+          if (a?.status) assignmentStatuses.push(String(a.status));
+        }
+      }
+
       await syncBookingLifecycle({
+        opportunityId: booking.ghl_opportunity_id || null,
+        dispatchStage: {
+          bookingStatus: booking.status,
+          jobStatus,
+          payoutStatus: booking.payout_status,
+          cleanerId: booking.cleaner_id,
+          assignmentStatuses,
+          serviceDate: newDate,
+        },
         contact: {
           email: booking.email,
           phone: booking.phone,
@@ -331,24 +456,29 @@ serve(async (req) => {
           city: booking.city,
           state: booking.state,
           postalCode: booking.zip_code,
-          source: "Novara Reschedule",
+          source: isAdmin ? "Novara Admin Reschedule" : "Novara Reschedule",
           tags: [
             "rescheduled",
             newDate ? `svc-${newDate}` : "",
             booking.zip_code ? `zip-${booking.zip_code}` : "",
             feeDecision.feeCents > 0 ? "short-notice-reschedule" : "",
+            isAdmin ? "admin-rescheduled" : "",
           ].filter(Boolean) as string[],
+          customFieldsByKey: ghlCustomFields,
         },
         opportunity: {
-          name: `NOV-${String(booking.booking_number).padStart(5, '0')} — ${booking.first_name} ${booking.last_name}`,
-          status: 'open',
-          monetaryValue: Math.round(((booking.total_estimate_cents || 0) + feeDecision.feeCents) / 100),
-          source: "Novara Reschedule",
+          name: `NOV-${String(booking.booking_number).padStart(5, "0")} — ${booking.first_name} ${booking.last_name}`,
+          status: "open",
+          monetaryValue: Math.round(
+            ((booking.total_estimate_cents || 0) + feeDecision.feeCents) / 100,
+          ),
+          source: isAdmin ? "Novara Admin Reschedule" : "Novara Reschedule",
+          customFieldsByKey: ghlCustomFields,
         },
       });
-      console.log('[reschedule-booking] GHL contact + opportunity tagged');
+      console.log("[reschedule-booking] GHL contact + pipeline updated");
     } catch (ghlPitErr) {
-      console.error('[reschedule-booking] GHL PIT sync failed (non-blocking):', ghlPitErr);
+      console.error("[reschedule-booking] GHL PIT sync failed (non-blocking):", ghlPitErr);
     }
 
     // LeadConnector inbound webhook mirror — backup so the GHL
@@ -383,10 +513,13 @@ serve(async (req) => {
         const feeLine = feeDecision.feeCents > 0
           ? ` A $${(feeDecision.feeCents / 100).toFixed(0)} short-notice fee was added to your invoice.`
           : "";
+        const opener = isAdmin
+          ? "Novara Cleaning: Our team rescheduled your appointment to"
+          : "Novara Cleaning: Your appointment has been rescheduled to";
         await sendSms(supabase, {
           toPhone: booking.phone,
           message:
-            `Novara Cleaning: Your appointment has been rescheduled to ` +
+            `${opener} ` +
             `${formatServiceDate(newDate)}` +
             (newTimeSlot ? ` (${formatTimeSlot(newTimeSlot)})` : "") +
             `.${feeLine} ${smsActionTail()}`,

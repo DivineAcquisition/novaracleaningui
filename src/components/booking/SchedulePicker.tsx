@@ -29,6 +29,11 @@ interface SchedulePickerProps {
   showContinue?: boolean;
   continueDisabled?: boolean;
   isProcessing?: boolean;
+  /**
+   * customer — 3-day lead time, weekdays only, 60-day window (booking funnel).
+   * admin — any date from today, including weekends, up to 1 year out.
+   */
+  mode?: "customer" | "admin";
 }
 
 // Extended time windows - more granular slots
@@ -65,9 +70,11 @@ export function SchedulePicker({
   showContinue = false,
   continueDisabled = false,
   isProcessing = false,
+  mode = "customer",
 }: SchedulePickerProps) {
-  const minDate = addDays(new Date(), 3);
-  const endDate = addDays(new Date(), 60);
+  const isAdminMode = mode === "admin";
+  const minDate = isAdminMode ? startOfDay(new Date()) : addDays(new Date(), 3);
+  const endDate = addDays(new Date(), isAdminMode ? 365 : 60);
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(minDate));
 
   const { availability, loading: isLoading } = useAvailability(minDate, endDate);
@@ -90,11 +97,20 @@ export function SchedulePicker({
   const slotsForSelectedDate = selectedDateStr ? availabilityByDate[selectedDateStr] || {} : {};
 
   const isDateDisabled = (date: Date) => {
-    return isWeekend(date) || isBefore(startOfDay(date), startOfDay(minDate));
+    if (isBefore(startOfDay(date), startOfDay(minDate))) return true;
+    if (isAdminMode) return false;
+    return isWeekend(date);
   };
 
   const getSlotStatus = (slotId: string) => {
     const slot = slotsForSelectedDate[slotId];
+    if (isAdminMode) {
+      if (!slot) return { available: true, label: "Open" };
+      const remaining = slot.capacity - slot.booked;
+      if (remaining <= 0) return { available: true, label: "Override" };
+      if (remaining <= 2) return { available: true, label: "Few left" };
+      return { available: true, label: "Available" };
+    }
     if (!slot) return { available: true, label: "Available" };
     if (!slot.available) return { available: false, label: "Unavailable" };
     const remaining = slot.capacity - slot.booked;
@@ -148,7 +164,9 @@ export function SchedulePicker({
           Pick Your Date & Time
         </CardTitle>
         <CardDescription>
-          Select a convenient appointment slot (3+ days advance booking required)
+          {isAdminMode
+            ? "Pick any date from today — weekends and short notice are allowed."
+            : "Select a convenient appointment slot (3+ days advance booking required)"}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
