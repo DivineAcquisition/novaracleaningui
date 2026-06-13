@@ -154,6 +154,44 @@ export function getEstimatedHours(homeSizeId: string): number {
   return HOME_SIZE_HOURS[homeSizeId] || 4;
 }
 
+// ─── Service-type duration multipliers ─────────────────────────────
+//
+// Deep / Move-In-Out / Combo cleans take materially longer than a
+// Standard clean for the same square footage. These mirror the pricing
+// tier multipliers (deep 1.5×, moveInOut 2.0×, combo 2.5×) because the
+// price tiers track labor effort. Used for JOB scheduling / conflict
+// windows so a cleaner who accepts a deep clean isn't double-booked on
+// a window sized for a standard clean.
+const SERVICE_DURATION_MULTIPLIERS: Record<string, number> = {
+  standard: 1.0,
+  deep: 1.5,
+  moveinout: 2.0,
+  combo: 2.5,
+};
+
+/** Normalize the many service_type spellings to a multiplier key. */
+function normalizeServiceKey(serviceType: string | null | undefined): string {
+  const s = String(serviceType || "").toLowerCase().replace(/[\s_-]+/g, "");
+  if (s.includes("move")) return "moveinout";
+  if (s.includes("combo")) return "combo";
+  if (s.includes("deep")) return "deep";
+  return "standard";
+}
+
+/**
+ * Estimated job hours for SCHEDULING — home-size base hours scaled by
+ * the service-type effort multiplier. Single source of truth so
+ * auto-dispatch, conflict detection, and calendar blocking all agree.
+ */
+export function getServiceDurationHours(
+  homeSizeId: string,
+  serviceType: string | null | undefined,
+): number {
+  const base = getEstimatedHours(homeSizeId);
+  const mult = SERVICE_DURATION_MULTIPLIERS[normalizeServiceKey(serviceType)] ?? 1.0;
+  return Math.round(base * mult * 100) / 100;
+}
+
 export function getSqftRange(homeSizeId: string): string {
   return HOME_SIZE_SQFT_RANGES[homeSizeId] || "1000-1500";
 }

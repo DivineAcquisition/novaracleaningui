@@ -5,6 +5,7 @@ import {
   offerExpiresAtFromNow,
   sendJobOfferSms,
 } from "../_shared/job-offer-sms.ts";
+import { scoreCleanerForJob } from "../_shared/dispatch-scoring.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,69 +17,10 @@ const logStep = (step: string, details?: any) => {
   console.log(`[DISPATCH] ${step}${detailsStr}`);
 };
 
-/**
- * Haversine formula to calculate distance between two lat/lng points in miles
- */
-function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3959; // Earth's radius in miles
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-/**
- * Calculate location score (0-30 points)
- */
-function calculateLocationScore(distanceMiles: number, maxTravelMiles: number): number {
-  if (distanceMiles > maxTravelMiles) return 0;
-  if (distanceMiles <= 5) return 30;
-  if (distanceMiles <= 10) return 25;
-  if (distanceMiles <= 15) return 20;
-  if (distanceMiles <= 20) return 15;
-  if (distanceMiles <= 25) return 10;
-  return 5;
-}
-
-/**
- * Calculate rating score (0-25 points)
- */
-function calculateRatingScore(averageRating: number | null, totalRatings: number | null): number {
-  // New cleaners get benefit of doubt
-  if (!averageRating || !totalRatings || totalRatings === 0) return 15;
-  
-  if (averageRating >= 5.0) return 25;
-  if (averageRating >= 4.5) return 22;
-  if (averageRating >= 4.0) return 18;
-  if (averageRating >= 3.5) return 12;
-  if (averageRating >= 3.0) return 8;
-  return 4;
-}
-
-/**
- * Calculate workload score (0-25 points)
- */
-function calculateWorkloadScore(upcomingJobsCount: number): number {
-  if (upcomingJobsCount === 0) return 25;
-  if (upcomingJobsCount <= 2) return 20;
-  if (upcomingJobsCount <= 4) return 15;
-  if (upcomingJobsCount <= 6) return 10;
-  if (upcomingJobsCount <= 8) return 5;
-  return 2;
-}
-
-/**
- * Calculate performance score (0-20 points)
- */
-function calculatePerformanceScore(acceptanceRate: number | null, onTimeRate: number | null): number {
-  const acceptanceScore = (acceptanceRate || 0) * 10; // Max 10 points
-  const onTimeScore = (onTimeRate || 0) * 10; // Max 10 points
-  return Math.round(acceptanceScore + onTimeScore);
-}
+// Cleaner scoring (location / rating / workload / performance + the
+// preferred-day soft penalty) lives in ../_shared/dispatch-scoring.ts
+// so this auto-dispatch path and the manual VA-assign path score
+// candidates with one identical formula. See scoreCleanerForJob.
 
 /**
  * Broadcast fallback: when scoring returns ZERO qualified cleaners (or
@@ -366,51 +308,55 @@ serve(async (req) => {
 
     logStep(`Found ${cleaners.length} approved cleaners`);
 
-    // Get upcoming jobs count for each cleaner
+    // Get upcoming jobs count for each cleaner. NOTE: a PostgREST
+    // `.gte("jobs.start_datetime", …)` filter on the embedded `jobs`
+    // table is silently ignored — it filtered nothing, so every past
+    // Offered/Confirmed assignment inflated the workload count and made
+    // cleaners look busier than they are. We pull start_datetime and
+    // window to "now or later" in JS instead.
     const cleanerIds = cleaners.map(c => c.id);
+    const nowMs = Date.now();
     const { data: upcomingJobsData } = await supabase
       .from("job_assignments")
       .select("cleaner_id, jobs(start_datetime)")
       .in("cleaner_id", cleanerIds)
-      .in("status", ["Offered", "Confirmed"])
-      .gte("jobs.start_datetime", new Date().toISOString());
+      .in("status", ["Offered", "Confirmed"]);
 
     const upcomingJobsMap = new Map();
     upcomingJobsData?.forEach((assignment: any) => {
+      const startRaw = assignment.jobs?.start_datetime;
+      if (!startRaw || new Date(startRaw).getTime() < nowMs) return;
       const count = upcomingJobsMap.get(assignment.cleaner_id) || 0;
       upcomingJobsMap.set(assignment.cleaner_id, count + 1);
     });
 
     // STAGE 2: Calculate Scores and Apply Soft Filters
+    //
+    // Scoring is delegated to the shared `scoreCleanerForJob` so the
+    // auto-dispatch path and the manual VA-assign path (admin-booking-
+    // assign) use ONE formula. dispatch-job adds two extra hard gates
+    // the shared scorer doesn't cover: the blocked-cleaner set (already
+    // offered/declined on this job) and a DB-backed schedule overlap
+    // check across the cleaner's other assignments.
     const scoredCandidates = [];
 
     for (const cleaner of cleaners) {
       if (blockedCleanerIds.has(cleaner.id)) continue;
-      // Check preferred work days (soft filter)
-      const worksToday = !cleaner.preferred_work_days || 
-                         cleaner.preferred_work_days.length === 0 ||
-                         cleaner.preferred_work_days.includes(dayAbbrev);
 
-      // Calculate distance
-      const distance = haversineDistance(
-        cleaner.home_lat,
-        cleaner.home_lng,
-        job.lat,
-        job.lng
+      const upcomingCount = upcomingJobsMap.get(cleaner.id) || 0;
+      const result = scoreCleanerForJob(
+        { ...cleaner, upcoming_jobs_count: upcomingCount },
+        { lat: job.lat, lng: job.lng, weekday: dayAbbrev },
       );
 
-      // Check if within max travel distance (hard requirement)
-      const withinDistance = distance <= (cleaner.max_travel_miles || 20);
-      if (!withinDistance) continue;
-
-      // Check max weekly bookings (hard requirement)
-      const upcomingCount = upcomingJobsMap.get(cleaner.id) || 0;
-      if (upcomingCount >= (cleaner.max_weekly_bookings || 10)) {
-        logStep(`Cleaner ${cleaner.first_name} at max capacity`, { upcomingCount });
+      if (!result.available) {
+        if (result.reason === "at_capacity") {
+          logStep(`Cleaner ${cleaner.first_name} at max capacity`, { upcomingCount });
+        }
         continue;
       }
 
-      // Check for scheduling conflicts (hard requirement)
+      // Check for scheduling conflicts (hard requirement, dispatch-only)
       const hasConflict = await hasSchedulingConflict(
         supabase,
         cleaner.id,
@@ -423,28 +369,17 @@ serve(async (req) => {
         continue;
       }
 
-      // Calculate comprehensive match score (0-100 points)
-      const locationScore = calculateLocationScore(distance, cleaner.max_travel_miles || 20);
-      const ratingScore = calculateRatingScore(cleaner.average_rating, cleaner.total_ratings);
-      const workloadScore = calculateWorkloadScore(upcomingCount);
-      const performanceScore = calculatePerformanceScore(cleaner.acceptance_rate, cleaner.on_time_rate);
-      
-      const totalScore = locationScore + ratingScore + workloadScore + performanceScore;
-
-      // Soft penalty for working outside preferred days (reduce score by 10%)
-      const finalScore = worksToday ? totalScore : totalScore * 0.9;
-
       scoredCandidates.push({
         ...cleaner,
-        distance_miles: Math.round(distance * 10) / 10,
+        distance_miles: result.distance != null ? Math.round(result.distance * 10) / 10 : null,
         upcoming_jobs_count: upcomingCount,
-        match_score: Math.round(finalScore * 10) / 10,
-        score_breakdown: {
-          location: locationScore,
-          rating: ratingScore,
-          workload: workloadScore,
-          performance: performanceScore,
-          works_today: worksToday
+        match_score: Math.round(result.score * 10) / 10,
+        score_breakdown: result.breakdown ?? {
+          location: 0,
+          rating: 0,
+          workload: 0,
+          performance: 0,
+          works_today: result.worksToday ?? true,
         }
       });
     }

@@ -259,8 +259,8 @@ async function handleJobDispatchWebhook(supabase: any, jobId: string) {
     payload[`Cleaner ${num} Distance`] = assignment.distance_miles ? `${assignment.distance_miles.toFixed(1)} miles` : 'N/A';
     payload[`Cleaner ${num} Workload Score`] = cleaner.workload_score || 0;
     payload[`Cleaner ${num} Weighted Score`] = cleaner.weighted_score || 0;
-    payload[`Cleaner ${num} Acceptance Rate`] = `${cleaner.acceptance_rate || 0}%`;
-    payload[`Cleaner ${num} On-Time Rate`] = `${cleaner.on_time_rate || 0}%`;
+    payload[`Cleaner ${num} Acceptance Rate`] = `${Math.round((cleaner.acceptance_rate || 0) * 100)}%`;
+    payload[`Cleaner ${num} On-Time Rate`] = `${Math.round((cleaner.on_time_rate || 0) * 100)}%`;
     payload[`Cleaner ${num} Avg Rating`] = cleaner.average_rating || 0;
     payload[`Cleaner ${num} Total Jobs`] = cleaner.completed_bookings || 0;
   });

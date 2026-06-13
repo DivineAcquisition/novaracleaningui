@@ -114,6 +114,12 @@ export default function BookingCheckout() {
   // priced-inputs useEffect above will re-init Stripe with the new
   // (un-discounted) amount so the Pay button stays in sync.
   const [isNewCustomer, setIsNewCustomer] = useState(true);
+  // Gate the Stripe payment-intent creation until checkNewCustomer()
+  // resolves. Without this, a RETURNING customer would briefly get a
+  // payment intent created at the new-customer (discounted) amount, then
+  // have it torn down and re-created once the check finished — a wasted
+  // intent and a flash of the wrong price. Mirrors walletBalanceReady.
+  const [newCustomerChecked, setNewCustomerChecked] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
 
@@ -298,14 +304,27 @@ export default function BookingCheckout() {
 
   // Check if new customer and auto-apply best promo
   useEffect(() => {
+    // Re-gate payment init whenever the email changes — we don't know
+    // the customer's status for the new email yet.
+    setNewCustomerChecked(false);
     const checkNewCustomer = async () => {
-      if (!bookingData.email) return;
-      const {
-        data
-      } = await supabase.from('bookings').select('id, status').eq('email', bookingData.email).in('status', ['confirmed', 'completed']).limit(1);
-      const isNew = !data || data.length === 0;
-      setIsNewCustomer(isNew);
-      await autoApplyBestPromo(isNew);
+      if (!bookingData.email) {
+        // No email to check against — unblock so flows that somehow
+        // reach init without an email aren't deadlocked (the init
+        // effect still requires an email via hasRequiredData).
+        setNewCustomerChecked(true);
+        return;
+      }
+      try {
+        const {
+          data
+        } = await supabase.from('bookings').select('id, status').eq('email', bookingData.email).in('status', ['confirmed', 'completed']).limit(1);
+        const isNew = !data || data.length === 0;
+        setIsNewCustomer(isNew);
+        await autoApplyBestPromo(isNew);
+      } finally {
+        setNewCustomerChecked(true);
+      }
     };
     checkNewCustomer();
   }, [bookingData.email]);
@@ -621,6 +640,7 @@ export default function BookingCheckout() {
 
     if (clientSecret) return;
     if (!walletBalanceReady) return;
+    if (!newCustomerChecked) return;
     if (isCreatingIntent || initError) return;
     if (paymentInitStarted.current) return;
     paymentInitStarted.current = true;
@@ -633,6 +653,7 @@ export default function BookingCheckout() {
     bookingData.timeSlot,
     clientSecret,
     walletBalanceReady,
+    newCustomerChecked,
     isCreatingIntent,
     initError,
     isNewCustomer,

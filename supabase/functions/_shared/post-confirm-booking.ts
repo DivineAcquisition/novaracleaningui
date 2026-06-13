@@ -393,7 +393,11 @@ async function fanoutDownstream(
   supabase: SupabaseClient,
   bookingId: string,
 ): Promise<void> {
-  // All non-blocking — each invoke is fire-and-(mostly)-forget.
+  // All non-blocking and mutually independent — invoke them in
+  // PARALLEL so the customer's confirmation response isn't held up by
+  // 6 edge functions running one after another (previously 12-30s of
+  // serial latency). Each is wrapped so one failure can't reject the
+  // batch.
   const fns: Array<[string, Record<string, unknown>]> = [
     ["auto-dispatch-booking", { bookingId }],
     ["create-google-calendar-event", { bookingId }],
@@ -402,16 +406,18 @@ async function fanoutDownstream(
     ["book-ghl-appointment", { bookingId }],
     ["send-post-booking-sms", { bookingId }],
   ];
-  for (const [name, body] of fns) {
-    try {
-      await supabase.functions.invoke(name, { body });
-      log(`${name} invoked`);
-    } catch (err) {
-      log(`${name} failed (non-blocking)`, {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
+  await Promise.allSettled(
+    fns.map(async ([name, body]) => {
+      try {
+        await supabase.functions.invoke(name, { body });
+        log(`${name} invoked`);
+      } catch (err) {
+        log(`${name} failed (non-blocking)`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }),
+  );
 }
 
 /**

@@ -160,22 +160,47 @@ serve(async (req) => {
     }
 
     // Both gates passed — promote the booking to confirmed.
-    const { error: updateErr } = await supabase
+    //
+    // This is a compare-and-swap: the UPDATE only matches rows still in
+    // a pre-confirmed status, and `.select()` returns the rows it
+    // actually flipped. Because stripe-webhook and the /book/details
+    // save can BOTH reach this point concurrently (each having read the
+    // row as still-pending before either committed), we must let only
+    // the winner run the fan-out. The loser's UPDATE matches zero rows
+    // → it treats the booking as already confirmed and returns a no-op,
+    // so the non-idempotent downstream effects (GHL appointment,
+    // sync-to-anything, post-booking SMS) never fire twice.
+    let promoted: Array<{ id: string }> | null = null;
+    const { data: promotedData, error: updateErr } = await supabase
       .from("bookings")
       .update({
         status: "confirmed",
         confirmed_at: new Date().toISOString(),
       })
       .eq("id", bookingId)
-      .in("status", ["pending_payment", "pending_details", "booked"]);
+      .in("status", ["pending_payment", "pending_details", "booked"])
+      .select("id");
+    promoted = promotedData;
 
     if (updateErr) {
       logStep("Confirm update failed, retrying without confirmed_at", { error: updateErr });
-      await supabase
+      const { data: retryData } = await supabase
         .from("bookings")
         .update({ status: "confirmed" })
         .eq("id", bookingId)
-        .in("status", ["pending_payment", "pending_details", "booked"]);
+        .in("status", ["pending_payment", "pending_details", "booked"])
+        .select("id");
+      promoted = retryData;
+    }
+
+    if (!promoted || promoted.length === 0) {
+      // Another concurrent caller (or a prior invocation) already won
+      // the transition. Do NOT run the fan-out again.
+      logStep("Booking already promoted by a concurrent caller — skipping fan-out", { bookingId });
+      return new Response(
+        JSON.stringify({ success: true, status: "confirmed", bookingId, alreadyConfirmed: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
     }
 
     logStep("Booking promoted to confirmed", { bookingId });

@@ -39,7 +39,20 @@ export function scoreCleanerForJob(
     max_weekly_bookings?: number | null;
   },
   job: { lat: number; lng: number; weekday: string },
-): { score: number; distance: number | null; available: boolean; reason?: string } {
+): {
+  score: number;
+  distance: number | null;
+  available: boolean;
+  reason?: string;
+  worksToday?: boolean;
+  breakdown?: {
+    location: number;
+    rating: number;
+    workload: number;
+    performance: number;
+    works_today: boolean;
+  };
+} {
   const maxTravel = Number(cleaner.max_travel_miles) || 25;
   if (!cleaner.home_lat || !cleaner.home_lng) {
     return { score: 0, distance: null, available: false, reason: "missing_home_location" };
@@ -78,14 +91,31 @@ export function scoreCleanerForJob(
   else if (workload >= 3) workloadScore = 15;
   else if (workload >= 1) workloadScore = 20;
 
-  const accept = Number(cleaner.acceptance_rate) || 0;
-  const onTime = Number(cleaner.on_time_rate) || 0;
-  const perfScore = accept * 10 + onTime * 10;
+  // acceptance_rate / on_time_rate are stored as a 0-1 fraction.
+  // Clamp defensively so any legacy 0-100 rows can't blow the
+  // performance term past its intended 20-point ceiling.
+  const accept = Math.min(1, Math.max(0, Number(cleaner.acceptance_rate) || 0));
+  const onTime = Math.min(1, Math.max(0, Number(cleaner.on_time_rate) || 0));
+  const perfScore = Math.round(accept * 10 + onTime * 10);
+
+  const prefs = cleaner.preferred_work_days || [];
+  const worksToday = prefs.length === 0 || prefs.includes(job.weekday);
 
   let total = locScore + ratingScore + workloadScore + perfScore;
-  const prefs = cleaner.preferred_work_days || [];
-  if (prefs.length > 0 && !prefs.includes(job.weekday)) {
+  if (!worksToday) {
     total = Math.round(total * 0.9);
   }
-  return { score: total, distance, available: true };
+  return {
+    score: total,
+    distance,
+    available: true,
+    worksToday,
+    breakdown: {
+      location: locScore,
+      rating: ratingScore,
+      workload: workloadScore,
+      performance: perfScore,
+      works_today: worksToday,
+    },
+  };
 }

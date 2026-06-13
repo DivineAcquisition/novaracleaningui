@@ -127,7 +127,8 @@ function buildContractorCustomFields(cleaner: any): Record<string, unknown> {
     contractor_insurance_expires_at: cleaner.insurance_expires_at || "",
     contractor_total_jobs: cleaner.total_bookings ?? 0,
     contractor_avg_rating: cleaner.average_rating ?? "",
-    contractor_on_time_rate: cleaner.on_time_rate ?? "",
+    contractor_on_time_rate:
+      cleaner.on_time_rate != null ? `${Math.round(cleaner.on_time_rate * 100)}%` : "",
   };
   Object.keys(out).forEach((k) => { if (out[k] === null || out[k] === undefined) delete out[k]; });
   return out;

@@ -50,22 +50,26 @@ serve(async (req) => {
 
     // Update each cleaner
     for (const cleaner of cleaners) {
-      // Calculate acceptance rate
+      // Rates are stored as a 0-1 fraction (NOT 0-100). Every consumer
+      // — dispatch-job scoring (× 10), _shared/dispatch-scoring (× 10),
+      // the admin Cleaners table (× 100 for display), and the Zapier
+      // webhook (× 100) — treats them as fractions. Storing 0-100 here
+      // was inflating the dispatch performance score by 100×.
       const acceptanceRate = cleaner.total_offers_received > 0
-        ? (cleaner.total_offers_accepted / cleaner.total_offers_received) * 100
+        ? cleaner.total_offers_accepted / cleaner.total_offers_received
         : 0;
 
-      // Calculate on-time rate
       const onTimeRate = cleaner.completed_bookings > 0
-        ? (cleaner.total_on_time_arrivals / cleaner.completed_bookings) * 100
+        ? cleaner.total_on_time_arrivals / cleaner.completed_bookings
         : 0;
 
-      // Update cleaner record
+      // Update cleaner record (round to 3 decimals so the fraction
+      // keeps ~1% display resolution after × 100).
       const { error: updateError } = await supabase
         .from("cleaners")
         .update({
-          acceptance_rate: Math.round(acceptanceRate * 10) / 10, // Round to 1 decimal
-          on_time_rate: Math.round(onTimeRate * 10) / 10
+          acceptance_rate: Math.round(acceptanceRate * 1000) / 1000,
+          on_time_rate: Math.round(onTimeRate * 1000) / 1000
         })
         .eq("id", cleaner.id);
 

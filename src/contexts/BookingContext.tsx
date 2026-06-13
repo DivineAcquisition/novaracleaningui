@@ -71,12 +71,25 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     }
   });
   
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState<number>(() => {
+    if (typeof window === 'undefined') return 1;
+    try {
+      const saved = localStorage.getItem('bookingCurrentStep');
+      const parsed = saved ? parseInt(saved, 10) : 1;
+      return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    } catch {
+      return 1;
+    }
+  });
   const totalSteps = 6;
 
   useEffect(() => {
     localStorage.setItem('bookingData', JSON.stringify(bookingData));
   }, [bookingData]);
+
+  useEffect(() => {
+    localStorage.setItem('bookingCurrentStep', String(currentStep));
+  }, [currentStep]);
 
   const updateBookingData = (data: Partial<BookingData>) => {
     setBookingData(prev => ({ ...prev, ...data }));
@@ -85,6 +98,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const resetBookingData = () => {
     setBookingData(initialBookingData);
     localStorage.removeItem('bookingData');
+    localStorage.removeItem('bookingCurrentStep');
     setCurrentStep(1);
   };
 

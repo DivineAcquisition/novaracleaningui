@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { notifyStaffNoCleanersAvailable } from "../_shared/dispatch-backfill.ts";
+import { getServiceDurationHours } from "../_shared/payout-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,22 +22,12 @@ function parseTimeSlot(timeSlot: string): string {
   return timeMap[timeSlot] || "09:00:00";
 }
 
-// Calculate estimated duration based on sq_ft and service type
-function calculateDuration(sqft: number, serviceType: string): number {
-  let baseHours = 3;
-  
-  if (sqft < 1500) baseHours = 2;
-  else if (sqft < 2500) baseHours = 3;
-  else if (sqft < 3500) baseHours = 4;
-  else baseHours = 5;
-
-  // Deep clean takes 50% longer
-  if (serviceType === "Deep Clean") {
-    baseHours = baseHours * 1.5;
-  }
-
-  return baseHours;
-}
+// Estimated job duration comes from the canonical helper in
+// _shared/payout-utils.ts (home_size_id base hours × service-type
+// multiplier). The old inline version keyed off raw sqft with a
+// different ladder than the rest of the system and gave Move-In/Out no
+// multiplier at all — so dispatched job windows didn't match the hours
+// used everywhere else, breaking conflict detection.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -88,7 +79,13 @@ serve(async (req) => {
 
     // 3. Calculate required cleaners based on sq_ft
     const minCleaners = (booking.sqft || 2000) >= 3000 ? 3 : 2;
-    const estimatedHours = calculateDuration(booking.sqft || 2000, booking.service_type);
+    // Duration is keyed off home_size_id (canonical) and scaled by the
+    // service-type multiplier, so Deep AND Move-In/Out get longer
+    // windows than a Standard clean of the same size.
+    const estimatedHours = getServiceDurationHours(
+      String(booking.home_size_id || ""),
+      booking.service_type,
+    );
 
     logStep("Calculated job requirements", { minCleaners, estimatedHours });
 

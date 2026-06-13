@@ -120,13 +120,14 @@ serve(async (req) => {
         } else {
           const newOnTimeArrivals = (cleaner.total_on_time_arrivals || 0) + 1;
           const completedBookings = cleaner.completed_bookings || 1;
-          const newOnTimeRate = (newOnTimeArrivals / completedBookings) * 100;
+          // Stored as a 0-1 fraction (see update-cleaner-performance).
+          const newOnTimeRate = newOnTimeArrivals / completedBookings;
 
           const { error: cleanerUpdateError } = await supabase
             .from("cleaners")
             .update({
               total_on_time_arrivals: newOnTimeArrivals,
-              on_time_rate: Math.round(newOnTimeRate * 10) / 10
+              on_time_rate: Math.round(newOnTimeRate * 1000) / 1000
             })
             .eq("id", cleanerId);
 
