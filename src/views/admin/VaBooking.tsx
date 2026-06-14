@@ -595,7 +595,6 @@ export default function VaBooking() {
     setSavedQuoteId(null);
     try {
       const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("va_quotes")
         .insert({
