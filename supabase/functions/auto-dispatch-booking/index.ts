@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { notifyStaffNoCleanersAvailable } from "../_shared/dispatch-backfill.ts";
 import { getServiceDurationHours } from "../_shared/payout-utils.ts";
+import { parseTimeSlotToClock } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,14 +13,15 @@ const logStep = (step: string, details?: any) => {
   console.log(`[AUTO-DISPATCH] ${step}`, details ? JSON.stringify(details) : '');
 };
 
-// Helper to parse time slot to hour
+// Resolve a booking's arrival window to a 24h job start clock. Delegates
+// to the shared parser so canonical slot ids ("8-12", "16-20"), named
+// windows, and freeform "8:00 AM - 12:00 PM" all map correctly. The old
+// inline version only knew morning/midday/afternoon and silently defaulted
+// EVERY real slot to 09:00 — so dispatched jobs (and the cleaner SMS,
+// calendar, and conflict checks built on start_datetime) all had the wrong
+// time.
 function parseTimeSlot(timeSlot: string): string {
-  const timeMap: Record<string, string> = {
-    "morning": "09:00:00",
-    "midday": "12:00:00",
-    "afternoon": "15:00:00"
-  };
-  return timeMap[timeSlot] || "09:00:00";
+  return parseTimeSlotToClock(timeSlot).start || "09:00:00";
 }
 
 // Estimated job duration comes from the canonical helper in

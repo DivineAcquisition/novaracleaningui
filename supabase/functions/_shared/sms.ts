@@ -104,3 +104,53 @@ export function formatTimeSlot(slot?: string | null): string {
   };
   return map[slot] || slot;
 }
+
+/**
+ * Parse a stored time-slot into 24h "HH:MM:SS" start/end clocks. Handles
+ * the canonical arrival-window ids ("8-12", "12-16", "16-20"), the named
+ * windows ("morning"/"midday"/"afternoon"/"evening"), and freeform
+ * "8:00 AM - 12:00 PM" / "9-12" strings. Returns null start/end when it
+ * can't make sense of the value so callers can apply their own default.
+ *
+ * This is the single source of truth for turning a booking's time_slot
+ * into a job start time — used to be duplicated (and broken) across the
+ * dispatch functions, where everything silently defaulted to 09:00.
+ */
+export function parseTimeSlotToClock(
+  slot?: string | null,
+): { start: string | null; end: string | null } {
+  if (!slot) return { start: null, end: null };
+  const raw = String(slot).trim();
+
+  // Canonical arrival-window ids the booking funnel stores.
+  const canonical: Record<string, { start: string; end: string }> = {
+    "8-12": { start: "08:00:00", end: "12:00:00" },
+    "12-16": { start: "12:00:00", end: "16:00:00" },
+    "16-20": { start: "16:00:00", end: "20:00:00" },
+  };
+  if (canonical[raw]) return canonical[raw];
+
+  // Named windows used by some legacy callers.
+  const named: Record<string, { start: string; end: string }> = {
+    morning: { start: "08:00:00", end: "12:00:00" },
+    midday: { start: "12:00:00", end: "16:00:00" },
+    afternoon: { start: "12:00:00", end: "16:00:00" },
+    evening: { start: "16:00:00", end: "20:00:00" },
+  };
+  if (named[raw.toLowerCase()]) return named[raw.toLowerCase()];
+
+  // Freeform "9:00 AM - 12:00 PM" or "9-12".
+  const m = raw.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)?\s*-\s*(\d{1,2}):?(\d{2})?\s*(AM|PM)?/i);
+  if (!m) return { start: null, end: null };
+  const toClock = (h: string, mm: string | undefined, mer: string | undefined) => {
+    let hour = parseInt(h, 10);
+    if (Number.isNaN(hour)) return null;
+    if (mer) {
+      const u = mer.toUpperCase();
+      if (u === "PM" && hour < 12) hour += 12;
+      if (u === "AM" && hour === 12) hour = 0;
+    }
+    return `${String(hour).padStart(2, "0")}:${(mm || "00").padStart(2, "0")}:00`;
+  };
+  return { start: toClock(m[1], m[2], m[3]), end: toClock(m[4], m[5], m[6]) };
+}
