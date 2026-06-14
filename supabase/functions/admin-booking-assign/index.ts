@@ -20,6 +20,7 @@ import { scoreCleanerForJob, type RankedCleaner } from "../_shared/dispatch-scor
 import { createContactTask } from "../_shared/ghl-tasks.ts";
 import { buildGhlTaskChecklistBody } from "../_shared/ghl-checklist-text.ts";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
+import { parseTimeSlotToClock } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,12 +51,9 @@ async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: stri
 }
 
 function parseTimeSlot(timeSlot: string): string {
-  const map: Record<string, string> = {
-    morning: "09:00:00",
-    midday: "12:00:00",
-    afternoon: "15:00:00",
-  };
-  return map[String(timeSlot || "").toLowerCase()] || "09:00:00";
+  // Shared parser: handles canonical slot ids ("8-12"), named windows, and
+  // freeform "8:00 AM - 12:00 PM". Falls back to 09:00 only when unparseable.
+  return parseTimeSlotToClock(timeSlot).start || "09:00:00";
 }
 
 async function resolveJobCoordinates(

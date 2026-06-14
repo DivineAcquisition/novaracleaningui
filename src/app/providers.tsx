@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HeroUIProvider } from "@heroui/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -13,15 +14,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AuthProvider>
-          <BookingProvider>
-            {children}
-          </BookingProvider>
-        </AuthProvider>
-      </TooltipProvider>
+      {/* HeroUI provider — makes HeroUI components available app-wide.
+          shadcn/Radix components continue to work alongside it. */}
+      <HeroUIProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AuthProvider>
+            <BookingProvider>
+              {children}
+            </BookingProvider>
+          </AuthProvider>
+        </TooltipProvider>
+      </HeroUIProvider>
     </QueryClientProvider>
   );
 }

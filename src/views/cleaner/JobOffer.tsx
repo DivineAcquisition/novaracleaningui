@@ -64,6 +64,11 @@ interface OfferDetail {
     zip: string | null;
     notes: string | null;
   };
+  booking?: {
+    service_date: string | null;
+    time_slot: string | null;
+    arrival_window: string | null;
+  } | null;
   customer: {
     first_name: string | null;
     phone_last4: string | null;
@@ -88,6 +93,37 @@ const fmtWhen = (iso: string | null, hours: number | null) => {
   const startTime = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   const endTime = end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return `${dayLabel} · ${startTime} – ${endTime}`;
+};
+
+// Friendly "Mon, Jun 20" for a YYYY-MM-DD string. Anchored at noon so the
+// date never rolls backward in negative-offset timezones.
+const fmtServiceDate = (dateStr?: string | null): string => {
+  if (!dateStr) return "";
+  const d = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+};
+
+// Turn a stored arrival window into a readable label. Canonical slot ids
+// map to ranges; already-human "8:00 AM - 9:00 AM" strings pass through.
+const fmtArrivalWindow = (slot?: string | null): string => {
+  if (!slot) return "";
+  const map: Record<string, string> = {
+    "8-12": "8:00 AM – 12:00 PM",
+    "12-16": "12:00 PM – 4:00 PM",
+    "16-20": "4:00 PM – 8:00 PM",
+  };
+  return map[slot] || slot.replace(/\s*-\s*/, " – ");
+};
+
+// Prefer the booking's canonical date + arrival window (what the customer
+// actually booked) over the tz-naive job timestamp.
+const whenLabel = (offer: OfferDetail): string => {
+  const date = fmtServiceDate(offer.booking?.service_date);
+  const window = fmtArrivalWindow(offer.booking?.time_slot || offer.booking?.arrival_window);
+  if (date && window) return `${date} · ${window}`;
+  if (date) return date;
+  return fmtWhen(offer.job.start_datetime, offer.job.duration_est_hours);
 };
 
 export default function CleanerJobOfferPage() {
@@ -289,7 +325,8 @@ export default function CleanerJobOfferPage() {
             <InfoRow
               icon={RiTimeLine}
               label="When"
-              value={fmtWhen(offer.job.start_datetime, offer.job.duration_est_hours)}
+              value={whenLabel(offer)}
+              hint={offer.job.duration_est_hours ? `~${offer.job.duration_est_hours} hrs on site` : undefined}
             />
             <InfoRow
               icon={RiMapPin2Line}

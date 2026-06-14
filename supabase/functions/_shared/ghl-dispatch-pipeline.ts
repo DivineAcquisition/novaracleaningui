@@ -28,7 +28,10 @@ const STAGE_NAME_PATTERNS: Record<DispatchStageKey, RegExp[]> = {
   paid: [/^paid$/i],
 };
 
-const PIPELINE_NAME_RE = /job\s*dispatch/i;
+// Match the fulfillment pipeline by name. We accept "Job Dispatch",
+// "Dispatch", "Fulfillment", or "Job Board" so a slightly different label
+// in GHL still resolves (set GHL_DISPATCH_PIPELINE_ID to override).
+const PIPELINE_NAME_RE = /job\s*dispatch|dispatch|fulfil|fulfill|job\s*board/i;
 
 export interface DispatchPipelineConfig {
   pipelineId: string;

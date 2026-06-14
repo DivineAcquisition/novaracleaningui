@@ -1,8 +1,14 @@
 import type { Config } from "tailwindcss";
+import { heroui } from "@heroui/react";
 
 export default {
   darkMode: ["class"],
-  content: ["./src/**/*.{ts,tsx}"],
+  content: [
+    "./src/**/*.{ts,tsx}",
+    // HeroUI component styles live in its theme package and must be scanned
+    // so the generated utility classes aren't tree-shaken away.
+    "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -122,5 +128,32 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // HeroUI (v2) themed to the Novara purple brand so HeroUI components
+    // match the existing shadcn/Tailwind look. shadcn primitives keep
+    // working unchanged — HeroUI is additive and lives behind <HeroUIProvider>.
+    heroui({
+      themes: {
+        light: {
+          colors: {
+            primary: {
+              DEFAULT: "#6810FE",
+              foreground: "#FFFFFF",
+            },
+            focus: "#6810FE",
+          },
+        },
+        dark: {
+          colors: {
+            primary: {
+              DEFAULT: "#9F7BFF",
+              foreground: "#FFFFFF",
+            },
+            focus: "#9F7BFF",
+          },
+        },
+      },
+    }),
+  ],
 } satisfies Config;

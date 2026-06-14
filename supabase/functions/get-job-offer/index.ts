@@ -81,6 +81,33 @@ serve(async (req) => {
       if (c) customer = { first_name: c.first_name, phone_last4: maskPhone(c.phone) };
     }
 
+    // Pull the linked booking's canonical service date + arrival window.
+    // jobs.start_datetime is stored tz-naive and historically defaulted to
+    // 09:00, so the offer page must display the booking's real time_slot
+    // (the same thing the customer booked) rather than re-deriving the time
+    // from the timestamp.
+    let booking: {
+      service_date: string | null;
+      time_slot: string | null;
+      arrival_window: string | null;
+    } | null = null;
+    if (assignment.job_id) {
+      const { data: b } = await supabase
+        .from("bookings")
+        .select("service_date, time_slot, arrival_window")
+        .eq("job_id", assignment.job_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (b) {
+        booking = {
+          service_date: b.service_date ?? null,
+          time_slot: b.time_slot ?? null,
+          arrival_window: b.arrival_window ?? null,
+        };
+      }
+    }
+
     // Don't leak the raw token back out.
     const { response_token: _omit, ...assignmentPublic } = assignment as any;
 
@@ -88,6 +115,7 @@ serve(async (req) => {
       JSON.stringify({
         assignment: assignmentPublic,
         job: job || null,
+        booking,
         customer,
         cleaner: { first_name: cleaner?.first_name || null },
       }),

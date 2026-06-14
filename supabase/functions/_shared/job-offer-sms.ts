@@ -8,6 +8,8 @@ export const JOB_OFFER_SMS_FROM_E164 = "+14432744402";
 
 export interface JobOfferSmsContext {
   jobDateFormatted: string;
+  /** Human arrival window, e.g. "8:00 AM – 12:00 PM". Optional. */
+  arrivalWindow?: string;
   city: string;
   zip: string;
   durationHours: number;
@@ -57,11 +59,15 @@ export function buildJobOfferSmsMessage(ctx: JobOfferSmsContext): string {
     payBlock += ` · ${ctx.sharePct}% revenue share`;
   }
 
+  const whenLine = ctx.arrivalWindow
+    ? `Date: ${ctx.jobDateFormatted}\nArrival: ${ctx.arrivalWindow}\n`
+    : `Date: ${ctx.jobDateFormatted}\n`;
+
   return (
     `Novara — Job offer\n\n` +
     `${teamLine}\n` +
     `${payBlock}\n\n` +
-    `Date: ${ctx.jobDateFormatted}\n` +
+    whenLine +
     `Location: ${ctx.city}${ctx.zip ? `, ${ctx.zip}` : ""}\n` +
     `~${ctx.durationHours} hrs · ${ctx.distanceMiles.toFixed(1)} mi away\n\n` +
     `Accept or decline within ${JOB_OFFER_EXPIRY_MINUTES} min (by ${expiresLabel}):\n` +

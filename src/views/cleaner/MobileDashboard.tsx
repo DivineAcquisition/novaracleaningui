@@ -109,28 +109,42 @@ export default function MobileDashboard() {
           .order("assigned_at", { ascending: true });
 
         // Resolve booking ids so "Mark done" can call complete-booking.
+        // We also pull the canonical service_date + time_slot so the card
+        // shows the real arrival window (jobs.start_datetime is stored
+        // tz-naive and historically defaulted to 09:00).
         const jobIds = (jobsData || []).map((a: any) => a.jobs?.id).filter(Boolean);
-        const bookingByJob: Record<string, string> = {};
+        const bookingByJob: Record<string, { id: string; service_date: string | null; time_slot: string | null }> = {};
         if (jobIds.length > 0) {
           const { data: bookingRows } = await supabase
             .from("bookings")
-            .select("id, job_id")
+            .select("id, job_id, service_date, time_slot, arrival_window")
             .in("job_id", jobIds);
           (bookingRows || []).forEach((b: any) => {
-            if (b.job_id) bookingByJob[b.job_id] = b.id;
+            if (b.job_id) {
+              bookingByJob[b.job_id] = {
+                id: b.id,
+                service_date: b.service_date ?? null,
+                time_slot: b.time_slot ?? b.arrival_window ?? null,
+              };
+            }
           });
         }
 
         if (jobsData) {
-          const formattedJobs = jobsData.map((assignment: any) => ({
-            id: assignment.id,
-            assignmentId: assignment.id,
-            role: assignment.role,
-            status: assignment.status,
-            estimated_pay_cents: assignment.estimated_pay_cents,
-            bookingId: assignment.jobs?.id ? bookingByJob[assignment.jobs.id] : undefined,
-            ...assignment.jobs,
-          }));
+          const formattedJobs = jobsData.map((assignment: any) => {
+            const bk = assignment.jobs?.id ? bookingByJob[assignment.jobs.id] : undefined;
+            return {
+              id: assignment.id,
+              assignmentId: assignment.id,
+              role: assignment.role,
+              status: assignment.status,
+              estimated_pay_cents: assignment.estimated_pay_cents,
+              bookingId: bk?.id,
+              booking_service_date: bk?.service_date ?? null,
+              booking_time_slot: bk?.time_slot ?? null,
+              ...assignment.jobs,
+            };
+          });
           setUpcomingJobs(formattedJobs);
         }
 

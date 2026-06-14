@@ -1,5 +1,7 @@
 // Notify assigned cleaners: Resend assignment email + optional SMS.
 
+import { formatServiceDate, formatTimeSlot } from "./sms.ts";
+
 const CHECKLIST_BY_SERVICE: Record<string, string> = {
   standard: "https://try.novaracleaning.com/checklist/standard-clean",
   deep: "https://try.novaracleaning.com/checklist/deep-clean",
@@ -64,10 +66,16 @@ export async function notifyCleanerOfAssignment(
 
   if (cleaner.phone) {
     try {
-      const slot = booking.time_slot ? ` (${booking.time_slot})` : "";
+      // Use the friendly date + arrival window (e.g. "Fri, Jun 20" /
+      // "8:00 AM – 12:00 PM") instead of the raw stored values, and show
+      // the cleaner what they'll earn.
+      const dateLabel = formatServiceDate(booking.service_date) || "TBD";
+      const windowLabel = formatTimeSlot(booking.time_slot || booking.arrival_window);
+      const whenLabel = windowLabel ? `${dateLabel}, ${windowLabel}` : dateLabel;
+      const payLabel = estimatedEarnings > 0 ? ` Pay: $${(estimatedEarnings / 100).toFixed(2)}.` : "";
       const msg =
         `Novara job assigned${opts?.role === "Support" ? " (support)" : ""}: ` +
-        `${customerName} · ${booking.service_date || "TBD"}${slot}. ` +
+        `${customerName} · ${whenLabel}.${payLabel} ` +
         `${booking.address || ""}, ${booking.city || ""}. ` +
         `Checklist: ${checklistUrl(booking.service_type)} ` +
         `Portal: https://contractor.novaracleaning.com/cleaner/mobile-dashboard`;

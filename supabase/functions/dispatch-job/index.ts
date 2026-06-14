@@ -6,6 +6,44 @@ import {
   sendJobOfferSms,
 } from "../_shared/job-offer-sms.ts";
 import { scoreCleanerForJob } from "../_shared/dispatch-scoring.ts";
+import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+
+// Pull the human-readable date + arrival window for a job from its linked
+// booking. We display the booking's stored time_slot (e.g. "8-12" →
+// "8:00 AM – 12:00 PM") instead of re-deriving from the job's stored
+// timestamp, which avoids any UTC/ET drift in the SMS the cleaner sees.
+async function getJobWhenLabels(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  jobId: string,
+  fallbackStartDatetime?: string | null,
+): Promise<{ dateLabel: string; arrivalWindow: string }> {
+  let serviceDate: string | null = null;
+  let timeSlot: string | null = null;
+  try {
+    const { data: b } = await supabase
+      .from("bookings")
+      .select("service_date, time_slot, arrival_window")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    serviceDate = b?.service_date ?? null;
+    timeSlot = b?.time_slot ?? b?.arrival_window ?? null;
+  } catch (_) { /* fall back below */ }
+
+  const dateLabel = serviceDate
+    ? formatServiceDate(serviceDate)
+    : (fallbackStartDatetime
+      ? new Date(fallbackStartDatetime).toLocaleDateString("en-US", {
+          timeZone: "America/New_York",
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })
+      : "");
+  return { dateLabel, arrivalWindow: formatTimeSlot(timeSlot) };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,10 +134,15 @@ async function broadcastJob(
     return { broadcastSent: 0, broadcastSkipped: 0, reason: "insert_failed" };
   }
 
-  const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString("en-US", {
-    weekday: "short", month: "short", day: "numeric",
-  });
-  const baseMsg = `🧹 Open Job — first to claim wins!\n\nDate: ${jobDateFormatted}\nLocation: ${job.city || ""} ${job.zip || ""}\n~${job.duration_est_hours || 2.5} hrs · revenue share pay\n\nTap to grab it:`;
+  const { dateLabel: jobDateFormatted, arrivalWindow } = await getJobWhenLabels(
+    supabase,
+    job.id,
+    job.start_datetime,
+  );
+  const whenLine = arrivalWindow
+    ? `Date: ${jobDateFormatted}\nArrival: ${arrivalWindow}\n`
+    : `Date: ${jobDateFormatted}\n`;
+  const baseMsg = `🧹 Open Job — first to claim wins!\n\n${whenLine}Location: ${job.city || ""} ${job.zip || ""}\n~${job.duration_est_hours || 2.5} hrs · revenue share pay\n\nTap to grab it:`;
 
   let sent = 0; let skipped = 0;
   for (const c of eligible) {
@@ -512,11 +555,11 @@ serve(async (req) => {
     logStep("Sending job-offer SMS to auto-selected cleaners");
     const teamSize = cleanerCount;
     const expiresAtDate = new Date(expiresAtIso);
-    const jobDateFormatted = new Date(job.start_datetime).toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+    const { dateLabel: jobDateFormatted, arrivalWindow } = await getJobWhenLabels(
+      supabase,
+      jobId,
+      job.start_datetime,
+    );
 
     const smsPromises = createdAssignments.map(async (assignment: any) => {
       const c = assignment.cleaners;
@@ -531,6 +574,7 @@ serve(async (req) => {
 
       const message = buildJobOfferSmsMessage({
         jobDateFormatted,
+        arrivalWindow,
         city: job.city || "",
         zip: job.zip || "",
         durationHours: Number(job.duration_est_hours) || 3,
