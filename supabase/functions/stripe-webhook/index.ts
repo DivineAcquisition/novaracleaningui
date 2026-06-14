@@ -837,6 +837,20 @@ serve(async (req) => {
           // sequences) can route on them.
           try {
             const { syncContactAndOpportunity, fmtMoney } = await import("../_shared/ghl-client.ts");
+            // File the membership opportunity on the SALES pipeline (never
+            // hiring/dispatch). Prefer the configured sales pipeline secret.
+            let salesPipelineId: string | undefined;
+            let salesStageId: string | undefined;
+            try {
+              const { data: secs } = await supabase
+                .from("app_secrets")
+                .select("key, value")
+                .in("key", ["GHL_SALES_PIPELINE_ID", "GHL_SALES_PIPELINE_STAGE_ID"]);
+              for (const s of secs || []) {
+                if (s.key === "GHL_SALES_PIPELINE_ID" && s.value) salesPipelineId = String(s.value).trim();
+                if (s.key === "GHL_SALES_PIPELINE_STAGE_ID" && s.value) salesStageId = String(s.value).trim();
+              }
+            } catch (_) { /* fall back to auto-discovery */ }
             await syncContactAndOpportunity({
               contact: {
                 email,
@@ -870,6 +884,8 @@ serve(async (req) => {
                 name: `Novara Membership — ${planLabels[plan]} (${(name || email).trim()})`,
                 status: "won",
                 source: "Novara Membership Signup",
+                pipelineId: salesPipelineId,
+                pipelineStageId: salesStageId,
                 monetaryValue: monthlyPriceCentsMeta ? Math.round(monthlyPriceCentsMeta / 100) : undefined,
                 customFieldsByKey: {
                   membership_plan: plan,

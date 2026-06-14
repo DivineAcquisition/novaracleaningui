@@ -324,10 +324,30 @@ let fieldIdCachePromise: Promise<Record<string, string>> | null = null;
 
 // ─── Pipeline / first-stage cache ─────────────────────────────────────────
 // Used when GHL_PIPELINE_ID / GHL_PIPELINE_STAGE_ID are NOT set as env
-// vars — we auto-discover the first pipeline and its first stage so
-// opportunities still get created rather than silently no-op'ing.
+// vars — we auto-discover the best SALES pipeline (NEVER the hiring /
+// contractor pipeline) and its first stage so opportunities still get
+// created rather than silently no-op'ing.
+
+// Pipelines we must NEVER drop a customer/sales opportunity into. The
+// hiring / recruiting / contractor onboarding funnel is for cleaners, not
+// customers — a booking landing here is the bug this guards against.
+const HIRING_PIPELINE_RE =
+  /\b(hir|recruit|cleaner|team|onboard|driver|contractor|applicant|interview|candidate)\b/i;
+// The Job Dispatch (fulfillment) pipeline is handled explicitly elsewhere;
+// it should not be the generic fallback for a sales opportunity either.
+const DISPATCH_PIPELINE_RE = /dispatch|fulfil|fulfill|job\s*board/i;
+// Pipelines that clearly ARE the sales/customer funnel.
+const SALES_PIPELINE_RE = /sales|customer|booking|revenue|client|lead/i;
+
 let pipelineCache: { pipelineId: string; pipelineStageId: string } | null = null;
 let pipelineCachePromise: Promise<{ pipelineId: string; pipelineStageId: string } | null> | null = null;
+
+function firstStageId(
+  stages?: Array<{ id?: string; name?: string; position?: number }>,
+): string | undefined {
+  if (!stages || stages.length === 0) return undefined;
+  return stages.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0]?.id;
+}
 
 async function autoDiscoverPipeline(
   cfg: GhlConfig,
@@ -355,17 +375,33 @@ async function autoDiscoverPipeline(
         log("auto-pipeline — no pipelines on location");
         return null;
       }
-      const p = pipelines[0];
-      const stages = p.stages ?? [];
-      const stage = stages.length > 0
-        ? stages.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0]
-        : null;
-      if (!p.id || !stage?.id) {
-        log("auto-pipeline — pipeline or stage missing id", { pipelineName: p.name });
+
+      // Selection priority (a customer/sales opportunity must NEVER land in
+      // the hiring pipeline):
+      //   1. an explicit sales-named pipeline
+      //   2. the first pipeline that is neither hiring nor dispatch
+      //   3. the first non-hiring pipeline
+      // We deliberately stop here rather than falling back to pipelines[0]
+      // (which is frequently the Hiring pipeline).
+      const nonHiring = pipelines.filter((p) => p.id && !HIRING_PIPELINE_RE.test(p.name || ""));
+      const chosen =
+        nonHiring.find((p) => SALES_PIPELINE_RE.test(p.name || "")) ||
+        nonHiring.find((p) => !DISPATCH_PIPELINE_RE.test(p.name || "")) ||
+        nonHiring[0];
+
+      if (!chosen?.id) {
+        log("auto-pipeline — no non-hiring pipeline found; refusing to use hiring pipeline", {
+          pipelineNames: pipelines.map((p) => p.name),
+        });
         return null;
       }
-      const result = { pipelineId: p.id, pipelineStageId: stage.id };
-      log("auto-pipeline resolved", { pipelineName: p.name, stageName: stage.name });
+      const stageId = firstStageId(chosen.stages);
+      if (!stageId) {
+        log("auto-pipeline — chosen pipeline has no stage", { pipelineName: chosen.name });
+        return null;
+      }
+      const result = { pipelineId: chosen.id, pipelineStageId: stageId };
+      log("auto-pipeline resolved", { pipelineName: chosen.name });
       pipelineCache = result;
       return result;
     } catch (err) {
@@ -596,17 +632,14 @@ export async function createOpportunity(
   }
 
   // Resolve pipeline + stage: explicit input wins, env-var second,
-  // auto-discover (first pipeline / first stage) third. This stops
-  // opportunity creation from silently being skipped when the env
-  // vars aren't set.
+  // sales-preferring auto-discovery third. We intentionally do NOT fall
+  // back to the Job Dispatch pipeline here — dispatch placement is always
+  // supplied explicitly by syncBookingLifecycle({ dispatchStage }). And
+  // auto-discovery now refuses to ever return the hiring pipeline, so a
+  // customer/sales opportunity can never be filed under recruiting.
   let pipelineId = input.pipelineId || cfg.pipelineId;
   let pipelineStageId = input.pipelineStageId || cfg.pipelineStageId;
   if (!pipelineId || !pipelineStageId) {
-    const dispatchCfg = await resolveJobDispatchPipeline(cfg, ghlFetch);
-    if (dispatchCfg && !pipelineId) {
-      pipelineId = dispatchCfg.pipelineId;
-      pipelineStageId = pipelineStageId || dispatchCfg.stages.unassigned;
-    }
     const discovered = await autoDiscoverPipeline(cfg);
     if (discovered) {
       pipelineId = pipelineId || discovered.pipelineId;
@@ -614,7 +647,7 @@ export async function createOpportunity(
     }
   }
   if (!pipelineId) {
-    log("createOpportunity skipped — could not resolve pipelineId");
+    log("createOpportunity skipped — could not resolve a non-hiring pipelineId");
     return null;
   }
 
@@ -869,6 +902,14 @@ export async function syncBookingLifecycle(args: {
       const stageKey = inferDispatchStage(args.dispatchStage);
       pipelineStageId = stageIdForKey(dispatchCfg, stageKey);
       log("dispatch stage resolved", { stageKey, pipelineStageId });
+    } else {
+      // We were asked to sync the Job Dispatch pipeline but couldn't
+      // resolve it. Do NOT fall through to creating/updating some other
+      // (e.g. sales or hiring) opportunity with dispatch data — that's how
+      // bookings ended up on the wrong pipeline. The Sales Pipeline is kept
+      // current separately via syncBookingSalesPipeline.
+      log("dispatch sync skipped — Job Dispatch pipeline not resolved (set GHL_DISPATCH_PIPELINE_ID)");
+      return { contactId, opportunityId: args.opportunityId ?? null, updated: false };
     }
   }
 
