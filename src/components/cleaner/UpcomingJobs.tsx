@@ -13,6 +13,30 @@ import { Button } from "@/components/ui/button";
 
 import { format } from "date-fns";
 
+// Prefer the booking's canonical date + arrival window (what the customer
+// booked) over jobs.start_datetime, which is stored tz-naive and used to
+// default to 09:00 — so the cleaner always sees the correct time.
+const WINDOW_LABELS: Record<string, string> = {
+  "8-12": "8:00 AM – 12:00 PM",
+  "12-16": "12:00 PM – 4:00 PM",
+  "16-20": "4:00 PM – 8:00 PM",
+};
+function jobWhenLabel(job: any): string {
+  const date: string | null = job.booking_service_date || null;
+  const slot: string | null = job.booking_time_slot || null;
+  if (date) {
+    const d = new Date(`${date}T12:00:00`);
+    const dayLabel = Number.isNaN(d.getTime())
+      ? date
+      : format(d, "EEEE, MMMM d");
+    const window = slot ? (WINDOW_LABELS[slot] || slot.replace(/\s*-\s*/, " – ")) : "";
+    return window ? `${dayLabel} · ${window}` : dayLabel;
+  }
+  return job.start_datetime
+    ? format(new Date(job.start_datetime), "EEEE, MMMM d 'at' h:mm a")
+    : "—";
+}
+
 interface UpcomingJobsProps {
   jobs: any[];
   onCheckIn?: (job: any) => void;
@@ -60,11 +84,7 @@ export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading }: Upc
             <div className="space-y-1.5 mb-3">
               <div className="flex items-center gap-2 text-xs">
                 <RiTimeLine className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>
-                  {job.start_datetime
-                    ? format(new Date(job.start_datetime), "EEEE, MMMM d 'at' h:mm a")
-                    : "—"}
-                </span>
+                <span>{jobWhenLabel(job)}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground" />
