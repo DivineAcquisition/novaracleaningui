@@ -864,6 +864,31 @@ serve(async (req) => {
           },
         );
         emails.fanout = fanout;
+
+        // Send service-type-specific checklist email when the VA checked
+        // the box. Standard bookings are also covered by the DB trigger
+        // (trigger_send_maintenance_checklist), but send-cleaning-checklist
+        // is idempotent so calling it here is safe — the idempotency ledger
+        // catches the duplicate before a second email goes out.
+        if (body.sendChecklistEmail !== false) {
+          try {
+            const checklistResp = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-cleaning-checklist`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                },
+                body: JSON.stringify({ bookingId }),
+              },
+            );
+            emails.checklist = await checklistResp.json();
+          } catch (chkErr) {
+            emails.checklist_error = chkErr instanceof Error ? chkErr.message : String(chkErr);
+            logStep("send-cleaning-checklist failed (non-blocking)", emails.checklist_error);
+          }
+        }
       } catch (err) {
         emails.fanout_error = err instanceof Error ? err.message : String(err);
         logStep("post-confirm fanout failed (non-blocking)", emails.fanout_error);

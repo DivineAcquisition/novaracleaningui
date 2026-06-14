@@ -31,67 +31,295 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// ─── OFFICIAL CHECKLIST (verbatim from NovaraCleaning Maintenance Cleaning Checklist PDF) ──
+// ─── SERVICE-TYPE-AWARE CHECKLIST DATA ───────────────────────────────
 //
-// DO NOT edit lightly — this is the contractual scope-of-work the
-// customer signed up for. If you change it, also update the printable
-// PDF in marketing collateral so the two stay in sync.
+// Each service type has its own subject, heading, intro, sections, and
+// extras list. Extend CHECKLIST_BY_TYPE to add new types — the handler
+// routes automatically. Idempotency kind is per-type so a deep_checklist
+// and maintenance_checklist can both exist for the same booking without
+// conflicting.
 
-const KITCHEN = [
-  "Dust and spot clean cabinet fronts",
-  "Clean counter tops",
-  "Clean sink and polish faucet",
-  "Wipe microwave interior and exterior",
-  "Dust small appliances & items on counter tops",
-  "Clean microwave (inside and out)",
-  "Clean/polish oven and refrigerator exterior",
-  "Clean/polish stove top and vent hood",
-  "Vacuum and mop kitchen floor",
-  "Remove trash, replace bag, wipe exterior",
-];
+interface ChecklistContent {
+  subject: string;
+  heading: string;
+  intro: string;
+  sections: Array<{ title: string; items: string[] }>;
+  extras: string[];
+  emailKind: string;
+}
 
-const BATHROOMS = [
-  "Clean mirrors (streak-free)",
-  "Dust light fixtures",
-  "Spot clean cabinet fronts",
-  "Scrub the shower and tub",
-  "Clean counters, sinks and polish fixtures",
-  "Disinfect toilet and toilet area",
-  "Vacuum bathroom rugs",
-  "Remove trash, replace bag, wipe exterior",
-  "Clean and disinfect bathroom floors",
-];
+const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
+  standard: {
+    subject: "Your Maintenance Cleaning Checklist — what's included ✨",
+    heading: "Maintenance Cleaning Checklist",
+    intro:
+      "All recurring cleanings (weekly, biweekly and monthly) are what we call <strong>maintenance cleans</strong> because the goal is to <em>maintain the cleanliness</em> of the home. These are thorough, efficient cleanings, covering every area of the house every single time.",
+    emailKind: "maintenance_checklist",
+    sections: [
+      {
+        title: "Kitchen",
+        items: [
+          "Dust and spot clean cabinet fronts",
+          "Clean counter tops",
+          "Clean sink and polish faucet",
+          "Wipe microwave interior and exterior",
+          "Dust small appliances & items on counter tops",
+          "Clean microwave (inside and out)",
+          "Clean/polish oven and refrigerator exterior",
+          "Clean/polish stove top and vent hood",
+          "Vacuum and mop kitchen floor",
+          "Remove trash, replace bag, wipe exterior",
+        ],
+      },
+      {
+        title: "Bathrooms",
+        items: [
+          "Clean mirrors (streak-free)",
+          "Dust light fixtures",
+          "Spot clean cabinet fronts",
+          "Scrub the shower and tub",
+          "Clean counters, sinks and polish fixtures",
+          "Disinfect toilet and toilet area",
+          "Vacuum bathroom rugs",
+          "Remove trash, replace bag, wipe exterior",
+          "Clean and disinfect bathroom floors",
+        ],
+      },
+      {
+        title: "All Rooms",
+        items: [
+          "Remove cob webs and dust ceiling fans",
+          "Dust reachable light fixtures and ceiling fans",
+          "Dust wall art and AC/heating vents",
+          "Disinfect light switches and door knobs",
+          "Dust and spot clean doors and door frames",
+          "Dust window sills and window ledges",
+          "Dust baseboards and blinds",
+          "Dust TVs, electronics, knick-knacks, book tops, picture frames, lamps, etc.",
+          "Dust all furniture — polish as needed",
+          "Dust banister and handrails",
+          "Vacuum all floors/stairs and mop hard surface floors",
+          "Vacuum all furniture (if possible)",
+          "Change linen and/or make all beds",
+          "Clean front/back door glass",
+        ],
+      },
+    ],
+    extras: [
+      "Hand wash baseboards",
+      "Clean oven (interior)",
+      "Clean refrigerator/freezer",
+      "Wash interior window (must be reachable with a 2-step stool)",
+      "Hand wash wood blinds or shutters",
+    ],
+  },
 
-const ALL_ROOMS = [
-  "Remove cob webs and dust ceiling fans",
-  "Dust reachable light fixtures and ceiling fans",
-  "Dust wall art and AC/heating vents",
-  "Disinfect light switches and door knobs",
-  "Dust and spot clean doors and door frames",
-  "Dust window sills and window ledges",
-  "Dust baseboards and blinds",
-  "Dust TVs, electronics, knick-knacks, book tops, picture frames, lamps, etc.",
-  "Dust all furniture — polish as needed",
-  "Dust banister and handrails",
-  "Vacuum all floors/stairs and mop hard surface floors",
-  "Vacuum all furniture (if possible)",
-  "Change linen and/or make all beds",
-  "Clean front/back door glass",
-];
+  deep: {
+    subject: "Your Deep Clean Checklist — full scope included ✨",
+    heading: "Deep Clean Checklist",
+    intro:
+      "Your Deep Clean is the thorough reset your home deserves. We go further than a standard maintenance clean — hand-wiping every surface, detail-cleaning appliances, and reaching every corner so your home is set to the highest baseline.",
+    emailKind: "deep_checklist",
+    sections: [
+      {
+        title: "Kitchen",
+        items: [
+          "Hand-wipe all cabinet exteriors",
+          "Clean countertops",
+          "Wipe backsplash",
+          "Clean sink and polish faucets",
+          "Hand-wipe small appliances and items on countertops",
+          "Clean microwave (inside and out)",
+          "Clean and polish oven and refrigerator exterior",
+          "Clean and polish stove top and vent hood",
+          "Detail-clean under electric range burners",
+          "Vacuum and mop kitchen floor",
+          "Remove trash, replace bag, wipe exterior",
+        ],
+      },
+      {
+        title: "Bathrooms",
+        items: [
+          "Clean mirrors (streak-free)",
+          "Wipe all reachable light fixtures",
+          "Wipe cabinet fronts",
+          "Scrub shower and tub",
+          "Clean counters, sinks, and polish fixtures",
+          "Disinfect toilet and surrounding area",
+          "Vacuum bathroom rugs",
+          "Remove trash, replace bags, wipe exterior",
+          "Clean and disinfect bathroom floor",
+        ],
+      },
+      {
+        title: "All Rooms",
+        items: [
+          "Remove cobwebs",
+          "Wipe all reachable light fixtures and ceiling fan blades",
+          "Dust wall art and A/C vents",
+          "Disinfect light switches and door knobs",
+          "Hand-wipe door frames and doors",
+          "Hand-wipe window sills and window ledges",
+          "Dust baseboards and blinds",
+          "Dust TVs, electronics, book tops, knick-knacks, lamps",
+          "Hand-polish all wood furniture",
+          "Dust banisters and handrails",
+          "Vacuum floors and mop hard surface floors",
+          "Vacuum under all furniture (where possible)",
+          "Vacuum carpet edges with attachment",
+          "Vacuum upholstered furniture and crevices",
+          "Change linens and/or make beds",
+          "Clean front and back door glass",
+        ],
+      },
+    ],
+    extras: [
+      "Hand wash baseboards (included in Deluxe)",
+      "Clean oven interior",
+      "Clean refrigerator and freezer interior",
+      "Wash interior windows (reachable with a 2-step stool)",
+      "Hand wash wood blinds or shutters (included in Deluxe)",
+    ],
+  },
 
-const EXTRAS = [
-  "Hand wash baseboards",
-  "Clean oven (interior)",
-  "Clean refrigerator/freezer",
-  "Wash interior window (must be reachable with a 2-step stool)",
-  "Hand wash wood blinds or shutters",
-];
+  moveinout: {
+    subject: "Your Move In/Out Cleaning Checklist — complete scope ✨",
+    heading: "Move In/Out Clean Checklist",
+    intro:
+      "Your Move In/Out Clean covers every inch of the empty home — including the interior of all cabinets, drawers, and built-ins that a standard or deep clean can't reach. Here's exactly what our team will complete.",
+    emailKind: "moveinout_checklist",
+    sections: [
+      {
+        title: "Kitchen",
+        items: [
+          "Hand-wipe all cabinet exteriors",
+          "Clean and wipe down pantry",
+          "Vacuum out and wipe inside all cabinets and drawers",
+          "Clean countertops",
+          "Wipe backsplash",
+          "Clean sink and polish faucets",
+          "Clean microwave (inside and out)",
+          "Clean and polish oven and refrigerator exterior",
+          "Clean and polish stove top and vent hood",
+          "Detail-clean under electric range burners",
+          "Vacuum and mop kitchen floor",
+        ],
+      },
+      {
+        title: "Bathrooms",
+        items: [
+          "Clean mirrors (streak-free)",
+          "Wipe all reachable light fixtures",
+          "Wipe cabinet fronts",
+          "Wipe out inside cabinets and drawers",
+          "Scrub shower and tub",
+          "Clean counters, sinks, and polish fixtures",
+          "Disinfect toilet and surrounding area",
+          "Clean and disinfect bathroom floor",
+        ],
+      },
+      {
+        title: "All Rooms",
+        items: [
+          "Remove cobwebs",
+          "Wipe all reachable light fixtures and ceiling fan blades",
+          "Dust A/C vents",
+          "Wipe inside and out of any built-in cabinets or bookcases",
+          "Disinfect light switches and door knobs",
+          "Hand-wipe door frames and doors",
+          "Hand-wipe window sills and ledges",
+          "Dust baseboards and blinds",
+          "Dust banisters and handrails",
+          "Vacuum floors and mop hard surface floors",
+          "Vacuum carpet edges with attachment",
+          "Clean front and back door glass",
+        ],
+      },
+    ],
+    extras: [
+      "Clean oven interior",
+      "Clean refrigerator and freezer interior",
+      "Wash interior windows (reachable with a 2-step stool)",
+      "Hand wash wood blinds or shutters",
+      "Carpet shampooing / steam cleaning (separate service)",
+    ],
+  },
 
-const SECTIONS: Array<{ title: string; items: string[] }> = [
-  { title: "Kitchen", items: KITCHEN },
-  { title: "Bathrooms", items: BATHROOMS },
-  { title: "All Rooms", items: ALL_ROOMS },
-];
+  combo: {
+    subject: "Your Combo Clean Checklist — both visits covered ✨",
+    heading: "Combo Clean Checklist",
+    intro:
+      "Your Combo Clean includes a Deep Clean on the first visit followed by a Standard Maintenance Clean on the follow-up visit. The scope below covers your initial deep clean — your second visit follows the standard maintenance checklist.",
+    emailKind: "combo_checklist",
+    sections: [
+      {
+        title: "Kitchen (Deep Clean — First Visit)",
+        items: [
+          "Hand-wipe all cabinet exteriors",
+          "Clean countertops",
+          "Wipe backsplash",
+          "Clean sink and polish faucets",
+          "Hand-wipe small appliances and items on countertops",
+          "Clean microwave (inside and out)",
+          "Clean and polish oven and refrigerator exterior",
+          "Clean and polish stove top and vent hood",
+          "Detail-clean under electric range burners",
+          "Vacuum and mop kitchen floor",
+          "Remove trash, replace bag, wipe exterior",
+        ],
+      },
+      {
+        title: "Bathrooms (Deep Clean — First Visit)",
+        items: [
+          "Clean mirrors (streak-free)",
+          "Wipe all reachable light fixtures",
+          "Wipe cabinet fronts",
+          "Scrub shower and tub",
+          "Clean counters, sinks, and polish fixtures",
+          "Disinfect toilet and surrounding area",
+          "Vacuum bathroom rugs",
+          "Remove trash, replace bags, wipe exterior",
+          "Clean and disinfect bathroom floor",
+        ],
+      },
+      {
+        title: "All Rooms (Deep Clean — First Visit)",
+        items: [
+          "Remove cobwebs",
+          "Wipe all reachable light fixtures and ceiling fan blades",
+          "Dust wall art and A/C vents",
+          "Disinfect light switches and door knobs",
+          "Hand-wipe door frames and doors",
+          "Hand-wipe window sills and window ledges",
+          "Dust baseboards and blinds",
+          "Dust TVs, electronics, book tops, knick-knacks, lamps",
+          "Hand-polish all wood furniture",
+          "Dust banisters and handrails",
+          "Vacuum floors and mop hard surface floors",
+          "Vacuum under all furniture (where possible)",
+          "Vacuum carpet edges with attachment",
+          "Vacuum upholstered furniture and crevices",
+          "Change linens and/or make beds",
+          "Clean front and back door glass",
+        ],
+      },
+    ],
+    extras: [
+      "Clean oven interior",
+      "Clean refrigerator and freezer interior",
+      "Wash interior windows (reachable with a 2-step stool)",
+      "Hand wash wood blinds or shutters",
+    ],
+  },
+};
+
+function resolveChecklistType(serviceType: string): string {
+  const lower = (serviceType || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (lower.includes("move") || lower.includes("inout")) return "moveinout";
+  if (lower === "deep") return "deep";
+  if (lower === "combo") return "combo";
+  return "standard";
+}
 
 // ─── HTML renderer ───────────────────────────────────────────────────
 function renderHtml(opts: {
@@ -100,8 +328,10 @@ function renderHtml(opts: {
   serviceDate?: string | null;
   timeSlot?: string | null;
   serviceAddress?: string | null;
+  content: ChecklistContent;
 }): string {
-  const sectionHtml = SECTIONS.map(
+  const { content } = opts;
+  const sectionHtml = content.sections.map(
     (g) => `
     <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#111827">${g.title}</h3>
     <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
@@ -111,7 +341,7 @@ function renderHtml(opts: {
 
   const extrasHtml = `
     <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
-      ${EXTRAS.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
+      ${content.extras.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`;
 
   const bookingMetaRows: string[] = [];
@@ -150,13 +380,13 @@ function renderHtml(opts: {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(22,163,74,0.10)">
         <tr><td style="background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);padding:32px 32px 28px;color:#ffffff">
           <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85">NovaraCleaning</p>
-          <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">Maintenance Cleaning Checklist</h1>
-          <p style="margin:0;font-size:14px;line-height:1.5;opacity:0.95">Hi ${opts.firstName || "there"} — here's exactly what the Novara team will do on every visit. Save this email so you always know what's included and what's an add-on.</p>
+          <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">${content.heading}</h1>
+          <p style="margin:0;font-size:14px;line-height:1.5;opacity:0.95">Hi ${opts.firstName || "there"} — here's exactly what the Novara team will do on your visit. Save this email so you always know what's included and what's an add-on.</p>
         </td></tr>
         <tr><td style="padding:28px 32px">
           ${bookingMetaTable}
           <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6">
-            All recurring cleanings (weekly, biweekly and monthly) are what we call <strong>maintenance cleans</strong> because the goal is to <em>maintain the cleanliness</em> of the home. These are thorough, efficient cleanings, covering every area of the house every single time.
+            ${content.intro}
           </p>
 
           ${sectionHtml}
@@ -182,19 +412,20 @@ function renderHtml(opts: {
 </body></html>`;
 }
 
-function plainText(opts: { firstName: string }): string {
+function plainText(opts: { firstName: string; content: ChecklistContent }): string {
+  const { content } = opts;
   const lines = [
     `Hi ${opts.firstName || "there"},`,
     "",
-    "Here is the official NovaraCleaning Maintenance Cleaning Checklist — exactly what our team will do on every recurring visit.",
+    `Here is the official NovaraCleaning ${content.heading} — exactly what our team will do on your visit.`,
     "",
-    ...SECTIONS.flatMap((g) => [
+    ...content.sections.flatMap((g) => [
       `--- ${g.title.toUpperCase()} ---`,
       ...g.items.map((t) => `  • ${t}`),
       "",
     ]),
     "--- EXTRAS (additional charges apply) ---",
-    ...EXTRAS.map((t) => `  • ${t}`),
+    ...content.extras.map((t) => `  • ${t}`),
     "",
     "Reply to this email or text us at +1 (844) 735-2070 to add an extra.",
     "",
@@ -277,29 +508,22 @@ serve(async (req) => {
       });
     }
 
-    // Only standard cleanings are in scope for the Maintenance Checklist.
-    // Deep / move-in/out are quoted separately with their own scope docs.
-    if (serviceType && serviceType !== "standard") {
-      return new Response(
-        JSON.stringify({ skipped: true, reason: "non-standard-service-type", serviceType }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        },
-      );
-    }
+    // Resolve service-type-aware checklist content
+    const checklistType = resolveChecklistType(serviceType);
+    const content = CHECKLIST_BY_TYPE[checklistType] ?? CHECKLIST_BY_TYPE.standard;
 
-    // Idempotency: skip if we already sent the checklist for this booking.
+    // Idempotency: skip if we already sent this checklist kind for this booking.
     if (resolvedBookingId) {
       const { data: prior } = await supabase
         .from("booking_emails_sent")
         .select("id, sent_at")
         .eq("booking_id", resolvedBookingId)
-        .eq("kind", "maintenance_checklist")
+        .eq("kind", content.emailKind)
         .maybeSingle();
       if (prior?.id) {
         console.log("[send-cleaning-checklist] already sent — skipping", {
           bookingId: resolvedBookingId,
+          kind: content.emailKind,
           priorSentAt: prior.sent_at,
         });
         return new Response(
@@ -319,13 +543,14 @@ serve(async (req) => {
       serviceDate,
       timeSlot,
       serviceAddress,
+      content,
     });
-    const text = plainText({ firstName });
+    const text = plainText({ firstName, content });
 
     const result = await resend.emails.send({
       from: "Novara Cleaning <hello@novaracleaning.com>",
       to: [email],
-      subject: "Your Maintenance Cleaning Checklist — what's included ✨",
+      subject: content.subject,
       html,
       text,
     });
@@ -346,7 +571,7 @@ serve(async (req) => {
       try {
         await supabase.from("booking_emails_sent").insert({
           booking_id: resolvedBookingId,
-          kind: "maintenance_checklist",
+          kind: content.emailKind,
           recipient_email: email,
           provider_message_id: (result?.data?.id as string | undefined) || null,
         });

@@ -34,6 +34,7 @@ import {
   RiLoader4Line,
   RiMoneyDollarCircleLine,
   RiPriceTag3Line,
+  RiSaveLine,
   RiSearchLine,
   RiSparklingLine,
   RiToolsLine,
@@ -338,6 +339,10 @@ export default function VaBooking() {
   const [sendConfirmationSms, setSendConfirmationSms] = useState(true);
   const [sendChecklistEmail, setSendChecklistEmail] = useState(true);
 
+  // Quote saving
+  const [savingQuote, setSavingQuote] = useState(false);
+  const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
+
   // Wallet credit
   const [walletCreditCents, setWalletCreditCents] = useState(0);
   useEffect(() => {
@@ -578,6 +583,59 @@ export default function VaBooking() {
       toast.error(`Failed to book: ${m}`);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSaveQuote = async () => {
+    if (!firstName.trim() || !email.trim() || !homeSizeId || !serviceType) {
+      toast.error("Customer name, email, home size, and service type are required to save a quote.");
+      return;
+    }
+    setSavingQuote(true);
+    setSavedQuoteId(null);
+    try {
+      const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("va_quotes")
+        .insert({
+          csr_name: csrName.trim() || null,
+          lead_id: linkedLead?.id || leadIdParam || null,
+          first_name: firstName.trim(),
+          last_name: lastName.trim() || null,
+          email: email.trim().toLowerCase(),
+          phone: phone || null,
+          address: address || null,
+          city: city || null,
+          state: state || null,
+          zip_code: zipCode || null,
+          home_size_id: homeSizeId,
+          service_type: serviceType,
+          add_ons: addOns,
+          frequency,
+          service_date: serviceDate || null,
+          time_slot: selectedTime || null,
+          base_price_cents: pricing.serviceCents,
+          total_estimate_cents: pricing.totalCents,
+          notes: null,
+          team_notes: teamNotes || null,
+          access_notes: accessNotes || null,
+          bedrooms: bedrooms ? parseInt(bedrooms) : null,
+          bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+          dwelling_type: dwellingType || null,
+          pets: pets || null,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      setSavedQuoteId(data.id);
+      toast.success("Quote saved — you can retrieve it later from this form.");
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to save quote: ${m}`);
+    } finally {
+      setSavingQuote(false);
     }
   };
 
@@ -1336,12 +1394,12 @@ export default function VaBooking() {
                   checked={sendChecklistEmail}
                   onCheckedChange={(v) => setSendChecklistEmail(v === true)}
                 />
-                Send Standard-Clean checklist email
-                {serviceType !== "standard" && (
-                  <span className="text-slate-400 text-xs">
-                    (only fires for Standard)
-                  </span>
-                )}
+                Send {
+                  serviceType === "deep" ? "Deep Clean"
+                  : serviceType === "moveInOut" ? "Move In/Out"
+                  : serviceType === "combo" ? "Combo Clean"
+                  : "Standard Clean"
+                } checklist email
               </label>
             </div>
           </FormSection>
@@ -1436,6 +1494,31 @@ export default function VaBooking() {
                     </>
                   )}
                 </Button>
+
+                <Button
+                  onClick={handleSaveQuote}
+                  disabled={savingQuote || !firstName.trim() || !email.trim()}
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-2 text-slate-600"
+                >
+                  {savingQuote ? (
+                    <>
+                      <RiLoader4Line className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Saving quote…
+                    </>
+                  ) : (
+                    <>
+                      <RiSaveLine className="w-3.5 h-3.5 mr-1.5" />
+                      Save as quote
+                    </>
+                  )}
+                </Button>
+                {savedQuoteId && (
+                  <p className="text-[11px] text-emerald-700 text-center mt-1">
+                    Quote saved · ID: {savedQuoteId.slice(0, 8)}…
+                  </p>
+                )}
 
                 {!canSubmit && requirements.length > 0 && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900 mt-1">

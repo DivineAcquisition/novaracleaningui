@@ -933,6 +933,71 @@ serve(async (req) => {
               logStep("Welcome SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
             }
           }
+
+          // ─── Auto-create first booking when the customer provided
+          //     scheduling preferences at signup. Status is
+          //     'pending_details' so the VA team confirms before dispatch
+          //     fires. All required fields must be present.
+          if (
+            !creditsError &&
+            subMeta.preferred_day_of_week &&
+            subMeta.home_size_id &&
+            subMeta.address &&
+            subMeta.city &&
+            subMeta.state
+          ) {
+            try {
+              const DOW_MAP: Record<string, number> = {
+                sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+                thursday: 4, friday: 5, saturday: 6,
+              };
+              const targetDow = DOW_MAP[subMeta.preferred_day_of_week.toLowerCase()];
+              if (targetDow !== undefined) {
+                // At least 3 days from now so the team has time to prepare
+                const earliest = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+                const candidate = new Date(earliest);
+                candidate.setHours(0, 0, 0, 0);
+                while (candidate.getDay() !== targetDow) {
+                  candidate.setDate(candidate.getDate() + 1);
+                }
+                const autoServiceDate = candidate.toISOString().split("T")[0];
+                const autoTimeSlot = subMeta.preferred_time_window || "10:00 AM - 12:00 PM";
+
+                const { error: autoBookErr } = await supabase
+                  .from("bookings")
+                  .insert({
+                    email,
+                    first_name: subMeta.first_name || (name.split(" ")[0] || ""),
+                    last_name: subMeta.last_name || (name.split(" ").slice(1).join(" ") || ""),
+                    phone: phone || "",
+                    address: subMeta.address,
+                    city: subMeta.city,
+                    state: subMeta.state,
+                    zip_code: subMeta.zip_code || "",
+                    home_size_id: subMeta.home_size_id,
+                    service_type: "standard",
+                    membership_plan: plan,
+                    uses_credit: true,
+                    service_date: autoServiceDate,
+                    time_slot: autoTimeSlot,
+                    base_price_cents: 0,
+                    deposit_cents: 0,
+                    total_estimate_cents: 0,
+                    status: "pending_details",
+                    customer_id: customerId,
+                    team_notes: "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching",
+                  });
+
+                if (autoBookErr) {
+                  logStep("Auto-booking creation failed (non-blocking)", { error: autoBookErr.message });
+                } else {
+                  logStep("Auto-booking created for new member", { autoServiceDate, autoTimeSlot, plan, email });
+                }
+              }
+            } catch (autoErr) {
+              logStep("Auto-booking error (non-blocking)", { error: autoErr instanceof Error ? autoErr.message : String(autoErr) });
+            }
+          }
         }
         break;
       }
@@ -1266,6 +1331,112 @@ serve(async (req) => {
             payment_received_at: new Date().toISOString(),
           }).eq("id", bookingId);
           logStep("Booking updated from deposit/full invoice payment", { bookingId, purpose });
+        }
+
+        // ── Membership renewal: reset credits ────────────────────────────
+        // invoice.billing_reason === 'subscription_cycle' fires reliably on
+        // every auto-renewal. We use this instead of parsing
+        // previous_attributes on customer.subscription.updated because
+        // Stripe API 2025-08-27.basil removed current_period_end from the
+        // subscription root and the nested previous_attributes path is
+        // unreliable.
+        if (invoice.billing_reason === "subscription_cycle" && invoice.subscription) {
+          const renewSubId = typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : (invoice.subscription as any).id;
+
+          try {
+            const renewSub = await stripe.subscriptions.retrieve(renewSubId);
+            // deno-lint-ignore no-explicit-any
+            const renewItemAny = renewSub.items?.data?.[0] as any;
+            // deno-lint-ignore no-explicit-any
+            const renewSubAny = renewSub as any;
+            const renewPeriodStart = renewItemAny?.current_period_start ?? renewSubAny.current_period_start;
+            const renewPeriodEnd = renewItemAny?.current_period_end ?? renewSubAny.current_period_end;
+
+            const renewMeta = (renewSub.metadata || {}) as Record<string, string>;
+            const renewPriceId = renewSub.items.data[0]?.price.id;
+            const renewUnitAmount = renewSub.items.data[0]?.price.unit_amount || 0;
+            const RENEWAL_LEGACY_MAP: Record<string, string> = {
+              "price_1SR2UhGc7k6gIVcMiKbuq1mo": "monthly",
+              "price_1SR2VNGc7k6gIVcMMI6Fuxga": "biweekly",
+              "price_1SR2VYGc7k6gIVcML2W0jVKS": "weekly",
+            };
+            let renewPlan: string = renewMeta.membership_plan
+              || RENEWAL_LEGACY_MAP[renewPriceId]
+              || (renewUnitAmount >= 60000 ? "weekly" : renewUnitAmount >= 25000 ? "biweekly" : "monthly");
+            if (!["monthly", "biweekly", "weekly"].includes(renewPlan)) renewPlan = "monthly";
+            const renewCredits: number = ({ monthly: 1, biweekly: 2, weekly: 4 } as Record<string, number>)[renewPlan] || 1;
+
+            // Idempotency: only reset if the period has actually advanced
+            const { data: existingCredits } = await supabase
+              .from("membership_credits")
+              .select("id, current_period_end")
+              .eq("subscription_id", renewSubId)
+              .maybeSingle();
+
+            if (!existingCredits) {
+              logStep("No membership_credits row for renewal — subscription.created may have failed", { renewSubId });
+            } else {
+              const newPeriodEndIso = renewPeriodEnd ? new Date(renewPeriodEnd * 1000).toISOString() : null;
+              const alreadyReset = existingCredits.current_period_end && newPeriodEndIso
+                && existingCredits.current_period_end === newPeriodEndIso;
+
+              if (alreadyReset) {
+                logStep("Credits already reset for this period (idempotent skip)", { renewSubId });
+              } else {
+                const { error: renewCredError } = await supabase
+                  .from("membership_credits")
+                  .update({
+                    credits_used: 0,
+                    credits_remaining: renewCredits,
+                    current_period_start: renewPeriodStart ? new Date(renewPeriodStart * 1000).toISOString() : null,
+                    current_period_end: newPeriodEndIso,
+                    credit_available_date: new Date().toISOString(),
+                  })
+                  .eq("subscription_id", renewSubId);
+
+                if (renewCredError) {
+                  logStep("Error resetting membership credits on renewal", { error: renewCredError.message, renewSubId });
+                } else {
+                  logStep("Membership credits reset via invoice.payment_succeeded", { renewSubId, plan: renewPlan, credits: renewCredits });
+
+                  // Send renewal + credit_allocated emails
+                  try {
+                    if (customerId) {
+                      const renewCus = await stripe.customers.retrieve(customerId);
+                      const renewEmail = (renewCus as Stripe.Customer).email || "";
+                      const renewName = (renewCus as Stripe.Customer).name || "";
+                      if (renewEmail) {
+                        const renewPlanLabels: Record<string, string> = {
+                          monthly: "Novara Monthly",
+                          biweekly: "Novara Bi-Weekly",
+                          weekly: "Novara Weekly",
+                        };
+                        const renewalIso = newPeriodEndIso || new Date().toISOString();
+                        await sendMembershipEmail("renewal", renewEmail, {
+                          name: renewName,
+                          plan: renewPlanLabels[renewPlan],
+                          amount: renewUnitAmount,
+                          renewalDate: renewalIso,
+                        });
+                        await sendMembershipEmail("credit_allocated", renewEmail, {
+                          name: renewName,
+                          plan: renewPlanLabels[renewPlan],
+                          credits: renewCredits,
+                          renewalDate: renewalIso,
+                        });
+                      }
+                    }
+                  } catch (renewEmailErr) {
+                    logStep("Renewal emails failed (non-blocking)", { error: renewEmailErr instanceof Error ? renewEmailErr.message : String(renewEmailErr) });
+                  }
+                }
+              }
+            }
+          } catch (renewErr) {
+            logStep("Membership credit renewal failed (non-blocking)", { error: renewErr instanceof Error ? renewErr.message : String(renewErr), renewSubId });
+          }
         }
         break;
       }
