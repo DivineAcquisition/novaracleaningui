@@ -34,6 +34,7 @@ import {
   RiCalendarCheckLine,
   RiChat3Line,
   RiTeamLine,
+  RiRocket2Line,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -68,6 +69,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/cleaners",
     icon: RiToolsLine,
     description: "Directory + onboarding",
+  },
+  {
+    title: "Dispatch",
+    url: "/admin/dispatch",
+    icon: RiRocket2Line,
+    description: "Staff jobs · offers · re-dispatch",
   },
   {
     title: "Internal Booking",
