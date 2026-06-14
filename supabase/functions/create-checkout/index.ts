@@ -69,6 +69,12 @@ serve(async (req) => {
         // first booking can be scheduled immediately after checkout.
         preferredDayOfWeek,
         preferredTimeWindow,
+        // Exact first-clean date/time when the membership signup comes
+        // from the booking funnel (the customer already picked a slot).
+        // The subscription webhook prefers these over the computed
+        // preferred day.
+        firstServiceDate,
+        firstTimeSlot,
         firstName: bodyFirstName,
         lastName: bodyLastName,
         phone: bodyPhone,
@@ -76,6 +82,11 @@ serve(async (req) => {
         city: bodyCity,
         state: bodyState,
         zipCode: bodyZip,
+        // When an admin/VA kicks off a membership for an existing
+        // booking, this links the subscription back to that booking row
+        // so the webhook converts it to a membership clean instead of
+        // creating a duplicate.
+        existingBookingId,
       } = body;
       
       const supabase = createClient(
@@ -90,23 +101,30 @@ serve(async (req) => {
         apiVersion: "2025-08-27.basil",
       });
 
-      // Get user email from auth token
+      // Resolve the customer's email. An explicitly supplied body email
+      // ALWAYS wins — the admin/VA flow creates subscriptions on behalf of
+      // a customer, so we must not let the caller's own auth token (e.g.
+      // the signed-in admin) hijack the email. Only fall back to the auth
+      // token's email when the body didn't carry one (the logged-in
+      // self-serve /membership flow).
       let email = bodyEmail;
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader) {
-        const token = authHeader.replace("Bearer ", "");
-        const { data } = await supabase.auth.getUser(token);
-        if (data?.user?.email) {
-          email = data.user.email;
+      if (!email) {
+        const authHeader = req.headers.get("Authorization");
+        if (authHeader) {
+          const token = authHeader.replace("Bearer ", "");
+          const { data } = await supabase.auth.getUser(token);
+          if (data?.user?.email) {
+            email = data.user.email;
+          }
         }
       }
 
-      if (!email) {
-        return new Response(
-          JSON.stringify({ error: "Email required for subscription" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
-        );
-      }
+      // Email is preferred (lets us reuse an existing Stripe customer and
+      // prefill the Checkout page) but NOT required. The public booking
+      // funnel reaches the membership step before collecting an email, so
+      // when it's missing we let Stripe Checkout collect it — subscription
+      // mode always requires an email on Stripe's hosted page, and the
+      // webhook reads it back off the resulting customer.
 
       // Look up membership price
       const prices = MEMBERSHIP_PRICES[homeSizeId];
@@ -130,9 +148,13 @@ serve(async (req) => {
       const homePricing = HOME_SIZE_PRICING.find(h => h.id === homeSizeId);
       const sqftLabel = homePricing ? homeSizeId.replace('_', '-') : homeSizeId;
 
-      // Check for existing Stripe customer
-      const customers = await stripe.customers.list({ email, limit: 1 });
-      const customerId = customers.data.length > 0 ? customers.data[0].id : undefined;
+      // Check for existing Stripe customer (only when we have an email to
+      // match on — otherwise Stripe Checkout creates the customer).
+      let customerId: string | undefined;
+      if (email) {
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        customerId = customers.data.length > 0 ? customers.data[0].id : undefined;
+      }
 
       const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
         // Recurring subscription
@@ -175,6 +197,9 @@ serve(async (req) => {
         monthly_price_cents: String(monthlyPriceDollars * 100),
         preferred_day_of_week: preferredDayOfWeek ? String(preferredDayOfWeek) : '',
         preferred_time_window: preferredTimeWindow ? String(preferredTimeWindow) : '',
+        first_service_date: firstServiceDate ? String(firstServiceDate) : '',
+        first_time_slot: firstTimeSlot ? String(firstTimeSlot) : '',
+        existing_booking_id: existingBookingId ? String(existingBookingId) : '',
         first_name: bodyFirstName ? String(bodyFirstName) : '',
         last_name: bodyLastName ? String(bodyLastName) : '',
         phone: bodyPhone ? String(bodyPhone) : '',

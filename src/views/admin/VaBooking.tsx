@@ -486,7 +486,79 @@ export default function VaBooking() {
 
   const canSubmit = requirements.length === 0;
 
+  // ─── Recurring membership signup ────────────────────────────────────
+  // When the VA selects a recurring frequency, this is a MEMBERSHIP, not
+  // a one-time booking. We generate a hosted Stripe subscription Checkout
+  // link (same path the public /membership flow uses) for the VA to send
+  // to the customer. Once the customer completes it, the stripe-webhook
+  // provisions their credits and auto-books the first clean on the exact
+  // date the VA picked — so we deliberately do NOT create a duplicate
+  // booking or invoice here.
+  const handleMembershipSubscribe = async () => {
+    if (!canSubmit) {
+      toast.error("Fill out all required fields before submitting.");
+      return;
+    }
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const planMap: Record<string, string> = {
+        weekly: "weekly",
+        biweekly: "biweekly",
+        monthly: "monthly",
+      };
+      const membershipPlan = planMap[frequency];
+      if (!membershipPlan) {
+        throw new Error(`Unsupported recurring frequency: ${frequency}`);
+      }
+      const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
+      const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const preferredDayOfWeek = selectedDate ? days[selectedDate.getDay()] : undefined;
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          mode: "subscription",
+          membershipPlan,
+          homeSizeId,
+          email: email.trim().toLowerCase(),
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          phone: phone || undefined,
+          address: address || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          zipCode: zipCode || undefined,
+          preferredDayOfWeek,
+          preferredTimeWindow: selectedTime || undefined,
+          firstServiceDate: serviceDate,
+          firstTimeSlot: selectedTime || undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error("No subscription checkout URL returned");
+
+      setResult({
+        membershipCheckout: true,
+        url: data.url,
+        sessionId: data.sessionId,
+        membershipPlan,
+        monthlyEstimateCents: pricing.serviceCents,
+      });
+      toast.success("Subscription link ready — send it to the customer to start their membership.");
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to create subscription link: ${m}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    if (frequency !== "one-time") {
+      await handleMembershipSubscribe();
+      return;
+    }
     if (!canSubmit) {
       toast.error("Fill out all required fields before submitting.");
       return;
@@ -637,6 +709,81 @@ export default function VaBooking() {
       setSavingQuote(false);
     }
   };
+
+  // ─── Membership subscription link screen ────────────────────────────
+  if (result?.membershipCheckout) {
+    const planLabel = result.membershipPlan
+      ? `Glow ${result.membershipPlan.charAt(0).toUpperCase()}${result.membershipPlan.slice(1)}`
+      : "Membership";
+    const subUrl: string = result.url;
+    return (
+      <div className="max-w-2xl mx-auto">
+        <SEO title="Novara Internal Booking" noindex />
+        <Card className="border border-slate-200 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] rounded-2xl overflow-hidden">
+          <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-teal-400" />
+          <CardHeader className="text-center pt-10">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center ring-1 ring-violet-200">
+              <RiSparklingLine className="w-7 h-7 text-violet-600" />
+            </div>
+            <Badge className="mx-auto mt-3 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-50 font-medium">
+              Membership subscription link ready
+            </Badge>
+            <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
+              {planLabel} — {`${firstName} ${lastName}`.trim() || email}
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Send this secure link to the customer to start their recurring
+              membership. Their first clean auto-books once they subscribe.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5 pb-8">
+            <div className="rounded-xl bg-slate-50 p-4 space-y-3 text-sm border border-slate-100">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Subscription checkout link
+              </p>
+              <div className="flex items-center gap-2">
+                <Input value={subUrl} readOnly className="font-mono text-xs bg-white" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(subUrl);
+                    toast.success("Link copied");
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <a href={subUrl} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="outline">
+                    Open link
+                    <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
+                  </Button>
+                </a>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              We don't charge anything here — the customer enters their card on
+              Stripe's hosted page. Once subscribed, Novara provisions their
+              monthly credits and books the first clean on{" "}
+              {selectedDate ? format(selectedDate, "MMM d, yyyy") : "their preferred day"}
+              {selectedTime ? ` (${selectedTime})` : ""}.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setResult(null)}
+              >
+                Back to form
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // ─── Success screen ─────────────────────────────────────────────────
   if (result?.success) {
@@ -1474,6 +1621,19 @@ export default function VaBooking() {
                   <span>I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy &amp; One-Time Service Agreement over the phone. A signed copy will be emailed to them with their details.</span>
                 </label>
 
+                {frequency !== "one-time" && (
+                  <div className="rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-[11px] text-violet-900 mt-3 flex items-start gap-1.5">
+                    <RiSparklingLine className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Recurring frequency selected — this creates a{" "}
+                      <strong>{frequency} membership</strong>. We'll generate a
+                      Stripe subscription link to send the customer instead of a
+                      one-time invoice. Their first clean auto-books once they
+                      subscribe.
+                    </span>
+                  </div>
+                )}
+
                 <Button
                   onClick={handleSubmit}
                   disabled={!canSubmit || submitting}
@@ -1484,11 +1644,11 @@ export default function VaBooking() {
                   {submitting ? (
                     <>
                       <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                      Creating booking…
+                      {frequency !== "one-time" ? "Creating link…" : "Creating booking…"}
                     </>
                   ) : (
                     <>
-                      Create booking
+                      {frequency !== "one-time" ? "Create membership link" : "Create booking"}
                       <RiArrowRightLine className="w-4 h-4 ml-2" />
                     </>
                   )}

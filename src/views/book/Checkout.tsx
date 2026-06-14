@@ -461,17 +461,52 @@ export default function BookingCheckout() {
     setIsCreatingIntent(true);
     setInitError(null);
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("create-checkout", {
+      // Membership = a RECURRING Stripe subscription, not a one-time
+      // charge. We MUST hit the standalone subscription path in
+      // create-checkout (mode: 'subscription'); sending the raw
+      // bookingData would fall through to the one-time payment path and
+      // the customer would never actually be subscribed.
+      //
+      // Map the day-of-week the customer already picked on the offer
+      // step into the preferred_day_of_week the subscription webhook
+      // uses to auto-book their first clean, and forward the exact
+      // selected date/time so the first clean honors their choice.
+      const plan = bookingData.membershipPlan; // 'monthly' | 'biweekly' | 'weekly'
+      let preferredDayOfWeek: string | undefined;
+      if (bookingData.serviceDate) {
+        const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        const d = new Date(bookingData.serviceDate + "T12:00:00");
+        if (!Number.isNaN(d.getTime())) preferredDayOfWeek = days[d.getDay()];
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
-          bookingData
-        }
+          mode: "subscription",
+          membershipPlan: plan,
+          homeSizeId: bookingData.homeSizeId,
+          email: bookingData.email || undefined,
+          firstName: bookingData.firstName || undefined,
+          lastName: bookingData.lastName || undefined,
+          phone: bookingData.phone || undefined,
+          address: bookingData.address || undefined,
+          city: bookingData.city || undefined,
+          state: bookingData.state || undefined,
+          zipCode: bookingData.zipCode || undefined,
+          preferredDayOfWeek,
+          preferredTimeWindow: bookingData.timeSlot || undefined,
+          // Exact first-clean selection from the booking funnel — the
+          // webhook prefers these over the computed preferred day.
+          firstServiceDate: bookingData.serviceDate || undefined,
+          firstTimeSlot: bookingData.timeSlot || undefined,
+        },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       if (data?.url) {
-        window.open(data.url, '_blank');
+        clearCheckoutSnapshot();
+        // Same-tab redirect so the popup blocker can't swallow it (a new
+        // tab opened after an await is frequently blocked).
+        window.location.href = data.url;
         toast.success("Redirecting to secure checkout...");
       } else {
         throw new Error("No checkout URL returned");
@@ -626,6 +661,11 @@ export default function BookingCheckout() {
 
   // Initialize payment when all required fields are present
   useEffect(() => {
+    // Membership signups (and members redeeming a credit) don't pay a
+    // one-time deposit here — they go through the recurring subscription
+    // Checkout or the $0 credit flow. Skip the payment-intent init so we
+    // don't create an unused PaymentIntent.
+    if (isNewMembershipSignup || isMemberUsingCredit) return;
     const email = bookingData.email?.trim();
     const hasRequiredData = email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
     if (!hasRequiredData) {
@@ -659,6 +699,8 @@ export default function BookingCheckout() {
     isNewCustomer,
     applyWallet,
     walletBalanceCents,
+    isNewMembershipSignup,
+    isMemberUsingCredit,
   ]);
 
   // Re-mount Stripe when priced inputs change after the PI was created

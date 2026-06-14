@@ -934,68 +934,101 @@ serve(async (req) => {
             }
           }
 
-          // ─── Auto-create first booking when the customer provided
-          //     scheduling preferences at signup. Status is
-          //     'pending_details' so the VA team confirms before dispatch
-          //     fires. All required fields must be present.
-          if (
-            !creditsError &&
-            subMeta.preferred_day_of_week &&
-            subMeta.home_size_id &&
-            subMeta.address &&
-            subMeta.city &&
-            subMeta.state
-          ) {
+          // ─── First-clean handling for the new member ──────────────
+          //
+          // Three cases, in priority order:
+          //   1. existing_booking_id — an admin/VA started the membership
+          //      against a booking they already created. Convert that row
+          //      into a membership clean (no duplicate, no double charge).
+          //   2. first_service_date — the member picked an exact slot in
+          //      the booking funnel. Honor it.
+          //   3. preferred_day_of_week — compute the next matching date.
+          //
+          // Cases 2 & 3 still require a full service address; without it
+          // we leave scheduling to the customer via /portal/book.
+          if (!creditsError) {
             try {
               const DOW_MAP: Record<string, number> = {
                 sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
                 thursday: 4, friday: 5, saturday: 6,
               };
-              const targetDow = DOW_MAP[subMeta.preferred_day_of_week.toLowerCase()];
-              if (targetDow !== undefined) {
-                // At least 3 days from now so the team has time to prepare
-                const earliest = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-                const candidate = new Date(earliest);
-                candidate.setHours(0, 0, 0, 0);
-                while (candidate.getDay() !== targetDow) {
-                  candidate.setDate(candidate.getDate() + 1);
-                }
-                const autoServiceDate = candidate.toISOString().split("T")[0];
-                const autoTimeSlot = subMeta.preferred_time_window || "10:00 AM - 12:00 PM";
 
-                const { error: autoBookErr } = await supabase
+              if (subMeta.existing_booking_id) {
+                // Case 1 — link/convert the admin-created booking.
+                const { error: linkErr } = await supabase
                   .from("bookings")
-                  .insert({
-                    email,
-                    first_name: subMeta.first_name || (name.split(" ")[0] || ""),
-                    last_name: subMeta.last_name || (name.split(" ").slice(1).join(" ") || ""),
-                    phone: phone || "",
-                    address: subMeta.address,
-                    city: subMeta.city,
-                    state: subMeta.state,
-                    zip_code: subMeta.zip_code || "",
-                    home_size_id: subMeta.home_size_id,
-                    service_type: "standard",
+                  .update({
                     membership_plan: plan,
                     uses_credit: true,
-                    service_date: autoServiceDate,
-                    time_slot: autoTimeSlot,
-                    base_price_cents: 0,
-                    deposit_cents: 0,
-                    total_estimate_cents: 0,
-                    status: "pending_details",
                     customer_id: customerId,
-                    team_notes: "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching",
-                  });
-
-                if (autoBookErr) {
-                  logStep("Auto-booking creation failed (non-blocking)", { error: autoBookErr.message });
+                    team_notes: "MEMBERSHIP BOOKING — recurring subscription started",
+                  })
+                  .eq("id", subMeta.existing_booking_id);
+                if (linkErr) {
+                  logStep("Linking existing booking to membership failed (non-blocking)", { error: linkErr.message });
                 } else {
-                  logStep("Auto-booking created for new member", { autoServiceDate, autoTimeSlot, plan, email });
+                  logStep("Linked existing booking to new membership", { bookingId: subMeta.existing_booking_id, plan });
+                }
+              } else if (
+                subMeta.home_size_id && subMeta.address && subMeta.city && subMeta.state
+              ) {
+                // Resolve the first-clean date: explicit slot wins, else
+                // compute from the preferred day of week.
+                let autoServiceDate: string | null = null;
+                let autoTimeSlot = subMeta.first_time_slot ||
+                  subMeta.preferred_time_window || "10:00 AM - 12:00 PM";
+
+                if (subMeta.first_service_date && /^\d{4}-\d{2}-\d{2}$/.test(subMeta.first_service_date)) {
+                  // Case 2 — exact date picked in the funnel.
+                  autoServiceDate = subMeta.first_service_date;
+                } else if (subMeta.preferred_day_of_week) {
+                  // Case 3 — next matching weekday, ≥3 days out.
+                  const targetDow = DOW_MAP[subMeta.preferred_day_of_week.toLowerCase()];
+                  if (targetDow !== undefined) {
+                    const candidate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+                    candidate.setHours(0, 0, 0, 0);
+                    while (candidate.getDay() !== targetDow) {
+                      candidate.setDate(candidate.getDate() + 1);
+                    }
+                    autoServiceDate = candidate.toISOString().split("T")[0];
+                  }
+                }
+
+                if (autoServiceDate) {
+                  const { error: autoBookErr } = await supabase
+                    .from("bookings")
+                    .insert({
+                      email,
+                      first_name: subMeta.first_name || (name.split(" ")[0] || ""),
+                      last_name: subMeta.last_name || (name.split(" ").slice(1).join(" ") || ""),
+                      phone: phone || "",
+                      address: subMeta.address,
+                      city: subMeta.city,
+                      state: subMeta.state,
+                      zip_code: subMeta.zip_code || "",
+                      home_size_id: subMeta.home_size_id,
+                      service_type: "standard",
+                      membership_plan: plan,
+                      uses_credit: true,
+                      service_date: autoServiceDate,
+                      time_slot: autoTimeSlot,
+                      base_price_cents: 0,
+                      deposit_cents: 0,
+                      total_estimate_cents: 0,
+                      status: "pending_details",
+                      customer_id: customerId,
+                      team_notes: "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching",
+                    });
+
+                  if (autoBookErr) {
+                    logStep("Auto-booking creation failed (non-blocking)", { error: autoBookErr.message });
+                  } else {
+                    logStep("Auto-booking created for new member", { autoServiceDate, autoTimeSlot, plan, email });
+                  }
                 }
               }
             } catch (autoErr) {
-              logStep("Auto-booking error (non-blocking)", { error: autoErr instanceof Error ? autoErr.message : String(autoErr) });
+              logStep("First-clean handling error (non-blocking)", { error: autoErr instanceof Error ? autoErr.message : String(autoErr) });
             }
           }
         }
