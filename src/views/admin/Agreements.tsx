@@ -51,19 +51,48 @@ export default function AdminAgreements() {
     void load();
   }, [load]);
 
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
   const download = async (row: AgreementRow) => {
     if (!row.pdf_path) {
       toast.error("No PDF stored for this agreement.");
       return;
     }
+    setDownloadingId(row.id);
     try {
+      // Generate a short-lived signed URL with the `download` flag so the
+      // storage server returns `Content-Disposition: attachment`. We then
+      // trigger it via a programmatic anchor click rather than
+      // `window.open()` — the latter, called after an `await`, is reliably
+      // killed by browser popup blockers (the most common reason the
+      // download silently does nothing).
+      const niceName = `Novara-Service-Agreement-${
+        (row.customer_name || row.customer_email || row.id)
+          .replace(/[^a-zA-Z0-9._-]/g, "_")
+      }.pdf`;
       const { data, error } = await supabase.storage
         .from("service-agreements")
-        .createSignedUrl(row.pdf_path, 120);
-      if (error || !data?.signedUrl) throw error || new Error("Could not sign URL");
-      window.open(data.signedUrl, "_blank");
+        .createSignedUrl(row.pdf_path, 120, { download: niceName });
+      if (error || !data?.signedUrl) {
+        throw error || new Error("Could not sign URL");
+      }
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.rel = "noopener";
+      a.download = niceName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Download failed");
+      console.error("[Agreements] download failed", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(
+        msg && msg !== "{}"
+          ? `Download failed: ${msg}`
+          : "Download failed — the signed PDF could not be generated.",
+      );
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -131,9 +160,13 @@ export default function AdminAgreements() {
                   <span><Yes ok={row.agreed_refund} /> Refund</span>
                   <span><Yes ok={row.agreed_service_agreement} /> Service Agreement</span>
                 </div>
-                <Button size="sm" onClick={() => void download(row)} disabled={!row.pdf_path}>
+                <Button
+                  size="sm"
+                  onClick={() => void download(row)}
+                  disabled={!row.pdf_path || downloadingId === row.id}
+                >
                   <RiDownloadLine className="w-4 h-4 mr-2" />
-                  Download PDF
+                  {downloadingId === row.id ? "Preparing…" : "Download PDF"}
                 </Button>
               </CardContent>
             </Card>
