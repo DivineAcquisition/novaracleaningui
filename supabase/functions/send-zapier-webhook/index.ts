@@ -13,6 +13,7 @@ import { loadTeamCleanersForBooking } from "../_shared/ghl-booking-team.ts";
 import { syncBookingSalesPipeline } from "../_shared/ghl-sales-pipeline.ts";
 import { toE164US } from "../_shared/phone-format.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { syncJobToAirtable } from "../_shared/airtable.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -945,6 +946,19 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     } catch (salesErr) {
       logStep("GHL sales pipeline sync failed (non-critical)", {
         error: salesErr instanceof Error ? salesErr.message : String(salesErr),
+      });
+    }
+
+    // ─── Airtable insight mirror (job data) ───────────────────────────
+    // Fire-and-forget; no-ops unless AIRTABLE_API_KEY + AIRTABLE_BASE_ID
+    // are configured. Runs on every booking lifecycle event this fanout
+    // handles (payment, assignment, accept, complete, cancel, reschedule),
+    // so the Airtable "Jobs" table stays current.
+    try {
+      await syncJobToAirtable(supabase, booking.id);
+    } catch (airErr) {
+      logStep("Airtable job sync failed (non-critical)", {
+        error: airErr instanceof Error ? airErr.message : String(airErr),
       });
     }
 
