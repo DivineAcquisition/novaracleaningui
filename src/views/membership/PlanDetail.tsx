@@ -31,6 +31,7 @@ import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
+import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 
 const PLAN_META = {
   monthly: {
@@ -104,6 +105,7 @@ export default function PlanDetail() {
   // /portal/book flow can hint the customer's preferred slot.
   const [preferredDay, setPreferredDay] = useState<string>("");
   const [preferredWindow, setPreferredWindow] = useState<string>("");
+  const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
 
   const plan = PLAN_META[planId as PlanId];
   if (!plan) {
@@ -150,6 +152,8 @@ export default function PlanDetail() {
           email: user?.email || undefined,
           preferredDayOfWeek: preferredDay,
           preferredTimeWindow: preferredWindow,
+          includeDeepClean: deepClean.includeDeepClean,
+          deepCleanedBefore: deepClean.deepCleanedBefore,
         },
       });
       if (error) throw error;
@@ -250,7 +254,9 @@ export default function PlanDetail() {
               <div>
                 <p className="font-semibold text-sm">Your monthly price</p>
                 <p className="text-xs text-muted-foreground">
-                  First month: ${selectedPrice + 75} (includes $75 deep clean)
+                  {deepClean.includeDeepClean
+                    ? `First month: $${selectedPrice + 75} (includes $75 deep clean)`
+                    : `First month: $${selectedPrice}`}
                 </p>
               </div>
               <p className="text-2xl md:text-3xl font-bold text-primary">${selectedPrice}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
@@ -348,6 +354,13 @@ export default function PlanDetail() {
 
         <Separator />
 
+        {/* First-clean deep clean */}
+        <section className="space-y-4 animate-fade-in-up stagger-3">
+          <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
+        </section>
+
+        <Separator />
+
         {/* How It Works */}
         <section className="space-y-5 animate-fade-in-up stagger-3">
           <h2 className="text-xl md:text-2xl font-bold font-jakarta text-center">How It Works</h2>
@@ -433,7 +446,10 @@ export default function PlanDetail() {
             </Button>
 
             <p className="text-[11px] text-center text-muted-foreground">
-              First month total: ${selectedPrice + 75} (includes $75 deep clean). Cancel anytime with 14 days' notice.
+              {deepClean.includeDeepClean
+                ? `First month total: $${selectedPrice + 75} (includes $75 deep clean). `
+                : `First month total: $${selectedPrice}. `}
+              Cancel anytime with 14 days&apos; notice.
             </p>
           </CardContent>
         </Card>

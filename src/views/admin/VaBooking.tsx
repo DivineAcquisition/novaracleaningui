@@ -69,6 +69,7 @@ import { useAvailability } from "@/hooks/use-availability";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 import {
   Card,
   CardContent,
@@ -307,6 +308,7 @@ export default function VaBooking() {
   const [serviceType, setServiceType] = useState<ServiceType>("standard");
   const [addOns, setAddOns] = useState<string[]>([]);
   const [frequency, setFrequency] = useState("one-time");
+  const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
 
@@ -532,6 +534,8 @@ export default function VaBooking() {
           preferredTimeWindow: selectedTime || undefined,
           firstServiceDate: serviceDate,
           firstTimeSlot: selectedTime || undefined,
+          includeDeepClean: deepClean.includeDeepClean,
+          deepCleanedBefore: deepClean.deepCleanedBefore,
         },
       });
       if (error) throw error;
@@ -1631,6 +1635,12 @@ export default function VaBooking() {
                       one-time invoice. Their first clean auto-books once they
                       subscribe.
                     </span>
+                  </div>
+                )}
+
+                {frequency !== "one-time" && (
+                  <div className="mt-3">
+                    <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
                   </div>
                 )}
 

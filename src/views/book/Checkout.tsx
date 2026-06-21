@@ -53,6 +53,7 @@ import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
 import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
+import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 import {
   clearCheckoutSnapshot,
   hasCheckoutPrerequisites,
@@ -217,6 +218,7 @@ export default function BookingCheckout() {
   const effectivePaymentOption: 'deposit' = 'deposit';
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
+  const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: '', includeDeepClean: true });
 
   // Pin funnel step + persist a session snapshot so schedule/service
   // selections survive idle time on this page (browser back, tab discard,
@@ -498,6 +500,10 @@ export default function BookingCheckout() {
           // webhook prefers these over the computed preferred day.
           firstServiceDate: bookingData.serviceDate || undefined,
           firstTimeSlot: bookingData.timeSlot || undefined,
+          // First-clean deep clean choice (optional surcharge + surge
+          // disclaimer when declined).
+          includeDeepClean: deepClean.includeDeepClean,
+          deepCleanedBefore: deepClean.deepCleanedBefore,
         },
       });
       if (error) throw error;
@@ -1138,7 +1144,9 @@ export default function BookingCheckout() {
                       {membership?.cleansPerMonth} cleaning credit/month • {membership?.discount}% off extras • Cancel anytime
                     </p>
                   </div>
-                  
+
+                  <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
+
                   <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isCreatingIntent}>
                     {isCreatingIntent ? <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
                   </Button>
