@@ -34,8 +34,22 @@ export async function notifyDiscord(supabase: DB, msg: DiscordMessage): Promise<
   try {
     const url = (await resolveSecret(supabase, "DISCORD_WEBHOOK_URL")).trim();
     if (!url) return false;
+
+    // Role mentions (e.g. @Operations). Role IDs come from
+    // DISCORD_MENTION_ROLE_IDS (comma/space separated). When set we put the
+    // <@&id> mentions in `content` + an allowed_mentions allowlist so only
+    // those roles ping (never @everyone/users).
+    const roleIds = (await resolveSecret(supabase, "DISCORD_MENTION_ROLE_IDS"))
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^\d+$/.test(s));
+    const content = roleIds.length ? roleIds.map((id) => `<@&${id}>`).join(" ") : undefined;
+    const allowedMentions = roleIds.length ? { roles: roleIds } : { parse: [] as string[] };
+
     const body = {
       username: msg.username || "Novara Ops",
+      content,
+      allowed_mentions: allowedMentions,
       embeds: [
         {
           title: msg.title,
