@@ -54,6 +54,87 @@ export interface PayrollRunRow {
 export const cleanerName = (c?: Partial<PayrollCleaner> | null): string =>
   c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "Cleaner";
 
+// ─── Operational jobs (derived from real bookings) ─────────────────────────
+export interface OperationalJobCleaner {
+  id: string;
+  name: string;
+  payCents: number;
+}
+export interface OperationalJob {
+  bookingId: string;
+  bookingNumber: string | null;
+  status: string;
+  serviceType: string | null;
+  serviceDate: string | null;
+  dateCompleted: string | null;
+  payPeriod: string;
+  customer: string;
+  customerPaidCents: number;
+  payoutStatus: string | null;
+  payable: boolean;
+  paid: boolean;
+  cleaners: OperationalJobCleaner[];
+}
+
+/** Pull live + past jobs straight from operations (bookings/job_assignments). */
+export async function loadOperationalJobs(
+  opts: { fromDate?: string; toDate?: string } = {},
+): Promise<OperationalJob[]> {
+  const { data, error } = await supabase.functions.invoke("payroll-operations", {
+    body: { action: "list", ...opts },
+  });
+  if (error) throw new Error(error.message || "Failed to load operational jobs");
+  // deno-lint-ignore no-explicit-any
+  if ((data as any)?.error) throw new Error((data as any).error);
+  // deno-lint-ignore no-explicit-any
+  return ((data as any)?.jobs as OperationalJob[]) || [];
+}
+
+export interface PayoutLedgerRow {
+  id: string;
+  bookingId: string | null;
+  bookingNumber: string | null;
+  cleanerId: string | null;
+  cleanerName: string;
+  totalBookingCents: number | null;
+  platformFeeCents: number | null;
+  payoutCents: number | null;
+  stripeTransferId: string | null;
+  status: string | null;
+  processedAt: string | null;
+  createdAt: string | null;
+}
+
+/** Load the real payout ledger (Stripe transfers) for the Runs history. */
+export async function loadPayoutLedger(): Promise<PayoutLedgerRow[]> {
+  const { data, error } = await supabase.functions.invoke("payroll-operations", {
+    body: { action: "payouts" },
+  });
+  if (error) throw new Error(error.message || "Failed to load payouts");
+  // deno-lint-ignore no-explicit-any
+  if ((data as any)?.error) throw new Error((data as any).error);
+  // deno-lint-ignore no-explicit-any
+  return ((data as any)?.payouts as PayoutLedgerRow[]) || [];
+}
+
+/** Release a single completed booking's payout via the proven process-payout flow. */
+export async function payoutBooking(bookingId: string): Promise<{ ok: boolean; amountCents?: number; skipped?: boolean; error?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke("process-payout", {
+      body: { bookingId, source: "admin_payroll" },
+    });
+    if (error) return { ok: false, error: error.message };
+    // deno-lint-ignore no-explicit-any
+    const d = data as any;
+    if (d?.error) return { ok: false, error: d.error };
+    if (d?.success) return { ok: true, amountCents: d.amount_cents };
+    if (d?.skipped) return { ok: true, skipped: true };
+    return { ok: false, error: "Unexpected response" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Invoke the server-side payroll-admin function (all money math is server-side). */
 export async function payrollAction<T = Record<string, unknown>>(
   action: string,
@@ -69,13 +150,16 @@ export async function payrollAction<T = Record<string, unknown>>(
 }
 
 export async function loadActiveCleaners(): Promise<PayrollCleaner[]> {
-  // `payment_method` is a newly-added column not yet in the generated types.
+  // Routed through the service-role function so the roster loads regardless
+  // of client-side RLS on the cleaners table (consistent with Bookings/Dispatch).
+  const { data, error } = await supabase.functions.invoke("payroll-operations", {
+    body: { action: "cleaners" },
+  });
+  if (error) throw new Error(error.message || "Failed to load cleaners");
   // deno-lint-ignore no-explicit-any
-  const { data, error } = await (supabase.from as any)("cleaners")
-    .select("id, first_name, last_name, email, pay_tier, pay_percentage, payment_method, stripe_account_id, payouts_enabled, status")
-    .order("first_name", { ascending: true });
-  if (error) throw error;
-  return (data || []) as unknown as PayrollCleaner[];
+  if ((data as any)?.error) throw new Error((data as any).error);
+  // deno-lint-ignore no-explicit-any
+  return (((data as any)?.cleaners) as PayrollCleaner[]) || [];
 }
 
 export const STATUS_TONE: Record<string, string> = {

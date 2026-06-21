@@ -9,14 +9,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { usd, formatPeriod, payPctForTier } from "@/lib/payroll";
-import { type PayrollCleaner, type PayrollRunRow, cleanerName, STATUS_TONE } from "./shared";
+import { usd, payPctForTier } from "@/lib/payroll";
+import { type PayrollCleaner, type PayoutLedgerRow, cleanerName, loadPayoutLedger, STATUS_TONE } from "./shared";
+
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—");
+
+interface Aggregate {
+  jobs_completed?: number;
+  paid_cents?: number;
+  owed_cents?: number;
+  processing_cents?: number;
+  last_paid_at?: string | null;
+}
 
 export default function CleanerDetailTab({ cleaners }: { cleaners: PayrollCleaner[] }) {
   const [cleanerId, setCleanerId] = useState<string>(cleaners[0]?.id || "");
-  const [runs, setRuns] = useState<PayrollRunRow[]>([]);
+  const [agg, setAgg] = useState<Aggregate | null>(null);
+  const [ledger, setLedger] = useState<PayoutLedgerRow[]>([]);
   const [loading, setLoading] = useState(false);
   const cleaner = useMemo(() => cleaners.find((c) => c.id === cleanerId), [cleaners, cleanerId]);
+
+  useEffect(() => { if (!cleanerId && cleaners[0]) setCleanerId(cleaners[0].id); }, [cleaners, cleanerId]);
 
   useEffect(() => {
     if (!cleanerId) return;
@@ -24,27 +37,21 @@ export default function CleanerDetailTab({ cleaners }: { cleaners: PayrollCleane
     (async () => {
       setLoading(true);
       try {
-        // deno-lint-ignore no-explicit-any
-        const { data, error } = await (supabase.from as any)("payroll_runs").select("*").eq("cleaner_id", cleanerId)
-          .order("pay_period_start", { ascending: false });
-        if (error) throw error;
-        if (!cancelled) setRuns((data || []) as unknown as PayrollRunRow[]);
+        const [{ data: aggRow }, all] = await Promise.all([
+          supabase.from("cleaner_payroll_v1" as never).select("*").eq("cleaner_id", cleanerId).maybeSingle(),
+          loadPayoutLedger(),
+        ]);
+        if (cancelled) return;
+        setAgg((aggRow || null) as unknown as Aggregate);
+        setLedger(all.filter((p) => p.cleanerId === cleanerId));
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to load");
+        if (!cancelled) toast.error(err instanceof Error ? err.message : "Failed to load");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, [cleanerId]);
-
-  const stats = useMemo(() => {
-    const paid = runs.filter((r) => ["sent", "cleared"].includes(r.status));
-    const lifetime = paid.reduce((a, r) => a + (r.net_cents || 0), 0);
-    const jobs = runs.reduce((a, r) => a + (r.total_jobs || 0), 0);
-    const last = paid.map((r) => r.sent_at).filter(Boolean).sort().reverse()[0] || null;
-    return { lifetime, jobs, last, runCount: runs.length };
-  }, [runs]);
 
   return (
     <div className="space-y-5">
@@ -53,9 +60,7 @@ export default function CleanerDetailTab({ cleaners }: { cleaners: PayrollCleane
           <p className="text-sm font-medium text-slate-600">Cleaner</p>
           <Select value={cleanerId} onValueChange={setCleanerId}>
             <SelectTrigger className="w-64"><SelectValue placeholder="Select a cleaner" /></SelectTrigger>
-            <SelectContent>
-              {cleaners.map((c) => <SelectItem key={c.id} value={c.id}>{cleanerName(c)}</SelectItem>)}
-            </SelectContent>
+            <SelectContent>{cleaners.map((c) => <SelectItem key={c.id} value={c.id}>{cleanerName(c)}</SelectItem>)}</SelectContent>
           </Select>
           {cleaner && (
             <span className="text-xs text-slate-500">
@@ -66,43 +71,41 @@ export default function CleanerDetailTab({ cleaners }: { cleaners: PayrollCleane
       </Card>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile label="Lifetime paid" value={usd(stats.lifetime)} highlight />
-        <Tile label="Runs" value={String(stats.runCount)} />
-        <Tile label="Total jobs" value={String(stats.jobs)} />
-        <Tile label="Last payout" value={stats.last ? new Date(stats.last).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"} />
+        <Tile label="Lifetime paid" value={usd(agg?.paid_cents || 0)} highlight />
+        <Tile label="Owed now" value={usd(agg?.owed_cents || 0)} />
+        <Tile label="Jobs completed" value={String(agg?.jobs_completed || 0)} />
+        <Tile label="Last payout" value={fmtDate(agg?.last_paid_at || null)} />
       </div>
 
       <Card className="border-slate-200">
-        <CardHeader className="pb-3"><CardTitle className="text-base">Run history</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Payout history</CardTitle></CardHeader>
         <CardContent className="p-0">
           {loading ? (
             <div className="p-6 space-y-3"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
-          ) : runs.length === 0 ? (
-            <div className="p-10 text-center text-sm text-slate-500">No runs for this cleaner yet.</div>
+          ) : ledger.length === 0 ? (
+            <div className="p-10 text-center text-sm text-slate-500">No payouts for this cleaner yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Period</TableHead>
-                    <TableHead className="text-right">Jobs</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">Net</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Booking</TableHead>
+                    <TableHead className="text-right">Payout</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Sent</TableHead>
-                    <TableHead>Cleared</TableHead>
+                    <TableHead>Transfer</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {runs.map((r) => (
+                  {ledger.map((r) => (
                     <TableRow key={r.id} className="hover:bg-slate-50/60">
-                      <TableCell className="text-xs">{formatPeriod(r.pay_period_start)}</TableCell>
-                      <TableCell className="text-right text-sm">{r.total_jobs}</TableCell>
-                      <TableCell className="text-right text-sm">{usd(r.gross_cents)}</TableCell>
-                      <TableCell className="text-right text-sm font-semibold text-violet-700">{usd(r.net_cents)}</TableCell>
-                      <TableCell><Badge variant="outline" className={cn("text-[10px] capitalize", STATUS_TONE[r.status])}>{r.status}</Badge></TableCell>
-                      <TableCell className="text-xs text-slate-500">{r.sent_at ? new Date(r.sent_at).toLocaleDateString() : "—"}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{r.cleared_at ? new Date(r.cleared_at).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell className="text-xs">{fmtDate(r.processedAt || r.createdAt)}</TableCell>
+                      <TableCell className="text-[11px] text-slate-500">{r.bookingNumber || "—"}</TableCell>
+                      <TableCell className="text-right text-sm font-semibold text-violet-700">{usd(r.payoutCents || 0)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("text-[10px] capitalize", STATUS_TONE[r.status || ""] || "bg-slate-100 text-slate-700 border-slate-200")}>{r.status || "—"}</Badge>
+                      </TableCell>
+                      <TableCell className="text-[10px] text-slate-400 max-w-[150px] truncate" title={r.stripeTransferId || ""}>{r.stripeTransferId || "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
