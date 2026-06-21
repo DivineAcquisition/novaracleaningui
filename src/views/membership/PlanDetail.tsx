@@ -124,11 +124,6 @@ export default function PlanDetail() {
   const selectableSizes = HOME_SIZES.filter(s => s.basePrice > 0);
 
   const handleSubscribe = async () => {
-    if (!user) {
-      toast.error("Please sign in first");
-      router.push("/auth");
-      return;
-    }
     if (!agreedToTerms) {
       toast.error("Please agree to the Terms of Service");
       return;
@@ -141,17 +136,29 @@ export default function PlanDetail() {
 
     setLoading(true);
     try {
+      // Guest-friendly: no sign-in required. Logged-in members pass their
+      // email so we reuse their Stripe customer; guests leave it blank and
+      // Stripe Checkout collects it (the subscription webhook provisions the
+      // membership keyed by whatever email is used at checkout). This makes
+      // membership checkout work for the public on try.* without bouncing
+      // visitors over to the app.* sign-in page.
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
           mode: "subscription",
           membershipPlan: planId,
           homeSizeId: selectedHomeSize,
+          email: user?.email || undefined,
           preferredDayOfWeek: preferredDay,
           preferredTimeWindow: preferredWindow,
         },
       });
       if (error) throw error;
-      if (data?.url) window.location.href = data.url;
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
     } catch (err) {
       console.error(err);
       toast.error("Failed to start checkout. Please try again.");

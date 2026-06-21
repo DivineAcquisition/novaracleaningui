@@ -78,8 +78,22 @@ export default function Membership() {
       {/* Navigation */}
       <div className="border-b border-border/50">
         <div className="container max-w-7xl mx-auto px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/account")} className="text-muted-foreground -ml-2">
-            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Back to Account
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Members came from their account; public visitors browse this
+              // page on try.* — send them back to the marketing home instead
+              // of the login-gated account page on app.*.
+              if (subscription?.subscribed) {
+                router.push("/account");
+              } else {
+                window.location.href = "https://novaracleaning.com/";
+              }
+            }}
+            className="text-muted-foreground -ml-2"
+          >
+            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Back
           </Button>
         </div>
       </div>
