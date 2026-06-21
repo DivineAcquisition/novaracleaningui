@@ -37,6 +37,24 @@ export function loadGooglePlaces(): Promise<typeof google.maps.places | null> {
   if (typeof window === "undefined") {
     return Promise.resolve(null);
   }
+
+  // Install the auth-failure hook BEFORE the Maps script is ever injected.
+  // Defining window.gm_authFailure suppresses Google's default
+  // "This page can't load Google Maps correctly" modal — instead we flip a
+  // flag the address components watch so they fall back to a plain,
+  // typeable input + server-side geocoding. Doing this in the loader (not a
+  // React effect) guarantees it's set before Google performs its check, so
+  // the customer never sees the alarming dialog.
+  if (!window.__novaraGmAuthFailureHooked) {
+    window.__novaraGmAuthFailureHooked = true;
+    const prior = (window as { gm_authFailure?: () => void }).gm_authFailure;
+    (window as { gm_authFailure?: () => void }).gm_authFailure = () => {
+      console.warn("[google-places] gm_authFailure — domain not allow-listed or key/API restricted");
+      window.__novaraGmAuthFailed = true;
+      try { prior?.(); } catch { /* ignore */ }
+    };
+  }
+
   if (window.__novaraGooglePlacesPromise) {
     return window.__novaraGooglePlacesPromise;
   }
