@@ -24,13 +24,22 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
   };
 
   // Size the canvas backing store to its display size * DPR for crisp lines.
+  // Idempotent: a no-op when the size hasn't actually changed, so a stray
+  // window "resize" (mobile keyboard open, URL bar collapse) can't silently
+  // wipe a signature the customer already drew. Also never sizes to 0 — a
+  // 0-width backing store (when the card animates in before layout settles)
+  // is what made the pad look "broken" / uncapturable.
   const resize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    const w = Math.round(rect.width * dpr);
+    const h = Math.round(rect.height * dpr);
+    if (w === 0 || h === 0) return;
+    if (canvas.width === w && canvas.height === h) return;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (ctx) {
       ctx.scale(dpr, dpr);
@@ -54,6 +63,9 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
 
   const start = (e: React.PointerEvent) => {
     e.preventDefault();
+    // Ensure the backing store is sized before the first stroke (handles a
+    // canvas that mounted at 0-width inside an animating card).
+    resize();
     const ctx = ctxOf();
     if (!ctx) return;
     drawing.current = true;

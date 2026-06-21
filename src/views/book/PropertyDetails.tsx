@@ -6,7 +6,7 @@ import {
   RiMapPinLine,
   RiSparklingLine
 } from "@remixicon/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -147,14 +147,21 @@ export default function PropertyDetails() {
   const [isHydrating, setIsHydrating] = useState(true);
 
   // Require a paid booking id (URL or context after Stripe redirect).
+  // Guard with a ref so neither branch can fire more than once — without
+  // this, a transient render where the URL param hasn't propagated yet could
+  // bounce the page in a redirect loop.
+  const didInitRedirect = useRef(false);
   useEffect(() => {
     const id = bookingId || bookingData.bookingId;
     if (id) {
-      if (!bookingId && bookingData.bookingId) {
+      if (!bookingId && bookingData.bookingId && !didInitRedirect.current) {
+        didInitRedirect.current = true;
         router.replace(`/book/details?booking_id=${bookingData.bookingId}`);
       }
       return;
     }
+    if (didInitRedirect.current) return;
+    didInitRedirect.current = true;
     toast.error("No booking ID found. Please complete checkout first.");
     router.replace("/book/checkout");
   }, [bookingId, bookingData.bookingId, router]);
@@ -565,7 +572,7 @@ export default function PropertyDetails() {
               <h3 className="text-base md:text-lg font-semibold">Service Address</h3>
               
               <AddressAutocomplete
-                key={bookingId || bookingData.bookingId || "details-address"}
+                key="details-address"
                 label="Street Address *"
                 placeholder="Start typing your address..."
                 initialValue={address}
