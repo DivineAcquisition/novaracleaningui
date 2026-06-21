@@ -92,6 +92,7 @@ export function AddressAutocomplete({
       const places = await loadGooglePlaces();
       if (cancelled) return;
       if (window.__novaraGmAuthFailed) {
+        if (inputRef.current?.value) initialStreetRef.current = inputRef.current.value;
         setGoogleBlocked(true);
         setGoogleLoaded(false);
         return;
@@ -147,6 +148,11 @@ export function AddressAutocomplete({
     const t = setInterval(() => {
       ticks++;
       if (window.__novaraGmAuthFailed) {
+        // Google bricks (greys out) the input it attached to when the JS
+        // API key's referrer allow-list rejects this domain. Preserve what
+        // the user typed and remount a clean, fully-typeable input that
+        // resolves the address via the server-side geocoder on blur.
+        if (inputRef.current?.value) initialStreetRef.current = inputRef.current.value;
         setGoogleBlocked(true);
         setGoogleLoaded(false);
         clearInterval(t);
@@ -306,6 +312,11 @@ export function AddressAutocomplete({
       
       <div className="relative">
         <Input
+          // Remount a fresh input if Google ever blocks/greys the one it
+          // attached to, so the field is ALWAYS typeable. The clean input
+          // has no Google widget; addresses still resolve via the
+          // server-side geocoder on blur.
+          key={googleBlocked ? "addr-fallback" : "addr-google"}
           ref={inputRef}
           id="customer-address-autocomplete"
           type="text"
@@ -322,6 +333,11 @@ export function AddressAutocomplete({
         />
         <RiMapPinLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
       </div>
+      {googleBlocked && (
+        <p className="text-[11px] text-muted-foreground">
+          Type your full street address (e.g. 123 Main St, Frederick, MD 21703) — we&apos;ll verify it automatically.
+        </p>
+      )}
       
       {validationError && (
         <div className="flex items-start gap-2 text-xs text-destructive">

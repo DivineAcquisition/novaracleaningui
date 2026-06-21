@@ -111,6 +111,7 @@ export function AddressAutocomplete({
       const places = await loadGooglePlaces();
       if (cancelled) return;
       if ((window as any).__novaraGmAuthFailed) {
+        if (inputRef.current?.value) initialStreetRef.current = inputRef.current.value;
         setLoadState("blocked");
         return;
       }
@@ -174,6 +175,7 @@ export function AddressAutocomplete({
     const t = setInterval(() => {
       ticks++;
       if ((window as any).__novaraGmAuthFailed) {
+        if (inputRef.current?.value) initialStreetRef.current = inputRef.current.value;
         setLoadState("blocked");
         clearInterval(t);
       }
@@ -335,6 +337,9 @@ export function AddressAutocomplete({
 
       <div className="relative">
         <Input
+          // Remount a clean input if Google greys/locks the one it attached
+          // to (referrer-blocked key), so the field stays fully typeable.
+          key={loadState === "blocked" ? "addr-fallback" : "addr-google"}
           ref={inputRef}
           id="address-autocomplete"
           type="text"
