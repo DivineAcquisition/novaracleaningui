@@ -25,8 +25,6 @@ import {
 
 const logo = "/novara-logo.png";
 
-const BOOKING_URL = "https://try.novaracleaning.com/book/zip";
-
 interface NavItem {
   label: string;
   href: string;
@@ -118,14 +116,15 @@ function SidebarContent({
 
         <div className="pt-2">
           <Separator className="mb-3" />
-          <a
-            href={BOOKING_URL}
+          <Link
+            href="/portal/book"
+            onClick={onClose}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium bg-gradient-primary text-white shadow-md hover:shadow-lg transition-shadow"
           >
             <RiCalendarCheckLine className="w-[18px] h-[18px]" />
             <span className="flex-1">Book a Cleaning</span>
             <RiArrowRightLine className="w-4 h-4 opacity-70" />
-          </a>
+          </Link>
         </div>
       </nav>
 
