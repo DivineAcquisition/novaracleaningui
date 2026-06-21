@@ -52,6 +52,12 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import JobsTab from "@/components/admin/payroll/JobsTab";
+import RunPayrollTab from "@/components/admin/payroll/RunPayrollTab";
+import RunsTab from "@/components/admin/payroll/RunsTab";
+import CleanerDetailTab from "@/components/admin/payroll/CleanerDetailTab";
+import { loadActiveCleaners, type PayrollCleaner } from "@/components/admin/payroll/shared";
 
 interface PayrollRow {
   cleaner_id: string;
@@ -96,7 +102,45 @@ const formatDate = (iso: string | null | undefined) => {
   }
 };
 
+// ─── Tabbed Payroll shell ──────────────────────────────────────────────
+// The manual payroll module (Jobs / Run Payroll / Runs / Cleaner Detail)
+// lives entirely here, alongside the original Stripe-Connect overview.
 export default function AdminPayroll() {
+  const [cleaners, setCleaners] = useState<PayrollCleaner[]>([]);
+
+  useEffect(() => {
+    loadActiveCleaners()
+      .then(setCleaners)
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load cleaners"));
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Payroll</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Enter completed jobs, build weekly runs, and pay 1099 cleaners via Stripe Connect.
+        </p>
+      </div>
+      <Tabs defaultValue="jobs" className="space-y-4">
+        <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="jobs">Jobs</TabsTrigger>
+          <TabsTrigger value="run">Run Payroll</TabsTrigger>
+          <TabsTrigger value="runs">Payroll Runs</TabsTrigger>
+          <TabsTrigger value="cleaner">Cleaner Detail</TabsTrigger>
+          <TabsTrigger value="overview">Connect Overview</TabsTrigger>
+        </TabsList>
+        <TabsContent value="jobs"><JobsTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="run"><RunPayrollTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="runs"><RunsTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="cleaner"><CleanerDetailTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="overview"><PayrollOverview /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function PayrollOverview() {
   const [rows, setRows] = useState<PayrollRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
