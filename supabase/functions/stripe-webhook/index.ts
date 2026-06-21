@@ -1529,6 +1529,48 @@ serve(async (req) => {
         break;
       }
 
+      // ─── Payroll: Connect transfer lifecycle → mark run cleared/failed ──
+      case 'transfer.created':
+      case 'transfer.updated':
+      case 'transfer.paid': {
+        // deno-lint-ignore no-explicit-any
+        const transfer = event.data.object as any;
+        const runId = transfer?.metadata?.payroll_run_id as string | undefined;
+        const transferId = transfer?.id as string | undefined;
+        try {
+          let q = supabase.from("payroll_runs").update({
+            status: "cleared",
+            cleared_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          q = runId ? q.eq("id", runId) : q.eq("stripe_transfer_id", transferId);
+          // Only clear runs that actually went out (don't resurrect drafts).
+          const { data: updated } = await q.in("status", ["sent", "failed"]).select("id");
+          logStep("Payroll run cleared via transfer event", { runId, transferId, count: (updated || []).length });
+        } catch (err) {
+          logStep("Payroll transfer-event handling failed (non-blocking)", { error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
+
+      case 'transfer.reversed': {
+        // deno-lint-ignore no-explicit-any
+        const transfer = event.data.object as any;
+        const runId = transfer?.metadata?.payroll_run_id as string | undefined;
+        const transferId = transfer?.id as string | undefined;
+        try {
+          let q = supabase.from("payroll_runs").update({
+            status: "failed",
+            failure_reason: "Stripe transfer reversed",
+            updated_at: new Date().toISOString(),
+          });
+          q = runId ? q.eq("id", runId) : q.eq("stripe_transfer_id", transferId);
+          await q;
+          logStep("Payroll run marked failed (transfer reversed)", { runId, transferId });
+        } catch (_) { /* non-blocking */ }
+        break;
+      }
+
       default:
         logStep("Unhandled event type", { type: event.type });
     }
