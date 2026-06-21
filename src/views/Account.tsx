@@ -28,12 +28,12 @@ import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 
-// Booking funnel lives on the try.* subdomain. The customer portal (this
-// view) is served from app.novaracleaning.com — sending the user across
-// subdomains is intentional so the booking funnel doesn't accidentally
-// inherit authenticated portal state.
-const BOOKING_URL = "https://try.novaracleaning.com/book/zip";
-const goToBooking = () => { window.location.href = BOOKING_URL; };
+// The public booking funnel lives on the try.* subdomain. The customer
+// portal (this view) is served from app.novaracleaning.com. Signed-in
+// members get a first-class in-app booking flow at /portal/book (use
+// credits, saved addresses, preferred cleaner, or pay for an extra clean);
+// everyone else is sent to the public funnel on try.*.
+const PUBLIC_BOOKING_URL = "https://try.novaracleaning.com/book/zip";
 
 interface Booking {
   id: string;
@@ -57,6 +57,7 @@ interface Booking {
   rating_submitted: boolean;
   cleaner_id: string | null;
   created_at: string;
+  booking_channel?: string | null;
 }
 
 interface MembershipCredit {
@@ -133,6 +134,41 @@ export default function Account() {
     await signOut();
     toast.success("Signed out successfully");
     router.push("/");
+  };
+
+  // Members book in-app (credits / saved addresses / preferred cleaner /
+  // extra paid cleans). Non-members go to the public funnel on try.*.
+  const handleBookNow = () => {
+    if (subscription?.subscribed) {
+      router.push("/portal/book");
+    } else {
+      window.location.href = PUBLIC_BOOKING_URL;
+    }
+  };
+
+  // Resume an unfinished booking. Portal (in-app) bookings that still owe a
+  // card re-open the hosted Checkout; funnel bookings hand off to try.* with
+  // an absolute URL so the cross-subdomain redirect can't strand the user.
+  const handleCompleteBooking = async (booking: Booking) => {
+    if (booking.status === "pending_details") {
+      window.location.href = `https://try.novaracleaning.com/book/details?booking_id=${booking.id}`;
+      return;
+    }
+    if (booking.booking_channel === "portal") {
+      try {
+        const { data, error } = await supabase.functions.invoke("portal-book-checkout", {
+          body: { action: "create", bookingId: booking.id },
+        });
+        if (error || (data as any)?.error || !(data as any)?.url) {
+          throw new Error((data as any)?.error || "Could not resume payment");
+        }
+        window.location.href = (data as any).url as string;
+      } catch (e: any) {
+        toast.error(e?.message || "Could not resume payment");
+      }
+      return;
+    }
+    window.location.href = `https://try.novaracleaning.com/book/checkout?booking_id=${booking.id}`;
   };
 
   const handleManageSubscription = async () => {
@@ -288,7 +324,7 @@ export default function Account() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 md:gap-2">
-                <Button size="sm" onClick={goToBooking} className="h-9 px-3 md:px-4 bg-gradient-primary shadow-md hover:shadow-lg transition-shadow">
+                <Button size="sm" onClick={handleBookNow} className="h-9 px-3 md:px-4 bg-gradient-primary shadow-md hover:shadow-lg transition-shadow">
                   <RiCalendarLine size={16} className="md:mr-1.5" />
                   <span className="hidden md:inline">Book Now</span>
                 </Button>
@@ -317,9 +353,6 @@ export default function Account() {
               // remains the right next step.
               const isDetailsStep = booking.status === 'pending_details';
               const ctaLabel = isDetailsStep ? 'Complete Details' : 'Complete Payment';
-              const ctaHref = isDetailsStep
-                ? `/book/details?booking_id=${booking.id}`
-                : `/book/checkout?booking_id=${booking.id}`;
               const headerLine = isDetailsStep
                 ? 'Finish Your Booking Details'
                 : 'Complete Your Booking';
@@ -341,7 +374,7 @@ export default function Account() {
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
                         <Button size="sm" className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                          onClick={() => router.push(ctaHref)}>
+                          onClick={() => handleCompleteBooking(booking)}>
                           {ctaLabel} <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
                         </Button>
                         <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
@@ -435,7 +468,7 @@ export default function Account() {
               <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
                 Schedule your next professional cleaning and let us handle the rest.
               </p>
-              <Button onClick={goToBooking} className="bg-gradient-primary shadow-md h-11 px-6">
+              <Button onClick={handleBookNow} className="bg-gradient-primary shadow-md h-11 px-6">
                 <RiSparklingLine className="w-4 h-4 mr-2" /> Book a Cleaning
               </Button>
             </CardContent>
@@ -524,7 +557,7 @@ export default function Account() {
               <Separator className="mb-4" />
               <div className="grid grid-cols-2 gap-2.5">
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
-                  onClick={goToBooking}>
+                  onClick={handleBookNow}>
                   <RiCalendarLine className="w-4 h-4 mr-2 text-primary" /> Book Cleaning
                 </Button>
                 {/* Billing / payment-method update — always show so
