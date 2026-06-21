@@ -28,12 +28,9 @@ import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 
-// The public booking funnel lives on the try.* subdomain. The customer
-// portal (this view) is served from app.novaracleaning.com. Signed-in
-// members get a first-class in-app booking flow at /portal/book (use
-// credits, saved addresses, preferred cleaner, or pay for an extra clean);
-// everyone else is sent to the public funnel on try.*.
-const PUBLIC_BOOKING_URL = "https://try.novaracleaning.com/book/zip";
+// Signed-in customers book in-app at /portal/book (credits, saved addresses,
+// preferred cleaner, or pay for an extra clean). The public funnel on the
+// try.* subdomain is only for logged-out visitors.
 
 interface Booking {
   id: string;
@@ -136,14 +133,12 @@ export default function Account() {
     router.push("/");
   };
 
-  // Members book in-app (credits / saved addresses / preferred cleaner /
-  // extra paid cleans). Non-members go to the public funnel on try.*.
+  // Signed-in customers always book in-app at /portal/book (credits / saved
+  // addresses / preferred cleaner / extra paid cleans). We no longer gate on
+  // the async `subscription` flag — it can briefly report not-subscribed and
+  // wrongly bounce members to the public funnel on try.*.
   const handleBookNow = () => {
-    if (subscription?.subscribed) {
-      router.push("/portal/book");
-    } else {
-      window.location.href = PUBLIC_BOOKING_URL;
-    }
+    router.push("/portal/book");
   };
 
   // Resume an unfinished booking. Portal (in-app) bookings that still owe a
