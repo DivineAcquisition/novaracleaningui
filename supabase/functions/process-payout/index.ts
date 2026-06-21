@@ -20,6 +20,7 @@ import {
   DEFAULT_PAY_PERCENTAGE,
 } from "../_shared/payout-utils.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { syncPayoutToAirtable } from "../_shared/airtable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -233,6 +234,13 @@ serve(async (req) => {
         console.warn("[process-payout] payout SMS failed (non-blocking)", smsErr);
       }
 
+      // Airtable insight mirror (payroll). No-ops unless configured.
+      try {
+        await syncPayoutToAirtable(supabase, payoutRecord.id);
+      } catch (airErr) {
+        console.warn("[process-payout] Airtable payroll sync failed (non-blocking)", airErr);
+      }
+
       return jsonResponse({
         success: true,
         transfer_id: transfer.id,
@@ -258,6 +266,10 @@ serve(async (req) => {
         .from("bookings")
         .update({ payout_status: "failed" })
         .eq("id", bookingId);
+      // Mirror the failed payout to Airtable too. No-ops unless configured.
+      try {
+        await syncPayoutToAirtable(supabase, payoutRecord.id);
+      } catch (_) { /* non-blocking */ }
       return jsonResponse(
         { error: errorMessage, payoutId: payoutRecord.id },
         502,
