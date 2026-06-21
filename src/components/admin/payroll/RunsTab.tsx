@@ -8,57 +8,57 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { usd, formatPeriod } from "@/lib/payroll";
-import { type PayrollCleaner, type PayrollRunRow, cleanerName, STATUS_TONE } from "./shared";
+import { usd } from "@/lib/payroll";
+import { type PayrollCleaner, type PayoutLedgerRow, loadPayoutLedger, STATUS_TONE } from "./shared";
+
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—");
 
 export default function RunsTab({ cleaners }: { cleaners: PayrollCleaner[] }) {
-  const [runs, setRuns] = useState<PayrollRunRow[]>([]);
+  const [rows, setRows] = useState<PayoutLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("all");
   const [cleanerId, setCleanerId] = useState("all");
-  const cleanerById = useMemo(() => new Map(cleaners.map((c) => [c.id, c])), [cleaners]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // deno-lint-ignore no-explicit-any
-      let q = (supabase.from as any)("payroll_runs").select("*").order("pay_period_start", { ascending: false }).limit(500);
-      if (status !== "all") q = q.eq("status", status);
-      if (cleanerId !== "all") q = q.eq("cleaner_id", cleanerId);
-      const { data, error } = await q;
-      if (error) throw error;
-      setRuns((data || []) as unknown as PayrollRunRow[]);
+      setRows(await loadPayoutLedger());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load runs");
+      toast.error(err instanceof Error ? err.message : "Failed to load payouts");
     } finally {
       setLoading(false);
     }
-  }, [status, cleanerId]);
-
+  }, []);
   useEffect(() => { void load(); }, [load]);
+
+  const filtered = useMemo(() => rows.filter((r) => {
+    if (status !== "all" && r.status !== status) return false;
+    if (cleanerId !== "all" && r.cleanerId !== cleanerId) return false;
+    return true;
+  }), [rows, status, cleanerId]);
+
+  const statuses = useMemo(() => Array.from(new Set(rows.map((r) => r.status).filter(Boolean))) as string[], [rows]);
 
   return (
     <Card className="border-slate-200">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-base">Payroll runs ({runs.length})</CardTitle>
+          <CardTitle className="text-base">Payout history ({filtered.length})</CardTitle>
           <div className="flex items-center gap-2">
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {["all", "draft", "approved", "sent", "cleared", "failed", "hold"].map((s) => (
-                  <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-                ))}
+                <SelectItem value="all">All statuses</SelectItem>
+                {statuses.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={cleanerId} onValueChange={setCleanerId}>
               <SelectTrigger className="w-48 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All cleaners</SelectItem>
-                {cleaners.map((c) => <SelectItem key={c.id} value={c.id}>{cleanerName(c)}</SelectItem>)}
+                {cleaners.map((c) => <SelectItem key={c.id} value={c.id}>{`${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner"}</SelectItem>)}
               </SelectContent>
             </Select>
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
@@ -70,42 +70,36 @@ export default function RunsTab({ cleaners }: { cleaners: PayrollCleaner[] }) {
       <CardContent className="p-0">
         {loading ? (
           <div className="p-6 space-y-3"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
-        ) : runs.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-500">No runs match this filter.</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-10 text-center text-sm text-slate-500">No payouts yet.</div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Date</TableHead>
                   <TableHead>Cleaner</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Jobs</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Bonus</TableHead>
-                  <TableHead className="text-right">Deduction</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
-                  <TableHead>Method</TableHead>
+                  <TableHead>Booking</TableHead>
+                  <TableHead className="text-right">Job total</TableHead>
+                  <TableHead className="text-right">Payout</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Transfer</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {runs.map((r) => (
+                {filtered.map((r) => (
                   <TableRow key={r.id} className="hover:bg-slate-50/60">
-                    <TableCell className="text-sm font-medium">{cleanerName(cleanerById.get(r.cleaner_id))}</TableCell>
-                    <TableCell className="text-xs">{formatPeriod(r.pay_period_start)}</TableCell>
-                    <TableCell className="text-right text-sm">{r.total_jobs}</TableCell>
-                    <TableCell className="text-right text-sm">{usd(r.gross_cents)}</TableCell>
-                    <TableCell className="text-right text-xs text-emerald-700">{r.bonus_cents ? usd(r.bonus_cents) : "—"}</TableCell>
-                    <TableCell className="text-right text-xs text-rose-600">{r.deduction_cents ? usd(r.deduction_cents) : "—"}</TableCell>
-                    <TableCell className="text-right text-sm font-semibold text-violet-700">{usd(r.net_cents)}</TableCell>
-                    <TableCell className="text-xs">{r.payment_method || "—"}</TableCell>
+                    <TableCell className="text-xs">{fmtDate(r.processedAt || r.createdAt)}</TableCell>
+                    <TableCell className="text-sm font-medium">{r.cleanerName}</TableCell>
+                    <TableCell className="text-[11px] text-slate-500">{r.bookingNumber || "—"}</TableCell>
+                    <TableCell className="text-right text-sm">{usd(r.totalBookingCents || 0)}</TableCell>
+                    <TableCell className="text-right text-sm font-semibold text-violet-700">{usd(r.payoutCents || 0)}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn("text-[10px] capitalize", STATUS_TONE[r.status])}>{r.status}</Badge>
+                      <Badge variant="outline" className={cn("text-[10px] capitalize", STATUS_TONE[r.status || ""] || "bg-slate-100 text-slate-700 border-slate-200")}>
+                        {r.status || "—"}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-[10px] text-slate-400 max-w-[140px] truncate" title={r.stripe_transfer_id || ""}>
-                      {r.stripe_transfer_id || "—"}
-                    </TableCell>
+                    <TableCell className="text-[10px] text-slate-400 max-w-[150px] truncate" title={r.stripeTransferId || ""}>{r.stripeTransferId || "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
