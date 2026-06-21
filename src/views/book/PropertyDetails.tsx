@@ -447,27 +447,35 @@ export default function PropertyDetails() {
         }
       }
 
-      const { error } = await supabase
-        .from("bookings")
-        .update({
+      // Persist via a service-role edge function. The booking funnel runs as
+      // a guest (anon) and `bookings` RLS has no public UPDATE policy, so a
+      // direct client update silently writes 0 rows — which left the details
+      // unsaved and bounced the confirmation page back here in a loop.
+      const { data: saveRes, error } = await supabase.functions.invoke("save-property-details", {
+        body: {
+          bookingId: id,
           address: street,
           city,
           state,
-          zip_code: zipCode || bookingData.zipCode,
-          bedrooms: parseInt(bedrooms),
-          bathrooms: parseFloat(bathrooms),
-          dwelling_type: dwellingType,
-          flooring_type: flooringType || null,
+          zipCode: zipCode || bookingData.zipCode,
+          bedrooms,
+          bathrooms,
+          dwellingType,
+          flooringType: flooringType || undefined,
           pets,
-          access_notes: accessNotes || null,
+          accessNotes: accessNotes || undefined,
           // Stamp the offer-type column too so reports / GHL syncs can
           // distinguish combo bookings from standalone deep / standard.
-          ...(bookingMeta.serviceType ? { offer_type: bookingMeta.serviceType } : {}),
-          ...secondVisitFields,
-        })
-        .eq("id", id);
+          offerType: bookingMeta.serviceType || undefined,
+          secondVisitDate: secondVisitFields.second_visit_date,
+          secondVisitTimeSlot: secondVisitFields.second_visit_time_slot,
+          secondVisitStartTime: secondVisitFields.second_visit_start_time,
+          secondVisitEndTime: secondVisitFields.second_visit_end_time,
+        },
+      });
 
       if (error) throw error;
+      if ((saveRes as { error?: string })?.error) throw new Error((saveRes as { error: string }).error);
 
       // Mirror the freshly-saved fields into the BookingContext so the
       // confirmation page shows the right address immediately (instead

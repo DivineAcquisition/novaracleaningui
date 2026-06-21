@@ -155,8 +155,15 @@ export default function BookingSuccess() {
         // status === 'pending_details', which caused a redirect loop
         // when finalize-booking hadn't yet been called (cold start,
         // brief client/server race, etc.).
+        // A field is only "missing" when it's null / undefined / empty string.
+        // Do NOT use `!booking[field]` — that treats 0 bedrooms (studio) or
+        // 0 bathrooms as missing and bounces a fully-completed booking back
+        // to /book/details in a loop.
         const requiredFields = ['address', 'city', 'state', 'bedrooms', 'bathrooms', 'dwelling_type'];
-        const missingFields = requiredFields.filter(field => !booking[field]);
+        const missingFields = requiredFields.filter((field) => {
+          const v = booking[field];
+          return v === null || v === undefined || v === "";
+        });
 
         if (missingFields.length > 0) {
           logStep("Missing required fields - redirecting to property details", { missingFields, status: booking.status });
