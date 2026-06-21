@@ -58,7 +58,7 @@ interface SavedAddress {
 
 export default function MemberBooking() {
   const router = useRouter();
-  const { user, subscription } = useAuth();
+  const { user } = useAuth();
   const { credits, loading: creditsLoading, hasCredits } = useMembershipCredits();
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -118,15 +118,17 @@ export default function MemberBooking() {
   useEffect(() => {
     if (creditsLoading) return;
     if (!user) {
-      toast.error('Please sign in to access member booking');
+      toast.error('Please sign in to book');
       router.push('/auth?returnTo=/portal/book');
       return;
     }
-    if (!subscription?.subscribed) {
-      toast.error('You need an active membership to use credits');
-      router.push('/membership');
-    }
-  }, [creditsLoading, user, subscription, router]);
+    // No membership gate: any signed-in customer can book here. Members
+    // with credits redeem them (standard = free); everyone else pays for
+    // the clean. Previously this redirected non-subscribed users to
+    // /membership — which lives on try.* — so members were bounced to the
+    // public domain (often prematurely, before check-subscription even
+    // resolved while `subscription` was still null).
+  }, [creditsLoading, user, router]);
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId);
 

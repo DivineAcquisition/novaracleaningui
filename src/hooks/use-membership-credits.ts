@@ -13,13 +13,18 @@ export interface MembershipCredits {
 }
 
 export function useMembershipCredits() {
-  const { user, subscription } = useAuth();
+  const { user } = useAuth();
   const [credits, setCredits] = useState<MembershipCredits | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchCredits = async () => {
-      if (!user || !subscription?.subscribed || !subscription?.customer_id) {
+      // Look up credits by the signed-in user's email rather than gating on
+      // the async `subscription` check. The Stripe subscription probe can
+      // lag (or briefly report not-subscribed on first paint), which used
+      // to hide a member's credits and bounce them out of the portal.
+      // membership_credits is the source of truth and is keyed by email.
+      if (!user?.email) {
         setCredits(null);
         setLoading(false);
         return;
@@ -29,8 +34,10 @@ export function useMembershipCredits() {
         const { data, error } = await supabase
           .from('membership_credits')
           .select('*')
-          .eq('customer_id', subscription.customer_id)
-          .single();
+          .eq('email', user.email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
         if (error) {
           console.error('Error fetching credits:', error);
@@ -47,7 +54,7 @@ export function useMembershipCredits() {
     };
 
     fetchCredits();
-  }, [user, subscription]);
+  }, [user]);
 
   return { credits, loading, hasCredits: (credits?.credits_remaining || 0) > 0 };
 }
