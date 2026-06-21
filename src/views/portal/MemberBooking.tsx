@@ -5,7 +5,6 @@ import {
   RiBankCardLine,
   RiCalendarLine,
   RiCheckLine,
-  RiErrorWarningLine,
   RiHomeLine,
   RiLoader4Line,
   RiMapPinLine,
@@ -35,7 +34,7 @@ import { cn } from '@/lib/utils';
 import { CleanerSelector } from '@/components/portal/CleanerSelector';
 import { SchedulePicker } from '@/components/booking/SchedulePicker';
 import { AddressAutocomplete } from '@/components/booking/AddressAutocomplete';
-import { HOME_SIZE_RANGES } from '@/lib/pricing-system';
+import { HOME_SIZE_RANGES, calculatePrice } from '@/lib/pricing-system';
 import { SEO } from "@/components/SEO";
 
 const STEPS = [
@@ -185,12 +184,8 @@ export default function MemberBooking() {
   };
 
   const handleSubmitBooking = async () => {
-    if (!user?.email || !credits) {
+    if (!user?.email) {
       toast.error('Please log in to continue');
-      return;
-    }
-    if (!hasCredits) {
-      toast.error('No credits available');
       return;
     }
 
@@ -251,7 +246,19 @@ export default function MemberBooking() {
       const dispatchNotes = selectedCleanerId
         ? `REQUESTED CLEANER: ${selectedCleanerName} (ID: ${selectedCleanerId})`
         : null;
-      const upsellAmount = serviceType === 'deep' ? DEEP_CLEAN_UPSELL_CENTS : 0;
+
+      // Money rules (all re-derived authoritatively in portal-book-checkout):
+      //   • credit + standard → $0, confirmed instantly
+      //   • credit + deep     → deep-clean surcharge, paid via hosted Checkout
+      //   • no credit (extra clean) → full v4 service price, paid up front
+      const usingCredit = hasCredits;
+      const fullPriceCents = Math.round(
+        calculatePrice(addressData.sqft_tier, serviceType).total * 100,
+      );
+      const chargeCents = usingCredit
+        ? (serviceType === 'deep' ? DEEP_CLEAN_UPSELL_CENTS : 0)
+        : fullPriceCents;
+      const needsPayment = chargeCents > 0;
 
       const bookingData = {
         customer_id: customer.id,
@@ -270,12 +277,12 @@ export default function MemberBooking() {
         time_slot: selectedTimeSlot,
         arrival_window: selectedTimeSlot,
         service_type: serviceType,
-        membership_plan: credits.membership_plan,
-        uses_credit: true,
-        base_price_cents: upsellAmount,
-        deposit_cents: upsellAmount,
-        total_estimate_cents: upsellAmount,
-        status: upsellAmount > 0 ? 'pending_payment' : 'confirmed',
+        membership_plan: credits?.membership_plan ?? null,
+        uses_credit: usingCredit,
+        base_price_cents: chargeCents,
+        deposit_cents: chargeCents,
+        total_estimate_cents: chargeCents,
+        status: needsPayment ? 'pending_payment' : 'confirmed',
         access_notes: specialInstructions || null,
         dispatch_notes: dispatchNotes,
         booking_channel: 'portal',
@@ -288,15 +295,17 @@ export default function MemberBooking() {
         .single();
       if (bookingError) throw bookingError;
 
-      const { error: creditError } = await supabase
-        .from('membership_credits')
-        .update({
-          credits_remaining: credits.credits_remaining - 1,
-          credits_used: (credits.credits_used || 0) + 1,
-        })
-        .eq('id', (credits as any).id);
-
-      if (creditError) console.error('Error updating credits:', creditError);
+      // Spend a credit only when one is actually being redeemed.
+      if (usingCredit && credits) {
+        const { error: creditError } = await supabase
+          .from('membership_credits')
+          .update({
+            credits_remaining: credits.credits_remaining - 1,
+            credits_used: (credits.credits_used || 0) + 1,
+          })
+          .eq('id', (credits as any).id);
+        if (creditError) console.error('Error updating credits:', creditError);
+      }
 
       if (startTime && endTime) {
         await supabase.rpc('reserve_time_slot', {
@@ -306,10 +315,23 @@ export default function MemberBooking() {
         });
       }
 
-      // ── GHL sync: every portal booking pushes a fresh contact +
-      //    opportunity into GoHighLevel so the team sees the new job
-      //    in the pipeline immediately. Best-effort — never blocks
-      //    the confirmation flow.
+      // ── Paid bookings (deep-clean upsell or no-credit extra clean):
+      //    collect the card via a Stripe-hosted Checkout Session and
+      //    finalize on return at /portal/book/success. The portal never
+      //    embeds card fields — that flow lives only in the public funnel.
+      if (needsPayment) {
+        const { data: pay, error: payErr } = await supabase.functions.invoke('portal-book-checkout', {
+          body: { action: 'create', bookingId: booking.id },
+        });
+        if (payErr || (pay as any)?.error || !(pay as any)?.url) {
+          throw new Error((pay as any)?.error || payErr?.message || 'Could not start secure checkout');
+        }
+        toast.success('Redirecting to secure checkout…');
+        window.location.href = (pay as any).url as string;
+        return;
+      }
+
+      // ── Free credit booking — confirmed instantly. Mirror to GHL + email.
       try {
         await supabase.functions.invoke('sync-to-ghl', {
           body: {
@@ -330,14 +352,14 @@ export default function MemberBooking() {
               serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
               timeSlot: selectedTimeSlot,
               homeSize: addressData.sqft_tier,
-              membershipPlan: credits.membership_plan,
+              membershipPlan: credits?.membership_plan,
               frequency: 'recurring',
-              quotedPriceCents: upsellAmount,
-              totalCents: upsellAmount,
-              depositPaid: upsellAmount === 0,
+              quotedPriceCents: 0,
+              totalCents: 0,
+              depositPaid: true,
               customerSource: 'Member Portal',
               market: bookingData.state,
-              tags: ['portal-booking', `member-${credits.membership_plan}`],
+              tags: ['portal-booking', `member-${credits?.membership_plan ?? 'none'}`],
             },
           },
         });
@@ -345,19 +367,7 @@ export default function MemberBooking() {
         console.error('GHL sync failed (non-blocking):', ghlErr);
       }
 
-      if (serviceType === 'deep') {
-        toast.success('Booking created! Redirecting to payment...');
-        router.push(`/book/checkout?booking_id=${booking.id}&upsell=deep`);
-        return;
-      }
-
       try {
-        const addr = isNewAddress
-          ? `${addressForm.street}${addressForm.unit ? ` ${addressForm.unit}` : ''}`
-          : `${selectedAddress?.street}${selectedAddress?.unit ? ` ${selectedAddress?.unit}` : ''}`;
-        const addrCity = isNewAddress ? addressForm.city : selectedAddress?.city || '';
-        const addrState = isNewAddress ? addressForm.state : selectedAddress?.state || '';
-        const addrZip = isNewAddress ? addressForm.zip : selectedAddress?.zip || '';
         await supabase.functions.invoke('send-booking-email', {
           body: {
             type: 'confirmation',
@@ -370,13 +380,13 @@ export default function MemberBooking() {
               timeSlot: selectedTimeSlot,
               serviceType,
               homeSize: addressData.sqft_tier,
-              address: addr,
-              city: addrCity,
-              state: addrState,
-              zipCode: addrZip,
-              totalAmount: upsellAmount,
+              address: bookingData.address,
+              city: bookingData.city,
+              state: bookingData.state,
+              zipCode: bookingData.zip_code,
+              totalAmount: 0,
               useCredit: true,
-              membershipPlan: credits.membership_plan,
+              membershipPlan: credits?.membership_plan,
             },
           },
         });
@@ -407,38 +417,19 @@ export default function MemberBooking() {
     );
   }
 
-  if (!hasCredits) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="container max-w-2xl mx-auto px-4 py-16">
-          <Card className="border-amber-200 dark:border-amber-800 shadow-lg animate-scale-in">
-            <CardContent className="py-12 text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                <RiErrorWarningLine className="w-8 h-8 text-amber-600 dark:text-amber-400" />
-              </div>
-              <h2 className="text-2xl font-bold">No Credits Available</h2>
-              <p className="text-muted-foreground max-w-md mx-auto text-sm">
-                You've used all your cleaning credits for this period. Credits refresh on{' '}
-                <span className="font-semibold text-foreground">
-                  {credits?.current_period_end
-                    ? format(new Date(credits.current_period_end), 'MMMM d, yyyy')
-                    : 'your next billing date'}
-                </span>.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-                <Button onClick={() => router.push('/account')} variant="outline" className="rounded-xl">
-                  <RiArrowLeftLine className="w-4 h-4 mr-2" /> Back to Account
-                </Button>
-                <Button onClick={() => router.push('/book/zip')} className="bg-gradient-primary rounded-xl shadow-md">
-                  Book Without Credit
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  // When the member has no credits left this cycle we don't bounce them to
+  // the public funnel anymore — they can book an extra clean right here and
+  // pay the full price. With credits, standard cleans are free and a deep
+  // clean adds the surcharge.
+  const payMode = !hasCredits;
+  const displaySqftTier = selectedAddress?.sqft_tier || addressForm.sqft_tier || '';
+  const fullPriceCents = displaySqftTier
+    ? Math.round(calculatePrice(displaySqftTier, serviceType).total * 100)
+    : 0;
+  const chargeCents = payMode
+    ? fullPriceCents
+    : (serviceType === 'deep' ? DEEP_CLEAN_UPSELL_CENTS : 0);
+  const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
   const progressPercent = ((currentStep + 1) / STEPS.length) * 100;
 
@@ -455,7 +446,11 @@ export default function MemberBooking() {
             </Button>
             <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg px-3 py-1">
               <RiTicketLine className="w-3.5 h-3.5 mr-1.5" />
-              <span className="font-semibold text-xs">{credits?.credits_remaining} Credit{credits?.credits_remaining !== 1 ? 's' : ''}</span>
+              <span className="font-semibold text-xs">
+                {payMode
+                  ? 'Extra clean'
+                  : `${credits?.credits_remaining} Credit${credits?.credits_remaining !== 1 ? 's' : ''}`}
+              </span>
             </Badge>
           </div>
           {/* Progress bar */}
@@ -859,38 +854,59 @@ export default function MemberBooking() {
 
                   <Separator />
 
-                  {/* Credit Usage */}
+                  {/* Pricing */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                          <RiBankCardLine className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-400">Using 1 Membership Credit</p>
-                          <p className="text-xs text-muted-foreground">
-                            {credits?.credits_remaining! - 1} credit{credits?.credits_remaining! - 1 !== 1 ? 's' : ''} remaining
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                        {serviceType === 'standard' ? '$0' : 'Applied'}
-                      </p>
-                    </div>
-
-                    {serviceType === 'deep' && (
+                    {payMode ? (
                       <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 p-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <RiStarLine className="w-4 h-4 text-primary" />
+                            <RiBankCardLine className="w-4 h-4 text-primary" />
                           </div>
                           <div>
-                            <p className="font-semibold text-sm text-primary">Deep Clean Upgrade</p>
-                            <p className="text-xs text-muted-foreground">Due now to confirm</p>
+                            <p className="font-semibold text-sm text-primary">
+                              {serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean'} — extra booking
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              No credits left this cycle &middot; paid in full now
+                            </p>
                           </div>
                         </div>
-                        <p className="text-2xl font-bold text-primary">${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)}</p>
+                        <p className="text-2xl font-bold text-primary">{usd(chargeCents)}</p>
                       </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                              <RiBankCardLine className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-400">Using 1 Membership Credit</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(credits?.credits_remaining ?? 1) - 1} credit{(credits?.credits_remaining ?? 1) - 1 !== 1 ? 's' : ''} remaining
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                            {serviceType === 'standard' ? '$0' : 'Applied'}
+                          </p>
+                        </div>
+
+                        {serviceType === 'deep' && (
+                          <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <RiStarLine className="w-4 h-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-primary">Deep Clean Upgrade</p>
+                                <p className="text-xs text-muted-foreground">Due now to confirm</p>
+                              </div>
+                            </div>
+                            <p className="text-2xl font-bold text-primary">${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)}</p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </CardContent>
@@ -915,13 +931,13 @@ export default function MemberBooking() {
                 disabled={isSubmitting}
                 className={cn(
                   "rounded-xl shadow-md",
-                  serviceType === 'deep' ? 'bg-gradient-primary' : 'bg-emerald-600 hover:bg-emerald-700'
+                  chargeCents > 0 ? 'bg-gradient-primary' : 'bg-emerald-600 hover:bg-emerald-700'
                 )}
               >
                 {isSubmitting ? (
-                  <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> {serviceType === 'deep' ? 'Processing...' : 'Booking...'}</>
-                ) : serviceType === 'deep' ? (
-                  <><RiBankCardLine className="w-4 h-4 mr-2" /> Continue to Payment (${(DEEP_CLEAN_UPSELL_CENTS / 100).toFixed(0)})</>
+                  <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> {chargeCents > 0 ? 'Processing...' : 'Booking...'}</>
+                ) : chargeCents > 0 ? (
+                  <><RiBankCardLine className="w-4 h-4 mr-2" /> Continue to Payment ({usd(chargeCents)})</>
                 ) : (
                   <><RiCheckLine className="w-4 h-4 mr-2" /> Confirm Booking</>
                 )}
