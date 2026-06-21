@@ -48,6 +48,7 @@ interface OfferRow {
   response_token: string | null;
   assigned_at: string | null;
   jobs: {
+    id: string;
     service_type: string;
     address: string;
     city: string;
@@ -84,12 +85,30 @@ export default function JobOffersList() {
       const { data } = await supabase
         .from("job_assignments")
         .select(
-          "id, role, status, distance_miles, estimated_pay_cents, pay_percentage_snapshot, response_token, assigned_at, jobs (service_type, address, city, state, start_datetime, duration_est_hours, sq_ft)",
+          "id, role, status, distance_miles, estimated_pay_cents, pay_percentage_snapshot, response_token, assigned_at, jobs (id, service_type, address, city, state, start_datetime, duration_est_hours, sq_ft)",
         )
         .eq("cleaner_id", auth.cleaner.id)
         .ilike("status", "offered")
         .order("assigned_at", { ascending: false });
-      setOffers((data || []) as unknown as OfferRow[]);
+      const rows = (data || []) as unknown as OfferRow[];
+
+      // Deep link from a Discord/SMS "Open & claim this job" link
+      // (/cleaner/job-offers?job=<job_id>): jump straight to THIS cleaner's
+      // tokenized accept/decline page for that job, resolving their personal
+      // response_token client-side.
+      const focusJob =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("job")
+          : null;
+      if (focusJob) {
+        const match = rows.find((o) => o.jobs?.id === focusJob && o.response_token);
+        if (match?.response_token) {
+          router.replace(`/cleaner/job-offer/${match.response_token}`);
+          return;
+        }
+      }
+
+      setOffers(rows);
     } finally {
       setLoading(false);
     }
