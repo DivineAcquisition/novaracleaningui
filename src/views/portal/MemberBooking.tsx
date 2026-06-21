@@ -317,23 +317,34 @@ export default function MemberBooking() {
         });
       }
 
-      // ── Paid bookings (deep-clean upsell or no-credit extra clean):
-      //    collect the card via a Stripe-hosted Checkout Session and
-      //    finalize on return at /portal/book/success. The portal never
-      //    embeds card fields — that flow lives only in the public funnel.
+      // ── Payment (deep-clean upsell or no-credit extra clean).
+      //    portal-book-checkout recognizes the customer by email:
+      //      • existing customer with a card on file → charged instantly
+      //        off-session (paid:true, instant:true), no redirect
+      //      • new customer / no saved card → returns a hosted Checkout URL
+      //        that stores the card for future one-tap bookings
+      let checkoutUrl: string | null = null;
+      let paidInstantly = false;
       if (needsPayment) {
         const { data: pay, error: payErr } = await supabase.functions.invoke('portal-book-checkout', {
           body: { action: 'create', bookingId: booking.id },
         });
-        if (payErr || (pay as any)?.error || !(pay as any)?.url) {
+        if (payErr || (pay as any)?.error) {
           throw new Error((pay as any)?.error || payErr?.message || 'Could not start secure checkout');
         }
-        toast.success('Redirecting to secure checkout…');
-        window.location.href = (pay as any).url as string;
-        return;
+        if ((pay as any)?.instant && (pay as any)?.paid) {
+          paidInstantly = true;
+        } else if ((pay as any)?.url) {
+          checkoutUrl = (pay as any).url as string;
+        } else {
+          throw new Error('Could not start secure checkout');
+        }
       }
 
-      // ── Free credit booking — confirmed instantly. Mirror to GHL + email.
+      const isConfirmed = !needsPayment || paidInstantly;
+
+      // ── GHL sync for every portal booking, mirroring the public funnel so
+      //    the team sees the contact + opportunity in the pipeline.
       try {
         await supabase.functions.invoke('sync-to-ghl', {
           body: {
@@ -355,13 +366,17 @@ export default function MemberBooking() {
               timeSlot: selectedTimeSlot,
               homeSize: addressData.sqft_tier,
               membershipPlan: credits?.membership_plan,
-              frequency: 'recurring',
-              quotedPriceCents: 0,
-              totalCents: 0,
-              depositPaid: true,
+              frequency: usingCredit ? 'recurring' : 'one-time',
+              quotedPriceCents: chargeCents,
+              totalCents: chargeCents,
+              depositPaid: isConfirmed,
+              usesCredit: usingCredit,
               customerSource: 'Member Portal',
               market: bookingData.state,
-              tags: ['portal-booking', `member-${credits?.membership_plan ?? 'none'}`],
+              tags: [
+                'portal-booking',
+                usingCredit ? `member-${credits?.membership_plan ?? 'none'}` : 'paid-extra-clean',
+              ],
             },
           },
         });
@@ -369,34 +384,49 @@ export default function MemberBooking() {
         console.error('GHL sync failed (non-blocking):', ghlErr);
       }
 
-      try {
-        await supabase.functions.invoke('send-booking-email', {
-          body: {
-            type: 'confirmation',
-            email: user.email,
-            data: {
-              firstName: customer.first_name,
-              lastName: customer.last_name,
-              bookingId: booking.id,
-              serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
-              timeSlot: selectedTimeSlot,
-              serviceType,
-              homeSize: addressData.sqft_tier,
-              address: bookingData.address,
-              city: bookingData.city,
-              state: bookingData.state,
-              zipCode: bookingData.zip_code,
-              totalAmount: 0,
-              useCredit: true,
-              membershipPlan: credits?.membership_plan,
+      // Confirmation email only once the booking is actually confirmed
+      // (free credit clean or an instant saved-card charge). Hosted-checkout
+      // bookings get their confirmation after payment, via the success page.
+      if (isConfirmed) {
+        try {
+          await supabase.functions.invoke('send-booking-email', {
+            body: {
+              type: 'confirmation',
+              email: user.email,
+              data: {
+                firstName: customer.first_name,
+                lastName: customer.last_name,
+                bookingId: booking.id,
+                serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
+                timeSlot: selectedTimeSlot,
+                serviceType,
+                homeSize: addressData.sqft_tier,
+                address: bookingData.address,
+                city: bookingData.city,
+                state: bookingData.state,
+                zipCode: bookingData.zip_code,
+                totalAmount: chargeCents,
+                useCredit: usingCredit,
+                membershipPlan: credits?.membership_plan,
+              },
             },
-          },
-        });
-      } catch (emailError) {
-        console.error('Email send failed:', emailError);
+          });
+        } catch (emailError) {
+          console.error('Email send failed:', emailError);
+        }
       }
 
-      toast.success('Booking confirmed! Check your email for details.');
+      if (checkoutUrl) {
+        toast.success('Redirecting to secure checkout…');
+        window.location.href = checkoutUrl;
+        return;
+      }
+
+      toast.success(
+        paidInstantly
+          ? 'Booking confirmed — your card on file was charged.'
+          : 'Booking confirmed! Check your email for details.',
+      );
       router.push('/account');
     } catch (error: any) {
       console.error('Booking error:', error);

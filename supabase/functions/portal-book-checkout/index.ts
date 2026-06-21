@@ -152,14 +152,70 @@ serve(async (req) => {
       return json({ error: "Nothing to charge for this booking" }, 400);
     }
 
-    // Reuse an existing Stripe customer when we can (keeps cards on file).
+    // Recognize the customer by email and find a saved card.
     let customerId: string | undefined;
+    let savedPaymentMethod: string | undefined;
     const customers = await stripe.customers.list({ email, limit: 1 });
-    if (customers.data.length > 0) customerId = customers.data[0].id;
+    if (customers.data.length > 0) {
+      const cust = customers.data[0];
+      customerId = cust.id;
+      const defaultPm =
+        (typeof cust.invoice_settings?.default_payment_method === "string"
+          ? cust.invoice_settings.default_payment_method
+          : undefined) ||
+        (typeof cust.default_source === "string" ? cust.default_source : undefined);
+      if (defaultPm) {
+        savedPaymentMethod = defaultPm;
+      } else {
+        const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
+        if (pms.data.length > 0) savedPaymentMethod = pms.data[0].id;
+      }
+    }
 
+    const piMetadata = {
+      booking_id: booking.id,
+      kind: "portal_booking",
+      uses_credit: String(usesCredit),
+    };
+
+    // ── Existing customer with a card on file → charge instantly
+    //    off-session. No card re-entry, no redirect. Falls back to hosted
+    //    Checkout if the card needs authentication (3DS) or is declined.
+    if (customerId && savedPaymentMethod) {
+      try {
+        const pi = await stripe.paymentIntents.create({
+          amount: amountCents,
+          currency: "usd",
+          customer: customerId,
+          payment_method: savedPaymentMethod,
+          off_session: true,
+          confirm: true,
+          description: label,
+          metadata: piMetadata,
+        });
+        if (pi.status === "succeeded") {
+          await supabase
+            .from("bookings")
+            .update({ status: "confirmed", payment_intent_id: pi.id })
+            .eq("id", booking.id);
+          logStep("Charged saved card off-session", { bookingId: booking.id, amountCents });
+          return json({ paid: true, instant: true, bookingId: booking.id, amountCents });
+        }
+        logStep("Saved-card PI not succeeded, falling back to Checkout", { status: pi.status });
+      } catch (e) {
+        logStep("Off-session charge failed, falling back to Checkout", {
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    // ── New customer (or no saved card / off-session declined) → hosted
+    //    Stripe Checkout Session that stores the card for next time, so the
+    //    customer never has to re-enter it on future in-app bookings.
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : email,
+      customer_creation: customerId ? undefined : "always",
       mode: "payment",
       line_items: [
         {
@@ -174,11 +230,7 @@ serve(async (req) => {
       success_url: `${origin}/portal/book/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/portal/book`,
       payment_intent_data: { setup_future_usage: "off_session" },
-      metadata: {
-        booking_id: booking.id,
-        kind: "portal_booking",
-        uses_credit: String(usesCredit),
-      },
+      metadata: piMetadata,
     });
 
     await supabase

@@ -87,7 +87,17 @@ serve(async (req) => {
         // so the webhook converts it to a membership clean instead of
         // creating a duplicate.
         existingBookingId,
+        // First-clean deep-clean handling. Memberships historically forced
+        // a mandatory +$75 deep clean on month one. We now ask the customer
+        // whether their home has been professionally deep cleaned recently
+        // and let them decline. `includeDeepClean` defaults to true for any
+        // caller that doesn't send it (backwards compatible). When declined
+        // we record it so the team/cleaner knows a surge may apply if the
+        // home turns out to need a deep clean on arrival.
+        includeDeepClean,
+        deepCleanedBefore,
       } = body;
+      const wantsDeepClean = includeDeepClean !== false;
       
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
@@ -170,19 +180,25 @@ serve(async (req) => {
           },
           quantity: 1,
         },
-        // One-time $75 deep clean surcharge for first month
-        {
+      ];
+
+      // Optional one-time $75 first-clean deep clean. Added only when the
+      // customer opted in (or didn't answer — legacy default). When they
+      // decline we skip the charge and tag the membership so dispatch knows
+      // a surge charge may apply if the cleaner finds a deep clean is needed.
+      if (wantsDeepClean) {
+        lineItems.push({
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'First Clean Deep Clean Surcharge',
-              description: 'One-time mandatory deep clean for new members (+$75)',
+              name: 'First Clean Deep Clean',
+              description: 'One-time deep clean to reset your home for membership (+$75)',
             },
             unit_amount: 7500,
           },
           quantity: 1,
-        },
-      ];
+        });
+      }
 
       // Push the schedule + customer hints into both the Checkout
       // Session metadata AND the resulting Subscription metadata. The
@@ -200,6 +216,8 @@ serve(async (req) => {
         first_service_date: firstServiceDate ? String(firstServiceDate) : '',
         first_time_slot: firstTimeSlot ? String(firstTimeSlot) : '',
         existing_booking_id: existingBookingId ? String(existingBookingId) : '',
+        deep_clean_included: wantsDeepClean ? 'true' : 'false',
+        deep_cleaned_before: deepCleanedBefore ? String(deepCleanedBefore) : '',
         first_name: bodyFirstName ? String(bodyFirstName) : '',
         last_name: bodyLastName ? String(bodyLastName) : '',
         phone: bodyPhone ? String(bodyPhone) : '',
