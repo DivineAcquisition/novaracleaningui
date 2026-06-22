@@ -1239,9 +1239,9 @@ export default function VaBooking() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="one-time">One-time</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="weekly">Weekly · Membership</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly · Membership</SelectItem>
+                    <SelectItem value="monthly">Monthly · Membership</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>

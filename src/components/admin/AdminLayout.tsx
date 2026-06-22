@@ -35,6 +35,7 @@ import {
   RiChat3Line,
   RiTeamLine,
   RiRocket2Line,
+  RiBuilding2Line,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -81,6 +82,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/csr",
     icon: RiFileEditLine,
     description: "VA booking submission",
+  },
+  {
+    title: "Commercial",
+    url: "/admin/commercial",
+    icon: RiBuilding2Line,
+    description: "Office · commercial · partnerships",
   },
   {
     title: "Customers",
