@@ -98,6 +98,7 @@ import { cn } from "@/lib/utils";
 import {
   ADD_ONS as ADD_ON_DEFS,
   HOME_SIZE_RANGES,
+  MEMBERSHIP_PRICES,
   SERVICE_TIER_PRICING,
   calculatePrice,
   getServicePrice,
@@ -143,6 +144,12 @@ const SERVICE_TYPE_OPTIONS: {
     multiplier: SERVICE_TIER_PRICING.combo.multiplier,
   },
 ];
+
+const MEMBERSHIP_PLAN_RAIL_LABEL: Record<string, string> = {
+  weekly: "Glow Weekly",
+  biweekly: "Glow Bi-Weekly",
+  monthly: "Glow Monthly",
+};
 
 const ADD_ON_LIST = (Object.keys(ADD_ON_DEFS) as Array<keyof typeof ADD_ON_DEFS>).map(
   (id) => ({
@@ -425,6 +432,12 @@ export default function VaBooking() {
   }
 
   // Live pricing
+  //
+  // For a recurring frequency this is a MEMBERSHIP, so the headline "total"
+  // is the monthly subscription rate (from MEMBERSHIP_PRICES, varies by home
+  // size) — NOT the one-time clean total. An override total replaces that
+  // monthly rate, and the deposit (when a deposit invoice mode is selected)
+  // is a one-time first-clean charge collected on the same Stripe signup.
   const pricing = useMemo(() => {
     const calc = calculatePrice(
       homeSizeId,
@@ -438,7 +451,17 @@ export default function VaBooking() {
     const serviceCents = Math.round((calc.basePrice + calc.serviceAddition) * 100);
     const addOnsCents = Math.round(calc.addOnsTotal * 100);
     const subtotalCents = Math.round(calc.subtotal * 100);
-    const computedCents = Math.round(calc.total * 100);
+    const oneTimeComputedCents = Math.round(calc.total * 100);
+
+    const isRecurring = frequency !== "one-time";
+    const membershipPlan = frequency as "weekly" | "biweekly" | "monthly";
+    const membershipMonthlyCents = isRecurring
+      ? Math.round((MEMBERSHIP_PRICES[homeSizeId]?.[membershipPlan] ?? 0) * 100)
+      : 0;
+
+    // Baseline the override compares against: the membership monthly rate
+    // for recurring, otherwise the one-time clean total.
+    const computedCents = isRecurring ? membershipMonthlyCents : oneTimeComputedCents;
 
     const overrideCents = overrideTotal.trim()
       ? Math.round(parseFloat(overrideTotal) * 100)
@@ -464,8 +487,10 @@ export default function VaBooking() {
       totalCents,
       depositCents,
       remainingCents,
+      isRecurring,
+      membershipMonthlyCents,
     };
-  }, [homeSizeId, serviceType, addOns, overrideTotal, depositPercent, invoiceMode]);
+  }, [homeSizeId, serviceType, addOns, overrideTotal, depositPercent, invoiceMode, frequency]);
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -517,6 +542,28 @@ export default function VaBooking() {
       const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
       const preferredDayOfWeek = selectedDate ? days[selectedDate.getDay()] : undefined;
 
+      // Admin price override + deposit posture. The override replaces the
+      // monthly recurring membership rate in the Stripe subscription; the
+      // deposit (when a deposit invoice mode is selected) is added as a
+      // one-time first-clean charge on the same hosted Checkout so it's
+      // collected during the membership signup. Both were previously
+      // dropped on the recurring path, so neither reached Stripe.
+      const overrideCents = overrideTotal.trim()
+        ? Math.round(parseFloat(overrideTotal) * 100)
+        : null;
+      const wantsDeposit =
+        invoiceMode === "deposit_plus_remaining" ||
+        invoiceMode === "deposit_plus_preauth";
+      const priceOverride: { total?: number; deposit?: number } = {};
+      if (overrideCents !== null && overrideCents >= 0) {
+        priceOverride.total = overrideCents;
+      }
+      if (wantsDeposit && pricing.depositCents > 0) {
+        priceOverride.deposit = pricing.depositCents;
+      }
+      const depositPercentFraction =
+        Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
+
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
           mode: "subscription",
@@ -536,6 +583,11 @@ export default function VaBooking() {
           firstTimeSlot: selectedTime || undefined,
           includeDeepClean: deepClean.includeDeepClean,
           deepCleanedBefore: deepClean.deepCleanedBefore,
+          priceOverride: Object.keys(priceOverride).length ? priceOverride : undefined,
+          invoiceMode,
+          depositPercent: depositPercentFraction,
+          csrName: csrName.trim() || undefined,
+          promoCode: promoCode.trim().toLowerCase() || undefined,
         },
       });
       if (error) throw error;
@@ -547,7 +599,9 @@ export default function VaBooking() {
         url: data.url,
         sessionId: data.sessionId,
         membershipPlan,
-        monthlyEstimateCents: pricing.serviceCents,
+        monthlyEstimateCents: pricing.totalCents,
+        depositCents: priceOverride.deposit ?? 0,
+        overrideApplied: priceOverride.total != null,
       });
       toast.success("Subscription link ready — send it to the customer to start their membership.");
     } catch (err) {
@@ -742,7 +796,25 @@ export default function VaBooking() {
           </CardHeader>
           <CardContent className="space-y-5 pb-8">
             <div className="rounded-xl bg-slate-50 p-4 space-y-3 text-sm border border-slate-100">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                    Monthly {result.overrideApplied ? "(custom)" : ""}
+                  </p>
+                  <p className="text-sm font-bold text-slate-900 tabular-nums">
+                    {fmtMoney(result.monthlyEstimateCents || 0)}/mo
+                  </p>
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                    Deposit at signup
+                  </p>
+                  <p className="text-sm font-bold text-slate-900 tabular-nums">
+                    {result.depositCents > 0 ? fmtMoney(result.depositCents) : "—"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 pt-1">
                 Subscription checkout link
               </p>
               <div className="flex items-center gap-2">
@@ -768,11 +840,26 @@ export default function VaBooking() {
               </div>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              We don't charge anything here — the customer enters their card on
-              Stripe's hosted page. Once subscribed, Novara provisions their
-              monthly credits and books the first clean on{" "}
-              {selectedDate ? format(selectedDate, "MMM d, yyyy") : "their preferred day"}
-              {selectedTime ? ` (${selectedTime})` : ""}.
+              {result.depositCents > 0 ? (
+                <>
+                  The customer enters their card on Stripe's hosted page. Their
+                  first invoice charges the{" "}
+                  <strong>{fmtMoney(result.depositCents)} first-clean deposit</strong>
+                  {" "}plus the {fmtMoney(result.monthlyEstimateCents || 0)} monthly
+                  membership. Once subscribed, Novara provisions their monthly
+                  credits and books the first clean on{" "}
+                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "their preferred day"}
+                  {selectedTime ? ` (${selectedTime})` : ""}.
+                </>
+              ) : (
+                <>
+                  We don't charge anything here — the customer enters their card
+                  on Stripe's hosted page. Once subscribed, Novara provisions
+                  their monthly credits and books the first clean on{" "}
+                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "their preferred day"}
+                  {selectedTime ? ` (${selectedTime})` : ""}.
+                </>
+              )}
             </p>
             <div className="flex gap-3 pt-2">
               <Button
@@ -1467,19 +1554,15 @@ export default function VaBooking() {
               </RadioGroup>
             </div>
 
-            {(invoiceMode === "deposit_plus_remaining" ||
-              invoiceMode === "deposit_plus_preauth") && (
+            {frequency !== "one-time" ? (
+              // Recurring membership: the override sets the MONTHLY
+              // subscription price (always available), and a deposit invoice
+              // mode adds a one-time first-clean deposit to the first invoice.
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Deposit % of total">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={depositPercent}
-                    onChange={(e) => setDepositPercent(e.target.value)}
-                  />
-                </Field>
-                <Field label="Override total ($)">
+                <Field
+                  label="Override monthly ($)"
+                  hint="Replaces the catalog membership rate on the Stripe subscription."
+                >
                   <Input
                     type="number"
                     min={0}
@@ -1489,17 +1572,63 @@ export default function VaBooking() {
                     placeholder={(pricing.computedCents / 100).toFixed(2)}
                   />
                 </Field>
-                {invoiceMode === "deposit_plus_preauth" && (
-                  <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
-                    A hosted Stripe Checkout link will be sent to the customer
-                    that collects the deposit AND saves their card off-session.
-                    A pre-auth hold for the remaining balance is placed a few
-                    days before service (existing prepare-completion-hold
-                    cron) and captured automatically when admin marks the
-                    booking complete.
-                  </div>
+                {(invoiceMode === "deposit_plus_remaining" ||
+                  invoiceMode === "deposit_plus_preauth") && (
+                  <Field
+                    label="Deposit % of monthly"
+                    hint="One-time first-clean deposit charged at signup."
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={depositPercent}
+                      onChange={(e) => setDepositPercent(e.target.value)}
+                    />
+                  </Field>
                 )}
+                <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
+                  {invoiceMode === "deposit_plus_remaining" ||
+                  invoiceMode === "deposit_plus_preauth"
+                    ? "The override sets the monthly subscription price on Stripe, and the deposit is added as a one-time charge on the customer's first invoice."
+                    : "The override sets the monthly subscription price on Stripe. Pick a deposit invoice mode above to also collect a one-time first-clean deposit at signup."}
+                </div>
               </div>
+            ) : (
+              (invoiceMode === "deposit_plus_remaining" ||
+                invoiceMode === "deposit_plus_preauth") && (
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Deposit % of total">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={depositPercent}
+                      onChange={(e) => setDepositPercent(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Override total ($)">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={overrideTotal}
+                      onChange={(e) => setOverrideTotal(e.target.value)}
+                      placeholder={(pricing.computedCents / 100).toFixed(2)}
+                    />
+                  </Field>
+                  {invoiceMode === "deposit_plus_preauth" && (
+                    <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
+                      A hosted Stripe Checkout link will be sent to the customer
+                      that collects the deposit AND saves their card off-session.
+                      A pre-auth hold for the remaining balance is placed a few
+                      days before service (existing prepare-completion-hold
+                      cron) and captured automatically when admin marks the
+                      booking complete.
+                    </div>
+                  )}
+                </div>
+              )
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1572,11 +1701,18 @@ export default function VaBooking() {
                 </p>
               </div>
               <CardContent className="space-y-2.5 pt-5 pb-5">
-                <SummaryRow
-                  label={`${SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)?.label} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
-                  value={fmtMoney(pricing.serviceCents)}
-                />
-                {pricing.addOnsCents > 0 && (
+                {pricing.isRecurring ? (
+                  <SummaryRow
+                    label={`${MEMBERSHIP_PLAN_RAIL_LABEL[frequency] || "Membership"} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
+                    value={`${fmtMoney(pricing.membershipMonthlyCents)}/mo`}
+                  />
+                ) : (
+                  <SummaryRow
+                    label={`${SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)?.label} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
+                    value={fmtMoney(pricing.serviceCents)}
+                  />
+                )}
+                {!pricing.isRecurring && pricing.addOnsCents > 0 && (
                   <SummaryRow
                     label={`Add-ons (${addOns.length})`}
                     value={`+${fmtMoney(pricing.addOnsCents)}`}
@@ -1585,30 +1721,48 @@ export default function VaBooking() {
                 <Separator className="my-1.5" />
                 <div className="flex items-center justify-between">
                   <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                    Total
+                    {pricing.isRecurring ? "Monthly" : "Total"}
                   </span>
                   <span className="font-jakarta text-2xl font-bold text-slate-900 tabular-nums">
                     {fmtMoney(pricing.totalCents)}
+                    {pricing.isRecurring && (
+                      <span className="text-sm font-semibold text-slate-500">/mo</span>
+                    )}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                      Deposit
-                    </p>
-                    <p className="text-sm font-bold text-slate-900 tabular-nums">
-                      {fmtMoney(pricing.depositCents)}
-                    </p>
+                {pricing.isRecurring ? (
+                  <div className="grid grid-cols-1 gap-2 pt-1">
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                        Deposit at signup
+                      </p>
+                      <p className="text-sm font-bold text-slate-900 tabular-nums">
+                        {pricing.depositCents > 0
+                          ? `${fmtMoney(pricing.depositCents)} (one-time, first clean)`
+                          : "None — recurring only"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                      Day-of
-                    </p>
-                    <p className="text-sm font-bold text-slate-900 tabular-nums">
-                      {fmtMoney(pricing.remainingCents)}
-                    </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                        Deposit
+                      </p>
+                      <p className="text-sm font-bold text-slate-900 tabular-nums">
+                        {fmtMoney(pricing.depositCents)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                        Day-of
+                      </p>
+                      <p className="text-sm font-bold text-slate-900 tabular-nums">
+                        {fmtMoney(pricing.remainingCents)}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {walletCreditCents > 0 && (
                   <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-800 flex items-center gap-1.5 mt-2">
