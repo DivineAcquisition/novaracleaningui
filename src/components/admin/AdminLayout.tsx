@@ -36,6 +36,7 @@ import {
   RiTeamLine,
   RiRocket2Line,
   RiBuilding2Line,
+  RiHotelLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -88,6 +89,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/commercial",
     icon: RiBuilding2Line,
     description: "Office · commercial · partnerships",
+  },
+  {
+    title: "Turnover Portal",
+    url: "/admin/partner",
+    icon: RiHotelLine,
+    description: "Airbnb hosts · pricing · crew",
   },
   {
     title: "Customers",

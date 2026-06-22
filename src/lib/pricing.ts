@@ -67,9 +67,23 @@ export const SERVICE_ZONES: Record<ZoneId, { id: ZoneId; label: string; modifier
 
 // ─── Add-ons ─────────────────────────────────────────────────────────────
 export const ADD_ONS = {
-  fridge:  { label: "Inside Fridge",     price: 30, note: "Free w/ Move-In/Out" },
-  oven:    { label: "Inside Oven",       price: 30, note: "Free w/ Move-In/Out" },
-  windows: { label: "Interior Windows",  price: 40, note: "Per visit" },
+  fridge:       { label: "Inside Fridge",          price: 30, note: "Free w/ Move-In/Out" },
+  oven:         { label: "Inside Oven",            price: 30, note: "Free w/ Move-In/Out" },
+  windows:      { label: "Interior Windows",       price: 40, note: "Per visit" },
+  laundry:      { label: "Laundry — wash & fold",  price: 35, note: "Per load" },
+  changeLinens: { label: "Change bed linens",      price: 15, note: "Linens provided by client" },
+  dishes:       { label: "Dishes & kitchen cleanup", price: 20, note: "Hand-wash / load dishwasher" },
+  baseboards:   { label: "Baseboards (hand-wiped)", price: 35, note: "Whole home" },
+  blinds:       { label: "Blinds & shutters",      price: 30, note: "Dusted / wiped" },
+  cabinets:     { label: "Inside cabinets",        price: 35, note: "Emptied cabinets" },
+  walls:        { label: "Spot wall washing",      price: 40, note: "Marks & scuffs" },
+  ceilingFans:  { label: "Ceiling fans",           price: 15, note: "Per home" },
+  microwave:    { label: "Inside microwave",       price: 10, note: "" },
+  dishwasher:   { label: "Inside dishwasher",      price: 15, note: "Descale / wipe" },
+  garage:       { label: "Garage sweep-out",       price: 50, note: "Single / double" },
+  patio:        { label: "Patio / balcony",        price: 35, note: "Sweep & tidy" },
+  petHair:      { label: "Heavy pet-hair removal", price: 35, note: "Extra vacuum pass" },
+  closets:      { label: "Inside closets / tidy",  price: 30, note: "Organize & wipe" },
 } as const;
 
 export type AddOnId = keyof typeof ADD_ONS;
@@ -252,11 +266,12 @@ export function calculatePrice(
   const serviceFinalPrice = getServiceFinalPrice(homeSizeId, serviceType, zone, membershipPlan);
   const serviceDiscount = Math.max(0, serviceListPrice - serviceFinalPrice);
 
-  // Add-ons. Move-In/Out includes fridge + oven for free.
+  // Add-ons. Move-In/Out already includes fridge + oven, so those two are
+  // free there; every other selected add-on is still chargeable.
   let addOnsTotal = 0;
   if (serviceType === "moveInOut") {
     addOnsTotal = addOns
-      .filter((a) => a === "windows")
+      .filter((a) => a !== "fridge" && a !== "oven")
       .reduce((sum, a) => sum + (ADD_ONS[a as AddOnId]?.price || 0), 0);
   } else {
     addOnsTotal = addOns.reduce((sum, a) => sum + (ADD_ONS[a as AddOnId]?.price || 0), 0);

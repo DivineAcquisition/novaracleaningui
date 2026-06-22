@@ -52,9 +52,23 @@ export const SERVICE_ZONES: Record<ZoneId, { id: ZoneId; modifier: number }> = {
 };
 
 export const ADD_ONS: Record<string, { price: number }> = {
-  fridge:  { price: 30 },
-  oven:    { price: 30 },
-  windows: { price: 40 },
+  fridge:       { price: 30 },
+  oven:         { price: 30 },
+  windows:      { price: 40 },
+  laundry:      { price: 35 },
+  changeLinens: { price: 15 },
+  dishes:       { price: 20 },
+  baseboards:   { price: 35 },
+  blinds:       { price: 30 },
+  cabinets:     { price: 35 },
+  walls:        { price: 40 },
+  ceilingFans:  { price: 15 },
+  microwave:    { price: 10 },
+  dishwasher:   { price: 15 },
+  garage:       { price: 50 },
+  patio:        { price: 35 },
+  petHair:      { price: 35 },
+  closets:      { price: 30 },
 };
 
 export const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
@@ -171,7 +185,7 @@ export function calculatePrice(
 
   let addOnsTotal = 0;
   if (serviceType === "moveInOut") {
-    addOnsTotal = addOns.filter((a) => a === "windows").reduce((sum, a) => sum + (ADD_ONS[a]?.price || 0), 0);
+    addOnsTotal = addOns.filter((a) => a !== "fridge" && a !== "oven").reduce((sum, a) => sum + (ADD_ONS[a]?.price || 0), 0);
   } else {
     addOnsTotal = addOns.reduce((sum, a) => sum + (ADD_ONS[a]?.price || 0), 0);
   }
