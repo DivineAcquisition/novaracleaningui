@@ -1011,6 +1011,18 @@ serve(async (req) => {
                 }
 
                 if (autoServiceDate) {
+                  // Reflect any admin first-clean deposit collected on the
+                  // subscription Checkout so the booking row mirrors what was
+                  // actually charged (instead of all-zeros). `deposit_cents`
+                  // is set by create-checkout when a deposit invoice mode was
+                  // used on the Internal Booking recurring path.
+                  const autoDepositCents = subMeta.deposit_cents
+                    ? parseInt(subMeta.deposit_cents, 10) || 0
+                    : 0;
+                  const autoTeamNotes = autoDepositCents > 0
+                    ? `MEMBERSHIP AUTO-BOOKING — $${(autoDepositCents / 100).toFixed(2)} first-clean deposit collected at signup. Confirm date with customer before dispatching`
+                    : "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching";
+
                   const { error: autoBookErr } = await supabase
                     .from("bookings")
                     .insert({
@@ -1029,11 +1041,11 @@ serve(async (req) => {
                       service_date: autoServiceDate,
                       time_slot: autoTimeSlot,
                       base_price_cents: 0,
-                      deposit_cents: 0,
-                      total_estimate_cents: 0,
+                      deposit_cents: autoDepositCents,
+                      total_estimate_cents: autoDepositCents,
                       status: "pending_details",
                       customer_id: customerId,
-                      team_notes: "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching",
+                      team_notes: autoTeamNotes,
                     });
 
                   if (autoBookErr) {

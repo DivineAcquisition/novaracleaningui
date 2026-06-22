@@ -96,6 +96,22 @@ serve(async (req) => {
         // home turns out to need a deep clean on arrival.
         includeDeepClean,
         deepCleanedBefore,
+        // Admin / VA overrides (Internal Booking recurring path). These were
+        // previously ignored on the subscription branch, so a price override
+        // never reached Stripe and the deposit was never collected.
+        //   priceOverride?: { total?: cents, deposit?: cents }
+        //     total   — replaces the monthly recurring membership rate.
+        //     deposit — one-time first-clean deposit added to the first
+        //               invoice of the subscription Checkout.
+        //   invoiceMode?  — 'deposit_plus_remaining' | 'deposit_plus_preauth'
+        //                   | 'full_now' | 'none' (controls deposit posture)
+        //   depositPercent? 0..1 (used to derive a deposit when an explicit
+        //               priceOverride.deposit isn't supplied)
+        priceOverride,
+        invoiceMode,
+        depositPercent,
+        csrName,
+        promoCode,
       } = body;
       const wantsDeepClean = includeDeepClean !== false;
       
@@ -146,13 +162,46 @@ serve(async (req) => {
       }
 
       const planKey = membershipPlan as keyof typeof prices;
-      const monthlyPriceDollars = prices[planKey];
-      if (!monthlyPriceDollars) {
+      const catalogMonthlyDollars = prices[planKey];
+      if (!catalogMonthlyDollars) {
         return new Response(
           JSON.stringify({ error: `Invalid membership plan: ${membershipPlan}` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
         );
       }
+
+      // ─── Admin price override + deposit resolution ──────────────────────
+      // The monthly recurring price is the admin override when supplied,
+      // otherwise the catalog rate. Stored in cents so it survives intact
+      // through Stripe + the subscription webhook (which reads
+      // `monthly_price_cents` back off the subscription metadata).
+      const catalogMonthlyCents = Math.round(catalogMonthlyDollars * 100);
+      const overrideTotalCents =
+        priceOverride && typeof priceOverride.total === "number" &&
+        priceOverride.total >= 0
+          ? Math.round(priceOverride.total)
+          : null;
+      const monthlyPriceCents = overrideTotalCents ?? catalogMonthlyCents;
+      const priceOverrideApplied = overrideTotalCents !== null;
+
+      // First-clean deposit. Prefer an explicit cents amount from the caller
+      // (so the hosted page charges exactly what the VA saw in the live
+      // quote). Otherwise derive it from the deposit percent against the
+      // monthly rate. Only deposit invoice modes collect a deposit here.
+      const wantsDeposit =
+        invoiceMode === "deposit_plus_remaining" ||
+        invoiceMode === "deposit_plus_preauth";
+      const depositPct = typeof depositPercent === "number"
+        ? Math.max(0, Math.min(1, depositPercent))
+        : 0.5;
+      let depositCents = 0;
+      if (priceOverride && typeof priceOverride.deposit === "number" &&
+          priceOverride.deposit > 0) {
+        depositCents = Math.round(priceOverride.deposit);
+      } else if (wantsDeposit) {
+        depositCents = Math.round(monthlyPriceCents * depositPct);
+      }
+      const collectsDeposit = wantsDeposit && depositCents > 0;
 
       const planLabel = MEMBERSHIP_PLAN_LABELS[membershipPlan] || membershipPlan;
       const homePricing = HOME_SIZE_PRICING.find(h => h.id === homeSizeId);
@@ -173,10 +222,12 @@ serve(async (req) => {
             currency: 'usd',
             product_data: {
               name: `Novara Membership — ${planLabel}`,
-              description: `Recurring cleaning membership for ${sqftLabel} sq ft home`,
+              description: priceOverrideApplied
+                ? `Recurring cleaning membership for ${sqftLabel} sq ft home (custom rate)`
+                : `Recurring cleaning membership for ${sqftLabel} sq ft home`,
             },
             recurring: { interval: 'month' },
-            unit_amount: monthlyPriceDollars * 100,
+            unit_amount: monthlyPriceCents,
           },
           quantity: 1,
         },
@@ -200,6 +251,26 @@ serve(async (req) => {
         });
       }
 
+      // Optional one-time first-clean deposit. Subscription-mode Checkout
+      // Sessions accept one-time prices alongside the recurring price —
+      // Stripe rolls them into the subscription's first invoice (same
+      // mechanism as the deep-clean line above). This is what makes the
+      // admin "deposit" posture actually collect money on the recurring
+      // signup instead of silently doing nothing.
+      if (collectsDeposit) {
+        lineItems.push({
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'First Clean Deposit',
+              description: 'One-time deposit for your first membership clean',
+            },
+            unit_amount: depositCents,
+          },
+          quantity: 1,
+        });
+      }
+
       // Push the schedule + customer hints into both the Checkout
       // Session metadata AND the resulting Subscription metadata. The
       // subscription metadata is what the `customer.subscription.*`
@@ -210,7 +281,13 @@ serve(async (req) => {
         membership_plan: membershipPlan,
         home_size_id: homeSizeId,
         is_membership_signup: 'true',
-        monthly_price_cents: String(monthlyPriceDollars * 100),
+        monthly_price_cents: String(monthlyPriceCents),
+        price_override_applied: priceOverrideApplied ? 'true' : 'false',
+        catalog_monthly_price_cents: String(catalogMonthlyCents),
+        deposit_cents: String(collectsDeposit ? depositCents : 0),
+        invoice_mode: invoiceMode ? String(invoiceMode) : '',
+        csr_name: csrName ? String(csrName) : '',
+        promo_code: promoCode ? String(promoCode) : '',
         preferred_day_of_week: preferredDayOfWeek ? String(preferredDayOfWeek) : '',
         preferred_time_window: preferredTimeWindow ? String(preferredTimeWindow) : '',
         first_service_date: firstServiceDate ? String(firstServiceDate) : '',
@@ -244,7 +321,13 @@ serve(async (req) => {
         },
       });
 
-      logStep("Subscription checkout created", { sessionId: session.id });
+      logStep("Subscription checkout created", {
+        sessionId: session.id,
+        monthlyPriceCents,
+        priceOverrideApplied,
+        depositCents: collectsDeposit ? depositCents : 0,
+        invoiceMode: invoiceMode || null,
+      });
 
       return new Response(
         JSON.stringify({ url: session.url, sessionId: session.id }),
