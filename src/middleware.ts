@@ -33,6 +33,7 @@ const HOSTS = {
   try: "try.novaracleaning.com",
   app: "app.novaracleaning.com",
   contractor: "contractor.novaracleaning.com",
+  partner: "partner.novaracleaning.com",
 } as const;
 
 type SubdomainKey = keyof typeof HOSTS;
@@ -65,6 +66,9 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
   // Public marketing + booking funnel (try.*). /book/confirmation stays
   // on try so the entire Stripe-checkout-return flow keeps a single host.
+  // Partner (Airbnb/STR host) turnover portal — its own subdomain.
+  ["/partner", "partner"],
+
   ["/book", "try"],
   ["/membership", "try"], // /membership and /membership/[planId] browse
   ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
@@ -77,6 +81,7 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   try: "/",
   app: "/auth",
   contractor: "/cleaner/auth",
+  partner: "/partner",
 };
 
 // Paths that ALL subdomains may serve (system / OAuth callbacks /
@@ -113,6 +118,7 @@ function subdomainOf(hostname: string): SubdomainKey | null {
   if (h.startsWith("try.")) return "try";
   if (h.startsWith("app.")) return "app";
   if (h.startsWith("contractor.")) return "contractor";
+  if (h.startsWith("partner.")) return "partner";
   // hiring.* is hosted on Framer — if DNS still points here for any
   // reason, fall through to `try` (marketing) so we never serve broken
   // content on the hiring subdomain.
