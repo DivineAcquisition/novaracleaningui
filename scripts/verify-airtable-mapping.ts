@@ -63,7 +63,7 @@ const cleaners = [
 const first = bookingToJobInput(booking, cleaners);
 const second = bookingToJobInput(booking, cleaners);
 check("same input → identical mapper output", first, second);
-check("jobId from booking number", first.jobId, "NOV-00142");
+check("jobId is the unique booking id", first.jobId, "b1");
 check("service type mapped", first.serviceType, JOB_SERVICE_TYPE.deep);
 check("payment status mapped", first.paymentStatus, PAYMENT_STATUS.paid);
 check("tier % from cleaners", first.tierPct, 35);

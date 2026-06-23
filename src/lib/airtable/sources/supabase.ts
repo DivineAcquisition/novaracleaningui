@@ -48,6 +48,12 @@ export interface BookingRow {
   service_date?: string | null;
   completed_at?: string | null;
   email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
   final_charge_cents?: number | null;
   total_estimate_cents?: number | null;
   cleaner_payout_cents?: number | null;
@@ -58,9 +64,6 @@ export interface BookingRow {
 
 const fullName = (first?: string | null, last?: string | null): string =>
   `${first || ""} ${last || ""}`.trim();
-
-const bookingRef = (n?: number | null): string =>
-  n != null ? `NOV-${String(n).padStart(5, "0")}` : "";
 
 /** Map source lead-source hints to a readable label (loosely mirrors GHL). */
 function mapLeadSource(c: CustomerRow): string | undefined {
@@ -83,6 +86,26 @@ export function customerToClientInput(c: CustomerRow, extra?: Partial<ClientInpu
     leadSource: mapLeadSource(c),
     stripeCustomerId: c.stripe_customer_id || undefined,
     ...extra,
+  };
+}
+
+/**
+ * Build a ClientInput from a booking's own contact fields. Used as a fallback
+ * so a Job always has a Client to link to even when the email isn't present in
+ * the `customers` table (e.g. guest/imported bookings). Upserts on email, so it
+ * updates the matching customer-derived client rather than duplicating.
+ */
+export function bookingToClientInput(b: BookingRow): ClientInput | null {
+  if (!b.email) return null;
+  const isCommercial = String(b.service_type || "").toLowerCase().includes("commercial");
+  return {
+    email: b.email,
+    name: fullName(b.first_name, b.last_name) || b.email,
+    type: isCommercial ? "Commercial" : "Residential",
+    phone: b.phone || undefined,
+    serviceZone: b.city || b.zip_code || undefined,
+    lifecycleStage:
+      b.membership_plan && b.membership_plan !== "none" ? "Member" : undefined,
   };
 }
 
@@ -142,8 +165,11 @@ export function bookingToJobInput(
   const cleanerName = cleaners.map((c) => fullName(c.first_name, c.last_name)).filter(Boolean).join(", ");
   const dateCompleted = (b.completed_at || b.service_date || "").slice(0, 10) || undefined;
 
+  // The booking UUID is the only guaranteed-unique natural key — booking_number
+  // is not reliably populated/unique in every environment, so keying on it can
+  // collapse distinct jobs onto one record.
   return {
-    jobId: bookingRef(b.booking_number) || b.id,
+    jobId: b.id,
     dateCompleted,
     serviceType: mapServiceType(b.service_type, b.membership_plan),
     customerPaidCents,
@@ -151,7 +177,11 @@ export function bookingToJobInput(
     numberOfCleaners,
     tierPct,
     cleanerPayPoolCents: opts?.cleanerPayPoolCents,
-    payPerCleanerCents: opts?.payPerCleanerCents ?? b.cleaner_payout_cents ?? undefined,
+    // Only an explicit, authoritative payroll figure overrides the computed
+    // split — the booking's legacy cleaner_payout_cents is noisy/stale (and can
+    // exceed the pool on cancelled rows), so we don't default to it here. The
+    // Revenue Ops view shows the consistent pool ÷ cleaners split.
+    payPerCleanerCents: opts?.payPerCleanerCents,
     paymentStatus: mapPaymentStatus(b.status),
     entrySource: opts?.entrySource ?? mapEntrySource(b.booking_channel),
     clientEmail: b.email || undefined,

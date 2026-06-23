@@ -16,6 +16,7 @@ import { ping } from "../src/lib/airtable/index";
 import { syncClient, syncJob } from "../src/lib/airtable/mappers/index";
 import { ENTRY_SOURCE } from "../src/lib/airtable/schema";
 import {
+  bookingToClientInput,
   bookingToJobInput,
   customerToClientInput,
   type CleanerRow,
@@ -52,7 +53,7 @@ async function backfillJobs(): Promise<void> {
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id, booking_number, status, service_type, service_date, completed_at, email, final_charge_cents, total_estimate_cents, cleaner_payout_cents, num_cleaners_assigned, booking_channel, membership_plan, job_id",
+      "id, booking_number, status, service_type, service_date, completed_at, email, first_name, last_name, phone, city, state, zip_code, final_charge_cents, total_estimate_cents, cleaner_payout_cents, num_cleaners_assigned, booking_channel, membership_plan, job_id",
     )
     .order("created_at", { ascending: false })
     .limit(LIMIT);
@@ -90,6 +91,11 @@ async function backfillJobs(): Promise<void> {
   let ok = 0;
   for (const b of rows) {
     try {
+      // Ensure a Client exists for this booking's email so the Job→Client link
+      // resolves even for emails not present in the customers table.
+      const clientInput = bookingToClientInput(b);
+      if (clientInput) await syncClient(clientInput).catch(() => null);
+
       const cleaners = b.job_id ? cleanersByJob.get(b.job_id) || [] : [];
       await syncJob(bookingToJobInput(b, cleaners, { entrySource: ENTRY_SOURCE.backfill }));
       ok++;

@@ -6,6 +6,7 @@
 
 import { getAdminSupabase } from "./sources/admin-client";
 import {
+  bookingToClientInput,
   bookingToJobInput,
   customerToClientInput,
   groupPayoutsIntoRuns,
@@ -65,16 +66,23 @@ export async function syncJobByBookingId(
   const { data: booking, error } = await supabase
     .from("bookings")
     .select(
-      "id, booking_number, status, service_type, service_date, completed_at, email, final_charge_cents, total_estimate_cents, cleaner_payout_cents, num_cleaners_assigned, booking_channel, membership_plan, job_id, customer_id",
+      "id, booking_number, status, service_type, service_date, completed_at, email, first_name, last_name, phone, city, state, zip_code, final_charge_cents, total_estimate_cents, cleaner_payout_cents, num_cleaners_assigned, booking_channel, membership_plan, job_id, customer_id",
     )
     .eq("id", bookingId)
     .maybeSingle();
   if (error) throw error;
   if (!booking) return null;
 
-  // Make sure the linked client exists (best-effort).
+  // Make sure the linked client exists so the Job→Client link resolves on the
+  // first pass. Prefer the full customer record; fall back to the booking's own
+  // contact fields when there's no matching customer row (guest/imported).
+  let clientSynced = false;
   if (booking.customer_id) {
-    await syncClientById(booking.customer_id).catch(() => null);
+    clientSynced = (await syncClientById(booking.customer_id).catch(() => null)) != null;
+  }
+  if (!clientSynced) {
+    const clientInput = bookingToClientInput(booking);
+    if (clientInput) await syncClient(clientInput).catch(() => null);
   }
 
   const cleaners = await cleanersForBooking(booking.job_id);
