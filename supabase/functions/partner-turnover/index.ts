@@ -63,6 +63,30 @@ function fmtWindow(start?: string | null, end?: string | null): string {
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
+// Resolve a Stripe customer's default (or most recent) card for one-tap
+// off-session turnover charges. Returns null when no card is on file.
+// deno-lint-ignore no-explicit-any
+async function getDefaultCard(stripe: any, customerId: string): Promise<{ id: string; brand: string; last4: string } | null> {
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer || customer.deleted) return null;
+    const pmRef = customer.invoice_settings?.default_payment_method;
+    if (pmRef && typeof pmRef === "object" && pmRef.card) {
+      return { id: pmRef.id, brand: pmRef.card.brand || "card", last4: pmRef.card.last4 || "????" };
+    }
+    if (typeof pmRef === "string") {
+      const pm = await stripe.paymentMethods.retrieve(pmRef);
+      if (pm?.card) return { id: pm.id, brand: pm.card.brand || "card", last4: pm.card.last4 || "????" };
+    }
+    const list = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
+    const pm = list.data?.[0];
+    if (pm?.card) return { id: pm.id, brand: pm.card.brand || "card", last4: pm.card.last4 || "????" };
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -240,6 +264,76 @@ serve(async (req) => {
       return json({ url: session.url, turnoverId: tr.id });
     }
 
+    // --- turnover.paymentInfo (does the host have a card on file?) -------
+    if (action === "turnover.paymentInfo") {
+      if (!host.stripe_customer_id) return json({ hasSavedCard: false });
+      try {
+        const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+        const pm = await getDefaultCard(stripe, host.stripe_customer_id);
+        if (!pm) return json({ hasSavedCard: false });
+        return json({ hasSavedCard: true, brand: pm.brand, last4: pm.last4 });
+      } catch (_) {
+        return json({ hasSavedCard: false });
+      }
+    }
+
+    // --- turnover.requestSaved (one-tap: charge saved card off-session) --
+    if (action === "turnover.requestSaved") {
+      const { data: property } = await admin.from("properties").select("*").eq("id", body.propertyId).maybeSingle();
+      if (!property || property.host_id !== host.id) return json({ error: "Property not found" }, 404);
+      if (property.turnover_price == null || Number(property.turnover_price) <= 0) {
+        return json({ error: "This property isn't priced yet. Our team will set your per-turnover rate shortly." }, 409);
+      }
+      if (!body.requested_date) return json({ error: "requested_date required" }, 400);
+
+      const priceCents = Math.round(Number(property.turnover_price) * 100);
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+      // Need a saved card to charge off-session; otherwise tell the client
+      // to fall back to the hosted Checkout flow.
+      if (!host.stripe_customer_id) return json({ needsCheckout: true });
+      const card = await getDefaultCard(stripe, host.stripe_customer_id);
+      if (!card) return json({ needsCheckout: true });
+
+      const { data: tr, error: trErr } = await admin.from("turnover_requests").insert({
+        property_id: property.id,
+        host_id: host.id,
+        requested_date: body.requested_date,
+        window_start: body.window_start || null,
+        window_end: body.window_end || null,
+        price: Number(property.turnover_price),
+        status: "pending_payment",
+        notes: (body.notes || "").trim() || null,
+      }).select("*").single();
+      if (trErr) return json({ error: trErr.message }, 500);
+
+      try {
+        const pi = await stripe.paymentIntents.create({
+          amount: priceCents,
+          currency: "usd",
+          customer: host.stripe_customer_id,
+          payment_method: card.id,
+          off_session: true,
+          confirm: true,
+          metadata: { kind: "turnover", turnover_id: tr.id, host_id: host.id },
+        });
+        if (pi.status === "succeeded") {
+          const after = await markPaidAndAssign(admin, tr.id, pi.id);
+          return json({ paid: true, turnoverId: tr.id, status: after?.status, assignment_type: after?.assignment_type });
+        }
+        // Needs SCA / further action → discard the row and use Checkout.
+        await admin.from("turnover_requests").delete().eq("id", tr.id).eq("status", "pending_payment");
+        return json({ needsCheckout: true });
+      } catch (e) {
+        // Card declined / authentication_required → fall back to Checkout.
+        await admin.from("turnover_requests").delete().eq("id", tr.id).eq("status", "pending_payment");
+        console.warn("[partner-turnover] off-session charge failed, falling back to checkout", e instanceof Error ? e.message : String(e));
+        return json({ needsCheckout: true });
+      }
+    }
+
     // --- turnover.reschedule (host, 24h cutoff) -------------------------
     if (action === "turnover.reschedule") {
       const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", body.turnoverId).maybeSingle();
@@ -380,37 +474,44 @@ async function handleFinalize(admin: SB, body: Record<string, unknown>, _origin:
   const paid = session.payment_status === "paid" || session.status === "complete";
 
   if (paid && tr.status === "pending_payment") {
-    // Optimistic status guard makes concurrent webhook + success-page calls safe.
-    const { data: claimed } = await admin.from("turnover_requests").update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
-      stripe_payment_intent_id: (session.payment_intent as string) || null,
-    }).eq("id", tr.id).eq("status", "pending_payment").select("id");
-    // If another caller already claimed it, don't double-run assignment/emails.
-    if (!claimed || claimed.length === 0) {
-      const { data: cur } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
-      return json({ paid: true, status: cur?.status, assignment_type: cur?.assignment_type });
-    }
-    const { property: paidProp, hostRow: paidHost } = await loadContext(admin, tr);
-    await sendHostEmail(admin, "turnover_confirmed", paidHost?.email, {
-      name: (paidHost?.name || "").split(" ")[0] || "",
-      property: paidProp?.nickname || paidProp?.address || "",
-      address: paidProp?.address || "",
-      date: formatServiceDate(tr.requested_date as string),
-      window: fmtWindow(tr.window_start as string, tr.window_end as string),
-      price: money(Number(tr.price || 0)),
-    });
-    try {
-      await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
-    } catch (e) {
-      console.warn("[partner-turnover] turnover GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
-    }
-    const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
-    await runAssignment(admin, fresh, "auto");
-    const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
+    const after = await markPaidAndAssign(admin, tr.id as string, (session.payment_intent as string) || null);
     return json({ paid: true, status: after?.status, assignment_type: after?.assignment_type });
   }
   return json({ paid, status: tr.status });
+}
+
+// Shared: claim a pending_payment turnover → paid, then confirm + assign +
+// notify. Idempotent via the optimistic status guard, so concurrent callers
+// (webhook, success page, off-session one-tap) never double-fan-out.
+async function markPaidAndAssign(admin: SB, trId: string, paymentIntentId: string | null) {
+  const { data: claimed } = await admin.from("turnover_requests").update({
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    stripe_payment_intent_id: paymentIntentId,
+  }).eq("id", trId).eq("status", "pending_payment").select("*");
+  if (!claimed || claimed.length === 0) {
+    const { data: cur } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", trId).single();
+    return cur;
+  }
+  const tr = claimed[0];
+  const { property: paidProp, hostRow: paidHost } = await loadContext(admin, tr);
+  await sendHostEmail(admin, "turnover_confirmed", paidHost?.email, {
+    name: (paidHost?.name || "").split(" ")[0] || "",
+    property: paidProp?.nickname || paidProp?.address || "",
+    address: paidProp?.address || "",
+    date: formatServiceDate(tr.requested_date as string),
+    window: fmtWindow(tr.window_start as string, tr.window_end as string),
+    price: money(Number(tr.price || 0)),
+  });
+  try {
+    await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
+  } catch (e) {
+    console.warn("[partner-turnover] turnover GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
+  }
+  const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", trId).single();
+  await runAssignment(admin, fresh, "auto");
+  const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", trId).single();
+  return after;
 }
 
 // --- Cleaner lifecycle (confirm / check-in / complete) -----------------

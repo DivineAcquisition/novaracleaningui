@@ -52,6 +52,22 @@ const isModifiable = (t: Turnover) => {
   return svc - Date.now() > 24 * 60 * 60 * 1000;
 };
 
+// Rough, clearly-labelled ballpark so a pending-pricing property isn't a dead
+// end. The admin still sets the binding per-turnover rate; this is guidance.
+function estimateRange(p: Pick<Property, "bedrooms" | "bathrooms" | "sqft">): [number, number] {
+  const beds = Number(p.bedrooms) || 1;
+  const baths = Number(p.bathrooms) || 1;
+  const sqft = Number(p.sqft) || 0;
+  let base = 90 + beds * 25 + baths * 20;
+  if (sqft > 0) base = Math.max(base, 60 + Math.round((sqft / 1000) * 70));
+  const low = Math.round(base / 5) * 5;
+  return [low, low + 40];
+}
+function estimateLabel(p: Pick<Property, "bedrooms" | "bathrooms" | "sqft">): string {
+  const [lo, hi] = estimateRange(p);
+  return `Est. $${lo}–$${hi}/turnover.`;
+}
+
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   pending_payment: { label: "Awaiting payment", cls: "bg-amber-100 text-amber-700" },
   paid: { label: "Paid · assigning", cls: "bg-blue-100 text-blue-700" },
@@ -470,8 +486,8 @@ function Dashboard() {
   const [rateFor, setRateFor] = useState<Turnover | null>(null);
   const [photoFor, setPhotoFor] = useState<Turnover | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     await supabase.functions.invoke("partner-turnover", { body: { action: "host.ensure" } }).catch(() => {});
     const [{ data: props }, { data: trs }] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
@@ -483,6 +499,17 @@ function Dashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live updates — reflect assignment / confirmation / completion without a
+  // manual refresh. Silent reload avoids the full-page spinner.
+  useEffect(() => {
+    const channel = supabase
+      .channel("partner-portal-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "turnover_requests" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "properties" }, () => load(true))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
 
   const propName = (id: string) => properties.find((p) => p.id === id)?.nickname || properties.find((p) => p.id === id)?.address || "Property";
 
@@ -531,7 +558,10 @@ function Dashboard() {
                             {priced ? (
                               <p className="font-bold text-primary">${Number(p.turnover_price).toFixed(0)}<span className="text-[11px] text-muted-foreground">/turnover</span></p>
                             ) : (
-                              <Badge className="bg-amber-100 text-amber-700">Pending pricing</Badge>
+                              <div>
+                                <Badge className="bg-amber-100 text-amber-700">Pending pricing</Badge>
+                                <p className="text-[11px] text-muted-foreground mt-1">{estimateLabel(p)}</p>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -543,7 +573,7 @@ function Dashboard() {
                             <RiCalendarLine className="w-3.5 h-3.5 mr-1" /> Request turnover
                           </Button>
                         </div>
-                        {!priced && <p className="text-[11px] text-amber-600 mt-2">Our team is setting your per-turnover rate — you'll be able to book once it's set.</p>}
+                        {!priced && <p className="text-[11px] text-amber-600 mt-2">Our team is confirming your per-turnover rate — {estimateLabel(p).toLowerCase()} You'll be able to book once it's set.</p>}
                       </CardContent>
                     </Card>
                   );
@@ -577,7 +607,7 @@ function Dashboard() {
         <PropertyForm property={editingProp} onClose={() => setShowPropForm(false)} onSaved={() => { setShowPropForm(false); load(); }} />
       )}
       {requestFor && (
-        <RequestForm property={requestFor} onClose={() => setRequestFor(null)} />
+        <RequestForm property={requestFor} onClose={() => setRequestFor(null)} onPaid={() => { setRequestFor(null); load(); }} />
       )}
       {rescheduleFor && (
         <RescheduleForm turnover={rescheduleFor} onClose={() => setRescheduleFor(null)} onDone={() => { setRescheduleFor(null); load(); }} />
@@ -872,13 +902,25 @@ function PropertyForm({ property, onClose, onSaved }: { property: Property | nul
   );
 }
 
-// ─── Request turnover (modal → Stripe checkout) ────────────────────────────
-function RequestForm({ property, onClose }: { property: Property; onClose: () => void }) {
+// ─── Request turnover (modal → one-tap saved card or Stripe checkout) ──────
+function RequestForm({ property, onClose, onPaid }: { property: Property; onClose: () => void; onPaid: () => void }) {
   const [date, setDate] = useState("");
   const [start, setStart] = useState("11:00");
   const [end, setEnd] = useState("15:00");
   const [busy, setBusy] = useState(false);
-  const submit = async () => {
+  const [savedCard, setSavedCard] = useState<{ brand: string; last4: string } | null>(null);
+  const priceLabel = `$${Number(property.turnover_price).toFixed(0)}`;
+
+  useEffect(() => {
+    supabase.functions.invoke("partner-turnover", { body: { action: "turnover.paymentInfo" } })
+      .then(({ data }) => {
+        if ((data as any)?.hasSavedCard) setSavedCard({ brand: (data as any).brand, last4: (data as any).last4 });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Hosted Stripe Checkout (new card, or fallback when one-tap can't charge).
+  const checkout = async () => {
     if (!date) { toast.error("Pick a date."); return; }
     setBusy(true);
     const { data, error } = await supabase.functions.invoke("partner-turnover", {
@@ -891,21 +933,57 @@ function RequestForm({ property, onClose }: { property: Property; onClose: () =>
     }
     window.location.href = (data as any).url;
   };
+
+  // One-tap: charge the saved card off-session; fall back to Checkout if the
+  // card needs authentication or is declined.
+  const oneTap = async () => {
+    if (!date) { toast.error("Pick a date."); return; }
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+      body: { action: "turnover.requestSaved", propertyId: property.id, requested_date: date, window_start: start, window_end: end },
+    });
+    if (error || (data as any)?.error) {
+      setBusy(false);
+      toast.error((data as any)?.error || "Could not complete payment");
+      return;
+    }
+    if ((data as any)?.paid) {
+      toast.success("Turnover booked — assigning your crew.");
+      onPaid();
+      return;
+    }
+    // needsCheckout → seamless fallback to hosted Checkout.
+    await checkout();
+  };
+
+  const cardName = savedCard ? `${savedCard.brand[0].toUpperCase()}${savedCard.brand.slice(1)} ••${savedCard.last4}` : "";
+
   return (
     <Modal onClose={onClose} title={`Request turnover — ${property.nickname || "Property"}`}>
       <div className="space-y-3">
         <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 flex items-center justify-between">
           <span className="text-sm">Per-turnover price</span>
-          <span className="font-bold text-primary">${Number(property.turnover_price).toFixed(0)}</span>
+          <span className="font-bold text-primary">{priceLabel}</span>
         </div>
         <div><Label>Date *</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div className="grid grid-cols-2 gap-2">
           <div><Label>Checkout time</Label><Input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></div>
           <div><Label>Next check-in by</Label><Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
         </div>
-        <Button onClick={submit} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
-          {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay $${Number(property.turnover_price).toFixed(0)} & request`}
-        </Button>
+        {savedCard ? (
+          <>
+            <Button onClick={oneTap} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
+              {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay ${priceLabel} with ${cardName}`}
+            </Button>
+            <button type="button" disabled={busy} onClick={checkout} className="w-full text-center text-xs font-medium text-[#4F38FF] hover:underline disabled:opacity-50">
+              Use a different card
+            </button>
+          </>
+        ) : (
+          <Button onClick={checkout} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
+            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay ${priceLabel} & request`}
+          </Button>
+        )}
         <p className="text-[11px] text-center text-muted-foreground">Your turnover is confirmed once payment succeeds, then we assign your cleaning crew.</p>
       </div>
     </Modal>
