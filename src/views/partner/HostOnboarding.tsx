@@ -10,15 +10,17 @@
 // Hosts do NOT set rates here — the Company sets per-turnover pricing after
 // review (shown as "Pending Pricing").
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   RiLoader4Line, RiUser3Line, RiMailLine, RiPhoneLine, RiBuilding2Line,
   RiHome4Line, RiAddLine, RiDeleteBinLine, RiArrowRightLine, RiArrowLeftLine,
   RiCheckboxCircleLine, RiShieldCheckLine, RiKey2Line, RiMapPinLine,
-  RiSparklingLine, RiFlashlightFill,
+  RiSparklingLine, RiFlashlightFill, RiLockPasswordLine, RiEyeLine, RiEyeOffLine,
 } from "@remixicon/react";
 
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import {
-  ACCESS_TYPES, SERVICE_ZONES,
+  ACCESS_TYPES, SERVICE_ZONES, MIN_PASSWORD_LENGTH,
   type EntityType, type OnboardingPropertyInput, type OnboardingFormPayload,
 } from "@/lib/host-onboarding/types";
 
@@ -58,9 +60,12 @@ function emptyProperty(): OnboardingPropertyInput {
 type Step = 1 | 2 | 3;
 
 export default function HostOnboarding() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [accountReady, setAccountReady] = useState(false);
 
   // Step 1 — identity
   const [fullName, setFullName] = useState("");
@@ -73,8 +78,22 @@ export default function HostOnboarding() {
   // Step 2 — properties
   const [properties, setProperties] = useState<OnboardingPropertyInput[]>([emptyProperty()]);
 
-  // Step 3 — consent
+  // Step 3 — consent + portal account
   const [consent, setConsent] = useState(false);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Prefill from an admin-generated "spin up onboarding link" (query params).
+  useEffect(() => {
+    if (!searchParams) return;
+    const get = (k: string) => searchParams.get(k)?.trim() || "";
+    const n = get("name"); if (n) setFullName(n);
+    const e = get("email"); if (e) setEmail(e);
+    const p = get("phone"); if (p) setPhone(p);
+    const z = get("zone");
+    if (z && (SERVICE_ZONES as readonly string[]).includes(z)) setServiceZone(z);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateProp = (i: number, patch: Partial<OnboardingPropertyInput>) =>
     setProperties((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
@@ -107,16 +126,22 @@ export default function HostOnboarding() {
 
   const submit = async () => {
     if (!consent) { toast.error("Please agree to the Host Partnership Agreement."); return; }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      toast.error(`Choose a password of at least ${MIN_PASSWORD_LENGTH} characters for your Host Portal.`);
+      return;
+    }
     setSubmitting(true);
+    const cleanEmail = email.trim().toLowerCase();
     const payload: OnboardingFormPayload = {
       fullName: fullName.trim(),
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       phone: phone.trim(),
       entityType: entityType as EntityType,
       entityName: entityType === "entity" ? entityName.trim() : undefined,
       serviceZone: serviceZone || undefined,
       properties,
       consentAgreement: consent,
+      password,
     };
     try {
       const res = await fetch("/api/host-onboarding", {
@@ -126,6 +151,23 @@ export default function HostOnboarding() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Submission failed");
+
+      // Seamless auth: if we just created the portal account, sign the host
+      // straight into their dashboard. If the email already had an account,
+      // sign in with the password they entered (works if it matches), else
+      // land them on the success card to log in manually.
+      if (data?.accountCreated || data?.accountExists) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+        if (!signInErr) {
+          setAccountReady(true);
+          toast.success("Welcome — your Host Portal is ready.");
+          router.push("/partner/dashboard");
+          return;
+        }
+      }
       setDone(true);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not submit your application");
@@ -146,7 +188,12 @@ export default function HostOnboarding() {
             <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">Host Onboarding</span>
           </div>
 
-          {done ? (
+          {accountReady ? (
+            <div className="rounded-2xl border border-slate-200/70 bg-white p-8 text-center shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)]">
+              <RiLoader4Line className="mx-auto h-7 w-7 animate-spin text-[#5500FF]" />
+              <p className="mt-4 text-sm text-slate-500">Setting up your Host Portal…</p>
+            </div>
+          ) : done ? (
             <SuccessCard email={email} />
           ) : (
             <>
@@ -161,7 +208,16 @@ export default function HostOnboarding() {
                   <StepProperties properties={properties} updateProp={updateProp} addProp={addProp} removeProp={removeProp} />
                 )}
                 {step === 3 && (
-                  <StepConsent consent={consent} setConsent={setConsent} propertyCount={properties.length} />
+                  <StepConsent
+                    consent={consent}
+                    setConsent={setConsent}
+                    propertyCount={properties.length}
+                    email={email}
+                    password={password}
+                    setPassword={setPassword}
+                    showPassword={showPassword}
+                    setShowPassword={setShowPassword}
+                  />
                 )}
 
                 <div className="mt-6 flex items-center gap-3">
@@ -361,22 +417,55 @@ function StepProperties({
   );
 }
 
-function StepConsent({ consent, setConsent, propertyCount }: { consent: boolean; setConsent: (v: boolean) => void; propertyCount: number }) {
+function StepConsent({
+  consent, setConsent, propertyCount, email, password, setPassword, showPassword, setShowPassword,
+}: {
+  consent: boolean; setConsent: (v: boolean) => void; propertyCount: number;
+  email: string; password: string; setPassword: (v: string) => void;
+  showPassword: boolean; setShowPassword: (v: boolean) => void;
+}) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
         <h1 className="font-jakarta text-2xl font-bold tracking-tight text-slate-900">Almost there</h1>
-        <p className="text-sm text-slate-500">Review and agree to finish your application.</p>
+        <p className="text-sm text-slate-500">Create your portal access and agree to finish.</p>
       </div>
 
       <div className="rounded-xl bg-[#EDE9FE] p-4 text-sm text-slate-700">
         <p className="font-semibold text-slate-900">What happens next</p>
         <ol className="mt-2 list-decimal space-y-1 pl-4 text-[13px]">
+          <li>You finish here and land straight in your Host Portal — no extra signup.</li>
           <li>We review your {propertyCount} propert{propertyCount === 1 ? "y" : "ies"} and set your per-turnover rate.</li>
           <li>You receive the full Host Partnership Agreement — with your rate schedule — to e-sign within 24 hours.</li>
           <li>Once signed, your properties go active and you can request turnovers.</li>
         </ol>
       </div>
+
+      {/* Seamless account — one password and they're in. */}
+      <Field label="Create a password for your Host Portal">
+        <div className="relative">
+          <RiLockPasswordLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+            autoComplete="new-password"
+            className={cn(INPUT_CLS, "pr-10")}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword ? <RiEyeOffLine className="h-4 w-4" /> : <RiEyeLine className="h-4 w-4" />}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">
+          You'll sign in to {email ? <span className="font-medium text-slate-600">{email}</span> : "your email"} to track turnovers and review your agreement.
+        </p>
+      </Field>
 
       <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#5500FF]" />
@@ -412,6 +501,13 @@ function SuccessCard({ email }: { email: string }) {
       <p className="mt-2 text-sm text-slate-500">
         Thanks — we've got your details{email ? <> at <span className="font-medium text-slate-700">{email}</span></> : ""}. Our team will set your per-turnover rates and send your full Host Partnership Agreement to e-sign within 24 hours. Keep an eye on your inbox.
       </p>
+      <a
+        href="/partner"
+        className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-md font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95"
+        style={{ background: PURPLE_GRADIENT }}
+      >
+        Go to your Host Portal
+      </a>
     </div>
   );
 }

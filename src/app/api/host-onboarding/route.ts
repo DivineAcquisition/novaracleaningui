@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { syncHostOnboardingToAirtable } from "@/lib/airtable";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
+import { provisionHostAccount } from "@/lib/host-onboarding/provision";
 import {
   normalizeOnboarding,
   validateOnboarding,
@@ -81,6 +82,12 @@ export async function POST(req: Request): Promise<NextResponse> {
   let ghlContactId: string | null = null;
   let ghlOpportunityId: string | null = null;
 
+  // 1b. Seamless auth — provision the Host Portal account (auth user + host +
+  // Pending-Pricing properties) so the host lands logged in. Best-effort:
+  // a failure here never blocks the saved submission.
+  const provision = await provisionHostAccount(supabase, payload);
+  if (provision.error) warnings.push(`Account setup deferred: ${provision.error}`);
+
   // 2. Airtable (Client → Properties). Retry once on failure before giving up.
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -128,6 +135,9 @@ export async function POST(req: Request): Promise<NextResponse> {
       airtable_property_ids: airtablePropertyIds,
       ghl_contact_id: ghlContactId,
       ghl_opportunity_id: ghlOpportunityId,
+      user_id: provision.userId,
+      host_id: provision.hostId,
+      account_created: provision.accountCreated,
       sync_error: warnings.length ? warnings.join(" | ") : null,
     })
     .eq("id", submissionId);
@@ -135,6 +145,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   return NextResponse.json({
     ok: true,
     submissionId,
+    // Tells the client whether to auto sign-in (created) or prompt login
+    // (the email already had a portal account).
+    accountCreated: provision.accountCreated,
+    accountExists: provision.accountExists,
     warnings: warnings.length ? warnings : undefined,
   });
 }

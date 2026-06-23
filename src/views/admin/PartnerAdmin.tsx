@@ -24,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PartnerOnboardingLinkDialog } from "@/components/admin/PartnerOnboardingLinkDialog";
 import { cn } from "@/lib/utils";
 
 interface Property { id: string; nickname: string | null; address: string | null; turnover_price: number | null; host_id: string; }
@@ -174,9 +175,12 @@ export default function PartnerAdmin() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Partner Turnover Ops</h1>
-        <p className="text-sm text-muted-foreground mt-1">Price properties, manage the turnover crew, and handle assignments.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Partner Turnover Ops</h1>
+          <p className="text-sm text-muted-foreground mt-1">Price properties, manage the turnover crew, and handle assignments.</p>
+        </div>
+        <PartnerOnboardingLinkDialog refTag="partner-admin" />
       </div>
 
       {/* Summary stats */}

@@ -93,6 +93,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
+import { PartnerOnboardingLinkDialog } from "@/components/admin/PartnerOnboardingLinkDialog";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import {
@@ -1008,15 +1009,23 @@ export default function VaBooking() {
               and bill in a single flow.
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setLeadLookupOpen((v) => !v)}
-            className="border-slate-200 bg-white"
-          >
-            <RiUserSearchLine className="w-4 h-4 mr-1.5" />
-            {leadLookupOpen ? "Close lead search" : "Search existing lead"}
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <PartnerOnboardingLinkDialog
+              name={`${firstName} ${lastName}`.trim()}
+              email={email}
+              phone={phone}
+              className="border-slate-200 bg-white"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLeadLookupOpen((v) => !v)}
+              className="border-slate-200 bg-white"
+            >
+              <RiUserSearchLine className="w-4 h-4 mr-1.5" />
+              {leadLookupOpen ? "Close lead search" : "Search existing lead"}
+            </Button>
+          </div>
         </div>
       </header>
 

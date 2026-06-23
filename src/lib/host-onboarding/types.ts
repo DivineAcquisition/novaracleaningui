@@ -24,7 +24,15 @@ export interface OnboardingFormPayload {
   serviceZone?: string;
   properties: OnboardingPropertyInput[];
   consentAgreement: boolean;
+  /**
+   * Optional Host Portal password. When supplied we provision the host's
+   * portal account at submit time so they land logged in (seamless auth).
+   * Omitted → submission is still saved; the host can set a password later.
+   */
+  password?: string;
 }
+
+export const MIN_PASSWORD_LENGTH = 8;
 
 export const SERVICE_ZONES = [
   "Baltimore",
@@ -71,6 +79,9 @@ export function validateOnboarding(p: Partial<OnboardingFormPayload>): Validatio
   if (!p.consentAgreement) {
     return { ok: false, error: "You must agree to the Host Partnership Agreement to continue." };
   }
+  if (p.password !== undefined && p.password !== "" && p.password.length < MIN_PASSWORD_LENGTH) {
+    return { ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
+  }
   return { ok: true };
 }
 
@@ -89,6 +100,7 @@ export function normalizeOnboarding(p: OnboardingFormPayload): OnboardingFormPay
     entityName: p.entityType === "entity" ? p.entityName?.trim() || "" : undefined,
     serviceZone: p.serviceZone?.trim() || undefined,
     consentAgreement: !!p.consentAgreement,
+    password: p.password ? String(p.password) : undefined,
     properties: (p.properties || []).map((pr) => ({
       nickname: pr.nickname.trim(),
       address: pr.address.trim(),
