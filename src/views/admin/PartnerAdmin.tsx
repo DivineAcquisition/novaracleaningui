@@ -8,11 +8,12 @@
 // full access) for reads/writes and the partner-turnover edge function for
 // assignment + notifications.
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   RiLoader4Line, RiPriceTag3Line, RiTeamLine, RiAlarmWarningLine, RiCalendarCheckLine,
+  RiSearchLine, RiStarFill, RiImage2Line, RiMoneyDollarCircleLine, RiCheckboxCircleLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -29,6 +30,8 @@ interface Property { id: string; nickname: string | null; address: string | null
 interface Turnover {
   id: string; property_id: string; host_id: string; requested_date: string; window_start: string | null; window_end: string | null;
   price: number; status: string; assignment_type: string | null; assigned_cleaner_id: string | null;
+  host_rating?: number | null; host_review?: string | null;
+  before_photos?: string[] | null; after_photos?: string[] | null;
 }
 interface Cleaner { id: string; first_name: string | null; last_name: string | null; phone: string | null; }
 interface Crew { id: string; cleaner_id: string; property_id: string | null; priority: number; active: boolean; is_turnover_crew: boolean; }
@@ -51,12 +54,15 @@ export default function PartnerAdmin() {
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [crew, setCrew] = useState<Crew[]>([]);
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
+  const [bulkPrice, setBulkPrice] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: props }, { data: trs }, { data: cl }, { data: cr }] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
-      (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }).limit(100),
+      (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }).limit(500),
       (supabase.from as any)("cleaners").select("id, first_name, last_name, phone").order("first_name"),
       (supabase.from as any)("turnover_crew").select("*"),
     ]);
@@ -67,6 +73,15 @@ export default function PartnerAdmin() {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Live updates so ops see new requests / status changes without refresh.
+  useEffect(() => {
+    const ch = supabase
+      .channel("admin-partner-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "turnover_requests" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [load]);
 
   const cleanerName = (id: string | null) => {
     if (!id) return "—";
@@ -112,6 +127,49 @@ export default function PartnerAdmin() {
   const pending = properties.filter((p) => p.turnover_price == null || Number(p.turnover_price) <= 0);
   const unassigned = turnovers.filter((t) => t.status === "unassigned_alert");
 
+  // Apply one rate to every pending-pricing property at once.
+  const setAllPending = async () => {
+    const val = parseFloat(bulkPrice || "");
+    if (!Number.isFinite(val) || val <= 0) { toast.error("Enter a valid price."); return; }
+    if (pending.length === 0) { toast.error("No properties pending pricing."); return; }
+    const { error } = await (supabase.from as any)("properties")
+      .update({ turnover_price: val })
+      .in("id", pending.map((p) => p.id));
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Priced ${pending.length} propert${pending.length === 1 ? "y" : "ies"} at $${val.toFixed(0)}.`);
+    setBulkPrice("");
+    load();
+  };
+
+  // ── Stats + filtered request list ──────────────────────────────────────
+  const stats = useMemo(() => {
+    const revenue = turnovers
+      .filter((t) => ["paid", "assigned", "cleaner_confirmed", "in_progress", "completed"].includes(t.status))
+      .reduce((s, t) => s + Number(t.price || 0), 0);
+    const completed = turnovers.filter((t) => t.status === "completed");
+    const rated = completed.filter((t) => t.host_rating);
+    const avgRating = rated.length ? rated.reduce((s, t) => s + (t.host_rating || 0), 0) / rated.length : 0;
+    return {
+      total: turnovers.length,
+      completed: completed.length,
+      revenue,
+      avgRating,
+      ratedCount: rated.length,
+      unassigned: unassigned.length,
+    };
+  }, [turnovers, unassigned.length]);
+
+  const filteredTurnovers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return turnovers.filter((t) => {
+      if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (!q) return true;
+      const prop = properties.find((p) => p.id === t.property_id);
+      const hay = `${prop?.nickname || ""} ${prop?.address || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [turnovers, properties, statusFilter, search]);
+
   if (loading) return <div className="flex justify-center py-20"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
@@ -119,6 +177,18 @@ export default function PartnerAdmin() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Partner Turnover Ops</h1>
         <p className="text-sm text-muted-foreground mt-1">Price properties, manage the turnover crew, and handle assignments.</p>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard icon={<RiCalendarCheckLine className="w-4 h-4" />} label="Requests" value={String(stats.total)} />
+        <StatCard icon={<RiCheckboxCircleLine className="w-4 h-4" />} label="Completed" value={String(stats.completed)} />
+        <StatCard icon={<RiMoneyDollarCircleLine className="w-4 h-4" />} label="Booked revenue" value={`$${stats.revenue.toFixed(0)}`} />
+        <StatCard
+          icon={<RiStarFill className="w-4 h-4 text-amber-400" />}
+          label={`Avg rating${stats.ratedCount ? ` (${stats.ratedCount})` : ""}`}
+          value={stats.avgRating ? stats.avgRating.toFixed(1) : "—"}
+        />
       </div>
 
       {/* Unassigned alert queue */}
@@ -144,6 +214,16 @@ export default function PartnerAdmin() {
         <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><RiPriceTag3Line className="w-5 h-5 text-primary" /> Properties pending pricing ({pending.length})</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {pending.length === 0 && <p className="text-sm text-muted-foreground">All properties are priced.</p>}
+          {pending.length > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3 bg-slate-50">
+              <span className="text-sm font-medium">Set all {pending.length} pending at once</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input className="w-28" inputMode="decimal" placeholder="per turnover" value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value)} />
+                <Button size="sm" variant="outline" onClick={setAllPending}>Apply to all</Button>
+              </div>
+            </div>
+          )}
           {pending.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
               <div className="text-sm min-w-0">
@@ -186,26 +266,76 @@ export default function PartnerAdmin() {
 
       {/* All requests */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><RiCalendarCheckLine className="w-5 h-5 text-primary" /> Recent turnover requests</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {turnovers.length === 0 && <p className="text-sm text-muted-foreground">No requests yet.</p>}
-          {turnovers.map((t) => (
-            <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
-              <div className="text-sm min-w-0">
-                <p className="font-medium truncate">{propName(t.property_id)}</p>
-                <p className="text-xs text-muted-foreground">{format(new Date(`${t.requested_date}T12:00:00`), "EEE, MMM d")} · ${Number(t.price).toFixed(0)} · {t.assigned_cleaner_id ? cleanerName(t.assigned_cleaner_id) : "unassigned"}{t.assignment_type ? ` (${t.assignment_type})` : ""}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge className={cn("text-[11px]", STATUS_TONE[t.status] || "bg-slate-100")}>{t.status.replace(/_/g, " ")}</Badge>
-                {["paid", "assigned", "unassigned_alert", "cleaner_confirmed"].includes(t.status) && (
-                  <AssignControl cleaners={cleaners} onAssign={(cid) => assign(t.id, cid)} label="Reassign" />
-                )}
-              </div>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><RiCalendarCheckLine className="w-5 h-5 text-primary" /> Turnover requests ({filteredTurnovers.length})</CardTitle>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <RiSearchLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input className="pl-8 h-9" placeholder="Search property / address…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-          ))}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-44 text-xs"><SelectValue placeholder="All statuses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="pending_payment">Pending payment</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="assigned">Assigned</SelectItem>
+                <SelectItem value="cleaner_confirmed">Cleaner confirmed</SelectItem>
+                <SelectItem value="in_progress">In progress</SelectItem>
+                <SelectItem value="unassigned_alert">Unassigned alert</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {filteredTurnovers.length === 0 && <p className="text-sm text-muted-foreground">No requests match your filters.</p>}
+          {filteredTurnovers.map((t) => {
+            const photoCount = (t.before_photos?.length || 0) + (t.after_photos?.length || 0);
+            const firstPhoto = (t.after_photos?.[0]) || (t.before_photos?.[0]);
+            return (
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                <div className="text-sm min-w-0">
+                  <p className="font-medium truncate">{propName(t.property_id)}</p>
+                  <p className="text-xs text-muted-foreground">{format(new Date(`${t.requested_date}T12:00:00`), "EEE, MMM d")} · ${Number(t.price).toFixed(0)} · {t.assigned_cleaner_id ? cleanerName(t.assigned_cleaner_id) : "unassigned"}{t.assignment_type ? ` (${t.assignment_type})` : ""}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {t.host_rating ? (
+                      <span className="text-[11px] text-amber-500 flex items-center gap-0.5">
+                        {Array.from({ length: t.host_rating }).map((_, i) => <RiStarFill key={i} className="w-3 h-3" />)}
+                      </span>
+                    ) : null}
+                    {photoCount > 0 && firstPhoto && (
+                      <a href={firstPhoto} target="_blank" rel="noreferrer" className="text-[11px] text-primary flex items-center gap-0.5 hover:underline">
+                        <RiImage2Line className="w-3 h-3" /> {photoCount}
+                      </a>
+                    )}
+                    {t.host_review && <span className="text-[11px] text-muted-foreground italic truncate max-w-[200px]">“{t.host_review}”</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={cn("text-[11px]", STATUS_TONE[t.status] || "bg-slate-100")}>{t.status.replace(/_/g, " ")}</Badge>
+                  {["paid", "assigned", "unassigned_alert", "cleaner_confirmed"].includes(t.status) && (
+                    <AssignControl cleaners={cleaners} onAssign={(cid) => assign(t.id, cid)} label="Reassign" />
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">{icon}{label}</div>
+        <p className="text-xl font-bold mt-1">{value}</p>
+      </CardContent>
+    </Card>
   );
 }
 

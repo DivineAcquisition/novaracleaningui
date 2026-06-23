@@ -918,6 +918,31 @@ export default function CleanerDashboard() {
           </CardContent>
         </Card>
 
+        {/* Turnover crew jobs */}
+        <Card className="border-0 shadow-lg border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <RiMapPinLine className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">Turnovers</p>
+                <p className="text-xs text-muted-foreground">
+                  Confirm, check in, and complete your Airbnb / STR turnovers
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/cleaner/turnovers")}
+              >
+                Open
+                <RiExternalLinkLine className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <p className="text-xs text-center text-muted-foreground">
           Need help? Contact support@novaracleaning.com
         </p>
