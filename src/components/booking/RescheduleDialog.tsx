@@ -16,6 +16,19 @@ import { toast } from "sonner";
 import { ResponsiveModal } from "@/components/booking/ResponsiveModal";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
 
+/**
+ * Safely format a YYYY-MM-DD service date. Internal/admin bookings can
+ * carry a null/empty service_date; passing that straight into
+ * `new Date(...)` yields an Invalid Date and makes date-fns `format`
+ * throw, which previously crashed the whole reschedule modal.
+ */
+function safeFormatDate(value: string | null | undefined, pattern: string): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "—";
+  return format(d, pattern);
+}
+
 interface Booking {
   id: string;
   service_date: string;
@@ -111,7 +124,8 @@ export function RescheduleDialog({
       onOpenChange(false);
     } catch (error) {
       console.error("Reschedule error:", error);
-      toast.error("Failed to reschedule booking");
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(msg || "Failed to reschedule booking");
     } finally {
       setIsRescheduling(false);
     }
@@ -160,7 +174,7 @@ export function RescheduleDialog({
               <div>
                 <p className="text-xs text-muted-foreground">Current Appointment</p>
                 <p className="text-sm font-semibold">
-                  {format(new Date(booking.service_date), "MMM d, yyyy")} · {booking.time_slot}
+                  {safeFormatDate(booking.service_date, "MMM d, yyyy")} · {booking.time_slot}
                 </p>
               </div>
             </div>
@@ -196,7 +210,7 @@ export function RescheduleDialog({
             <div className="flex items-center justify-center gap-3 text-sm">
               <div className="text-center">
                 <p className="text-[11px] text-muted-foreground">From</p>
-                <p className="font-medium">{format(new Date(booking.service_date), "MMM d")}</p>
+                <p className="font-medium">{safeFormatDate(booking.service_date, "MMM d")}</p>
                 <p className="text-[11px] text-muted-foreground">{booking.time_slot}</p>
               </div>
               <RiArrowRightLine className="h-5 w-5 text-primary" />
