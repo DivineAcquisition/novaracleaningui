@@ -373,7 +373,7 @@ function StepConsent({ consent, setConsent, propertyCount }: { consent: boolean;
         <p className="font-semibold text-slate-900">What happens next</p>
         <ol className="mt-2 list-decimal space-y-1 pl-4 text-[13px]">
           <li>We review your {propertyCount} propert{propertyCount === 1 ? "y" : "ies"} and set your per-turnover rate.</li>
-          <li>You receive the Host Partnership Agreement — with your rate schedule — to e-sign.</li>
+          <li>You receive the full Host Partnership Agreement — with your rate schedule — to e-sign within 24 hours.</li>
           <li>Once signed, your properties go active and you can request turnovers.</li>
         </ol>
       </div>
@@ -384,10 +384,11 @@ function StepConsent({ consent, setConsent, propertyCount }: { consent: boolean;
           I agree to the{" "}
           <a href={AGREEMENT_URL} target="_blank" rel="noreferrer" className="font-semibold text-[#5500FF] hover:underline">
             NovaraCleaning Host Partnership Agreement and Property &amp; Rate Schedule
-          </a>.
+          </a>. I understand the{" "}
+          <span className="font-semibold text-slate-900">full agreement will be sent to me to e-sign, and must be signed within 24 hours</span>.
         </span>
       </label>
-      <p className="text-[11px] text-slate-400">By submitting, you consent to the agreement terms; we record the time and your device for the agreement record.</p>
+      <p className="text-[11px] text-slate-400">By submitting, you consent to the agreement terms; we record the time and your device for the agreement record. The complete Host Partnership Agreement (with your rate schedule) will be emailed for e-signature and must be signed within 24&nbsp;hours.</p>
     </div>
   );
 }
@@ -409,7 +410,7 @@ function SuccessCard({ email }: { email: string }) {
       </div>
       <h1 className="mt-4 font-jakarta text-2xl font-bold tracking-tight text-slate-900">Application received!</h1>
       <p className="mt-2 text-sm text-slate-500">
-        Thanks — we've got your details{email ? <> at <span className="font-medium text-slate-700">{email}</span></> : ""}. Our team will set your per-turnover rates and send your Host Partnership Agreement to sign. Keep an eye on your inbox.
+        Thanks — we've got your details{email ? <> at <span className="font-medium text-slate-700">{email}</span></> : ""}. Our team will set your per-turnover rates and send your full Host Partnership Agreement to e-sign within 24 hours. Keep an eye on your inbox.
       </p>
     </div>
   );
