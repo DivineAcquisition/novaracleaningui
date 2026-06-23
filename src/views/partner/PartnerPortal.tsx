@@ -8,13 +8,14 @@
 // is enforced server-side by the partner-turnover edge function.
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   RiHome4Line, RiAddLine, RiLoader4Line, RiCalendarLine, RiMapPinLine,
   RiLogoutBoxRLine, RiCheckboxCircleLine, RiTimeLine, RiEditLine, RiSparklingLine,
-  RiMailSendLine,
+  RiMailSendLine, RiCalendarScheduleLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -231,6 +232,7 @@ function AuthScreen() {
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────
 function Dashboard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
   const [turnovers, setTurnovers] = useState<Turnover[]>([]);
@@ -260,7 +262,12 @@ function Dashboard() {
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold"><RiSparklingLine className="w-5 h-5" style={{ color: "#5500FF" }} /> Host Portal</div>
-          <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}><RiLogoutBoxRLine className="w-4 h-4" /></Button>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={() => router.push("/partner/schedule")}>
+              <RiCalendarScheduleLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Weekly schedule</span>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}><RiLogoutBoxRLine className="w-4 h-4" /></Button>
+          </div>
         </div>
       </header>
 

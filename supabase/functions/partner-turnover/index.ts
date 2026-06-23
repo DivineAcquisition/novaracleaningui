@@ -2,8 +2,11 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
-import { sendSms, formatServiceDate } from "../_shared/sms.ts";
-import { notifyDiscord } from "../_shared/discord.ts";
+import { formatServiceDate } from "../_shared/sms.ts";
+import {
+  type SB, money, fmtWindow, sendPartnerEmail as sendHostEmail,
+  runAssignment, notifyAssignment, loadContext, finalizeBatch,
+} from "../_shared/turnover-engine.ts";
 
 // --- Partner Turnover Portal - server engine -----------------------------
 //
@@ -19,14 +22,15 @@ import { notifyDiscord } from "../_shared/discord.ts";
 //   turnover.finalize  -> verify payment server-side, then auto-assign + notify
 //   turnover.cancel    -> host cancellation (24h cutoff)
 //   admin.assign       -> admin manual (re)assign + re-notify (role-gated)
+//   batch.checkout     -> book a whole week in one payment
+//   batch.finalize     -> verify batch payment, assign every turnover
+//   recurring.save     -> create/update a repeating weekly pattern
+//   recurring.update   -> pause / resume / cancel a recurring schedule
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Cleaner's share of a turnover used in the assignment SMS (informational).
-const CLEANER_SHARE = 0.70;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -34,33 +38,6 @@ function json(body: unknown, status = 200) {
     status,
   });
 }
-const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
-
-// Fire a branded host email (best-effort).
-async function sendHostEmail(admin: SB, type: string, email: string | null | undefined, data: Record<string, unknown>) {
-  if (!email) return;
-  try {
-    await admin.functions.invoke("send-partner-email", { body: { type, email, data } });
-  } catch (e) {
-    console.warn("[partner-turnover] email failed", type, e instanceof Error ? e.message : String(e));
-  }
-}
-function fmtWindow(start?: string | null, end?: string | null): string {
-  const t = (s?: string | null) => {
-    if (!s) return "";
-    const [h, m] = s.split(":");
-    const hh = parseInt(h, 10);
-    const ap = hh >= 12 ? "PM" : "AM";
-    const h12 = hh % 12 === 0 ? 12 : hh % 12;
-    return `${h12}:${m ?? "00"} ${ap}`;
-  };
-  const a = t(start), b = t(end);
-  if (a && b) return `${a} - ${b}`;
-  return a || b || "";
-}
-
-// deno-lint-ignore no-explicit-any
-type SB = any;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -239,7 +216,7 @@ serve(async (req) => {
         });
         // Run assignment on the freshly-paid request.
         const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
-        await runAssignment(admin, fresh, "auto");
+        await runAssignment(admin, fresh);
         const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
         return json({ paid: true, status: after?.status, assignment_type: after?.assignment_type });
       }
@@ -289,9 +266,147 @@ serve(async (req) => {
       }
       // No cleaner specified -> re-run the auto engine.
       await admin.from("turnover_requests").update({ assigned_by: userId }).eq("id", tr.id);
-      await runAssignment(admin, tr, "auto");
+      await runAssignment(admin, tr);
       const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
       return json({ status: after?.status, assignment_type: after?.assignment_type });
+    }
+
+    // --- batch.checkout (whole week, one payment) -----------------------
+    if (action === "batch.checkout") {
+      const lines: Array<{ propertyId: string; date: string; window_start?: string; window_end?: string }> = Array.isArray(body.lines) ? body.lines : [];
+      if (!body.weekStart || lines.length === 0) return json({ error: "weekStart and at least one line required" }, 400);
+
+      // Server-authoritative pricing: re-read each property's current price.
+      const priced: Array<{ propertyId: string; date: string; ws: string | null; we: string | null; price: number }> = [];
+      let total = 0;
+      for (const ln of lines) {
+        if (!ln.propertyId || !ln.date) return json({ error: "Each line needs propertyId and date" }, 400);
+        const { data: property } = await admin.from("properties").select("id, host_id, turnover_price").eq("id", ln.propertyId).maybeSingle();
+        if (!property || property.host_id !== host.id) return json({ error: "Property not found" }, 404);
+        if (property.turnover_price == null || Number(property.turnover_price) <= 0) {
+          return json({ error: "One of your properties isn't priced yet." }, 409);
+        }
+        const price = Number(property.turnover_price);
+        total += price;
+        priced.push({ propertyId: ln.propertyId, date: ln.date, ws: ln.window_start || null, we: ln.window_end || null, price });
+      }
+
+      const { data: batch, error: bErr } = await admin.from("booking_batches").insert({
+        host_id: host.id,
+        week_start: body.weekStart,
+        source: "manual",
+        turnover_count: priced.length,
+        total_amount: total,
+        status: "pending_payment",
+      }).select("*").single();
+      if (bErr) return json({ error: bErr.message }, 500);
+
+      // Create a pending turnover per line, grouped by batch_id.
+      const rows = priced.map((p) => ({
+        property_id: p.propertyId, host_id: host.id, requested_date: p.date,
+        window_start: p.ws, window_end: p.we, price: p.price, status: "pending_payment", batch_id: batch.id,
+      }));
+      const { error: trErr } = await admin.from("turnover_requests").insert(rows);
+      if (trErr) return json({ error: trErr.message }, 500);
+
+      // Optionally persist repeat-weekly patterns from flagged rows.
+      const repeat: Array<{ propertyId: string; days_of_week: number[]; window_start?: string; window_end?: string }> = Array.isArray(body.repeat) ? body.repeat : [];
+      for (const r of repeat) {
+        const { data: property } = await admin.from("properties").select("id, host_id, turnover_price").eq("id", r.propertyId).maybeSingle();
+        if (property && property.host_id === host.id && property.turnover_price != null) {
+          await admin.from("recurring_schedules").insert({
+            host_id: host.id, property_id: r.propertyId,
+            days_of_week: r.days_of_week || [], window_start: r.window_start || null, window_end: r.window_end || null,
+            price_snapshot: Number(property.turnover_price), active: true,
+          });
+        }
+      }
+
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      let customerId = host.stripe_customer_id || undefined;
+      if (!customerId && host.email) {
+        const list = await stripe.customers.list({ email: host.email, limit: 1 });
+        customerId = list.data[0]?.id || (await stripe.customers.create({ email: host.email, name: host.name || undefined })).id;
+        await admin.from("hosts").update({ stripe_customer_id: customerId }).eq("id", host.id);
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        customer_email: customerId ? undefined : host.email,
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Weekly turnovers (${priced.length}) - week of ${body.weekStart}` },
+            unit_amount: Math.round(total * 100),
+          },
+          quantity: 1,
+        }],
+        success_url: `${origin}/partner/turnover/batch-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/partner/dashboard`,
+        payment_intent_data: { setup_future_usage: "off_session" },
+        metadata: { kind: "turnover_batch", batch_id: batch.id, host_id: host.id },
+      });
+      await admin.from("booking_batches").update({ stripe_checkout_session_id: session.id }).eq("id", batch.id);
+      return json({ url: session.url, batchId: batch.id });
+    }
+
+    // --- batch.finalize (verify payment, then assign every turnover) -----
+    if (action === "batch.finalize") {
+      if (!body.sessionId) return json({ error: "sessionId required" }, 400);
+      const { data: batch } = await admin.from("booking_batches").select("*").eq("stripe_checkout_session_id", body.sessionId).maybeSingle();
+      if (!batch) return json({ error: "Batch not found" }, 404);
+
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      const session = await stripe.checkout.sessions.retrieve(body.sessionId);
+      const paid = session.payment_status === "paid" || session.status === "complete";
+
+      if (paid && batch.status === "pending_payment") {
+        await admin.from("booking_batches").update({
+          status: "paid", stripe_payment_intent_id: (session.payment_intent as string) || null,
+        }).eq("id", batch.id).eq("status", "pending_payment");
+        await finalizeBatch(admin, batch.id);
+      }
+      const { data: after } = await admin.from("booking_batches").select("status, turnover_count, total_amount, week_start").eq("id", batch.id).single();
+      return json({ paid, status: after?.status, count: after?.turnover_count, total: after?.total_amount, weekStart: after?.week_start });
+    }
+
+    // --- recurring.save (create/update a weekly pattern) -----------------
+    if (action === "recurring.save") {
+      const { data: property } = await admin.from("properties").select("id, host_id, turnover_price").eq("id", body.propertyId).maybeSingle();
+      if (!property || property.host_id !== host.id) return json({ error: "Property not found" }, 404);
+      if (property.turnover_price == null || Number(property.turnover_price) <= 0) return json({ error: "Property isn't priced yet." }, 409);
+      const fields = {
+        host_id: host.id, property_id: body.propertyId,
+        days_of_week: Array.isArray(body.days_of_week) ? body.days_of_week : [],
+        window_start: body.window_start || null, window_end: body.window_end || null,
+        price_snapshot: Number(property.turnover_price), active: true,
+      };
+      if (body.scheduleId) {
+        const { data: ex } = await admin.from("recurring_schedules").select("id, host_id").eq("id", body.scheduleId).maybeSingle();
+        if (!ex || ex.host_id !== host.id) return json({ error: "Schedule not found" }, 404);
+        const { data, error } = await admin.from("recurring_schedules").update(fields).eq("id", body.scheduleId).select("*").single();
+        if (error) return json({ error: error.message }, 500);
+        return json({ schedule: data });
+      }
+      const { data, error } = await admin.from("recurring_schedules").insert(fields).select("*").single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ schedule: data });
+    }
+
+    // --- recurring.update (pause / resume / cancel) ----------------------
+    if (action === "recurring.update") {
+      const { data: sch } = await admin.from("recurring_schedules").select("*").eq("id", body.scheduleId).maybeSingle();
+      if (!sch || sch.host_id !== host.id) return json({ error: "Schedule not found" }, 404);
+      const upd: Record<string, unknown> = {};
+      if (body.op === "cancel") upd.active = false;
+      else if (body.op === "resume") { upd.active = true; upd.paused_until = null; }
+      else if (body.op === "pause") upd.paused_until = body.paused_until || null;
+      else return json({ error: "Unknown op" }, 400);
+      await admin.from("recurring_schedules").update(upd).eq("id", sch.id);
+      return json({ ok: true });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
@@ -299,149 +414,3 @@ serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
-
-// --- Assignment engine -------------------------------------------------
-async function runAssignment(admin: SB, tr: Record<string, unknown>, defaultType: "auto" | "preferred") {
-  const propertyId = tr.property_id as string;
-  const date = tr.requested_date as string;
-
-  // Candidate crew: property-preferred first (priority), then global crew.
-  const { data: preferred } = await admin
-    .from("turnover_crew")
-    .select("cleaner_id, priority")
-    .eq("active", true).eq("is_turnover_crew", true).eq("property_id", propertyId)
-    .order("priority", { ascending: true });
-  const { data: pool } = await admin
-    .from("turnover_crew")
-    .select("cleaner_id, priority")
-    .eq("active", true).eq("is_turnover_crew", true).is("property_id", null)
-    .order("priority", { ascending: true });
-
-  const ordered = [
-    ...(preferred || []).map((c: { cleaner_id: string }) => ({ id: c.cleaner_id, type: "preferred" as const })),
-    ...(pool || []).map((c: { cleaner_id: string }) => ({ id: c.cleaner_id, type: "auto" as const })),
-  ];
-
-  // Cleaners already booked on this date for an active turnover (conflict).
-  const { data: sameDay } = await admin
-    .from("turnover_requests")
-    .select("assigned_cleaner_id, window_start, window_end")
-    .eq("requested_date", date)
-    .in("status", ["assigned", "cleaner_confirmed", "in_progress"]);
-  const overlaps = (s1?: string | null, e1?: string | null, s2?: string | null, e2?: string | null) => {
-    if (!s1 || !e1 || !s2 || !e2) return true; // unknown windows -> treat as conflict (same day)
-    return s1 < e2 && s2 < e1;
-  };
-  const busy = new Set<string>();
-  for (const r of sameDay || []) {
-    if (r.assigned_cleaner_id && overlaps(tr.window_start as string, tr.window_end as string, r.window_start, r.window_end)) {
-      busy.add(r.assigned_cleaner_id);
-    }
-  }
-
-  const pick = ordered.find((c) => !busy.has(c.id));
-
-  if (pick) {
-    await admin.from("turnover_requests").update({
-      assigned_cleaner_id: pick.id,
-      assignment_type: pick.type,
-      status: "assigned",
-      assigned_at: new Date().toISOString(),
-    }).eq("id", tr.id);
-    const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
-    await notifyAssignment(admin, fresh);
-    return;
-  }
-
-  // No one available -> escalate (never silently leave unassigned).
-  await admin.from("turnover_requests").update({ status: "unassigned_alert" }).eq("id", tr.id);
-  const { property, hostRow } = await loadContext(admin, tr);
-  await notifyDiscord(admin, {
-    title: "UNASSIGNED turnover needs manual assignment",
-    color: 15158332,
-    fields: [
-      { name: "Property", value: property?.nickname || property?.address || "-", inline: true },
-      { name: "Date", value: `${formatServiceDate(date)} ${fmtWindow(tr.window_start as string, tr.window_end as string)}`, inline: true },
-      { name: "Host", value: hostRow?.name || hostRow?.email || "-", inline: true },
-      { name: "Why", value: "No turnover crew available for this date/window.", inline: false },
-    ],
-  });
-  const opsPhone = (await resolveSecret(admin, "OPS_ALERT_PHONE")).trim();
-  if (opsPhone) {
-    await sendSms(admin, {
-      toPhone: opsPhone,
-      type: "reminder",
-      message: `Novara: UNASSIGNED turnover ${property?.nickname || property?.address || ""} on ${formatServiceDate(date)} - no crew free. Assign manually in admin.`,
-    });
-  }
-}
-
-async function loadContext(admin: SB, tr: Record<string, unknown>) {
-  const { data: property } = await admin.from("properties").select("*").eq("id", tr.property_id).maybeSingle();
-  const { data: hostRow } = await admin.from("hosts").select("*").eq("id", tr.host_id).maybeSingle();
-  return { property, hostRow };
-}
-
-async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
-  const { property, hostRow } = await loadContext(admin, tr);
-  const cleanerId = tr.assigned_cleaner_id as string | null;
-  if (!cleanerId) return;
-  const { data: cleaner } = await admin.from("cleaners").select("first_name, phone, email").eq("id", cleanerId).maybeSingle();
-  const dateLabel = formatServiceDate(tr.requested_date as string);
-  const windowLabel = fmtWindow(tr.window_start as string, tr.window_end as string);
-  const priceNum = Number(tr.price || 0);
-  const share = money(priceNum * CLEANER_SHARE);
-  const nickname = property?.nickname || property?.address || "Property";
-  const assignmentType = (tr.assignment_type as string) || "auto";
-
-  // 1. Cleaner SMS - reply YES to confirm.
-  if (cleaner?.phone) {
-    await sendSms(admin, {
-      toPhone: cleaner.phone,
-      type: "job_offer",
-      message: `New turnover assigned: ${nickname}, ${property?.address || ""}. ${dateLabel}${windowLabel ? ` between ${windowLabel}` : ""}. Pay: ${share}. Reply YES to confirm. Access: ${property?.access_instructions || "see app"}.`,
-    });
-  }
-
-  // 2. Discord ops.
-  await notifyDiscord(admin, {
-    title: "Turnover assigned",
-    color: 3066993,
-    fields: [
-      { name: "Property", value: nickname, inline: true },
-      { name: "When", value: `${dateLabel} ${windowLabel}`, inline: true },
-      { name: "Cleaner", value: `${cleaner?.first_name || "Cleaner"} (${assignmentType})`, inline: true },
-      { name: "Host", value: hostRow?.name || hostRow?.email || "-", inline: true },
-      { name: "Price", value: money(priceNum), inline: true },
-    ],
-  });
-
-  // 3. Host SMS + email.
-  if (hostRow?.phone) {
-    await sendSms(admin, {
-      toPhone: hostRow.phone,
-      type: "confirmation",
-      message: `Your turnover for ${nickname} on ${dateLabel} is confirmed and assigned. We'll have it guest-ready${windowLabel ? ` by the end of your ${windowLabel} window` : ""}. - NovaraCleaning`,
-    });
-  }
-  await sendHostEmail(admin, "turnover_assigned", hostRow?.email, {
-    name: (hostRow?.name || "").split(" ")[0] || "",
-    property: nickname,
-    address: property?.address || "",
-    date: dateLabel,
-    window: windowLabel,
-    cleaner: cleaner?.first_name || "Your cleaner",
-  });
-
-  // 4. Cleaner email (if on file) - SMS already sent above.
-  if (cleaner?.email) {
-    await sendHostEmail(admin, "turnover_assigned", cleaner.email, {
-      name: cleaner.first_name || "",
-      property: nickname,
-      address: property?.address || "",
-      date: dateLabel,
-      window: windowLabel,
-      cleaner: cleaner.first_name || "you",
-    });
-  }
-}
