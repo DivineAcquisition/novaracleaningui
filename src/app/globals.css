@@ -13,9 +13,10 @@
     --popover: 0 0% 100%;
     --popover-foreground: 262 15% 20%;
 
-    --primary: 262 99% 53%;
+    /* Brand scheme — #5C0FFE (primary) + #8F7BFD (light) */
+    --primary: 259 99% 53%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 262 99% 46%;
+    --primary-hover: 259 99% 46%;
     --primary-glow: 249 97% 74%;
 
     --secondary: 262 35% 95%;
@@ -32,8 +33,8 @@
 
     --border: 262 25% 90%;
     --input: 262 25% 90%;
-    --ring: 262 99% 53%;
-    --focus-ring: 262 99% 53%;
+    --ring: 259 99% 53%;
+    --focus-ring: 259 99% 53%;
     --focus-ring-offset: 0 0% 100%;
 
     --radius: 1rem;
@@ -41,16 +42,16 @@
     --success: 142 76% 32%;
     --warning: 38 92% 45%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(262 99% 53%), hsl(249 97% 74%));
+    --gradient-primary: linear-gradient(135deg, hsl(259 99% 53%), hsl(249 97% 74%));
     --gradient-hero: linear-gradient(180deg, hsl(0 0% 100%), hsl(249 50% 97%));
-    --gradient-lavender: linear-gradient(135deg, hsl(262 99% 53% / 0.1), hsl(249 97% 74% / 0.1));
+    --gradient-lavender: linear-gradient(135deg, hsl(259 99% 53% / 0.1), hsl(249 97% 74% / 0.1));
     
     --shadow-sm: 0 1px 2px 0 hsl(262 20% 30% / 0.05);
     --shadow-md: 0 2px 8px hsl(262 20% 30% / 0.06);
     --shadow-lg: 0 4px 16px hsl(262 20% 30% / 0.08);
     --shadow-xl: 0 8px 24px hsl(262 20% 30% / 0.10);
     --shadow-card: 0 2px 12px hsl(262 20% 30% / 0.06);
-    --shadow-lavender: 0 0 12px hsl(262 99% 53% / 0.15), 0 0 24px hsl(262 99% 53% / 0.08);
+    --shadow-lavender: 0 0 12px hsl(259 99% 53% / 0.15), 0 0 24px hsl(259 99% 53% / 0.08);
     
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -100,7 +101,7 @@
     --success: 142 76% 36%;
     --warning: 38 92% 50%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(262 99% 53%), hsl(249 97% 74%));
+    --gradient-primary: linear-gradient(135deg, hsl(259 99% 53%), hsl(249 97% 74%));
     --gradient-hero: linear-gradient(180deg, hsl(262 35% 10%), hsl(262 35% 14%));
     --gradient-lavender: linear-gradient(135deg, hsl(262 99% 53% / 0.2), hsl(249 97% 74% / 0.2));
     --shadow-lavender: 0 0 20px hsl(262 99% 53% / 0.3), 0 0 40px hsl(262 99% 53% / 0.2);

@@ -7,17 +7,24 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:translate-y-[1px]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-gradient-primary text-white border border-white/15 shadow-[0_3px_0_0_hsl(260,100%,35%),0_4px_10px_-2px_hsl(260,100%,50%/0.25),inset_0_1px_0_0_hsl(0,0%,100%/0.15)] hover:shadow-[0_1px_0_0_hsl(260,100%,35%),0_3px_8px_-2px_hsl(260,100%,50%/0.25),inset_0_1px_0_0_hsl(0,0%,100%/0.15)] hover:translate-y-[2px] active:shadow-[0_0px_0_0_hsl(260,100%,35%),inset_0_1px_2px_0_hsl(260,100%,30%/0.3)] active:translate-y-[3px]",
-        destructive: "bg-destructive text-destructive-foreground border border-white/15 shadow-[0_3px_0_0_hsl(0,70%,45%),0_4px_10px_-2px_hsl(0,84%,60%/0.25),inset_0_1px_0_0_hsl(0,0%,100%/0.15)] hover:shadow-[0_1px_0_0_hsl(0,70%,45%),0_3px_8px_-2px_hsl(0,84%,60%/0.25)] hover:translate-y-[2px] active:shadow-[0_0px_0_0_hsl(0,70%,45%)] active:translate-y-[3px]",
-        outline: "border border-border bg-background shadow-[0_1px_2px_0_hsl(260,25%,85%/0.5)] hover:bg-accent/30 hover:border-primary/30 hover:shadow-sm active:shadow-none active:translate-y-[1px]",
-        secondary: "bg-secondary text-secondary-foreground border border-white/20 shadow-[0_2px_0_0_hsl(260,35%,88%),inset_0_1px_0_0_hsl(0,0%,100%/0.4)] hover:shadow-[0_1px_0_0_hsl(260,35%,88%)] hover:translate-y-[1px] active:shadow-none active:translate-y-[2px]",
-        ghost: "hover:bg-accent/50",
+        // Clean, modern gradient with a soft colored elevation and a subtle
+        // lift on hover (no chunky skeuomorphic stack).
+        default:
+          "bg-gradient-primary text-white shadow-[0_4px_14px_-3px_hsl(259_99%_53%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(259_99%_53%/0.55)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_2px_8px_-3px_hsl(259_99%_53%/0.4)]",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-[0_4px_14px_-3px_hsl(0_84%_60%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(0_84%_60%/0.55)] hover:-translate-y-px active:translate-y-0",
+        outline:
+          "border border-border bg-background shadow-sm hover:bg-accent/30 hover:border-primary/40 hover:text-primary active:bg-accent/40",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/70 active:bg-secondary/80",
+        ghost: "hover:bg-accent/50 hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline hover:text-primary-hover",
-        success: "bg-success text-white border border-white/15 shadow-[0_3px_0_0_hsl(142,76%,22%),0_4px_10px_-2px_hsl(142,76%,32%/0.25),inset_0_1px_0_0_hsl(0,0%,100%/0.15)] hover:shadow-[0_1px_0_0_hsl(142,76%,22%),0_3px_8px_-2px_hsl(142,76%,32%/0.25)] hover:translate-y-[2px] active:shadow-[0_0px_0_0_hsl(142,76%,22%)] active:translate-y-[3px]",
+        success:
+          "bg-success text-white shadow-[0_4px_14px_-3px_hsl(142_76%_32%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(142_76%_32%/0.55)] hover:-translate-y-px active:translate-y-0",
       },
       size: {
         default: "h-10 px-5 py-2",
