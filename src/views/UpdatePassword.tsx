@@ -5,20 +5,27 @@ import {
   RiEyeLine,
   RiEyeOffLine,
   RiLoader4Line,
-  RiLockLine
+  RiLockLine,
+  RiShieldKeyholeLine,
+  RiBankCardLine,
 } from "@remixicon/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
+import { AuthScaffold, AuthCard, AUTH_INPUT_CLS, AUTH_GRADIENT } from "@/components/auth/AuthScaffold";
+
+const SECURITY_FEATURES = [
+  { icon: RiShieldKeyholeLine, label: "Encrypted by default", desc: "Passwords are hashed — never stored in plain text." },
+  { icon: RiBankCardLine, label: "Protects your account", desc: "Keeps your bookings and saved cards secure." },
+];
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
@@ -129,10 +136,10 @@ export default function UpdatePassword() {
   // so the user doesn't see "Invalid link" flash + redirect.
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC] px-4">
         <SEO title="Verifying reset link" description="Verifying your password reset link." noindex />
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <RiLoader4Line className="h-7 w-7 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <RiLoader4Line className="h-7 w-7 animate-spin text-[#4F38FF]" />
           <p className="text-sm">Verifying your reset link…</p>
         </div>
       </div>
@@ -141,120 +148,107 @@ export default function UpdatePassword() {
 
   if (passwordUpdated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6">
-        <Card className="max-w-sm w-full shadow-xl border-0 overflow-hidden animate-scale-in">
-          <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
-          <CardContent className="pt-8 pb-8">
-            <div className="space-y-4 text-center">
-              <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'var(--gradient-primary)' }}>
-                <RiCheckboxCircleLine className="w-7 h-7 text-white" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-xl font-bold tracking-tight">Password Updated!</h2>
-                <p className="text-sm text-muted-foreground">Redirecting to your account...</p>
-              </div>
-              <RiLoader4Line className="w-5 h-5 animate-spin mx-auto text-primary" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC] px-4 py-6">
+        <SEO title="Password updated" noindex />
+        <AuthCard className="w-full max-w-sm text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg shadow-[#4F38FF]/25" style={{ background: AUTH_GRADIENT }}>
+            <RiCheckboxCircleLine className="h-7 w-7" />
+          </div>
+          <h2 className="mt-4 font-jakarta text-xl font-bold tracking-tight text-slate-900">Password updated!</h2>
+          <p className="mt-1 text-sm text-slate-500">Redirecting to your account…</p>
+          <RiLoader4Line className="mx-auto mt-4 h-5 w-5 animate-spin text-[#4F38FF]" />
+        </AuthCard>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6">
+    <AuthScaffold
+      eyebrow="Account Security"
+      headline={<>Secure your<br />account.</>}
+      subline="Choose a new password to protect your Novara account."
+      features={SECURITY_FEATURES}
+    >
       <SEO title="Update Password" description="Choose a new password for your Novara Cleaning account." noindex />
-      <Card className="max-w-sm w-full shadow-xl border-0 overflow-hidden animate-scale-in">
-        <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
-        <CardHeader className="text-center space-y-1 pb-3 pt-6">
-          <CardTitle className="text-xl font-bold tracking-tight">Update Password</CardTitle>
-          <CardDescription className="text-sm">Choose a new password</CardDescription>
-        </CardHeader>
-        
-        <CardContent className="px-6 pb-6">
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-sm">New Password</Label>
-              <div className="relative">
-                <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter new password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 h-11 rounded-xl"
-                  disabled={isLoading}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <RiEyeOffLine className="w-4 h-4" /> : <RiEyeLine className="w-4 h-4" />}
-                </button>
-              </div>
-              {password && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Strength:</span>
-                    <span className={cn(
-                      "font-medium",
-                      passwordStrength.strength <= 25 && "text-red-500",
-                      passwordStrength.strength === 50 && "text-orange-500",
-                      passwordStrength.strength === 75 && "text-amber-500",
-                      passwordStrength.strength === 100 && "text-emerald-500",
-                    )}>{passwordStrength.label}</span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-1.5">
-                    <div
-                      className={cn("h-1.5 rounded-full transition-all duration-300", passwordStrength.color)}
-                      style={{ width: `${passwordStrength.strength}%` }}
-                    />
-                  </div>
+      <AuthCard>
+        <div className="space-y-1.5">
+          <h1 className="font-jakarta text-[26px] font-bold leading-tight tracking-tight text-slate-900">Update password</h1>
+          <p className="text-sm text-slate-500">Choose a new password for your account.</p>
+        </div>
+
+        <form onSubmit={handleUpdatePassword} className="mt-6 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-slate-700">New password</Label>
+            <div className="relative">
+              <RiLockLine className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter new password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={cn(AUTH_INPUT_CLS, "pr-10")}
+                disabled={isLoading}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700"
+              >
+                {showPassword ? <RiEyeOffLine className="h-4 w-4" /> : <RiEyeLine className="h-4 w-4" />}
+              </button>
+            </div>
+            {password && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Strength</span>
+                  <span className={cn(
+                    "font-medium",
+                    passwordStrength.strength <= 25 && "text-red-500",
+                    passwordStrength.strength === 50 && "text-orange-500",
+                    passwordStrength.strength === 75 && "text-amber-500",
+                    passwordStrength.strength === 100 && "text-emerald-500",
+                  )}>{passwordStrength.label}</span>
                 </div>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
-              <div className="relative">
-                <RiLockLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="confirm-password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Confirm new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10 h-11 rounded-xl"
-                  disabled={isLoading}
-                  required
-                />
+                <div className="h-1.5 w-full rounded-full bg-slate-100">
+                  <div className={cn("h-1.5 rounded-full transition-all duration-300", passwordStrength.color)} style={{ width: `${passwordStrength.strength}%` }} />
+                </div>
               </div>
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-xs text-destructive">Passwords do not match</p>
-              )}
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm-password" className="text-slate-700">Confirm password</Label>
+            <div className="relative">
+              <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                id="confirm-password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={AUTH_INPUT_CLS}
+                disabled={isLoading}
+                required
+              />
             </div>
+            {confirmPassword && password !== confirmPassword && (
+              <p className="text-xs text-red-500">Passwords do not match</p>
+            )}
+          </div>
 
-            <Button
-              type="submit"
-              className="w-full h-11 rounded-xl bg-gradient-primary shadow-md"
-              disabled={isLoading || password !== confirmPassword}
-            >
-              {isLoading ? (
-                <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" /> Updating...</>
-              ) : (
-                "Update Password"
-              )}
-            </Button>
-
-            <p className="text-[11px] text-center text-muted-foreground">
-              Min. 6 characters
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          <Button
+            type="submit"
+            className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95"
+            style={{ background: AUTH_GRADIENT }}
+            disabled={isLoading || password !== confirmPassword}
+          >
+            {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Updating…</> : "Update password"}
+          </Button>
+          <p className="text-center text-[11px] text-slate-400">Minimum 6 characters.</p>
+        </form>
+      </AuthCard>
+    </AuthScaffold>
   );
 }
