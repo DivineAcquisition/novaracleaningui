@@ -1,25 +1,16 @@
 "use client";
 
-// ─── Admin address autocomplete (v2 — 2026-05-26) ─────────────────────
+// ─── Admin address autocomplete (v3 — 2026-06) ────────────────────────────────
 //
-// Premium SaaS-styled wrapper around Google Places Autocomplete with a
-// robust fallback chain so the internal booking form always gets a
-// usable City / State / ZIP even when Google Places isn't reachable
-// (e.g. the API key has HTTP-referrer restrictions that haven't been
-// extended to admin.novaracleaning.com yet).
+// Uses the modern Places API (New) via useAddressAutocomplete and renders its
+// own suggestion dropdown. The legacy google.maps.places.Autocomplete widget is
+// no longer served to API keys created on/after 2025-03-01 (it constructs but
+// returns no predictions) — this programmatic path is the supported replacement
+// and also avoids the old .pac-container z-index / focus-trap issues inside
+// dialogs.
 //
-// Resolution order (best → fallback):
-//   1. Google Places suggestion picked from the dropdown → returns
-//      address_components → onAddressSelect with street + city + state +
-//      zip + lat + lng.
-//   2. User blurs the input (or pressed Enter): call geocode-address
-//      Edge Function (Nominatim) which returns a `parsed` object with
-//      the same shape PLUS lat/lng.
-//   3. Local parseAddressString as a last resort — pulls City / State /
-//      ZIP out of a freeform "123 Main St, Frederick, MD 21703" entry.
-//
-// A small status pill above the input makes it obvious which path is
-// active so a VA never has to wonder "is Google working right now?".
+// Fallback chain: Google suggestion → geocode-address (Nominatim) on blur →
+// pure-JS parseAddressString. A status pill makes the active path obvious.
 
 import {
   RiCheckboxCircleLine,
@@ -44,7 +35,8 @@ import {
   type AddressHistoryItem,
 } from "@/lib/address-history";
 import { mergeAddressParts, parseAddressString } from "@/lib/address-formatter";
-import { loadGooglePlaces, parsePlaceResult } from "@/lib/google-places-loader";
+import { useAddressAutocomplete, type AddressAutocompleteStatus } from "@/hooks/use-address-autocomplete";
+import type { AddressSuggestion } from "@/lib/google-places-loader";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -64,8 +56,6 @@ interface AddressAutocompleteProps {
   placeholder?: string;
 }
 
-type LoadState = "loading" | "ready" | "manual" | "blocked";
-
 export function AddressAutocomplete({
   onAddressSelect,
   initialValue = "",
@@ -73,121 +63,31 @@ export function AddressAutocomplete({
   placeholder = "Start typing the customer's address…",
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  // Google Places must own an uncontrolled input — parent re-renders on
-  // every keystroke make the field look disabled/grey and break search.
-  const initialStreetRef = useRef(initialValue);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [geocodedLocation, setGeocodedLocation] = useState<string | null>(null);
-  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const pickedRef = useRef(false);
+
+  const { status, suggestions, query, resolve, clear } = useAddressAutocomplete();
 
   useEffect(() => {
     setAddressHistory(getAddressHistory());
   }, []);
 
-  // Wire Google's gm_authFailure once per page so referrer-blocked keys
-  // produce a visible "manual entry" badge instead of a silent failure.
+  // Hydrate from parent once (e.g. lead load) without tying to keystrokes.
   useEffect(() => {
-    const w = window as any;
-    if (w.__novaraGmAuthFailureHooked) return;
-    w.__novaraGmAuthFailureHooked = true;
-    const prior = w.gm_authFailure;
-    w.gm_authFailure = () => {
-      console.warn(
-        "[google-places] gm_authFailure — admin domain likely not allow-listed",
-      );
-      w.__novaraGmAuthFailed = true;
-      try { prior?.(); } catch { /* ignore */ }
-    };
-  }, []);
-
-  // Wire Google Places Autocomplete. Always falls back gracefully.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const places = await loadGooglePlaces();
-      if (cancelled) return;
-      if ((window as any).__novaraGmAuthFailed) {
-        if (inputRef.current?.value) initialStreetRef.current = inputRef.current.value;
-        setLoadState("blocked");
-        return;
-      }
-      if (!places) {
-        setLoadState("manual");
-        return;
-      }
-      if (!inputRef.current) {
-        await new Promise<void>((r) => requestAnimationFrame(() => r()));
-      }
-      if (!inputRef.current) {
-        setLoadState("manual");
-        return;
-      }
-      try {
-        const ac = new places.Autocomplete(inputRef.current, {
-          componentRestrictions: { country: "us" },
-          fields: ["address_components", "geometry", "formatted_address"],
-          types: ["address"],
-        });
-        autocompleteRef.current = ac;
-        ac.addListener("place_changed", () => {
-          const place = ac.getPlace();
-          if (!place || !place.address_components) {
-            setValidationError("Pick an address from the dropdown to autofill the fields");
-            return;
-          }
-          const parsed = parsePlaceResult(place);
-          setValidationError(null);
-          setGeocodedLocation(parsed.formattedAddress || null);
-          if (inputRef.current && parsed.street) {
-            inputRef.current.value = parsed.street;
-          }
-          onAddressSelect({
-            street: parsed.street,
-            city: parsed.city,
-            state: parsed.state,
-            zipCode: parsed.zipCode,
-            lat: parsed.lat ?? 0,
-            lng: parsed.lng ?? 0,
-          });
-        });
-        setLoadState("ready");
-      } catch (err) {
-        console.warn("[AddressAutocomplete:admin] Google Places init failed", err);
-        setLoadState("manual");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Detect post-load auth failure (gm_authFailure may fire after the
-  // Autocomplete is wired but before the user gets results). Poll once
-  // a second for the first 6 seconds.
-  useEffect(() => {
-    if (loadState !== "ready") return;
-    let ticks = 0;
-    const t = setInterval(() => {
-      ticks++;
-      if ((window as any).__novaraGmAuthFailed) {
-        if (inputRef.current?.value) initialStreetRef.current = inputRef.current.value;
-        setLoadState("blocked");
-        clearInterval(t);
-      }
-      if (ticks > 6) clearInterval(t);
-    }, 1000);
-    return () => clearInterval(t);
-  }, [loadState]);
+    if (!initialValue || !inputRef.current) return;
+    if (!inputRef.current.value.trim()) inputRef.current.value = initialValue;
+  }, [initialValue]);
 
   const handleHistorySelect = (item: AddressHistoryItem) => {
     setValidationError(null);
     setGeocodedLocation(null);
     if (inputRef.current) inputRef.current.value = item.street;
+    pickedRef.current = true;
     onAddressSelect({
       street: item.street,
       city: item.city,
@@ -197,52 +97,58 @@ export function AddressAutocomplete({
       lng: item.lng || 0,
     });
     setShowHistory(false);
+    setOpen(false);
+    clear();
   };
 
-  const handleInputChange = () => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (validationError) setValidationError(null);
     if (geocodedLocation) setGeocodedLocation(null);
+    pickedRef.current = false;
+    if (status === "ready") {
+      query(e.target.value);
+      setOpen(true);
+    }
   };
 
-  // Hydrate from parent once (e.g. lead load) without tying to keystrokes.
-  useEffect(() => {
-    if (!initialValue || !inputRef.current) return;
-    if (!inputRef.current.value.trim()) {
-      inputRef.current.value = initialValue;
-      initialStreetRef.current = initialValue;
+  const handleSuggestionPick = async (s: AddressSuggestion) => {
+    setOpen(false);
+    const parsed = await resolve(s);
+    if (!parsed) {
+      setValidationError("Could not load that address — type it in full and click Parse.");
+      return;
     }
-  }, [initialValue]);
+    pickedRef.current = true;
+    setValidationError(null);
+    setGeocodedLocation(parsed.formattedAddress || null);
+    if (inputRef.current && parsed.street) inputRef.current.value = parsed.street;
+    onAddressSelect({
+      street: parsed.street,
+      city: parsed.city,
+      state: parsed.state,
+      zipCode: parsed.zipCode,
+      lat: parsed.lat ?? 0,
+      lng: parsed.lng ?? 0,
+    });
+  };
 
-  // Manual parse path — always runs whether Google loaded or not. Used by
-  // onBlur when the user typed but didn't pick from the Google dropdown,
-  // and by the "Parse this address" button when Google is blocked. Hits
-  // geocode-address (Nominatim) first, then falls back to a pure-JS parse.
+  // Manual parse path — Nominatim first, then pure-JS parse.
   const parseManualEntry = async (raw?: string) => {
     const value = (raw ?? inputRef.current?.value ?? "").trim();
     if (!value) return;
     setBusy(true);
     const local = parseAddressString(value);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "geocode-address",
-        {
-          body: {
-            address: value,
-            city: local.city,
-            state: local.state,
-            zip: local.zipCode,
-          },
-        },
-      );
+      const { data, error } = await supabase.functions.invoke("geocode-address", {
+        body: { address: value, city: local.city, state: local.state, zip: local.zipCode },
+      });
       if (error || !data) {
         emitFallback(local, value);
         return;
       }
       setGeocodedLocation(data.display_name || null);
       const remoteParsed =
-        data.parsed && typeof data.parsed === "object"
-          ? mergeAddressParts(data.parsed, local)
-          : local;
+        data.parsed && typeof data.parsed === "object" ? mergeAddressParts(data.parsed, local) : local;
       const finalStreet = remoteParsed.street || local.street || value;
       onAddressSelect({
         street: finalStreet,
@@ -252,9 +158,7 @@ export function AddressAutocomplete({
         lat: typeof data.lat === "number" ? data.lat : 0,
         lng: typeof data.lng === "number" ? data.lng : 0,
       });
-      if (inputRef.current && finalStreet) {
-        inputRef.current.value = finalStreet;
-      }
+      if (inputRef.current && finalStreet) inputRef.current.value = finalStreet;
     } catch (err) {
       console.warn("[AddressAutocomplete:admin] geocode fallback failed", err);
       emitFallback(local, value);
@@ -263,10 +167,7 @@ export function AddressAutocomplete({
     }
   };
 
-  const emitFallback = (
-    parsed: ReturnType<typeof parseAddressString>,
-    raw: string,
-  ) => {
+  const emitFallback = (parsed: ReturnType<typeof parseAddressString>, raw: string) => {
     onAddressSelect({
       street: parsed.street || raw,
       city: parsed.city || "",
@@ -278,13 +179,11 @@ export function AddressAutocomplete({
   };
 
   const handleInputBlur = async () => {
-    // Only skip when the user already picked a Places suggestion.
-    // If they typed manually while Google is "ready", still geocode.
-    if (loadState === "ready" && geocodedLocation) return;
+    setTimeout(() => setOpen(false), 150);
+    if (pickedRef.current) return; // a suggestion/history pick already resolved
     await parseManualEntry();
   };
 
-  // ─── Render ──────────────────────────────────────────────────────
   return (
     <div className="space-y-2">
       {label ? (
@@ -293,23 +192,17 @@ export function AddressAutocomplete({
             {label}
           </Label>
           <div className="flex items-center gap-2">
-            <StatusBadge state={loadState} />
+            <StatusBadge state={status} />
             {addressHistory.length > 0 && (
               <Popover open={showHistory} onOpenChange={setShowHistory}>
                 <PopoverTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto py-1 px-2 text-xs text-slate-500 hover:text-slate-900"
-                  >
+                  <Button variant="ghost" size="sm" className="h-auto py-1 px-2 text-xs text-slate-500 hover:text-slate-900">
                     <RiTimeLine className="w-3 h-3 mr-1" />
                     Recent
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-2" align="end">
-                  <p className="text-xs font-medium text-slate-500 px-2 py-1">
-                    Recently used addresses
-                  </p>
+                  <p className="text-xs font-medium text-slate-500 px-2 py-1">Recently used addresses</p>
                   <div className="space-y-1">
                     {addressHistory.map((item) => (
                       <button
@@ -331,33 +224,54 @@ export function AddressAutocomplete({
         </div>
       ) : (
         <div className="flex justify-end -mt-1">
-          <StatusBadge state={loadState} />
+          <StatusBadge state={status} />
         </div>
       )}
 
       <div className="relative">
         <Input
-          // Remount a clean input if Google greys/locks the one it attached
-          // to (referrer-blocked key), so the field stays fully typeable.
-          key={loadState === "blocked" ? "addr-fallback" : "addr-google"}
           ref={inputRef}
           id="address-autocomplete"
           type="text"
           placeholder={placeholder}
-          defaultValue={initialStreetRef.current}
+          defaultValue={initialValue}
           className="pr-10"
           onChange={handleInputChange}
           onBlur={handleInputBlur}
           onFocus={() => {
             setShowHistory(false);
             setValidationError(null);
+            if (status === "ready" && suggestions.length > 0) setOpen(true);
           }}
           autoComplete="off"
         />
         <RiMapPinLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+
+        {open && status === "ready" && suggestions.length > 0 && (
+          <ul className="absolute z-[10000] left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+            {suggestions.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    void handleSuggestionPick(s);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors flex items-start gap-2"
+                >
+                  <RiMapPinLine className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block font-medium truncate">{s.primary}</span>
+                    {s.secondary && <span className="block text-xs text-slate-500 truncate">{s.secondary}</span>}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {loadState === "blocked" && (
+      {status === "blocked" && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900 flex items-start gap-1.5">
           <RiErrorWarningLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
@@ -377,10 +291,9 @@ export function AddressAutocomplete({
         </div>
       )}
 
-      {loadState !== "blocked" && loadState !== "ready" && (
+      {status === "manual" && (
         <p className="text-[11px] text-slate-500">
-          Type a full address (e.g. "123 Main St, Frederick, MD 21703") and we'll
-          split the parts on blur.
+          Type a full address (e.g. &quot;123 Main St, Frederick, MD 21703&quot;) and we&apos;ll split the parts on blur.
         </p>
       )}
 
@@ -401,10 +314,10 @@ export function AddressAutocomplete({
   );
 }
 
-// ─── Status badge ────────────────────────────────────────────────────
+// ─── Status badge ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ state }: { state: LoadState }) {
-  const map: Record<LoadState, { label: string; cls: string; icon: JSX.Element }> = {
+function StatusBadge({ state }: { state: AddressAutocompleteStatus }) {
+  const map: Record<AddressAutocompleteStatus, { label: string; cls: string; icon: JSX.Element }> = {
     loading: {
       label: "Loading Google Places…",
       cls: "bg-slate-100 text-slate-600 border-slate-200",

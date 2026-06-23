@@ -151,6 +151,138 @@ export interface PlacesAddressComponents {
   formattedAddress?: string;
 }
 
+// ─── Places API (New) — programmatic autocomplete ─────────────────────────────
+//
+// Google stopped serving the legacy `places.Autocomplete` widget to API keys /
+// Cloud projects created on/after 2025-03-01 — it constructs but returns NO
+// predictions (the "dropdown doesn't work anywhere" symptom). The supported
+// path is the new `AutocompleteSuggestion` API, which we drive ourselves and
+// render in our own dropdown (so it also works inside dialogs/sheets without
+// the old .pac-container z-index / focus-trap problems).
+
+export interface AddressSuggestion {
+  id: string;
+  /** Bold first line, e.g. "123 Main St". */
+  primary: string;
+  /** Muted second line, e.g. "Frederick, MD, USA". */
+  secondary: string;
+  /** Internal handle used to resolve full place details. */
+  _prediction: unknown;
+}
+
+// A billing "session" groups keystroke suggestions with the final resolve; we
+// rotate the token after each resolved place (Google's recommended pattern).
+let sessionToken: unknown = null;
+
+/** True when the modern AutocompleteSuggestion API is present (Places New). */
+export function newPlacesAutocompleteAvailable(): boolean {
+  const places = window.google?.maps?.places as unknown as { AutocompleteSuggestion?: unknown } | undefined;
+  return !!places?.AutocompleteSuggestion;
+}
+
+function getSessionToken(reset = false): unknown {
+  const places = window.google?.maps?.places as unknown as { AutocompleteSessionToken?: new () => unknown } | undefined;
+  if (!places?.AutocompleteSessionToken) return undefined;
+  if (reset || !sessionToken) sessionToken = new places.AutocompleteSessionToken();
+  return sessionToken;
+}
+
+/**
+ * Fetch US address autocomplete suggestions for `input`. Returns [] when the
+ * API isn't available or the input is too short — callers fall back to manual
+ * entry + server-side geocoding.
+ */
+export async function fetchAddressSuggestions(input: string): Promise<AddressSuggestion[]> {
+  const trimmed = input.trim();
+  const places = window.google?.maps?.places as any;
+  if (!places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions || trimmed.length < 3) {
+    return [];
+  }
+  try {
+    const res = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+      input: trimmed,
+      sessionToken: getSessionToken(),
+      includedRegionCodes: ["us"],
+    });
+    const out: AddressSuggestion[] = [];
+    for (const s of (res?.suggestions || []) as any[]) {
+      const p = s?.placePrediction;
+      if (!p) continue;
+      out.push({
+        id: String(p.placeId || p.place || Math.random().toString(36).slice(2)),
+        primary: p.mainText?.text || p.text?.text || "",
+        secondary: p.secondaryText?.text || "",
+        _prediction: p,
+      });
+    }
+    return out;
+  } catch (err) {
+    console.warn("[google-places] fetchAutocompleteSuggestions failed", err);
+    return [];
+  }
+}
+
+/** Resolve a suggestion to full address components, then rotate the session. */
+export async function resolveAddressSuggestion(
+  suggestion: AddressSuggestion,
+): Promise<PlacesAddressComponents | null> {
+  const p = suggestion._prediction as any;
+  if (!p?.toPlace) return null;
+  try {
+    const place = p.toPlace();
+    await place.fetchFields({ fields: ["addressComponents", "formattedAddress", "location"] });
+    getSessionToken(true); // end the billing session
+    return parsePlaceNew(place);
+  } catch (err) {
+    console.warn("[google-places] resolveAddressSuggestion failed", err);
+    return null;
+  }
+}
+
+/** Map a Places-API-New `Place` (camelCase addressComponents) to our shape. */
+export function parsePlaceNew(place: any): PlacesAddressComponents {
+  const components = (place?.addressComponents || []) as Array<{
+    longText?: string;
+    shortText?: string;
+    types?: string[];
+  }>;
+  let streetNumber = "";
+  let route = "";
+  let city = "";
+  let state = "";
+  let zipCode = "";
+
+  for (const c of components) {
+    const types = c.types || [];
+    const long = c.longText || "";
+    const short = c.shortText || "";
+    if (types.includes("street_number")) streetNumber = short || long;
+    if (types.includes("route")) route = long || short;
+    if (types.includes("locality") || types.includes("postal_town") || types.includes("sublocality")) {
+      if (!city) city = long || short;
+    }
+    if (!city && (types.includes("administrative_area_level_3") || types.includes("administrative_area_level_2"))) {
+      city = long || short;
+    }
+    if (types.includes("administrative_area_level_1")) state = short || long;
+    if (types.includes("postal_code")) zipCode = short || long;
+  }
+
+  const loc = place?.location;
+  const lat = typeof loc?.lat === "function" ? loc.lat() : loc?.lat;
+  const lng = typeof loc?.lng === "function" ? loc.lng() : loc?.lng;
+
+  return {
+    street: `${streetNumber} ${route}`.trim(),
+    city,
+    state,
+    zipCode,
+    lat: typeof lat === "number" ? lat : undefined,
+    lng: typeof lng === "number" ? lng : undefined,
+    formattedAddress: place?.formattedAddress || undefined,
+  };
+}
+
 /** Extract the four canonical address pieces from a Google Places
  *  `PlaceResult`. Returns blank fields if the place doesn't include
  *  one — callers should treat empty city/state as a soft warning,
