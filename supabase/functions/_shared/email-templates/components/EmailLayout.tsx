@@ -46,7 +46,6 @@ export const EmailLayout = ({
                 style={logo}
               />
             )}
-            <Text style={logoWordmark}>{BRAND.name}</Text>
           </Section>
 
           {/* Title bar — brand-gradient strip above the body content. */}
@@ -116,7 +115,7 @@ const container = {
 
 const logo = {
   display: 'block',
-  margin: '0 auto 8px',
+  margin: '0 auto',
 };
 
 const logoBar = {
@@ -126,15 +125,6 @@ const logoBar = {
   borderRadius: '8px 8px 0 0',
   border: `1px solid ${BRAND.colors.gray[200]}`,
   borderBottom: 'none',
-};
-
-const logoWordmark = {
-  margin: '0',
-  fontSize: '14px',
-  fontWeight: '700',
-  letterSpacing: '0.04em',
-  color: BRAND.colors.primary,
-  textTransform: 'uppercase' as const,
 };
 
 const header = {

@@ -32,7 +32,7 @@ const BRAND = {
   gray600: "#6B7280",
   gray700: "#374151",
   gray900: "#111827",
-  logo: "https://app.novaracleaning.com/novara-logo.png",
+  logo: "https://app.novaracleaning.com/novara-email-logo.png",
   supportEmail: "support@novaracleaning.com",
   supportPhone: "+1 (844) 735-2070",
 };
@@ -102,7 +102,7 @@ function renderHtml(cfg: EmailConfig, link: string): string {
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BRAND.gray50};padding:20px 0;"><tr><td align="center">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
 <tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;padding:20px 20px 12px;text-align:center;">
-<img src="${BRAND.logo}" alt="${BRAND.name}" width="140" height="48" style="display:block;margin:0 auto 8px;" />
+<img src="${BRAND.logo}" alt="${BRAND.name}" width="200" height="27" style="display:block;margin:0 auto 8px;" />
 <div style="font-size:13px;font-weight:700;letter-spacing:.04em;color:${BRAND.primary};text-transform:uppercase;">HOST PORTAL</div>
 </td></tr>
 <tr><td style="background:${BRAND.gradient};color:#ffffff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">

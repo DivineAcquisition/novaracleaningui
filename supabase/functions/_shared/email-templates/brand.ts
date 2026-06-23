@@ -69,9 +69,12 @@ export const BRAND = {
   // Public logo URL. Served from the customer portal subdomain so it's
   // guaranteed to exist (file lives at /public/novara-logo.png in the
   // Next.js bundle that powers app.novaracleaning.com).
+  // Horizontal wordmark lockup (sparkle + "NOVARACLEANING"). Aspect
+  // ratio ≈ 7.4:1, so width/height are sized to keep it crisp and
+  // undistorted in the email header.
   logo: {
-    url: 'https://app.novaracleaning.com/novara-logo.png',
-    width: '140',
-    height: '48',
+    url: 'https://app.novaracleaning.com/novara-email-logo.png',
+    width: '200',
+    height: '27',
   },
 };

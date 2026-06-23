@@ -63,7 +63,7 @@ const BRAND = {
   gray700: "#374151",
   gray600: "#6B7280",
   gray200: "#E5E7EB",
-  logoUrl: "https://app.novaracleaning.com/novara-logo.png",
+  logoUrl: "https://app.novaracleaning.com/novara-email-logo.png",
   supportPhone: "+1 (844) 735-2070",
   supportEmail: "support@novaracleaning.com",
 };
@@ -81,7 +81,7 @@ function renderDetailsReminderEmail(args: {
 <body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${BRAND.gray700};">
 <div style="max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#fff;padding:20px 20px 12px;text-align:center;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;">
-    <img src="${BRAND.logoUrl}" width="140" height="48" alt="${BRAND.name} logo" style="display:block;margin:0 auto 8px;"/>
+    <img src="${BRAND.logoUrl}" width="200" height="27" alt="${BRAND.name} logo" style="display:block;margin:0 auto 8px;"/>
     <div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:${BRAND.primary};text-transform:uppercase;">${BRAND.name}</div>
   </div>
   <div style="background:${BRAND.gradient};color:#fff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
