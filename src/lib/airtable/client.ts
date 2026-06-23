@@ -328,6 +328,24 @@ export async function findRecordIdByField(
   return res.records?.[0]?.id ?? null;
 }
 
+/**
+ * Fetch specific records by their Airtable record ids (batched into OR()
+ * formula chunks). Fields are returned keyed by field id. Used to read back
+ * admin-set rates before sending a contract for signature.
+ */
+export async function getRecords(tableId: string, ids: string[]): Promise<AirtableRecord[]> {
+  const wanted = ids.filter(Boolean);
+  if (wanted.length === 0) return [];
+  const out: AirtableRecord[] = [];
+  for (let i = 0; i < wanted.length; i += 50) {
+    const chunk = wanted.slice(i, i + 50);
+    const formula = `OR(${chunk.map((id) => `RECORD_ID()="${escapeFormulaValue(id)}"`).join(",")})`;
+    const recs = await listRecords(tableId, { filterByFormula: formula, maxRecords: chunk.length });
+    out.push(...recs);
+  }
+  return out;
+}
+
 export interface ListOptions {
   fields?: string[];
   filterByFormula?: string;
