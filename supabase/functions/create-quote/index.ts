@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import {
+  ghlIsConfigured,
+  splitFullAddress,
+  syncContactAndOpportunity,
+} from "../_shared/ghl-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,6 +54,66 @@ serve(async (req) => {
 
     logStep("Quote request stored", { quoteId: data.id });
 
+    // ── Map the quote lead into GoHighLevel (contact + open opportunity) so
+    //    large-home / commercial quote requests land in the sales pipeline
+    //    and trigger CRM follow-up automation. Best-effort + never blocks the
+    //    quote submission.
+    let ghlContactId: string | null = null;
+    let ghlOpportunityId: string | null = null;
+    if (ghlIsConfigured()) {
+      try {
+        const [first, ...rest] = String(fullName || "").trim().split(/\s+/);
+        const lastName = rest.join(" ") || undefined;
+        const addr = splitFullAddress(String(address || ""));
+        const sqftLabel = sqft ? `${sqft} sq-ft` : "";
+        const result = await syncContactAndOpportunity({
+          contact: {
+            email: email || undefined,
+            phone: phone || undefined,
+            firstName: first || undefined,
+            lastName,
+            address1: addr.street || address || undefined,
+            city: addr.city || undefined,
+            state: addr.state || undefined,
+            postalCode: addr.zipCode || undefined,
+            source: "Novara Custom Quote",
+            tags: ["lead - new", "source - custom quote", "service - custom quote"],
+            customFieldsByKey: {
+              estimated_sqft: sqft ?? "",
+              job_notes_internal: notes || "",
+              lead_source: "Website",
+              cleaning_type: "Deep Cleaning",
+            },
+          },
+          opportunity: {
+            name: `Custom Quote — ${(fullName || email || "Lead")}${sqftLabel ? ` (${sqftLabel})` : ""}`,
+            status: "open",
+            source: "Novara Custom Quote",
+          },
+        });
+        ghlContactId = result.contactId;
+        ghlOpportunityId = result.opportunityId;
+        logStep("GHL sync complete", { ghlContactId, ghlOpportunityId });
+
+        if (ghlContactId || ghlOpportunityId) {
+          try {
+            await supabase
+              .from("custom_quotes")
+              .update({ ghl_contact_id: ghlContactId, ghl_opportunity_id: ghlOpportunityId })
+              .eq("id", data.id);
+          } catch (persistErr) {
+            logStep("Failed to persist GHL ids (non-critical)", {
+              error: persistErr instanceof Error ? persistErr.message : String(persistErr),
+            });
+          }
+        }
+      } catch (ghlErr) {
+        logStep("GHL sync failed (non-critical)", {
+          error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),
+        });
+      }
+    }
+
     // Send notification email to ops team
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (resendApiKey) {
@@ -80,7 +145,13 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: "Quote request received", quoteId: data.id }),
+      JSON.stringify({
+        success: true,
+        message: "Quote request received",
+        quoteId: data.id,
+        ghlContactId,
+        ghlOpportunityId,
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
