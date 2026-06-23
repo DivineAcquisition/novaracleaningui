@@ -223,60 +223,58 @@ serve(async (req) => {
         customerId = customers.data.length > 0 ? customers.data[0].id : undefined;
       }
 
-      const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-        // Recurring subscription
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `Novara Membership — ${planLabel}`,
-              description: priceOverrideApplied
-                ? `Recurring cleaning membership for ${sqftLabel} sq ft home (custom rate)`
-                : `Recurring cleaning membership for ${sqftLabel} sq ft home`,
-            },
-            recurring: { interval: 'month' },
-            unit_amount: monthlyPriceCents,
-          },
-          quantity: 1,
+      // ─── Build real Stripe Price objects for a Payment Link ─────────────
+      // Payment Links require persisted Price ids (no inline price_data), so we
+      // create a Product + a recurring Price at EXACTLY the amount entered in
+      // the internal booking (override wins over catalog). This guarantees the
+      // price the VA typed is the price Stripe charges — the inline price_data
+      // path was not reliably reflecting the override.
+      const membershipProduct = await stripe.products.create({
+        name: `Novara Membership — ${planLabel}`,
+        description: priceOverrideApplied
+          ? `Recurring cleaning membership for ${sqftLabel} sq ft home (custom rate)`
+          : `Recurring cleaning membership for ${sqftLabel} sq ft home`,
+        metadata: {
+          home_size_id: homeSizeId,
+          membership_plan: membershipPlan,
+          price_override_applied: priceOverrideApplied ? "true" : "false",
         },
+      });
+
+      const recurringPrice = await stripe.prices.create({
+        product: membershipProduct.id,
+        currency: "usd",
+        unit_amount: monthlyPriceCents,
+        recurring: { interval: "month" },
+        nickname: `${planLabel} — ${fmtMoney(monthlyPriceCents)}/mo`,
+      });
+
+      const lineItems: Array<{ price: string; quantity: number }> = [
+        { price: recurringPrice.id, quantity: 1 },
       ];
 
-      // Optional one-time $75 first-clean deep clean. Added only when the
-      // customer opted in (or didn't answer — legacy default). When they
-      // decline we skip the charge and tag the membership so dispatch knows
-      // a surge charge may apply if the cleaner finds a deep clean is needed.
+      // Optional one-time $75 first-clean deep clean (added to the first
+      // invoice). Created as a one-time Price under the same product.
       if (wantsDeepClean) {
-        lineItems.push({
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: 'First Clean Deep Clean',
-              description: 'One-time deep clean to reset your home for membership (+$75)',
-            },
-            unit_amount: 7500,
-          },
-          quantity: 1,
+        const deepCleanPrice = await stripe.prices.create({
+          product: membershipProduct.id,
+          currency: "usd",
+          unit_amount: 7500,
+          nickname: "First Clean Deep Clean",
         });
+        lineItems.push({ price: deepCleanPrice.id, quantity: 1 });
       }
 
-      // Optional one-time first-clean deposit. Subscription-mode Checkout
-      // Sessions accept one-time prices alongside the recurring price —
-      // Stripe rolls them into the subscription's first invoice (same
-      // mechanism as the deep-clean line above). This is what makes the
-      // admin "deposit" posture actually collect money on the recurring
-      // signup instead of silently doing nothing.
+      // Optional one-time first-clean deposit — the exact amount the VA saw in
+      // the live quote, rolled into the subscription's first invoice.
       if (collectsDeposit) {
-        lineItems.push({
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: 'First Clean Deposit',
-              description: 'One-time deposit for your first membership clean',
-            },
-            unit_amount: depositCents,
-          },
-          quantity: 1,
+        const depositPrice = await stripe.prices.create({
+          product: membershipProduct.id,
+          currency: "usd",
+          unit_amount: depositCents,
+          nickname: "First Clean Deposit",
         });
+        lineItems.push({ price: depositPrice.id, quantity: 1 });
       }
 
       // ─── Map the membership/recurring lead into GHL NOW ─────────────────
@@ -414,25 +412,29 @@ serve(async (req) => {
         ghl_opportunity_id: ghlOpportunityId,
       };
 
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        customer_email: customerId ? undefined : email,
+      // ─── Create a Payment Link (replaces Checkout Sessions) ─────────────
+      // A reusable hosted link the customer opens to start their subscription.
+      // The subscription metadata is what the customer.subscription.* webhook
+      // reads to provision credits + auto-book the first clean.
+      const paymentLink = await stripe.paymentLinks.create({
         line_items: lineItems,
-        mode: 'subscription',
-        success_url: `${req.headers.get("origin")}/membership/success?session_id={CHECKOUT_SESSION_ID}&plan=${membershipPlan}`,
-        cancel_url: `${req.headers.get("origin")}/membership/${membershipPlan}`,
-        // Surface phone collection if the customer hasn't provided one
-        // — GHL custom fields can't update what we never captured.
-        phone_number_collection: bodyPhone ? undefined : { enabled: true },
         metadata: sharedMetadata,
         subscription_data: {
           metadata: sharedMetadata,
           description: `Novara ${planLabel} — ${homeSizeId.replace('_', '-')} sqft`,
         },
+        phone_number_collection: { enabled: true },
+        allow_promotion_codes: true,
+        after_completion: {
+          type: "redirect",
+          redirect: { url: `${req.headers.get("origin")}/membership/success?plan=${membershipPlan}` },
+        },
       });
 
-      logStep("Subscription checkout created", {
-        sessionId: session.id,
+      const session = { id: paymentLink.id, url: paymentLink.url };
+
+      logStep("Subscription payment link created", {
+        paymentLinkId: paymentLink.id,
         monthlyPriceCents,
         priceOverrideApplied,
         depositCents: collectsDeposit ? depositCents : 0,

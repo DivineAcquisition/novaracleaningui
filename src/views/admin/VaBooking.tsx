@@ -830,7 +830,7 @@ export default function VaBooking() {
                 </div>
               </div>
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 pt-1">
-                Subscription checkout link
+                Subscription payment link
               </p>
               <div className="flex items-center gap-2">
                 <Input value={subUrl} readOnly className="font-mono text-xs bg-white" />
