@@ -6,6 +6,7 @@ import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 import { syncTurnoverToGhl, upsertHostContact } from "../_shared/ghl-partner-sync.ts";
 import { sendHostAgreement } from "../_shared/host-onboarding-ghl.ts";
+import { finalizeBatch } from "../_shared/turnover-engine.ts";
 
 // --- Partner Turnover Portal - server engine -----------------------------
 //
@@ -656,6 +657,155 @@ serve(async (req) => {
       }
 
       return json({ ok: true, url: session.url, turnoverId: tr.id });
+    }
+
+    // --- recurring.save (create/update a weekly OR monthly schedule) -----
+    if (action === "recurring.save") {
+      const { data: property } = await admin.from("properties").select("id, host_id, turnover_price").eq("id", body.propertyId).maybeSingle();
+      if (!property || property.host_id !== host.id) return json({ error: "Property not found" }, 404);
+      if (property.turnover_price == null || Number(property.turnover_price) <= 0) return json({ error: "Property isn't priced yet." }, 409);
+      const frequency = body.frequency === "monthly" ? "monthly" : "weekly";
+      if (frequency === "weekly" && !(Array.isArray(body.days_of_week) && body.days_of_week.length > 0)) {
+        return json({ error: "Pick at least one day of the week." }, 400);
+      }
+      const dom = parseInt(String(body.day_of_month), 10);
+      if (frequency === "monthly" && !(Number.isFinite(dom) && dom >= 1 && dom <= 31)) {
+        return json({ error: "Pick a day of the month (1-31)." }, 400);
+      }
+      const fields = {
+        host_id: host.id,
+        property_id: body.propertyId,
+        frequency,
+        days_of_week: frequency === "weekly" ? body.days_of_week : [],
+        day_of_month: frequency === "monthly" ? dom : null,
+        window_start: body.window_start || null,
+        window_end: body.window_end || null,
+        price_snapshot: Number(property.turnover_price),
+        active: true,
+      };
+      if (body.scheduleId) {
+        const { data: ex } = await admin.from("recurring_schedules").select("id, host_id").eq("id", body.scheduleId).maybeSingle();
+        if (!ex || ex.host_id !== host.id) return json({ error: "Schedule not found" }, 404);
+        const { data, error } = await admin.from("recurring_schedules").update(fields).eq("id", body.scheduleId).select("*").single();
+        if (error) return json({ error: error.message }, 500);
+        return json({ schedule: data });
+      }
+      const { data, error } = await admin.from("recurring_schedules").insert(fields).select("*").single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ schedule: data });
+    }
+
+    // --- recurring.update (pause / resume / cancel) ----------------------
+    if (action === "recurring.update") {
+      const { data: sch } = await admin.from("recurring_schedules").select("*").eq("id", body.scheduleId).maybeSingle();
+      if (!sch || sch.host_id !== host.id) return json({ error: "Schedule not found" }, 404);
+      const upd: Record<string, unknown> = {};
+      if (body.op === "cancel") upd.active = false;
+      else if (body.op === "resume") { upd.active = true; upd.paused_until = null; }
+      else if (body.op === "pause") upd.paused_until = body.paused_until || null;
+      else return json({ error: "Unknown op" }, 400);
+      await admin.from("recurring_schedules").update(upd).eq("id", sch.id);
+      return json({ ok: true });
+    }
+
+    // --- batch.checkout (book a whole week of turnovers, pay per clean) --
+    if (action === "batch.checkout") {
+      const lines: Array<{ propertyId: string; date: string; window_start?: string; window_end?: string }> = Array.isArray(body.lines) ? body.lines : [];
+      if (!body.weekStart || lines.length === 0) return json({ error: "weekStart and at least one line required" }, 400);
+
+      // Server-authoritative pricing: re-read each property's current price.
+      const priced: Array<{ propertyId: string; date: string; ws: string | null; we: string | null; price: number }> = [];
+      let total = 0;
+      for (const ln of lines) {
+        if (!ln.propertyId || !ln.date) return json({ error: "Each line needs propertyId and date" }, 400);
+        const { data: property } = await admin.from("properties").select("id, host_id, turnover_price").eq("id", ln.propertyId).maybeSingle();
+        if (!property || property.host_id !== host.id) return json({ error: "Property not found" }, 404);
+        if (property.turnover_price == null || Number(property.turnover_price) <= 0) {
+          return json({ error: "One of your properties isn't priced yet." }, 409);
+        }
+        const price = Number(property.turnover_price);
+        total += price;
+        priced.push({ propertyId: ln.propertyId, date: ln.date, ws: ln.window_start || null, we: ln.window_end || null, price });
+      }
+
+      const { data: batch, error: bErr } = await admin.from("booking_batches").insert({
+        host_id: host.id, week_start: body.weekStart, source: "manual",
+        turnover_count: priced.length, total_amount: total, status: "pending_payment",
+      }).select("*").single();
+      if (bErr) return json({ error: bErr.message }, 500);
+
+      const rows = priced.map((p) => ({
+        property_id: p.propertyId, host_id: host.id, requested_date: p.date,
+        window_start: p.ws, window_end: p.we, price: p.price, status: "pending_payment", batch_id: batch.id,
+      }));
+      const { error: trErr } = await admin.from("turnover_requests").insert(rows);
+      if (trErr) return json({ error: trErr.message }, 500);
+
+      // Optionally persist repeat patterns (weekly days or monthly day) from the UI.
+      const repeat: Array<{ propertyId: string; frequency?: string; days_of_week?: number[]; day_of_month?: number; window_start?: string; window_end?: string }> = Array.isArray(body.repeat) ? body.repeat : [];
+      for (const r of repeat) {
+        const { data: rp } = await admin.from("properties").select("id, host_id, turnover_price").eq("id", r.propertyId).maybeSingle();
+        if (rp && rp.host_id === host.id && rp.turnover_price != null) {
+          const freq = r.frequency === "monthly" ? "monthly" : "weekly";
+          await admin.from("recurring_schedules").insert({
+            host_id: host.id, property_id: r.propertyId, frequency: freq,
+            days_of_week: freq === "weekly" ? (r.days_of_week || []) : [],
+            day_of_month: freq === "monthly" ? (r.day_of_month || null) : null,
+            window_start: r.window_start || null, window_end: r.window_end || null,
+            price_snapshot: Number(rp.turnover_price), active: true,
+          });
+        }
+      }
+
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      let customerId = host.stripe_customer_id || undefined;
+      if (!customerId && host.email) {
+        const list = await stripe.customers.list({ email: host.email, limit: 1 });
+        customerId = list.data[0]?.id || (await stripe.customers.create({ email: host.email, name: host.name || undefined })).id;
+        await admin.from("hosts").update({ stripe_customer_id: customerId }).eq("id", host.id);
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        customer_email: customerId ? undefined : host.email,
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Weekly turnovers (${priced.length}) - week of ${body.weekStart}` },
+            unit_amount: Math.round(total * 100),
+          },
+          quantity: 1,
+        }],
+        success_url: `${origin}/partner/turnover/batch-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/partner/schedule`,
+        payment_intent_data: { setup_future_usage: "off_session" },
+        metadata: { kind: "turnover_batch", batch_id: batch.id, host_id: host.id },
+      });
+      await admin.from("booking_batches").update({ stripe_checkout_session_id: session.id }).eq("id", batch.id);
+      return json({ url: session.url, batchId: batch.id });
+    }
+
+    // --- batch.finalize (verify payment, then assign every turnover) -----
+    if (action === "batch.finalize") {
+      if (!body.sessionId) return json({ error: "sessionId required" }, 400);
+      const { data: batch } = await admin.from("booking_batches").select("*").eq("stripe_checkout_session_id", body.sessionId).maybeSingle();
+      if (!batch) return json({ error: "Batch not found" }, 404);
+
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      const session = await stripe.checkout.sessions.retrieve(body.sessionId as string);
+      const paid = session.payment_status === "paid" || session.status === "complete";
+
+      if (paid && batch.status === "pending_payment") {
+        const { data: claimed } = await admin.from("booking_batches").update({
+          status: "paid", stripe_payment_intent_id: (session.payment_intent as string) || null,
+        }).eq("id", batch.id).eq("status", "pending_payment").select("id");
+        if (claimed && claimed.length > 0) await finalizeBatch(admin, batch.id);
+      }
+      const { data: after } = await admin.from("booking_batches").select("status, turnover_count, total_amount, week_start").eq("id", batch.id).single();
+      return json({ paid, status: after?.status, count: after?.turnover_count, total: after?.total_amount, weekStart: after?.week_start });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
