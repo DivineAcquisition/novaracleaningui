@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
+import { syncTurnoverToGhl, upsertHostContact } from "../_shared/ghl-partner-sync.ts";
 
 // --- Partner Turnover Portal - server engine -----------------------------
 //
@@ -114,6 +115,14 @@ serve(async (req) => {
           name: body.name?.trim() || host.name || metaName || null,
           phone: body.phone ? body.phone.replace(/\D/g, "") : (host.phone || (metaPhone ? metaPhone.replace(/\D/g, "") : null)),
         }).eq("id", host.id);
+      }
+      // Mirror the host into GoHighLevel as a "partner host" contact so the
+      // team has CRM visibility + automation for the turnover portal.
+      try {
+        const { data: freshHost } = await admin.from("hosts").select("*").eq("id", host.id).maybeSingle();
+        await upsertHostContact(admin, freshHost || host);
+      } catch (e) {
+        console.warn("[partner-turnover] host GHL upsert failed (non-blocking)", e instanceof Error ? e.message : String(e));
       }
       return json({ host });
     }
@@ -237,6 +246,15 @@ serve(async (req) => {
           window: fmtWindow(tr.window_start as string, tr.window_end as string),
           price: money(Number(tr.price || 0)),
         });
+        // Map the paid turnover into GHL as an opportunity on the host
+        // contact BEFORE assignment, so even an unassigned job is visible in
+        // the pipeline. notifyAssignment() patches it with the cleaner once
+        // assigned. Best-effort — never blocks the booking.
+        try {
+          await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
+        } catch (e) {
+          console.warn("[partner-turnover] turnover GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
+        }
         // Run assignment on the freshly-paid request.
         const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
         await runAssignment(admin, fresh, "auto");
@@ -263,6 +281,12 @@ serve(async (req) => {
         property: cProp?.nickname || cProp?.address || "",
         date: formatServiceDate(tr.requested_date as string),
       });
+      // Reflect the cancellation in GHL (opportunity → lost).
+      try {
+        await syncTurnoverToGhl(admin, { host, property: cProp, turnover: { ...tr, status: "cancelled" } });
+      } catch (e) {
+        console.warn("[partner-turnover] cancel GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
+      }
       return json({ ok: true });
     }
 
@@ -443,5 +467,12 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
       window: windowLabel,
       cleaner: cleaner.first_name || "you",
     });
+  }
+
+  // 5. Patch the GHL opportunity with the assigned cleaner + assigned status.
+  try {
+    await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: tr, cleaner });
+  } catch (e) {
+    console.warn("[partner-turnover] assignment GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
   }
 }
