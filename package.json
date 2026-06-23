@@ -10,6 +10,7 @@
     "mobile:dev": "vite -c mobile/vite.config.ts",
     "mobile:build": "vite build -c mobile/vite.config.ts",
     "mobile:sync": "npm run mobile:build && cap sync",
+    "stress:partner": "tsx scripts/stress-partner-portal.ts",
     "airtable:links": "tsx scripts/add-airtable-links.ts",
     "airtable:backfill": "tsx scripts/backfill-airtable.ts",
     "airtable:verify": "tsx scripts/verify-airtable-mapping.ts"
