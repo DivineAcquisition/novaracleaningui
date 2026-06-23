@@ -101,6 +101,12 @@ const NAV_ITEMS: NavItem[] = [
     description: "Airbnb hosts · pricing · crew",
   },
   {
+    title: "Host Accounts",
+    url: "/admin/partner-accounts",
+    icon: RiHotelLine,
+    description: "STR partner lifecycle · revenue",
+  },
+  {
     title: "Customers",
     url: "/admin/customers",
     icon: RiGroupLine,
@@ -150,6 +156,13 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+// Segment-aware active check so prefix-colliding routes (e.g. /admin/partner vs
+// /admin/partner-accounts) don't both light up — match exact or a full segment.
+function isNavActive(pathname: string | null, url: string): boolean {
+  if (!pathname) return false;
+  return pathname === url || pathname.startsWith(`${url}/`);
+}
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -165,7 +178,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     router.replace("/admin/auth");
   };
 
-  const active = NAV_ITEMS.find((n) => pathname?.startsWith(n.url));
+  const active = NAV_ITEMS.find((n) => isNavActive(pathname, n.url));
 
   return (
     <div className="min-h-screen flex w-full bg-slate-50 text-slate-900 font-sans">
@@ -278,7 +291,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
         Workspace
       </p>
       {NAV_ITEMS.map((item) => {
-        const isActive = pathname?.startsWith(item.url) ?? false;
+        const isActive = isNavActive(pathname, item.url);
         return (
           <Link
             key={item.url}
