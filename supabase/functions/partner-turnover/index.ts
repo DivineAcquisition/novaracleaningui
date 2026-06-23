@@ -74,18 +74,39 @@ serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization") || "";
     const jwt = authHeader.replace("Bearer ", "");
-    const { data: u } = await admin.auth.getUser(jwt);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    // Calls from other Edge Functions (stripe-webhook, sms-inbound)
+    // authenticate with the service-role key, not a user JWT. Treat those as
+    // trusted internal callers for the server-to-server actions below
+    // (turnover.finalize, cleaner.confirm, cleaner.checkin, cleaner.complete).
+    const isInternal = !!jwt && jwt === serviceRoleKey;
+    const { data: u } = isInternal
+      ? { data: { user: null } }
+      : await admin.auth.getUser(jwt);
     const userId: string | undefined = u?.user?.id;
     const userEmail: string | undefined = u?.user?.email?.toLowerCase();
     const userMeta = (u?.user?.user_metadata || {}) as Record<string, unknown>;
     const metaName = (userMeta.full_name as string) || (userMeta.name as string) ||
       [userMeta.first_name, userMeta.last_name].filter(Boolean).join(" ") || "";
     const metaPhone = (userMeta.phone as string) || "";
-    if (!userId) return json({ error: "Not signed in" }, 401);
 
     const body = await req.json();
     const action: string = body.action;
     const origin = req.headers.get("origin") || "https://partner.novaracleaning.com";
+
+    // ── Internal / payment-verified actions (no host session required) ──
+    // These are reached before the auth gate below because they are either
+    // independently verified (turnover.finalize re-checks Stripe) or only
+    // ever invoked server-to-server with the service-role key.
+    if (action === "turnover.finalize") {
+      return await handleFinalize(admin, body, origin);
+    }
+    if (action === "cleaner.confirm" || action === "cleaner.checkin" || action === "cleaner.complete") {
+      if (!isInternal) return json({ error: "Forbidden" }, 403);
+      return await handleCleanerLifecycle(admin, action, body);
+    }
+
+    if (!userId) return json({ error: "Not signed in" }, 401);
 
     const getHost = async () => {
       const { data } = await admin.from("hosts").select("*").eq("user_id", userId).maybeSingle();
@@ -219,49 +240,67 @@ serve(async (req) => {
       return json({ url: session.url, turnoverId: tr.id });
     }
 
-    // --- turnover.finalize (verify payment server-side -> assign + notify) -
-    if (action === "turnover.finalize") {
-      if (!body.sessionId) return json({ error: "sessionId required" }, 400);
-      const { data: tr } = await admin.from("turnover_requests").select("*").eq("stripe_checkout_session_id", body.sessionId).maybeSingle();
-      if (!tr) return json({ error: "Turnover not found" }, 404);
-
-      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-      const session = await stripe.checkout.sessions.retrieve(body.sessionId);
-      const paid = session.payment_status === "paid" || session.status === "complete";
-
-      if (paid && tr.status === "pending_payment") {
-        await admin.from("turnover_requests").update({
-          status: "paid",
-          paid_at: new Date().toISOString(),
-          stripe_payment_intent_id: (session.payment_intent as string) || null,
-        }).eq("id", tr.id).eq("status", "pending_payment");
-        // Payment-received confirmation email to the host.
-        const { property: paidProp, hostRow: paidHost } = await loadContext(admin, tr);
-        await sendHostEmail(admin, "turnover_confirmed", paidHost?.email, {
-          name: (paidHost?.name || "").split(" ")[0] || "",
-          property: paidProp?.nickname || paidProp?.address || "",
-          address: paidProp?.address || "",
-          date: formatServiceDate(tr.requested_date as string),
-          window: fmtWindow(tr.window_start as string, tr.window_end as string),
-          price: money(Number(tr.price || 0)),
-        });
-        // Map the paid turnover into GHL as an opportunity on the host
-        // contact BEFORE assignment, so even an unassigned job is visible in
-        // the pipeline. notifyAssignment() patches it with the cleaner once
-        // assigned. Best-effort — never blocks the booking.
-        try {
-          await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
-        } catch (e) {
-          console.warn("[partner-turnover] turnover GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
-        }
-        // Run assignment on the freshly-paid request.
-        const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
-        await runAssignment(admin, fresh, "auto");
-        const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
-        return json({ paid: true, status: after?.status, assignment_type: after?.assignment_type });
+    // --- turnover.reschedule (host, 24h cutoff) -------------------------
+    if (action === "turnover.reschedule") {
+      const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", body.turnoverId).maybeSingle();
+      if (!tr || tr.host_id !== host.id) return json({ error: "Turnover not found" }, 404);
+      if (!["paid", "assigned", "cleaner_confirmed", "unassigned_alert"].includes(tr.status)) {
+        return json({ error: "This turnover can't be rescheduled." }, 409);
       }
-      return json({ paid, status: tr.status });
+      if (!body.requested_date) return json({ error: "requested_date required" }, 400);
+      // No self-reschedule inside the 24h window of the CURRENT service date.
+      const svc = new Date(`${tr.requested_date}T12:00:00`);
+      if (svc.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+        return json({ error: "Within 24 hours of service - contact support to reschedule." }, 409);
+      }
+      // Moving the date invalidates the existing assignment → re-dispatch.
+      await admin.from("turnover_requests").update({
+        requested_date: body.requested_date,
+        window_start: body.window_start || tr.window_start,
+        window_end: body.window_end || tr.window_end,
+        status: "paid",
+        assigned_cleaner_id: null,
+        assignment_type: null,
+        assigned_at: null,
+        cleaner_confirmed_at: null,
+        reschedule_count: (Number(tr.reschedule_count) || 0) + 1,
+        last_rescheduled_at: new Date().toISOString(),
+      }).eq("id", tr.id);
+      const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
+      await runAssignment(admin, fresh, "auto");
+      const { property: rProp, hostRow: rHost } = await loadContext(admin, fresh);
+      await sendHostEmail(admin, "turnover_rescheduled", rHost?.email, {
+        name: (rHost?.name || "").split(" ")[0] || "",
+        property: rProp?.nickname || rProp?.address || "",
+        address: rProp?.address || "",
+        date: formatServiceDate(body.requested_date as string),
+        window: fmtWindow(body.window_start || fresh.window_start, body.window_end || fresh.window_end),
+      });
+      const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
+      return json({ ok: true, status: after?.status, assignment_type: after?.assignment_type });
+    }
+
+    // --- turnover.rate (host post-clean feedback) ----------------------
+    if (action === "turnover.rate") {
+      const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", body.turnoverId).maybeSingle();
+      if (!tr || tr.host_id !== host.id) return json({ error: "Turnover not found" }, 404);
+      if (tr.status !== "completed") return json({ error: "You can rate a turnover once it's completed." }, 409);
+      const rating = parseInt(String(body.rating), 10);
+      if (!Number.isFinite(rating) || rating < 1 || rating > 5) return json({ error: "Rating must be 1-5." }, 400);
+      await admin.from("turnover_requests").update({
+        host_rating: rating,
+        host_review: (body.review || "").trim() || null,
+        rated_at: new Date().toISOString(),
+      }).eq("id", tr.id);
+      // Feed the cleaner's rolling performance score (best-effort).
+      try {
+        if (tr.assigned_cleaner_id) {
+          await admin.functions.invoke("update-cleaner-performance", {
+            body: { cleanerId: tr.assigned_cleaner_id, rating, source: "turnover" },
+          });
+        }
+      } catch (_) { /* non-blocking */ }
+      return json({ ok: true });
     }
 
     // --- turnover.cancel (host) -----------------------------------------
@@ -323,6 +362,124 @@ serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
+
+// --- turnover.finalize (verify payment server-side -> assign + notify) ---
+//
+// Safe to call without a user session: payment is re-verified against Stripe
+// by checkout session id. Invoked by BOTH the success page (with the host's
+// JWT) and stripe-webhook (service role) so a closed browser tab can never
+// strand a paid turnover in pending_payment. Idempotent on the status guard.
+async function handleFinalize(admin: SB, body: Record<string, unknown>, _origin: string) {
+  if (!body.sessionId) return json({ error: "sessionId required" }, 400);
+  const { data: tr } = await admin.from("turnover_requests").select("*").eq("stripe_checkout_session_id", body.sessionId).maybeSingle();
+  if (!tr) return json({ error: "Turnover not found" }, 404);
+
+  const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+  const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+  const session = await stripe.checkout.sessions.retrieve(body.sessionId as string);
+  const paid = session.payment_status === "paid" || session.status === "complete";
+
+  if (paid && tr.status === "pending_payment") {
+    // Optimistic status guard makes concurrent webhook + success-page calls safe.
+    const { data: claimed } = await admin.from("turnover_requests").update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      stripe_payment_intent_id: (session.payment_intent as string) || null,
+    }).eq("id", tr.id).eq("status", "pending_payment").select("id");
+    // If another caller already claimed it, don't double-run assignment/emails.
+    if (!claimed || claimed.length === 0) {
+      const { data: cur } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
+      return json({ paid: true, status: cur?.status, assignment_type: cur?.assignment_type });
+    }
+    const { property: paidProp, hostRow: paidHost } = await loadContext(admin, tr);
+    await sendHostEmail(admin, "turnover_confirmed", paidHost?.email, {
+      name: (paidHost?.name || "").split(" ")[0] || "",
+      property: paidProp?.nickname || paidProp?.address || "",
+      address: paidProp?.address || "",
+      date: formatServiceDate(tr.requested_date as string),
+      window: fmtWindow(tr.window_start as string, tr.window_end as string),
+      price: money(Number(tr.price || 0)),
+    });
+    try {
+      await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
+    } catch (e) {
+      console.warn("[partner-turnover] turnover GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
+    }
+    const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
+    await runAssignment(admin, fresh, "auto");
+    const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
+    return json({ paid: true, status: after?.status, assignment_type: after?.assignment_type });
+  }
+  return json({ paid, status: tr.status });
+}
+
+// --- Cleaner lifecycle (confirm / check-in / complete) -----------------
+//
+// Invoked server-to-server (service role) from sms-inbound when a cleaner
+// replies to the assignment texts, and from the cleaner app. Each step
+// advances status and fans out the right host notifications.
+async function handleCleanerLifecycle(admin: SB, action: string, body: Record<string, unknown>) {
+  const turnoverId = body.turnoverId as string | undefined;
+  const cleanerId = body.cleanerId as string | undefined;
+  if (!turnoverId) return json({ error: "turnoverId required" }, 400);
+  const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", turnoverId).maybeSingle();
+  if (!tr) return json({ error: "Turnover not found" }, 404);
+  // When a cleanerId is supplied (SMS / app), it must own the assignment.
+  if (cleanerId && tr.assigned_cleaner_id && tr.assigned_cleaner_id !== cleanerId) {
+    return json({ error: "Not your turnover" }, 403);
+  }
+
+  if (action === "cleaner.confirm") {
+    if (!["assigned", "cleaner_confirmed"].includes(tr.status)) {
+      return json({ error: "Nothing to confirm" }, 409);
+    }
+    if (tr.status !== "cleaner_confirmed") {
+      await admin.from("turnover_requests").update({
+        status: "cleaner_confirmed",
+        cleaner_confirmed_at: new Date().toISOString(),
+      }).eq("id", tr.id).eq("status", "assigned");
+      const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
+      await notifyCleanerConfirmed(admin, fresh);
+    }
+    return json({ ok: true, status: "cleaner_confirmed" });
+  }
+
+  if (action === "cleaner.checkin") {
+    if (!["cleaner_confirmed", "assigned"].includes(tr.status)) {
+      return json({ error: "Can't check in yet" }, 409);
+    }
+    await admin.from("turnover_requests").update({
+      status: "in_progress",
+      started_at: new Date().toISOString(),
+    }).eq("id", tr.id);
+    if (Array.isArray(body.before_photos) && body.before_photos.length) {
+      await admin.from("turnover_requests").update({ before_photos: body.before_photos }).eq("id", tr.id);
+    }
+    const { property, hostRow } = await loadContext(admin, tr);
+    if (hostRow?.phone) {
+      await sendSms(admin, {
+        toPhone: hostRow.phone, type: "confirmation",
+        message: `Your cleaner has started the turnover at ${property?.nickname || property?.address || "your property"}. We'll let you know the moment it's guest-ready. - NovaraCleaning`,
+      });
+    }
+    return json({ ok: true, status: "in_progress" });
+  }
+
+  if (action === "cleaner.complete") {
+    await admin.from("turnover_requests").update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    }).eq("id", tr.id);
+    if (Array.isArray(body.after_photos) && body.after_photos.length) {
+      await admin.from("turnover_requests").update({ after_photos: body.after_photos }).eq("id", tr.id);
+    }
+    const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
+    await notifyTurnoverCompleted(admin, fresh);
+    return json({ ok: true, status: "completed" });
+  }
+
+  return json({ error: `Unknown lifecycle action: ${action}` }, 400);
+}
 
 // --- Assignment engine -------------------------------------------------
 async function runAssignment(admin: SB, tr: Record<string, unknown>, defaultType: "auto" | "preferred") {
@@ -474,5 +631,74 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
     await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: tr, cleaner });
   } catch (e) {
     console.warn("[partner-turnover] assignment GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
+  }
+}
+
+// Cleaner replied YES → reassure the host their crew is locked in.
+async function notifyCleanerConfirmed(admin: SB, tr: Record<string, unknown>) {
+  const { property, hostRow } = await loadContext(admin, tr);
+  const cleanerId = tr.assigned_cleaner_id as string | null;
+  const { data: cleaner } = cleanerId
+    ? await admin.from("cleaners").select("first_name").eq("id", cleanerId).maybeSingle()
+    : { data: null };
+  const nickname = property?.nickname || property?.address || "your property";
+  const dateLabel = formatServiceDate(tr.requested_date as string);
+
+  await notifyDiscord(admin, {
+    title: "Turnover confirmed by cleaner",
+    color: 3066993,
+    fields: [
+      { name: "Property", value: nickname, inline: true },
+      { name: "When", value: dateLabel, inline: true },
+      { name: "Cleaner", value: cleaner?.first_name || "Cleaner", inline: true },
+    ],
+  });
+  if (hostRow?.phone) {
+    await sendSms(admin, {
+      toPhone: hostRow.phone, type: "confirmation",
+      message: `Good news — ${cleaner?.first_name || "your cleaner"} confirmed your ${dateLabel} turnover at ${nickname}. - NovaraCleaning`,
+    });
+  }
+  await sendHostEmail(admin, "turnover_cleaner_confirmed", hostRow?.email, {
+    name: (hostRow?.name || "").split(" ")[0] || "",
+    property: nickname,
+    address: property?.address || "",
+    date: dateLabel,
+    window: fmtWindow(tr.window_start as string, tr.window_end as string),
+    cleaner: cleaner?.first_name || "Your cleaner",
+  });
+}
+
+// Turnover marked complete → tell the host it's guest-ready + invite a rating.
+async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
+  const { property, hostRow } = await loadContext(admin, tr);
+  const nickname = property?.nickname || property?.address || "your property";
+  const dateLabel = formatServiceDate(tr.requested_date as string);
+
+  await notifyDiscord(admin, {
+    title: "Turnover completed",
+    color: 3066993,
+    fields: [
+      { name: "Property", value: nickname, inline: true },
+      { name: "When", value: dateLabel, inline: true },
+      { name: "Host", value: hostRow?.name || hostRow?.email || "-", inline: true },
+    ],
+  });
+  if (hostRow?.phone) {
+    await sendSms(admin, {
+      toPhone: hostRow.phone, type: "confirmation",
+      message: `${nickname} is guest-ready! Your ${dateLabel} turnover is complete. Rate your clean in the portal: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
+    });
+  }
+  await sendHostEmail(admin, "turnover_completed", hostRow?.email, {
+    name: (hostRow?.name || "").split(" ")[0] || "",
+    property: nickname,
+    address: property?.address || "",
+    date: dateLabel,
+  });
+  try {
+    await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: { ...tr, status: "completed" } });
+  } catch (e) {
+    console.warn("[partner-turnover] completion GHL sync failed (non-blocking)", e instanceof Error ? e.message : String(e));
   }
 }

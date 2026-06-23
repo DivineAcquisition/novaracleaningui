@@ -152,6 +152,39 @@ function build(type: string, d: PartnerEmailData): { subject: string; html: stri
           ctaLabel: "Request a turnover", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
         }),
       };
+    case "turnover_rescheduled":
+      return {
+        subject: `Turnover rescheduled - ${d.property || "your property"} → ${d.date || ""}`.trim(),
+        html: renderHtml({
+          preheader: "Your turnover has been moved to a new date.",
+          heading: "Turnover rescheduled",
+          bodyHtml: `<p>${hi}</p><p>Your turnover has been moved to the new date below. We're re-assigning a vetted cleaner and will confirm shortly.</p>`,
+          rows,
+          ctaLabel: "View my turnovers", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
+        }),
+      };
+    case "turnover_cleaner_confirmed":
+      return {
+        subject: `Your cleaner confirmed - ${d.property || "your property"}`.trim(),
+        html: renderHtml({
+          preheader: "Your cleaner confirmed the turnover.",
+          heading: "Your cleaner is confirmed",
+          bodyHtml: `<p>${hi}</p><p><strong>${d.cleaner || "Your cleaner"}</strong> confirmed your upcoming turnover. You're all set — we'll have the property guest-ready by the end of your window.</p>`,
+          rows: [...rows, { label: "Cleaner", value: d.cleaner || "" }],
+          ctaLabel: "View my turnovers", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
+        }),
+      };
+    case "turnover_completed":
+      return {
+        subject: `Guest-ready - ${d.property || "your property"} turnover complete`.trim(),
+        html: renderHtml({
+          preheader: "Your turnover is complete and guest-ready.",
+          heading: "Your turnover is complete",
+          bodyHtml: `<p>${hi}</p><p>Great news — your turnover is done and the property is guest-ready. We'd love your feedback: rate your clean from the dashboard so we keep matching you with your best crews.</p>`,
+          rows,
+          ctaLabel: "Rate my clean", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
+        }),
+      };
     default:
       return null;
   }

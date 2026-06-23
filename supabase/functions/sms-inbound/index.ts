@@ -198,6 +198,61 @@ serve(async (req) => {
     .maybeSingle();
   const activeBooking = bookingRow || null;
 
+  // ─── Partner-portal cleaner replies (turnover crew) ────────────
+  // The assignment SMS asks the cleaner to "Reply YES to confirm" and the
+  // check-in/out flow accepts START / DONE. Cleaners aren't customers, so
+  // handle these before the customer-booking flow. We only act when the
+  // inbound phone maps to a cleaner with a turnover in the matching state,
+  // so a customer who is also a cleaner still falls through correctly.
+  const TOKEN_START = new Set(["START JOB", "STARTJOB", "ARRIVED", "ONSITE", "ON SITE", "BEGIN"]);
+  const TOKEN_DONE = new Set(["DONE", "COMPLETE", "COMPLETED", "FINISHED"]);
+  const isTurnoverVerb = TOKEN_YES.has(upper) || TOKEN_START.has(upper) || TOKEN_DONE.has(upper);
+  if (isTurnoverVerb) {
+    const { data: cleanerRow } = await supabase
+      .from("cleaners")
+      .select("id, first_name, phone")
+      .ilike("phone", `%${lastTen}%`)
+      .limit(1)
+      .maybeSingle();
+    if (cleanerRow) {
+      // Status we look for depends on the verb.
+      const wantStatuses = TOKEN_YES.has(upper)
+        ? ["assigned"]
+        : TOKEN_START.has(upper)
+          ? ["cleaner_confirmed", "assigned"]
+          : ["in_progress", "cleaner_confirmed"];
+      const { data: turnoverRow } = await supabase
+        .from("turnover_requests")
+        .select("id, status, requested_date")
+        .eq("assigned_cleaner_id", cleanerRow.id)
+        .in("status", wantStatuses)
+        .gte("requested_date", todayIso)
+        .order("requested_date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (turnoverRow) {
+        const lifecycleAction = TOKEN_YES.has(upper)
+          ? "cleaner.confirm"
+          : TOKEN_START.has(upper)
+            ? "cleaner.checkin"
+            : "cleaner.complete";
+        try {
+          await supabase.functions.invoke("partner-turnover", {
+            body: { action: lifecycleAction, turnoverId: turnoverRow.id, cleanerId: cleanerRow.id },
+          });
+        } catch (e) {
+          log("turnover lifecycle invoke failed", { error: e instanceof Error ? e.message : String(e) });
+        }
+        const reply = TOKEN_YES.has(upper)
+          ? `Novara: You're confirmed for the ${formatServiceDate(turnoverRow.requested_date)} turnover. Reply START when you arrive, DONE when it's guest-ready. Details + access are in your cleaner app.`
+          : TOKEN_START.has(upper)
+            ? `Novara: Marked you on-site. Reply DONE when the turnover is guest-ready. Thank you!`
+            : `Novara: Turnover marked complete — the host has been notified it's guest-ready. Thank you!`;
+        return finalize(`turnover_${lifecycleAction.split(".")[1]}`, reply);
+      }
+    }
+  }
+
   if (!activeBooking && (TOKEN_RESCHEDULE.has(upper) || TOKEN_CANCEL.has(upper) || TOKEN_YES.has(upper))) {
     return finalize(
       "no_active_booking",
