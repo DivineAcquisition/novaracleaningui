@@ -6,13 +6,14 @@
 //   1. Dashboard          (live metrics + activity)
 //   2. Bookings           (every booking, with cancel/reschedule/refund)
 //   3. Cleaners           (directory + onboarding + management)
-//   4. Internal Booking   (VA-driven booking submission, formerly "CSR Form")
-//   5. Customers          (full account control)
-//   6. Operational Map    (cleaner coverage × booking heatmap)
-//   7. Messages           (manual SMS + email send)
-//   8. Payroll            (Stripe Connect cleaner payouts)
-//   9. Sales              (per-VA leads, bookings, revenue)
-//  10. Team               (admins + VA portal access)
+//   4. Dispatch           (staff jobs, offers, re-dispatch)
+//   5. Internal Booking   (VA-driven booking submission, formerly "CSR Form")
+//   6. Commercial         (office / commercial / partnerships)
+//   7. Turnover & STR     (short-term-rental hosts, turnovers, crew, recurring)
+//   8. Customers          (full account control)
+//   9. Operational Map    (cleaner coverage × booking heatmap)
+//  10. Payroll            (Stripe Connect cleaner payouts)
+//  11. Team               (admins + VA portal access)
 //
 // Premium SaaS feel: Plus Jakarta Sans display font, lovable-style press
 // buttons, sharper card density, emerald accent. Sidebar is light-gray on
@@ -26,13 +27,10 @@ import {
   RiMapPin2Line,
   RiFileEditLine,
   RiBankCardLine,
-  RiLineChartLine,
   RiLogoutBoxRLine,
   RiMenuLine,
   RiCloseLine,
-  RiShieldStarLine,
   RiCalendarCheckLine,
-  RiChat3Line,
   RiTeamLine,
   RiRocket2Line,
   RiBuilding2Line,
@@ -95,10 +93,10 @@ const NAV_ITEMS: NavItem[] = [
     description: "Office · commercial · partnerships",
   },
   {
-    title: "Turnover Portal",
+    title: "Turnover & STR",
     url: "/admin/partner",
     icon: RiHotelLine,
-    description: "Airbnb hosts · pricing · crew",
+    description: "STR hosts · turnovers · crew · recurring",
   },
   {
     title: "Host Accounts",
@@ -119,34 +117,10 @@ const NAV_ITEMS: NavItem[] = [
     description: "Coverage × booking heatmap",
   },
   {
-    title: "Messages",
-    url: "/admin/messages",
-    icon: RiChat3Line,
-    description: "Manual SMS + email",
-  },
-  {
     title: "Payroll",
     url: "/admin/payroll",
     icon: RiBankCardLine,
     description: "Stripe Connect payouts",
-  },
-  {
-    title: "Sales",
-    url: "/admin/sales-tracker",
-    icon: RiLineChartLine,
-    description: "Per-VA leads & revenue",
-  },
-  {
-    title: "Testimonials",
-    url: "/admin/testimonials",
-    icon: RiShieldStarLine,
-    description: "Customer video reviews",
-  },
-  {
-    title: "Agreements",
-    url: "/admin/agreements",
-    icon: RiFileEditLine,
-    description: "Signed service agreements",
   },
   {
     title: "Team",
