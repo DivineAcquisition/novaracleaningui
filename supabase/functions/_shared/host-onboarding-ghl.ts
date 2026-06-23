@@ -23,6 +23,7 @@ import {
   updateOpportunity,
   upsertContact,
 } from "./ghl-client.ts";
+import { hostIdentityFields } from "./ghl-partner-field-map.ts";
 
 const log = (step: string, details?: unknown) => {
   const tail = details === undefined ? "" : ` ${JSON.stringify(details)}`;
@@ -73,16 +74,14 @@ export async function upsertHostOnboardingContact(
       "host onboarding",
       isEntity ? "host-entity" : "host-individual",
     ],
-    customFieldsByKey: {
-      client_type: "STR Host",
-      host_type: "STR Host",
-      host_entity_type: isEntity ? "Entity" : "Individual",
-      entity_name: isEntity ? (input.entityName || "") : "",
-      partner_status: "Onboarding",
-      onboarding_stage: "Agreement Pending",
-      number_of_properties: input.propertyCount,
-      market: input.serviceZone || "",
-    },
+    customFieldsByKey: hostIdentityFields({
+      entityType: input.entityType,
+      entityName: input.entityName,
+      propertyCount: input.propertyCount,
+      serviceZone: input.serviceZone,
+      partnerStatus: "Onboarding",
+      onboardingStage: "Agreement Pending",
+    }),
   });
 }
 

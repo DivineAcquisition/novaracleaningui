@@ -13,12 +13,12 @@
 
 import {
   createOpportunity,
-  fmtMoney,
   ghlIsConfigured,
   updateOpportunity,
   upsertContact,
   type GhlContactInput,
 } from "./ghl-client.ts";
+import { hostIdentityFields, turnoverCustomFields } from "./ghl-partner-field-map.ts";
 
 // deno-lint-ignore no-explicit-any
 type SB = any;
@@ -92,6 +92,9 @@ function hostContactInput(
   customFieldsByKey?: GhlContactInput["customFieldsByKey"],
 ): GhlContactInput {
   const { firstName, lastName } = splitName(host.name);
+  // Always stamp the STR-host identity fields so a turnover-only host matches
+  // an onboarded host in GHL (consistency with the onboarding contact upsert).
+  const mergedFields = { ...hostIdentityFields({}), ...(customFieldsByKey || {}) };
   return {
     email: host.email || undefined,
     phone: host.phone || undefined,
@@ -99,8 +102,8 @@ function hostContactInput(
     lastName,
     name: host.name || undefined,
     source: "Novara Partner Portal",
-    tags: ["partner - host", "source - turnover portal", ...extraTags],
-    customFieldsByKey,
+    tags: ["partner - host", "source - turnover portal", "str host", ...extraTags],
+    customFieldsByKey: mergedFields,
   };
 }
 
@@ -211,25 +214,20 @@ export async function syncTurnoverToGhl(
   const status = turnoverOpportunityStatus(turnover.status);
   const name = `Turnover — ${propLabel}${dateLabel ? ` — ${dateLabel}` : ""}`;
 
-  const customFieldsByKey: Record<string, string | number | boolean | null | undefined> = {
-    cleaning_type: "Move In/Out Cleaning", // closest configured GHL option for a turnover
-    service_time__date: serviceWhen,
-    next_service_date__time: status === "won" ? "" : serviceWhen,
-    preferred_start_date: dateLabel || "",
-    entry__gate_notes: property?.access_instructions || "",
-    job_notes_internal: turnover.notes || "",
-    bedrooms: property?.bedrooms ?? "",
-    bathrooms: property?.bathrooms ?? "",
-    estimated_sqft: property?.sqft ?? "",
-    final_cost_: fmtMoney(Math.round(priceNum * 100)),
-    deposit_paid: turnover.status && turnover.status !== "pending_payment" ? "Yes" : "No",
-    deposit_amount_: fmtMoney(Math.round(priceNum * 100)),
-    remaining_balance: fmtMoney(0),
-    service_frequency: "One-Time",
-    billing_frequency: "Per Visit",
-    "1_contractor": cleanerName || "",
-    "1_contractor_number": cleaner?.phone || "",
-  };
+  const customFieldsByKey = turnoverCustomFields({
+    serviceWhen,
+    dateLabel,
+    status,
+    accessNotes: property?.access_instructions,
+    jobNotes: turnover.notes,
+    bedrooms: property?.bedrooms,
+    bathrooms: property?.bathrooms,
+    sqft: property?.sqft,
+    priceDollars: priceNum,
+    isPaid: !!turnover.status && turnover.status !== "pending_payment",
+    cleanerName,
+    cleanerPhone: cleaner?.phone,
+  });
 
   const monetaryValue = priceNum > 0 ? Math.round(priceNum) : undefined;
 
