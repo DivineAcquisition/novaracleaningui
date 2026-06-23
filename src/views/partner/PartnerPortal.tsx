@@ -15,7 +15,7 @@ import {
   RiHome4Line, RiAddLine, RiLoader4Line, RiCalendarLine, RiMapPinLine,
   RiLogoutBoxRLine, RiCheckboxCircleLine, RiTimeLine, RiEditLine, RiSparklingLine,
   RiMailSendLine, RiLockLine, RiUser3Line, RiPhoneLine, RiMailLine,
-  RiShieldCheckLine, RiArrowRightLine,
+  RiShieldCheckLine, RiArrowRightLine, RiFlashlightFill, RiKey2Line,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -78,20 +78,127 @@ export default function PartnerPortal() {
   return session ? <Dashboard /> : <AuthScreen />;
 }
 
-// ─── Shared auth shell (premium gradient backdrop) ─────────────────────────
+// ─── Brand tokens (purple ramp — used as a scalpel, not a flood) ────────────
+const PURPLE_GRADIENT = "linear-gradient(135deg,#4F38FF 0%,#6A57FF 100%)";
+const INPUT_CLS =
+  "h-11 pl-10 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 " +
+  "focus-visible:border-[#6A57FF] focus-visible:ring-2 focus-visible:ring-[#6A57FF]/25";
+
+const FEATURES = [
+  { icon: RiShieldCheckLine, label: "Vetted cleaners", desc: "Background-checked and rated after every clean." },
+  { icon: RiFlashlightFill, label: "Auto dispatch", desc: "Matched to your preferred crew the moment you book." },
+  { icon: RiKey2Line, label: "Secure access", desc: "Lockbox & gate codes stored safely, shared only on the job." },
+];
+const STATS = [
+  { value: "4.9", label: "Avg rating" },
+  { value: "24h", label: "Turnaround" },
+  { value: "100%", label: "Vetted crew" },
+];
+
+// One signature motion for the surface: a slow aurora drift. Scoped via a
+// unique animation name; disabled under prefers-reduced-motion.
+function AuroraMotionStyle() {
+  return (
+    <style>{`
+@keyframes nvDriftA{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(30px,-24px,0)}}
+@keyframes nvDriftB{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(-26px,20px,0)}}
+.nv-drift-a{animation:nvDriftA 14s ease-in-out infinite}
+.nv-drift-b{animation:nvDriftB 18s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.nv-drift-a,.nv-drift-b{animation:none}}
+`}</style>
+  );
+}
+
+// ─── Brand panel (desktop only) — aurora + value props + trust stats ───────
+function BrandPanel() {
+  return (
+    <div className="relative hidden overflow-hidden p-12 text-white lg:flex lg:flex-col lg:justify-between" style={{ background: "#0B0920" }}>
+      <AuroraMotionStyle />
+      {/* Aurora wash + drifting glows + faint grid */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(55% 45% at 16% 12%, rgba(106,87,255,.55), transparent 60%)," +
+              "radial-gradient(45% 40% at 90% 18%, rgba(154,140,255,.32), transparent 60%)," +
+              "radial-gradient(70% 65% at 78% 98%, rgba(79,56,255,.5), transparent 62%)",
+          }}
+        />
+        <div className="nv-drift-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(106,87,255,.45)" }} />
+        <div className="nv-drift-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(79,56,255,.4)" }} />
+        <div
+          className="absolute inset-0 opacity-[0.05]"
+          style={{
+            backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",
+            backgroundSize: "44px 44px",
+            maskImage: "radial-gradient(ellipse at center, #000 40%, transparent 85%)",
+          }}
+        />
+      </div>
+
+      {/* Logo */}
+      <div className="relative">
+        <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-8 w-auto" style={{ filter: "brightness(0) invert(1)" }} />
+      </div>
+
+      {/* Headline + value props */}
+      <div className="relative max-w-md">
+        <h2 className="font-jakarta text-3xl font-bold leading-[1.15] tracking-tight xl:text-[2.6rem]">
+          Turnover cleanings,<br />handled for you.
+        </h2>
+        <p className="mt-4 text-sm leading-relaxed text-white/70">
+          List your rentals, lock in a per-turnover rate, and we dispatch a vetted crew — guest-ready by every check-in.
+        </p>
+        <ul className="mt-9 space-y-5">
+          {FEATURES.map((f) => (
+            <li key={f.label} className="flex items-start gap-3.5">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur">
+                <f.icon className="h-[18px] w-[18px] text-white" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold leading-tight">{f.label}</p>
+                <p className="mt-0.5 text-xs leading-snug text-white/55">{f.desc}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Trust stats — tabular mono numerals */}
+      <div className="relative flex items-center gap-9">
+        {STATS.map((s) => (
+          <div key={s.label}>
+            <p className="font-mono text-2xl font-semibold tabular-nums tracking-tight">{s.value}</p>
+            <p className="mt-1 text-[11px] uppercase tracking-wider text-white/45">{s.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared auth shell — premium split layout (brand panel + form) ─────────
 function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="min-h-screen relative flex items-center justify-center px-4 py-10 overflow-hidden"
-      style={{ background: "linear-gradient(140deg,#1B0B45 0%,#5500FF 52%,#3D00B8 100%)" }}
-    >
-      {/* Decorative blurred glows for depth */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 -left-24 w-[22rem] h-[22rem] rounded-full blur-3xl opacity-40" style={{ background: "#918CFF" }} />
-        <div className="absolute -bottom-36 -right-20 w-[26rem] h-[26rem] rounded-full blur-3xl opacity-30" style={{ background: "#C4B5FD" }} />
-        <div className="absolute top-1/3 right-1/3 w-44 h-44 rounded-full blur-2xl opacity-20" style={{ background: "#FFFFFF" }} />
+    <div className="min-h-screen w-full bg-[#FAFAFC] lg:grid lg:grid-cols-[1.05fr_1fr]">
+      <BrandPanel />
+      <div className="relative flex min-h-screen items-center justify-center px-5 py-12 sm:px-10">
+        {/* Faint top accent on the form side for warmth */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-40 lg:hidden"
+          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(106,87,255,.10), transparent 70%)" }}
+        />
+        <div className="relative w-full max-w-[400px] space-y-8">
+          {/* Compact brand for mobile (brand panel is desktop-only) */}
+          <div className="flex flex-col items-center gap-2 lg:hidden">
+            <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-7 w-auto" />
+            <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">Host Portal</span>
+          </div>
+          {children}
+        </div>
       </div>
-      <div className="relative w-full max-w-md">{children}</div>
     </div>
   );
 }
@@ -107,8 +214,6 @@ function GoogleIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
-const PURPLE_GRADIENT = "linear-gradient(135deg,#5500FF 0%,#7C3AED 100%)";
 
 // ─── Set a new password (recovery) ─────────────────────────────────────────
 function SetPasswordForm({ onDone }: { onDone: () => void }) {
@@ -127,25 +232,21 @@ function SetPasswordForm({ onDone }: { onDone: () => void }) {
   return (
     <AuthShell>
       <SEO title="Set a new password" noindex />
-      <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl ring-1 ring-white/40 overflow-hidden">
-        <div className="h-1.5 w-full" style={{ background: PURPLE_GRADIENT }} />
-        <div className="px-7 pt-8 pb-7 space-y-5">
-          <div className="text-center space-y-2">
-            <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-7 w-auto mx-auto" />
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Set a new password</h1>
-            <p className="text-sm text-slate-500">Choose a strong password for your host account.</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-slate-700">New password</Label>
-            <div className="relative">
-              <RiLockLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="pl-10 h-11" />
-            </div>
-          </div>
-          <Button onClick={submit} disabled={busy} className="w-full h-11 text-white font-semibold shadow-lg shadow-violet-500/25 hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
-            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Update password"}
-          </Button>
+      <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)]">
+        <div className="space-y-1.5">
+          <h1 className="font-jakarta text-2xl font-bold tracking-tight text-slate-900">Set a new password</h1>
+          <p className="text-sm text-slate-500">Choose a strong password for your host account.</p>
         </div>
+        <div className="mt-6 space-y-1.5">
+          <Label className="text-slate-700">New password</Label>
+          <div className="relative">
+            <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={INPUT_CLS} />
+          </div>
+        </div>
+        <Button onClick={submit} disabled={busy} className="mt-6 h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
+          {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Update password"}
+        </Button>
       </div>
     </AuthShell>
   );
@@ -239,119 +340,107 @@ function AuthScreen() {
     <AuthShell>
       <SEO title="Host Portal" description="Request Airbnb & short-term-rental turnover cleanings." noindex />
 
-      {/* Brand mark above the card */}
-      <div className="text-center mb-5">
-        <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-8 w-auto mx-auto drop-shadow-sm" style={{ filter: "brightness(0) invert(1)" }} />
-        <p className="text-white/70 text-xs font-medium tracking-[0.18em] uppercase mt-2">Host Portal</p>
-      </div>
-
-      <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl ring-1 ring-white/40 overflow-hidden">
-        <div className="h-1.5 w-full" style={{ background: PURPLE_GRADIENT }} />
-        <div className="px-7 pt-7 pb-7 space-y-5">
-          <div className="text-center space-y-1.5">
-            <div className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30" style={{ background: PURPLE_GRADIENT }}>
-              <RiSparklingLine className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 pt-1">{headline}</h1>
-            <p className="text-sm text-slate-500">{subline}</p>
-          </div>
-
-          {mode === "check-email" ? (
-            <div className="text-center space-y-4 py-2">
-              <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center">
-                <RiMailSendLine className="w-7 h-7" style={{ color: "#5500FF" }} />
-              </div>
-              <div>
-                <p className="font-semibold text-slate-900">Check your email</p>
-                <p className="text-sm text-slate-500 mt-1">We sent a confirmation link to <span className="font-medium text-slate-700">{cleanEmail() || "your inbox"}</span>. Click it to finish setting up your account.</p>
-              </div>
-              <Button variant="outline" className="w-full h-11" onClick={resendConfirm}>Resend confirmation</Button>
-              <button className="text-sm text-[#5500FF] font-medium hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
-            </div>
-          ) : (
-            <>
-              {/* Google OAuth — works for both sign in and sign up */}
-              {mode !== "forgot" && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={doGoogle}
-                    disabled={googleBusy || busy}
-                    className="w-full h-11 gap-2.5 border-slate-200 text-slate-700 font-semibold hover:bg-slate-50"
-                  >
-                    {googleBusy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <GoogleIcon className="w-5 h-5" />}
-                    Continue with Google
-                  </Button>
-                  <div className="flex items-center gap-3">
-                    <div className="h-px flex-1 bg-slate-200" />
-                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">or {mode === "signup" ? "sign up" : "sign in"} with email</span>
-                    <div className="h-px flex-1 bg-slate-200" />
-                  </div>
-                </>
-              )}
-
-              {mode === "signup" && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-700">Name</Label>
-                    <div className="relative">
-                      <RiUser3Line className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="pl-10 h-11" />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-700">Phone</Label>
-                    <div className="relative">
-                      <RiPhoneLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" className="pl-10 h-11" />
-                    </div>
-                  </div>
-                </>
-              )}
-              <div className="space-y-1.5">
-                <Label className="text-slate-700">Email</Label>
-                <div className="relative">
-                  <RiMailLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" className="pl-10 h-11" />
-                </div>
-              </div>
-              {mode !== "forgot" && (
-                <div className="space-y-1.5">
-                  <Label className="text-slate-700">Password</Label>
-                  <div className="relative">
-                    <RiLockLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="pl-10 h-11" />
-                  </div>
-                </div>
-              )}
-              {mode === "login" && (
-                <div className="text-right -mt-1">
-                  <button className="text-xs text-[#5500FF] font-medium hover:underline" onClick={() => setMode("forgot")}>Forgot password?</button>
-                </div>
-              )}
-              <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy || googleBusy} className="w-full h-11 text-white font-semibold shadow-lg shadow-violet-500/25 hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
-                {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : (<>{primaryLabel}<RiArrowRightLine className="w-4 h-4 ml-1.5" /></>)}
-              </Button>
-              <p className="text-center text-sm text-slate-500">
-                {mode === "forgot" ? (
-                  <button className="text-[#5500FF] font-semibold hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
-                ) : mode === "signup" ? (
-                  <>Already have an account? <button className="text-[#5500FF] font-semibold hover:underline" onClick={() => setMode("login")}>Sign in</button></>
-                ) : (
-                  <>New here? <button className="text-[#5500FF] font-semibold hover:underline" onClick={() => setMode("signup")}>Create one</button></>
-                )}
-              </p>
-            </>
-          )}
+      <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)]">
+        <div className="space-y-1.5">
+          <h1 className="font-jakarta text-[26px] font-bold leading-tight tracking-tight text-slate-900">{headline}</h1>
+          <p className="text-sm text-slate-500">{subline}</p>
         </div>
+
+        {mode === "check-email" ? (
+          <div className="mt-6 space-y-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4F38FF]/10">
+              <RiMailSendLine className="h-7 w-7 text-[#4F38FF]" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">Check your email</p>
+              <p className="mt-1 text-sm text-slate-500">We sent a confirmation link to <span className="font-medium text-slate-700">{cleanEmail() || "your inbox"}</span>. Click it to finish setting up your account.</p>
+            </div>
+            <Button variant="outline" className="h-11 w-full" onClick={resendConfirm}>Resend confirmation</Button>
+            <button className="text-sm font-medium text-[#4F38FF] hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {/* Google OAuth — works for both sign in and sign up */}
+            {mode !== "forgot" && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={doGoogle}
+                  disabled={googleBusy || busy}
+                  className="h-11 w-full gap-2.5 border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  {googleBusy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <GoogleIcon className="h-5 w-5" />}
+                  Continue with Google
+                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">or {mode === "signup" ? "sign up" : "sign in"} with email</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
+              </>
+            )}
+
+            {mode === "signup" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-slate-700">Name</Label>
+                  <div className="relative">
+                    <RiUser3Line className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={INPUT_CLS} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-slate-700">Phone</Label>
+                  <div className="relative">
+                    <RiPhoneLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" className={INPUT_CLS} />
+                  </div>
+                </div>
+              </>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-slate-700">Email</Label>
+              <div className="relative">
+                <RiMailLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" className={INPUT_CLS} />
+              </div>
+            </div>
+            {mode !== "forgot" && (
+              <div className="space-y-1.5">
+                <Label className="text-slate-700">Password</Label>
+                <div className="relative">
+                  <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={INPUT_CLS} />
+                </div>
+              </div>
+            )}
+            {mode === "login" && (
+              <div className="-mt-1 text-right">
+                <button className="text-xs font-medium text-[#4F38FF] hover:underline" onClick={() => setMode("forgot")}>Forgot password?</button>
+              </div>
+            )}
+            <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy || googleBusy} className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
+              {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : (<>{primaryLabel}<RiArrowRightLine className="ml-1.5 h-4 w-4" /></>)}
+            </Button>
+            <p className="text-center text-sm text-slate-500">
+              {mode === "forgot" ? (
+                <button className="font-semibold text-[#4F38FF] hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
+              ) : mode === "signup" ? (
+                <>Already have an account? <button className="font-semibold text-[#4F38FF] hover:underline" onClick={() => setMode("login")}>Sign in</button></>
+              ) : (
+                <>New here? <button className="font-semibold text-[#4F38FF] hover:underline" onClick={() => setMode("signup")}>Create one</button></>
+              )}
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Trust strip */}
-      <div className="flex items-center justify-center gap-5 mt-6 text-white/75 text-xs">
-        <span className="flex items-center gap-1.5"><RiShieldCheckLine className="w-4 h-4" /> Vetted cleaners</span>
-        <span className="flex items-center gap-1.5"><RiCheckboxCircleLine className="w-4 h-4" /> Secure payments</span>
-        <span className="flex items-center gap-1.5"><RiTimeLine className="w-4 h-4" /> Guest-ready turnovers</span>
+      {/* Mobile trust row (brand panel carries this on desktop) */}
+      <div className="flex items-center justify-center gap-5 text-xs text-slate-400 lg:hidden">
+        <span className="flex items-center gap-1.5"><RiShieldCheckLine className="h-4 w-4" /> Vetted</span>
+        <span className="flex items-center gap-1.5"><RiCheckboxCircleLine className="h-4 w-4" /> Secure</span>
+        <span className="flex items-center gap-1.5"><RiTimeLine className="h-4 w-4" /> Guest-ready</span>
       </div>
     </AuthShell>
   );
