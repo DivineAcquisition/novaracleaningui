@@ -10,6 +10,7 @@
 //   welcome                    - host account created
 //   agreement_sent             - Host Partnership Agreement sent to e-sign (24h)
 //   agreement_signed           - agreement signed → properties active
+//   payment_link               - Stripe Checkout link to pay for a turnover
 //   turnover_confirmed         - payment received, turnover booked (receipt)
 //   turnover_assigned          - a cleaner has been assigned
 //   turnover_cleaner_confirmed - cleaner confirmed the turnover
@@ -106,6 +107,8 @@ interface PartnerEmailData {
   window?: string; price?: string; cleaner?: string;
   // Onboarding / agreement extras.
   propertyCount?: number; agreementUrl?: string; rateSummary?: string; deadline?: string;
+  // Payment link.
+  checkoutUrl?: string;
 }
 
 function build(type: string, d: PartnerEmailData): { subject: string; html: string } | null {
@@ -172,6 +175,18 @@ function build(type: string, d: PartnerEmailData): { subject: string; html: stri
           heading: "You're all set!",
           bodyHtml: `<p>${hi}</p><p>Welcome to the Novara Host Portal. Here's how it works:</p><ul style="padding-left:18px;margin:12px 0;"><li>Add your rental properties (address + access details).</li><li>Our team sets your per-turnover rate.</li><li>Request a turnover, pay, and we assign a vetted cleaner - guest-ready by your next check-in.</li></ul><p>You'll get a confirmation and assignment update by email and text for every turnover.</p>`,
           ctaLabel: "Open my portal", ctaUrl: BRAND.portalUrl,
+        }),
+      };
+    case "payment_link":
+      return {
+        subject: `Pay to confirm your turnover - ${d.property || "your property"}${d.date ? ` on ${d.date}` : ""}`.trim(),
+        html: renderHtml({
+          preheader: "Secure your turnover — pay with the link inside.",
+          heading: "Confirm your turnover",
+          bodyHtml: `<p>${hi}</p><p>Your rate is set and your turnover is ready to confirm. Pay securely below and a vetted cleaner will have your property guest-ready by check-in. Your card is saved for one-tap turnovers next time.</p>`,
+          rows,
+          ctaLabel: d.checkoutUrl ? "Pay & confirm turnover" : undefined,
+          ctaUrl: d.checkoutUrl || undefined,
         }),
       };
     case "turnover_confirmed":

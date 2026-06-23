@@ -58,6 +58,8 @@ export default function PartnerAdmin() {
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [crew, setCrew] = useState<Crew[]>([]);
   const [sendingAgreement, setSendingAgreement] = useState<string | null>(null);
+  const [payDate, setPayDate] = useState<Record<string, string>>({});
+  const [sendingPayLink, setSendingPayLink] = useState<string | null>(null);
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [bulkPrice, setBulkPrice] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -132,7 +134,9 @@ export default function PartnerAdmin() {
   };
 
   const pending = properties.filter((p) => p.turnover_price == null || Number(p.turnover_price) <= 0);
+  const priced = properties.filter((p) => p.turnover_price != null && Number(p.turnover_price) > 0);
   const unassigned = turnovers.filter((t) => t.status === "unassigned_alert");
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   // Hosts whose every property is priced → ready to send the agreement.
   const hostsReadyForAgreement = useMemo(() => {
@@ -156,6 +160,29 @@ export default function PartnerAdmin() {
       toast.success("Host agreement sent — e-sign link emailed & texted.");
     } finally {
       setSendingAgreement(null);
+    }
+  };
+
+  const hostName = (id: string) => {
+    const h = hosts.find((x) => x.id === id);
+    return h?.name || h?.email || "Host";
+  };
+
+  const sendPaymentLink = async (propertyId: string) => {
+    const date = payDate[propertyId];
+    if (!date) { toast.error("Pick a service date first."); return; }
+    setSendingPayLink(propertyId);
+    try {
+      const { data, error } = await supabase.functions.invoke("partner-turnover", {
+        body: { action: "admin.sendPaymentLink", propertyId, requested_date: date },
+      });
+      const err = error || (data as any)?.error;
+      if (err) { toast.error((data as any)?.error || "Could not send payment link"); return; }
+      toast.success("Payment link sent — Stripe checkout emailed & texted to the host.");
+      setPayDate((prev) => ({ ...prev, [propertyId]: "" }));
+      load();
+    } finally {
+      setSendingPayLink(null);
     }
   };
 
@@ -269,6 +296,38 @@ export default function PartnerAdmin() {
                 <span className="text-sm text-muted-foreground">$</span>
                 <Input className="w-28" inputMode="decimal" placeholder="per turnover" value={priceEdits[p.id] || ""} onChange={(e) => setPriceEdits({ ...priceEdits, [p.id]: e.target.value })} />
                 <Button size="sm" onClick={() => setPrice(p.id)}>Set</Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Collect payment — send a Stripe Checkout link by email + SMS */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><RiMoneyDollarCircleLine className="w-5 h-5 text-primary" /> Send payment link ({priced.length} priced)</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {priced.length === 0 && <p className="text-sm text-muted-foreground">Set a rate on a property to send its host a Stripe checkout link.</p>}
+          {priced.map((p) => (
+            <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+              <div className="text-sm min-w-0">
+                <p className="font-medium truncate">{p.nickname || "Property"} · ${Number(p.turnover_price).toFixed(0)}/turnover</p>
+                <p className="text-xs text-muted-foreground truncate">{hostName(p.host_id)}{p.address ? ` · ${p.address}` : ""}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  className="w-40 h-9"
+                  min={todayStr}
+                  value={payDate[p.id] || ""}
+                  onChange={(e) => setPayDate({ ...payDate, [p.id]: e.target.value })}
+                />
+                <Button
+                  size="sm"
+                  disabled={!payDate[p.id] || sendingPayLink === p.id}
+                  onClick={() => sendPaymentLink(p.id)}
+                >
+                  {sendingPayLink === p.id ? "Sending…" : "Send payment link"}
+                </Button>
               </div>
             </div>
           ))}

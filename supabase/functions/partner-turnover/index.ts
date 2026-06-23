@@ -556,6 +556,108 @@ serve(async (req) => {
       return json({ ok: true, ghl: ghlOk, contactId, rateSummary });
     }
 
+    // --- admin.sendPaymentLink (role-gated: after a rate is set, send the ---
+    // host a Stripe Checkout link to pay for a turnover, by email + SMS).
+    // Creates a pending turnover, a Checkout Session (charges now + saves the
+    // card for future one-tap), and delivers the link. The existing
+    // stripe-webhook → turnover.finalize path captures the payment, assigns a
+    // cleaner, and fires the confirmation comms.
+    if (action === "admin.sendPaymentLink") {
+      const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", userId);
+      const isAdmin = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
+      if (!isAdmin) return json({ error: "Admins or VAs only" }, 403);
+
+      const propertyId = body.propertyId as string | undefined;
+      if (!propertyId) return json({ error: "propertyId required" }, 400);
+      if (!body.requested_date) return json({ error: "requested_date required" }, 400);
+
+      const { data: property } = await admin.from("properties").select("*").eq("id", propertyId).maybeSingle();
+      if (!property) return json({ error: "Property not found" }, 404);
+      if (property.turnover_price == null || Number(property.turnover_price) <= 0) {
+        return json({ error: "Set this property's rate before sending a payment link." }, 409);
+      }
+      const { data: payHost } = await admin.from("hosts").select("*").eq("id", property.host_id).maybeSingle();
+      if (!payHost) return json({ error: "Host not found" }, 404);
+      if (!payHost.email && !payHost.phone) {
+        return json({ error: "Host has no email or phone to send the link to." }, 409);
+      }
+
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      if (!stripeKey) return json({ error: "Stripe is not configured (STRIPE_SECRET_KEY missing)." }, 500);
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+      const priceCents = Math.round(Number(property.turnover_price) * 100);
+
+      const { data: tr, error: trErr } = await admin.from("turnover_requests").insert({
+        property_id: property.id,
+        host_id: payHost.id,
+        requested_date: body.requested_date,
+        window_start: body.window_start || null,
+        window_end: body.window_end || null,
+        price: Number(property.turnover_price),
+        status: "pending_payment",
+        notes: (body.notes || "").trim() || null,
+      }).select("*").single();
+      if (trErr) return json({ error: trErr.message }, 500);
+
+      // Reuse / create the host's Stripe customer so the card is saved for
+      // future one-tap turnovers (spec §3.3).
+      let customerId = payHost.stripe_customer_id || undefined;
+      if (!customerId && payHost.email) {
+        const list = await stripe.customers.list({ email: payHost.email, limit: 1 });
+        customerId = list.data[0]?.id;
+        if (!customerId) {
+          const c = await stripe.customers.create({ email: payHost.email, name: payHost.name || undefined });
+          customerId = c.id;
+        }
+        await admin.from("hosts").update({ stripe_customer_id: customerId }).eq("id", payHost.id);
+      }
+
+      const partnerBase = "https://partner.novaracleaning.com";
+      const propLabel = property.nickname || property.address || "Property";
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        customer_email: customerId ? undefined : (payHost.email || undefined),
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Turnover - ${propLabel}` },
+            unit_amount: priceCents,
+          },
+          quantity: 1,
+        }],
+        success_url: `${partnerBase}/partner/turnover/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${partnerBase}/partner/dashboard`,
+        payment_intent_data: { setup_future_usage: "off_session" },
+        metadata: { kind: "turnover", turnover_id: tr.id, host_id: payHost.id },
+      });
+      await admin.from("turnover_requests").update({ stripe_checkout_session_id: session.id }).eq("id", tr.id);
+
+      // Deliver the link: email (Resend) + SMS (GHL). Best-effort.
+      const firstName = (payHost.name || "").split(" ")[0] || "there";
+      const dateLabel = formatServiceDate(body.requested_date as string);
+      const windowLabel = fmtWindow(body.window_start as string, body.window_end as string);
+      await sendHostEmail(admin, "payment_link", payHost.email, {
+        name: firstName,
+        property: propLabel,
+        address: property.address || "",
+        date: dateLabel,
+        window: windowLabel,
+        price: money(Number(property.turnover_price)),
+        checkoutUrl: session.url || "",
+      });
+      if (payHost.phone && session.url) {
+        await sendSms(admin, {
+          toPhone: payHost.phone,
+          type: "confirmation",
+          message: `${firstName}, your Novara turnover for ${propLabel} on ${dateLabel} is ready. Pay ${money(Number(property.turnover_price))} to confirm: ${session.url} - NovaraCleaning`,
+        });
+      }
+
+      return json({ ok: true, url: session.url, turnoverId: tr.id });
+    }
+
     return json({ error: `Unknown action: ${action}` }, 400);
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
