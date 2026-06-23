@@ -74,5 +74,32 @@ export async function POST(req: Request): Promise<NextResponse> {
     })
     .eq("id", submission.id);
 
+  // Activate the host's Supabase properties (portal bookability) now that the
+  // agreement is signed. Pricing still gates bookings (NULL price = pending).
+  if (submission.host_id) {
+    try {
+      await supabase.from("hosts").update({ status: "active" }).eq("id", submission.host_id);
+    } catch { /* best-effort */ }
+  }
+
+  // Lifecycle comms — "you're active" (email via Resend + SMS via GHL).
+  const firstName = (submission.full_name || "").split(" ")[0] || "there";
+  try {
+    await supabase.functions.invoke("send-partner-email", {
+      body: { type: "agreement_signed", email: submission.email, data: { name: firstName } },
+    });
+  } catch { /* best-effort */ }
+  if (submission.phone) {
+    try {
+      await supabase.functions.invoke("send-ghl-sms", {
+        body: {
+          phone: submission.phone,
+          message: `You're all set, ${firstName}! Your Novara Host Partnership Agreement is signed and your properties are active. Request a turnover anytime: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
+          type: "confirmation",
+        },
+      });
+    } catch { /* best-effort */ }
+  }
+
   return NextResponse.json({ ok: true, signed: true, warnings: warnings.length ? warnings : undefined });
 }

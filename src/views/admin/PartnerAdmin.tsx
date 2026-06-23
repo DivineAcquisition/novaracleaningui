@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import {
   RiLoader4Line, RiPriceTag3Line, RiTeamLine, RiAlarmWarningLine, RiCalendarCheckLine,
   RiSearchLine, RiStarFill, RiImage2Line, RiMoneyDollarCircleLine, RiCheckboxCircleLine,
+  RiFileTextLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ import { PartnerOnboardingLinkDialog } from "@/components/admin/PartnerOnboardin
 import { cn } from "@/lib/utils";
 
 interface Property { id: string; nickname: string | null; address: string | null; turnover_price: number | null; host_id: string; }
+interface Host { id: string; name: string | null; email: string | null; phone: string | null; status: string | null; }
 interface Turnover {
   id: string; property_id: string; host_id: string; requested_date: string; window_start: string | null; window_end: string | null;
   price: number; status: string; assignment_type: string | null; assigned_cleaner_id: string | null;
@@ -51,9 +53,11 @@ const STATUS_TONE: Record<string, string> = {
 export default function PartnerAdmin() {
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [hosts, setHosts] = useState<Host[]>([]);
   const [turnovers, setTurnovers] = useState<Turnover[]>([]);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [crew, setCrew] = useState<Crew[]>([]);
+  const [sendingAgreement, setSendingAgreement] = useState<string | null>(null);
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [bulkPrice, setBulkPrice] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -61,13 +65,15 @@ export default function PartnerAdmin() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: props }, { data: trs }, { data: cl }, { data: cr }] = await Promise.all([
+    const [{ data: props }, { data: hs }, { data: trs }, { data: cl }, { data: cr }] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
+      (supabase.from as any)("hosts").select("id, name, email, phone, status").order("created_at", { ascending: false }),
       (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }).limit(500),
       (supabase.from as any)("cleaners").select("id, first_name, last_name, phone").order("first_name"),
       (supabase.from as any)("turnover_crew").select("*"),
     ]);
     setProperties((props as Property[]) || []);
+    setHosts((hs as Host[]) || []);
     setTurnovers((trs as Turnover[]) || []);
     setCleaners((cl as Cleaner[]) || []);
     setCrew((cr as Crew[]) || []);
@@ -127,6 +133,31 @@ export default function PartnerAdmin() {
 
   const pending = properties.filter((p) => p.turnover_price == null || Number(p.turnover_price) <= 0);
   const unassigned = turnovers.filter((t) => t.status === "unassigned_alert");
+
+  // Hosts whose every property is priced → ready to send the agreement.
+  const hostsReadyForAgreement = useMemo(() => {
+    return hosts
+      .map((h) => {
+        const hProps = properties.filter((p) => p.host_id === h.id);
+        const priced = hProps.filter((p) => p.turnover_price != null && Number(p.turnover_price) > 0);
+        return { host: h, total: hProps.length, priced: priced.length };
+      })
+      .filter((x) => x.total > 0);
+  }, [hosts, properties]);
+
+  const sendAgreement = async (hostId: string) => {
+    setSendingAgreement(hostId);
+    try {
+      const { data, error } = await supabase.functions.invoke("partner-turnover", {
+        body: { action: "admin.sendHostAgreement", hostId },
+      });
+      const err = error || (data as any)?.error;
+      if (err) { toast.error((data as any)?.error || "Could not send agreement"); return; }
+      toast.success("Host agreement sent — e-sign link emailed & texted.");
+    } finally {
+      setSendingAgreement(null);
+    }
+  };
 
   // Apply one rate to every pending-pricing property at once.
   const setAllPending = async () => {
@@ -241,6 +272,36 @@ export default function PartnerAdmin() {
               </div>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Host agreements — send the Host Partnership Agreement to e-sign */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><RiFileTextLine className="w-5 h-5 text-primary" /> Host agreements ({hostsReadyForAgreement.length})</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {hostsReadyForAgreement.length === 0 && <p className="text-sm text-muted-foreground">No hosts with properties yet.</p>}
+          {hostsReadyForAgreement.map(({ host, total, priced }) => {
+            const allPriced = priced === total && total > 0;
+            return (
+              <div key={host.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                <div className="text-sm min-w-0">
+                  <p className="font-medium truncate">{host.name || host.email || "Host"}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {host.email || "—"} · {priced}/{total} priced
+                    {!allPriced && <span className="text-amber-600"> · price all to send</span>}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={allPriced ? "default" : "outline"}
+                  disabled={!allPriced || sendingAgreement === host.id}
+                  onClick={() => sendAgreement(host.id)}
+                >
+                  {sendingAgreement === host.id ? "Sending…" : "Send agreement"}
+                </Button>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 

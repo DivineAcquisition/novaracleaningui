@@ -5,11 +5,18 @@
 // Callable server-to-server by the partner-turnover edge function
 // (verify_jwt is false). Never throws fatally - email is best-effort.
 //
-// Types:
-//   welcome            - host account created
-//   turnover_confirmed - payment received, turnover booked (receipt)
-//   turnover_assigned  - a cleaner has been assigned
-//   turnover_cancelled - turnover cancelled
+// Types (full partner lifecycle, front to end):
+//   application_received       - onboarding form submitted (agreement coming)
+//   welcome                    - host account created
+//   agreement_sent             - Host Partnership Agreement sent to e-sign (24h)
+//   agreement_signed           - agreement signed → properties active
+//   turnover_confirmed         - payment received, turnover booked (receipt)
+//   turnover_assigned          - a cleaner has been assigned
+//   turnover_cleaner_confirmed - cleaner confirmed the turnover
+//   turnover_in_progress       - cleaner has started the turnover
+//   turnover_completed         - turnover done, guest-ready
+//   turnover_cancelled         - turnover cancelled
+//   turnover_rescheduled       - turnover moved to a new date
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -97,6 +104,8 @@ ${ctaBlock}
 interface PartnerEmailData {
   name?: string; property?: string; address?: string; date?: string;
   window?: string; price?: string; cleaner?: string;
+  // Onboarding / agreement extras.
+  propertyCount?: number; agreementUrl?: string; rateSummary?: string; deadline?: string;
 }
 
 function build(type: string, d: PartnerEmailData): { subject: string; html: string } | null {
@@ -109,6 +118,52 @@ function build(type: string, d: PartnerEmailData): { subject: string; html: stri
     { label: "Price", value: d.price || "" },
   ];
   switch (type) {
+    case "application_received": {
+      const count = d.propertyCount && d.propertyCount > 0
+        ? `${d.propertyCount} propert${d.propertyCount === 1 ? "y" : "ies"}`
+        : "your properties";
+      return {
+        subject: "We've got your Novara host application",
+        html: renderHtml({
+          preheader: "Next: we set your rates and send your agreement to e-sign.",
+          heading: "Application received",
+          bodyHtml: `<p>${hi}</p><p>Thanks for applying to partner with Novara for your short-term-rental turnovers. We've received ${count} and here's what happens next:</p><ol style="padding-left:18px;margin:12px 0;"><li>Our team reviews your ${d.propertyCount === 1 ? "property" : "properties"} and sets your per-turnover rate.</li><li>You'll receive the full <strong>Host Partnership Agreement</strong> — with your rate schedule — to e-sign. <strong>It must be signed within 24 hours.</strong></li><li>Once signed, your properties go active and you can request turnovers anytime.</li></ol><p>Keep an eye on your inbox — your agreement is on the way.</p>`,
+          ctaLabel: "Open my portal", ctaUrl: BRAND.portalUrl,
+        }),
+      };
+    }
+    case "agreement_sent":
+      return {
+        subject: "Action needed: sign your Novara Host Partnership Agreement (24 hours)",
+        html: renderHtml({
+          preheader: "Your rates are set — review and e-sign your agreement.",
+          heading: "Your agreement is ready to sign",
+          bodyHtml: `<p>${hi}</p><p>Your per-turnover rates are set and your <strong>Host Partnership Agreement</strong> (with your full rate schedule) is ready for signature. <strong>Please review and e-sign within 24 hours</strong> so we can activate your properties.</p>${d.rateSummary ? `<p style="background:${BRAND.lavender};border-radius:8px;padding:12px 14px;font-size:14px;"><strong>Your rate schedule:</strong><br/>${d.rateSummary}</p>` : ""}<p>The agreement was sent to your email — check your inbox (and spam). Questions about a rate? Just reply to this email before signing.</p>`,
+          ctaLabel: d.agreementUrl ? "Review & sign agreement" : undefined,
+          ctaUrl: d.agreementUrl || undefined,
+        }),
+      };
+    case "agreement_signed":
+      return {
+        subject: "You're active — welcome to Novara, host!",
+        html: renderHtml({
+          preheader: "Your agreement is signed and your properties are live.",
+          heading: "You're all set",
+          bodyHtml: `<p>${hi}</p><p>Your Host Partnership Agreement is signed and your properties are now <strong>active</strong>. You can request a turnover anytime — pick a date, we charge your card on file, and a vetted cleaner has it guest-ready by check-in.</p><p>You'll get an email and text at every step of every turnover.</p>`,
+          ctaLabel: "Request a turnover", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
+        }),
+      };
+    case "turnover_in_progress":
+      return {
+        subject: `Turnover started — ${d.property || "your property"}`.trim(),
+        html: renderHtml({
+          preheader: "Your cleaner has started the turnover.",
+          heading: "Your turnover is underway",
+          bodyHtml: `<p>${hi}</p><p>${d.cleaner ? `<strong>${d.cleaner}</strong> has` : "Your cleaner has"} started the turnover at your property. We'll let you know the moment it's guest-ready.</p>`,
+          rows,
+          ctaLabel: "View my turnovers", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
+        }),
+      };
     case "welcome":
       return {
         subject: "Welcome to the Novara Host Portal",

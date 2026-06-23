@@ -5,6 +5,7 @@ import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 import { syncTurnoverToGhl, upsertHostContact } from "../_shared/ghl-partner-sync.ts";
+import { sendHostAgreement } from "../_shared/host-onboarding-ghl.ts";
 
 // --- Partner Turnover Portal - server engine -----------------------------
 //
@@ -379,6 +380,13 @@ serve(async (req) => {
         date: formatServiceDate(body.requested_date as string),
         window: fmtWindow(body.window_start || fresh.window_start, body.window_end || fresh.window_end),
       });
+      if (rHost?.phone) {
+        await sendSms(admin, {
+          toPhone: rHost.phone,
+          message: `Your turnover at ${rProp?.nickname || rProp?.address || "your property"} is moved to ${formatServiceDate(body.requested_date as string)}. We're re-assigning a vetted cleaner. - NovaraCleaning`,
+          type: "confirmation",
+        });
+      }
       const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
       return json({ ok: true, status: after?.status, assignment_type: after?.assignment_type });
     }
@@ -423,6 +431,13 @@ serve(async (req) => {
         property: cProp?.nickname || cProp?.address || "",
         date: formatServiceDate(tr.requested_date as string),
       });
+      if (host.phone) {
+        await sendSms(admin, {
+          toPhone: host.phone,
+          message: `Your turnover at ${cProp?.nickname || cProp?.address || "your property"} on ${formatServiceDate(tr.requested_date as string)} is cancelled. Rebook anytime in your portal. - NovaraCleaning`,
+          type: "confirmation",
+        });
+      }
       // Reflect the cancellation in GHL (opportunity → lost).
       try {
         await syncTurnoverToGhl(admin, { host, property: cProp, turnover: { ...tr, status: "cancelled" } });
@@ -458,6 +473,87 @@ serve(async (req) => {
       await runAssignment(admin, tr, "auto");
       const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
       return json({ status: after?.status, assignment_type: after?.assignment_type });
+    }
+
+    // --- admin.sendHostAgreement (role-gated: send the Host Partnership ----
+    // Agreement to a first-time host once all their properties are priced).
+    // Triggers the GHL document e-sign (entity-aware tag), emails the host the
+    // rate schedule (Resend), and texts them (GHL). Idempotent-ish: callable
+    // again to re-send; refuses if any property is still unpriced.
+    if (action === "admin.sendHostAgreement") {
+      const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", userId);
+      const isAdmin = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
+      if (!isAdmin) return json({ error: "Admins or VAs only" }, 403);
+
+      const hostId = body.hostId as string | undefined;
+      if (!hostId) return json({ error: "hostId required" }, 400);
+      const { data: targetHost } = await admin.from("hosts").select("*").eq("id", hostId).maybeSingle();
+      if (!targetHost) return json({ error: "Host not found" }, 404);
+
+      // Every property must be priced before we send a rate schedule to sign.
+      const { data: props } = await admin.from("properties").select("*").eq("host_id", hostId);
+      const propList = (props || []) as Array<Record<string, unknown>>;
+      if (propList.length === 0) return json({ error: "Host has no properties yet." }, 409);
+      const unpriced = propList.filter((p) => p.turnover_price == null || Number(p.turnover_price) <= 0);
+      if (unpriced.length > 0) {
+        return json({
+          error: "Set every property's rate before sending the agreement.",
+          unpriced: unpriced.map((p) => (p.nickname as string) || (p.address as string) || "Property"),
+        }, 409);
+      }
+
+      const rateSummary = propList
+        .map((p) => `${(p.nickname as string) || (p.address as string) || "Property"}: ${money(Number(p.turnover_price))}/turnover`)
+        .join("; ");
+
+      // Pull the onboarding submission for entity type + GHL ids (best-effort).
+      const { data: sub } = await admin
+        .from("host_onboarding_submissions")
+        .select("*")
+        .eq("host_id", hostId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const entityType = (sub?.entity_type as "individual" | "entity") || "individual";
+
+      // Ensure a GHL contact exists, then trigger the entity-aware document.
+      const contactId = targetHost.ghl_contact_id
+        || sub?.ghl_contact_id
+        || (await upsertHostContact(admin, targetHost));
+      let ghlOk = false;
+      if (contactId) {
+        ghlOk = await sendHostAgreement({
+          contactId,
+          email: targetHost.email,
+          entityType,
+          entityName: sub?.entity_name || undefined,
+          rateSummary,
+          opportunityId: sub?.ghl_opportunity_id || null,
+        });
+      }
+
+      // Email (Resend) + SMS (GHL) the host that their agreement is ready.
+      const firstName = (targetHost.name || "").split(" ")[0] || "there";
+      await sendHostEmail(admin, "agreement_sent", targetHost.email, {
+        name: firstName,
+        rateSummary,
+      });
+      if (targetHost.phone) {
+        await sendSms(admin, {
+          toPhone: targetHost.phone,
+          type: "confirmation",
+          message: `${firstName}, your Novara Host Partnership Agreement (with your rates) is ready to e-sign. Please sign within 24 hours so we can activate your properties. Check your email. - NovaraCleaning`,
+        });
+      }
+
+      // Advance the onboarding submission lifecycle.
+      if (sub?.id) {
+        await admin.from("host_onboarding_submissions")
+          .update({ status: "agreement_sent" })
+          .eq("id", sub.id);
+      }
+
+      return json({ ok: true, ghl: ghlOk, contactId, rateSummary });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
@@ -512,6 +608,13 @@ async function markPaidAndAssign(admin: SB, trId: string, paymentIntentId: strin
     window: fmtWindow(tr.window_start as string, tr.window_end as string),
     price: money(Number(tr.price || 0)),
   });
+  if (paidHost?.phone) {
+    await sendSms(admin, {
+      toPhone: paidHost.phone,
+      message: `Payment received — your ${formatServiceDate(tr.requested_date as string)} turnover at ${paidProp?.nickname || paidProp?.address || "your property"} is booked. We're assigning your cleaner now. - NovaraCleaning`,
+      type: "confirmation",
+    });
+  }
   try {
     await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
   } catch (e) {
@@ -572,6 +675,12 @@ async function handleCleanerLifecycle(admin: SB, action: string, body: Record<st
         message: `Your cleaner has started the turnover at ${property?.nickname || property?.address || "your property"}. We'll let you know the moment it's guest-ready. - NovaraCleaning`,
       });
     }
+    await sendHostEmail(admin, "turnover_in_progress", hostRow?.email, {
+      name: (hostRow?.name || "").split(" ")[0] || "",
+      property: property?.nickname || property?.address || "",
+      address: property?.address || "",
+      date: formatServiceDate(tr.requested_date as string),
+    });
     return json({ ok: true, status: "in_progress" });
   }
 

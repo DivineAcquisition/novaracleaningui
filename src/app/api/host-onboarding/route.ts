@@ -142,6 +142,28 @@ export async function POST(req: Request): Promise<NextResponse> {
     })
     .eq("id", submissionId);
 
+  // 4. Lifecycle comms — "application received" (email via Resend + SMS via GHL).
+  // Best-effort: a comms hiccup never fails the submission.
+  const firstName = payload.fullName.split(" ")[0] || "there";
+  try {
+    await supabase.functions.invoke("send-partner-email", {
+      body: {
+        type: "application_received",
+        email: payload.email,
+        data: { name: firstName, propertyCount: payload.properties.length },
+      },
+    });
+  } catch { /* best-effort */ }
+  try {
+    await supabase.functions.invoke("send-ghl-sms", {
+      body: {
+        phone: payload.phone,
+        message: `Thanks ${firstName} — we received your Novara host application. We'll set your per-turnover rates and send your Host Partnership Agreement to e-sign within 24 hours. - NovaraCleaning`,
+        type: "confirmation",
+      },
+    });
+  } catch { /* best-effort */ }
+
   return NextResponse.json({
     ok: true,
     submissionId,
