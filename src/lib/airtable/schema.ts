@@ -52,6 +52,9 @@ export const CLIENT_FIELDS = {
   stripeCustomerId: "fldgUcDumlPrnxslG",
   paymentMethodOnFile: "fldbQ7J9t2b0kj1vG",
   smsOptIn: "fldATiSE6Ji0DxpgY",
+  notes: "fldnNP6izQ8g2Mmpb", // long text — free-form notes + admin audit trail
+  // Count of linked Properties (rollup/count field on Clients). Read-only.
+  propertiesCount: "fldrIEbiGVFSr1Pzn",
 } as const;
 
 export const JOB_FIELDS = {
@@ -68,9 +71,12 @@ export const JOB_FIELDS = {
   paymentStatus: "fldlYORWTbBUOUwph",
   entrySource: "fldQeWeOGrjSPJExc",
   // link fields (created by scripts/add-airtable-links.ts)
-  client: "Client", // multipleRecordLinks → Clients
+  client: "Client", // multipleRecordLinks → Clients (write by name)
   property: "Property", // multipleRecordLinks → Properties (STR turnovers)
   payrollRun: "Payroll Run", // multipleRecordLinks → Payroll Runs
+  // Field ID of the Client link — used when READING (returnFieldsByFieldId)
+  // to group a host's turnover history by their Client record id.
+  clientLinkId: "fldiOCbiJyxwxBLXh",
 } as const;
 
 export const PROPERTY_FIELDS = {
@@ -90,7 +96,10 @@ export const PROPERTY_FIELDS = {
   propertyStatus: "fldEnGRYQzYJObYeY",
   turnoverFrequency: "fldbWTEVb2POrD5Si",
   // link field
-  host: "Host", // multipleRecordLinks → Clients
+  host: "Host", // multipleRecordLinks → Clients (write by name)
+  // Field ID of the Host link — used when READING (returnFieldsByFieldId)
+  // to group properties under their host Client record id.
+  hostLinkId: "fldGlabTTMCiLuTR7",
 } as const;
 
 export const COMMERCIAL_ACCOUNT_FIELDS = {
@@ -219,6 +228,32 @@ export const PAYMENT_STATUS = {
   paid: "Paid",
   failed: "Failed",
   refunded: "Refunded",
+} as const;
+
+// Property lifecycle (spec §4.2): a property starts "Pending Pricing", goes
+// "Active" once a Standard Rate is set + agreement signed, and can be "Paused".
+export const PROPERTY_STATUS = {
+  pendingPricing: "Pending Pricing",
+  active: "Active",
+  paused: "Paused",
+} as const;
+
+// Host (Client) lifecycle stage (spec §5): the admin promotes a host to
+// "Active" once live, and "Churned" on offboard (history is retained).
+export const LIFECYCLE_STAGE = {
+  lead: "Lead",
+  onboarding: "Onboarding",
+  active: "Active",
+  paused: "Paused",
+  churned: "Churned",
+} as const;
+
+// Host onboarding stage (spec §5.2): "Live" once approved to go live.
+export const ONBOARDING_STAGE = {
+  pendingPricing: "Pending Pricing",
+  agreementSent: "Agreement Sent",
+  signed: "Signed",
+  live: "Live",
 } as const;
 
 export const ENTRY_SOURCE = {

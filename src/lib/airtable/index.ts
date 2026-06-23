@@ -18,3 +18,4 @@ export {
 export type { Fields, FieldValue, AirtableRecord, UpsertResult, MetaField, MetaTable } from "./client";
 export * from "./mappers";
 export * from "./host-onboarding";
+export * from "./partner-admin";
