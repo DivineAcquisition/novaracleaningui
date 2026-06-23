@@ -46,6 +46,10 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
+// Brand ramp — matches the auth surfaces so the whole product reads as one
+// design language (purple as a precise accent on a clean light shell).
+const RAMP = "linear-gradient(135deg,#4F38FF 0%,#6A57FF 100%)";
+
 interface NavItem {
   title: string;
   url: string;
@@ -214,7 +218,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 min-w-0">
             {active ? (
               <>
-                <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-700 inline-flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-lg text-[#4F38FF] inline-flex items-center justify-center shrink-0" style={{ background: "rgba(79,56,255,0.10)" }}>
                   <active.icon className="w-4 h-4" />
                 </span>
                 <h1 className="font-jakarta text-sm font-semibold text-slate-900 truncate tracking-tight">
@@ -248,21 +252,21 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5 px-5 py-5 border-b border-slate-200",
+        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-slate-200",
         compact && "border-0 py-0",
       )}
     >
-      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(16,163,74,0.4)]">
-        <RiShieldStarLine className="w-5 h-5 text-white" />
-      </div>
-      <div className="leading-tight">
-        <p className="font-jakarta text-sm font-bold text-slate-900 tracking-tight">
-          Novara
-        </p>
-        <p className="text-[10px] text-slate-500 font-semibold tracking-[0.08em] uppercase">
-          Admin Console
-        </p>
-      </div>
+      {!compact && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(120% 100% at 0% 0%, rgba(79,56,255,0.08), transparent 70%)" }}
+        />
+      )}
+      <img src="/novara-email-logo.png" alt="Novara" className="relative h-[22px] w-auto" />
+      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#4F38FF]" style={{ background: "rgba(79,56,255,0.10)" }}>
+        Admin
+      </span>
     </div>
   );
 }
@@ -280,19 +284,23 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
             key={item.url}
             href={item.url}
             className={cn(
-              "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
+              "group relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
               isActive
-                ? "bg-gradient-to-r from-violet-50 to-violet-50/40 text-violet-900 font-semibold shadow-[inset_0_0_0_1px_rgba(16,163,74,0.15)]"
+                ? "bg-[#4F38FF]/[0.07] text-[#4F38FF] font-semibold"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70",
             )}
           >
+            {isActive && (
+              <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ background: RAMP }} />
+            )}
             <span
               className={cn(
                 "w-8 h-8 rounded-md flex items-center justify-center transition-all",
                 isActive
-                  ? "bg-violet-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
+                  ? "text-white shadow-[0_2px_6px_-1px_rgba(79,56,255,0.5)]"
                   : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700",
               )}
+              style={isActive ? { background: RAMP } : undefined}
             >
               <item.icon className="w-4 h-4" />
             </span>
@@ -302,7 +310,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
                 className={cn(
                   "text-[11px] leading-tight truncate",
                   isActive
-                    ? "text-violet-700/70"
+                    ? "text-[#4F38FF]/70"
                     : "text-slate-400 group-hover:text-slate-500",
                 )}
               >
