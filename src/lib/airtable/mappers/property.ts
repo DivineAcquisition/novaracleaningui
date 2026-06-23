@@ -35,6 +35,8 @@ export async function syncProperty(property: PropertyInput): Promise<string | nu
     [PROPERTY_FIELDS.linenIncluded]: property.linenIncluded,
     [PROPERTY_FIELDS.restockIncluded]: property.restockIncluded,
     [PROPERTY_FIELDS.accessType]: property.accessType,
+    [PROPERTY_FIELDS.accessInstructions]: property.accessInstructions,
+    [PROPERTY_FIELDS.stagingNotes]: property.stagingNotes,
     [PROPERTY_FIELDS.propertyStatus]: property.propertyStatus,
     [PROPERTY_FIELDS.turnoverFrequency]: property.turnoverFrequency,
     ...(hostRecordId ? { [PROPERTY_FIELDS.host]: [hostRecordId] } : {}),

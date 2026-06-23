@@ -85,6 +85,8 @@ export const PROPERTY_FIELDS = {
   linenIncluded: "fldjoZm0lyUennMcg",
   restockIncluded: "fldm2gBV6COkvg9Hb",
   accessType: "fldCJK3tB43Lnr2CP",
+  accessInstructions: "fldLQOwaD9IGThFkX",
+  stagingNotes: "fldbh7iAJn0EvYvWH",
   propertyStatus: "fldEnGRYQzYJObYeY",
   turnoverFrequency: "fldbWTEVb2POrD5Si",
   // link field

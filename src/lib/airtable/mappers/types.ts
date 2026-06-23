@@ -46,6 +46,8 @@ export interface PropertyInput {
   linenIncluded?: boolean;
   restockIncluded?: boolean;
   accessType?: string;
+  accessInstructions?: string;
+  stagingNotes?: string;
   propertyStatus?: string;
   turnoverFrequency?: string;
   /** Host (Client) — link resolved by this email, or pass hostRecordId directly. */

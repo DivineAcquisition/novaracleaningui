@@ -7,6 +7,7 @@ export {
   updateRecords,
   findRecordIdByField,
   listRecords,
+  getRecords,
   createLinkField,
   listTableFields,
   listBaseTables,
@@ -16,3 +17,4 @@ export {
 } from "./client";
 export type { Fields, FieldValue, AirtableRecord, UpsertResult, MetaField, MetaTable } from "./client";
 export * from "./mappers";
+export * from "./host-onboarding";
