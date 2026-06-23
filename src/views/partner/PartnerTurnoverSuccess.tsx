@@ -45,21 +45,21 @@ export default function PartnerTurnoverSuccess() {
     <div className="min-h-screen bg-gradient-to-br from-[#EDE9FE] to-white flex items-center justify-center px-4">
       <SEO title="Turnover Confirmed" noindex />
       <Card className="w-full max-w-md shadow-xl border-0">
-        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5500FF,#918CFF)" }} />
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5C0FFE,#8F7BFD)" }} />
         <CardContent className="pt-10 pb-8 text-center space-y-5">
           {state === "verifying" && (
-            <><RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#5500FF" }} />
+            <><RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#5C0FFE" }} />
               <h1 className="text-xl font-bold">Confirming your turnover…</h1>
               <p className="text-sm text-muted-foreground">Verifying your payment.</p></>
           )}
           {(state === "ok" || state === "pending") && (
             <>
-              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "#5500FF" }}>
+              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "#5C0FFE" }}>
                 <RiCheckboxCircleLine className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-2xl font-bold">Turnover confirmed!</h1>
               <p className="text-sm text-muted-foreground">{state === "ok" ? assignment : "Payment received — we'll confirm your assignment shortly."}</p>
-              <Button onClick={() => router.push("/partner/dashboard")} className="w-full h-11" style={{ background: "#5500FF" }}>
+              <Button onClick={() => router.push("/partner/dashboard")} className="h-11 w-full">
                 View my turnovers <RiArrowRightLine className="w-4 h-4 ml-2" />
               </Button>
             </>
@@ -69,7 +69,7 @@ export default function PartnerTurnoverSuccess() {
               <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center"><RiErrorWarningLine className="w-8 h-8 text-amber-600" /></div>
               <h1 className="text-xl font-bold">We couldn't confirm just yet</h1>
               <p className="text-sm text-muted-foreground">If you completed payment, your turnover will appear on your dashboard shortly.</p>
-              <Button onClick={() => router.push("/partner/dashboard")} className="w-full h-11" style={{ background: "#5500FF" }}>Go to dashboard</Button>
+              <Button onClick={() => router.push("/partner/dashboard")} className="h-11 w-full">Go to dashboard</Button>
             </>
           )}
         </CardContent>

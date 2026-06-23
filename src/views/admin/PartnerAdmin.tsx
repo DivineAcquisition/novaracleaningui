@@ -153,7 +153,7 @@ export default function PartnerAdmin() {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">$</span>
                 <Input className="w-28" inputMode="decimal" placeholder="per turnover" value={priceEdits[p.id] || ""} onChange={(e) => setPriceEdits({ ...priceEdits, [p.id]: e.target.value })} />
-                <Button size="sm" onClick={() => setPrice(p.id)} style={{ background: "#5500FF" }}>Set</Button>
+                <Button size="sm" onClick={() => setPrice(p.id)}>Set</Button>
               </div>
             </div>
           ))}
@@ -174,7 +174,7 @@ export default function PartnerAdmin() {
                   {member && (
                     <Input type="number" className="w-20 h-8" value={member.priority} onChange={(e) => setPriority(member.id, parseInt(e.target.value, 10) || 100)} title="priority (lower = first)" />
                   )}
-                  <Button size="sm" variant={isCrew ? "default" : "outline"} onClick={() => toggleCrew(c)} style={isCrew ? { background: "#5500FF" } : undefined}>
+                  <Button size="sm" variant={isCrew ? "default" : "outline"} onClick={() => toggleCrew(c)}>
                     {isCrew ? "On crew" : "Add to crew"}
                   </Button>
                 </div>

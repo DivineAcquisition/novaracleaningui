@@ -49,7 +49,7 @@ export default function PartnerAuthCallback() {
     <div className="min-h-screen bg-gradient-to-br from-[#EDE9FE] to-white flex items-center justify-center">
       <SEO title="Signing you in…" noindex />
       <div className="text-center space-y-4">
-        <RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#5500FF" }} />
+        <RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#5C0FFE" }} />
         <p className="text-muted-foreground">Signing you in…</p>
       </div>
     </div>

@@ -79,10 +79,10 @@ export default function PartnerPortal() {
 }
 
 // ─── Brand tokens (purple ramp — used as a scalpel, not a flood) ────────────
-const PURPLE_GRADIENT = "linear-gradient(135deg,#4F38FF 0%,#6A57FF 100%)";
+const PURPLE_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 const INPUT_CLS =
   "h-11 pl-10 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 " +
-  "focus-visible:border-[#6A57FF] focus-visible:ring-2 focus-visible:ring-[#6A57FF]/25";
+  "focus-visible:border-[#8F7BFD] focus-visible:ring-2 focus-visible:ring-[#8F7BFD]/25";
 
 const FEATURES = [
   { icon: RiShieldCheckLine, label: "Vetted cleaners", desc: "Background-checked and rated after every clean." },
@@ -120,13 +120,13 @@ function BrandPanel() {
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(55% 45% at 16% 12%, rgba(106,87,255,.55), transparent 60%)," +
-              "radial-gradient(45% 40% at 90% 18%, rgba(154,140,255,.32), transparent 60%)," +
-              "radial-gradient(70% 65% at 78% 98%, rgba(79,56,255,.5), transparent 62%)",
+              "radial-gradient(55% 45% at 16% 12%, rgba(143,123,253,.55), transparent 60%)," +
+              "radial-gradient(45% 40% at 90% 18%, rgba(171,158,253,.32), transparent 60%)," +
+              "radial-gradient(70% 65% at 78% 98%, rgba(92,15,254,.5), transparent 62%)",
           }}
         />
-        <div className="nv-drift-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(106,87,255,.45)" }} />
-        <div className="nv-drift-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(79,56,255,.4)" }} />
+        <div className="nv-drift-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(143,123,253,.45)" }} />
+        <div className="nv-drift-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(92,15,254,.4)" }} />
         <div
           className="absolute inset-0 opacity-[0.05]"
           style={{
@@ -188,7 +188,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-40 lg:hidden"
-          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(106,87,255,.10), transparent 70%)" }}
+          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(143,123,253,.10), transparent 70%)" }}
         />
         <div className="relative w-full max-w-[400px] space-y-8">
           {/* Compact brand for mobile (brand panel is desktop-only) */}
@@ -232,7 +232,7 @@ function SetPasswordForm({ onDone }: { onDone: () => void }) {
   return (
     <AuthShell>
       <SEO title="Set a new password" noindex />
-      <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)]">
+      <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(92,15,254,0.25)]">
         <div className="space-y-1.5">
           <h1 className="font-jakarta text-2xl font-bold tracking-tight text-slate-900">Set a new password</h1>
           <p className="text-sm text-slate-500">Choose a strong password for your host account.</p>
@@ -244,7 +244,7 @@ function SetPasswordForm({ onDone }: { onDone: () => void }) {
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={INPUT_CLS} />
           </div>
         </div>
-        <Button onClick={submit} disabled={busy} className="mt-6 h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
+        <Button onClick={submit} disabled={busy} className="mt-6 h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
           {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Update password"}
         </Button>
       </div>
@@ -340,7 +340,7 @@ function AuthScreen() {
     <AuthShell>
       <SEO title="Host Portal" description="Request Airbnb & short-term-rental turnover cleanings." noindex />
 
-      <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)]">
+      <div className="rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(92,15,254,0.25)]">
         <div className="space-y-1.5">
           <h1 className="font-jakarta text-[26px] font-bold leading-tight tracking-tight text-slate-900">{headline}</h1>
           <p className="text-sm text-slate-500">{subline}</p>
@@ -348,15 +348,15 @@ function AuthScreen() {
 
         {mode === "check-email" ? (
           <div className="mt-6 space-y-4 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4F38FF]/10">
-              <RiMailSendLine className="h-7 w-7 text-[#4F38FF]" />
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#5C0FFE]/10">
+              <RiMailSendLine className="h-7 w-7 text-[#5C0FFE]" />
             </div>
             <div>
               <p className="font-semibold text-slate-900">Check your email</p>
               <p className="mt-1 text-sm text-slate-500">We sent a confirmation link to <span className="font-medium text-slate-700">{cleanEmail() || "your inbox"}</span>. Click it to finish setting up your account.</p>
             </div>
             <Button variant="outline" className="h-11 w-full" onClick={resendConfirm}>Resend confirmation</Button>
-            <button className="text-sm font-medium text-[#4F38FF] hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
+            <button className="text-sm font-medium text-[#5C0FFE] hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
           </div>
         ) : (
           <div className="mt-6 space-y-4">
@@ -417,19 +417,19 @@ function AuthScreen() {
             )}
             {mode === "login" && (
               <div className="-mt-1 text-right">
-                <button className="text-xs font-medium text-[#4F38FF] hover:underline" onClick={() => setMode("forgot")}>Forgot password?</button>
+                <button className="text-xs font-medium text-[#5C0FFE] hover:underline" onClick={() => setMode("forgot")}>Forgot password?</button>
               </div>
             )}
-            <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy || googleBusy} className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
+            <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy || googleBusy} className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
               {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : (<>{primaryLabel}<RiArrowRightLine className="ml-1.5 h-4 w-4" /></>)}
             </Button>
             <p className="text-center text-sm text-slate-500">
               {mode === "forgot" ? (
-                <button className="font-semibold text-[#4F38FF] hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
+                <button className="font-semibold text-[#5C0FFE] hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
               ) : mode === "signup" ? (
-                <>Already have an account? <button className="font-semibold text-[#4F38FF] hover:underline" onClick={() => setMode("login")}>Sign in</button></>
+                <>Already have an account? <button className="font-semibold text-[#5C0FFE] hover:underline" onClick={() => setMode("login")}>Sign in</button></>
               ) : (
-                <>New here? <button className="font-semibold text-[#4F38FF] hover:underline" onClick={() => setMode("signup")}>Create one</button></>
+                <>New here? <button className="font-semibold text-[#5C0FFE] hover:underline" onClick={() => setMode("signup")}>Create one</button></>
               )}
             </p>
           </div>
@@ -476,7 +476,7 @@ function Dashboard() {
       <SEO title="Host Dashboard" noindex />
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold"><RiSparklingLine className="w-5 h-5" style={{ color: "#5500FF" }} /> Host Portal</div>
+          <div className="flex items-center gap-2 font-bold"><RiSparklingLine className="w-5 h-5" style={{ color: "#5C0FFE" }} /> Host Portal</div>
           <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}><RiLogoutBoxRLine className="w-4 h-4" /></Button>
         </div>
       </header>
@@ -490,7 +490,7 @@ function Dashboard() {
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold">Your properties</h2>
-                <Button size="sm" onClick={() => { setEditingProp(null); setShowPropForm(true); }} style={{ background: "#5500FF" }}>
+                <Button size="sm" onClick={() => { setEditingProp(null); setShowPropForm(true); }}>
                   <RiAddLine className="w-4 h-4 mr-1" /> Add property
                 </Button>
               </div>
@@ -524,7 +524,7 @@ function Dashboard() {
                           <Button size="sm" variant="outline" onClick={() => { setEditingProp(p); setShowPropForm(true); }}>
                             <RiEditLine className="w-3.5 h-3.5 mr-1" /> Edit
                           </Button>
-                          <Button size="sm" disabled={!priced} onClick={() => setRequestFor(p)} style={priced ? { background: "#5500FF" } : undefined}>
+                          <Button size="sm" disabled={!priced} onClick={() => setRequestFor(p)}>
                             <RiCalendarLine className="w-3.5 h-3.5 mr-1" /> Request turnover
                           </Button>
                         </div>
@@ -615,7 +615,7 @@ function PropertyForm({ property, onClose, onSaved }: { property: Property | nul
         </div>
         <div><Label>Access instructions</Label><Textarea rows={2} value={f.access_instructions} onChange={(e) => setF({ ...f, access_instructions: e.target.value })} placeholder="Lockbox 1234, gate code, parking, where supplies are…" /></div>
         <div><Label>Special notes</Label><Textarea rows={2} value={f.special_notes} onChange={(e) => setF({ ...f, special_notes: e.target.value })} placeholder="Staging prefs, quirks…" /></div>
-        <Button onClick={save} disabled={busy} className="w-full" style={{ background: "#5500FF" }}>
+        <Button onClick={save} disabled={busy} className="w-full">
           {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Save property"}
         </Button>
       </div>
@@ -654,7 +654,7 @@ function RequestForm({ property, onClose }: { property: Property; onClose: () =>
           <div><Label>Checkout time</Label><Input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></div>
           <div><Label>Next check-in by</Label><Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
         </div>
-        <Button onClick={submit} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
+        <Button onClick={submit} disabled={busy} className="h-11 w-full">
           {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay $${Number(property.turnover_price).toFixed(0)} & request`}
         </Button>
         <p className="text-[11px] text-center text-muted-foreground">Your turnover is confirmed once payment succeeds, then we assign your cleaning crew.</p>
