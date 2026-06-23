@@ -9,7 +9,10 @@
     "lint": "next lint",
     "mobile:dev": "vite -c mobile/vite.config.ts",
     "mobile:build": "vite build -c mobile/vite.config.ts",
-    "mobile:sync": "npm run mobile:build && cap sync"
+    "mobile:sync": "npm run mobile:build && cap sync",
+    "airtable:links": "tsx scripts/add-airtable-links.ts",
+    "airtable:backfill": "tsx scripts/backfill-airtable.ts",
+    "airtable:verify": "tsx scripts/verify-airtable-mapping.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
@@ -98,6 +101,7 @@
     "eslint-config-next": "^14.2.20",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.22.4",
     "typescript": "^5.8.3",
     "vite": "^5.4.21"
   }

@@ -647,7 +647,26 @@ serve(async (req) => {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         logStep("Processing checkout completion", { sessionId: session.id });
-        
+
+        // ── Partner Turnover Portal checkout ──────────────────────────
+        // Turnover Checkout sessions carry metadata.kind = "turnover". Drive
+        // finalization (verify → assign → notify) from the webhook so a
+        // closed browser tab can never strand a paid turnover. Idempotent:
+        // partner-turnover.turnover.finalize guards on pending_payment.
+        if (session.metadata?.kind === "turnover") {
+          try {
+            await supabase.functions.invoke("partner-turnover", {
+              body: { action: "turnover.finalize", sessionId: session.id },
+            });
+            logStep("Turnover finalized via webhook", { sessionId: session.id });
+          } catch (turnoverErr) {
+            logStep("Turnover finalize failed (non-blocking)", {
+              error: turnoverErr instanceof Error ? turnoverErr.message : String(turnoverErr),
+            });
+          }
+          break;
+        }
+
         // Update booking status to 'booked'
         const { error: updateError } = await supabase
           .from('bookings')

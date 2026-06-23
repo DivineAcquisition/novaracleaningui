@@ -16,6 +16,7 @@ import {
   RiLogoutBoxRLine, RiCheckboxCircleLine, RiTimeLine, RiEditLine, RiSparklingLine,
   RiMailSendLine, RiLockLine, RiUser3Line, RiPhoneLine, RiMailLine,
   RiShieldCheckLine, RiArrowRightLine, RiFlashlightFill, RiKey2Line,
+  RiStarFill, RiStarLine, RiCalendarEventLine, RiCloseLine, RiImage2Line,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +39,33 @@ interface Turnover {
   id: string; property_id: string; requested_date: string; window_start: string | null;
   window_end: string | null; price: number; status: string; assignment_type: string | null;
   assigned_cleaner_id: string | null; created_at: string;
+  cleaner_confirmed_at?: string | null; started_at?: string | null; completed_at?: string | null;
+  paid_at?: string | null; assigned_at?: string | null;
+  before_photos?: string[] | null; after_photos?: string[] | null;
+  host_rating?: number | null; host_review?: string | null;
+}
+
+// More than 24h before the service date → host can still self-serve.
+const isModifiable = (t: Turnover) => {
+  if (["completed", "cancelled"].includes(t.status)) return false;
+  const svc = new Date(`${t.requested_date}T12:00:00`).getTime();
+  return svc - Date.now() > 24 * 60 * 60 * 1000;
+};
+
+// Rough, clearly-labelled ballpark so a pending-pricing property isn't a dead
+// end. The admin still sets the binding per-turnover rate; this is guidance.
+function estimateRange(p: Pick<Property, "bedrooms" | "bathrooms" | "sqft">): [number, number] {
+  const beds = Number(p.bedrooms) || 1;
+  const baths = Number(p.bathrooms) || 1;
+  const sqft = Number(p.sqft) || 0;
+  let base = 90 + beds * 25 + baths * 20;
+  if (sqft > 0) base = Math.max(base, 60 + Math.round((sqft / 1000) * 70));
+  const low = Math.round(base / 5) * 5;
+  return [low, low + 40];
+}
+function estimateLabel(p: Pick<Property, "bedrooms" | "bathrooms" | "sqft">): string {
+  const [lo, hi] = estimateRange(p);
+  return `Est. $${lo}–$${hi}/turnover.`;
 }
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -454,9 +482,12 @@ function Dashboard() {
   const [showPropForm, setShowPropForm] = useState(false);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [requestFor, setRequestFor] = useState<Property | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<Turnover | null>(null);
+  const [rateFor, setRateFor] = useState<Turnover | null>(null);
+  const [photoFor, setPhotoFor] = useState<Turnover | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     await supabase.functions.invoke("partner-turnover", { body: { action: "host.ensure" } }).catch(() => {});
     const [{ data: props }, { data: trs }] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
@@ -468,6 +499,17 @@ function Dashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live updates — reflect assignment / confirmation / completion without a
+  // manual refresh. Silent reload avoids the full-page spinner.
+  useEffect(() => {
+    const channel = supabase
+      .channel("partner-portal-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "turnover_requests" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "properties" }, () => load(true))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
 
   const propName = (id: string) => properties.find((p) => p.id === id)?.nickname || properties.find((p) => p.id === id)?.address || "Property";
 
@@ -516,7 +558,10 @@ function Dashboard() {
                             {priced ? (
                               <p className="font-bold text-primary">${Number(p.turnover_price).toFixed(0)}<span className="text-[11px] text-muted-foreground">/turnover</span></p>
                             ) : (
-                              <Badge className="bg-amber-100 text-amber-700">Pending pricing</Badge>
+                              <div>
+                                <Badge className="bg-amber-100 text-amber-700">Pending pricing</Badge>
+                                <p className="text-[11px] text-muted-foreground mt-1">{estimateLabel(p)}</p>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -528,7 +573,7 @@ function Dashboard() {
                             <RiCalendarLine className="w-3.5 h-3.5 mr-1" /> Request turnover
                           </Button>
                         </div>
-                        {!priced && <p className="text-[11px] text-amber-600 mt-2">Our team is setting your per-turnover rate — you'll be able to book once it's set.</p>}
+                        {!priced && <p className="text-[11px] text-amber-600 mt-2">Our team is confirming your per-turnover rate — {estimateLabel(p).toLowerCase()} You'll be able to book once it's set.</p>}
                       </CardContent>
                     </Card>
                   );
@@ -540,27 +585,18 @@ function Dashboard() {
             <section className="space-y-3">
               <h2 className="text-lg font-bold">Turnovers</h2>
               {turnovers.length === 0 && <p className="text-sm text-muted-foreground">No turnover requests yet.</p>}
-              <div className="grid gap-2.5">
-                {turnovers.map((t) => {
-                  const st = STATUS_LABEL[t.status] || { label: t.status, cls: "bg-slate-100 text-slate-600" };
-                  return (
-                    <Card key={t.id}>
-                      <CardContent className="p-3.5 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm truncate flex items-center gap-1.5"><RiMapPinLine className="w-3.5 h-3.5 text-primary" />{propName(t.property_id)}</p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                            <RiTimeLine className="w-3 h-3" />{format(new Date(`${t.requested_date}T12:00:00`), "EEE, MMM d")}
-                            {t.window_start ? ` · ${t.window_start.slice(0,5)}–${(t.window_end||"").slice(0,5)}` : ""}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <Badge className={cn("text-[11px]", st.cls)}>{st.label}</Badge>
-                          <p className="text-sm font-semibold mt-1">${Number(t.price).toFixed(0)}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+              <div className="grid gap-3">
+                {turnovers.map((t) => (
+                  <TurnoverCard
+                    key={t.id}
+                    turnover={t}
+                    propertyName={propName(t.property_id)}
+                    onReschedule={() => setRescheduleFor(t)}
+                    onRate={() => setRateFor(t)}
+                    onViewPhotos={() => setPhotoFor(t)}
+                    onChanged={load}
+                  />
+                ))}
               </div>
             </section>
           </>
@@ -571,9 +607,252 @@ function Dashboard() {
         <PropertyForm property={editingProp} onClose={() => setShowPropForm(false)} onSaved={() => { setShowPropForm(false); load(); }} />
       )}
       {requestFor && (
-        <RequestForm property={requestFor} onClose={() => setRequestFor(null)} />
+        <RequestForm property={requestFor} onClose={() => setRequestFor(null)} onPaid={() => { setRequestFor(null); load(); }} />
+      )}
+      {rescheduleFor && (
+        <RescheduleForm turnover={rescheduleFor} onClose={() => setRescheduleFor(null)} onDone={() => { setRescheduleFor(null); load(); }} />
+      )}
+      {rateFor && (
+        <RateForm turnover={rateFor} onClose={() => setRateFor(null)} onDone={() => { setRateFor(null); load(); }} />
+      )}
+      {photoFor && (
+        <PhotosViewer turnover={photoFor} onClose={() => setPhotoFor(null)} />
       )}
     </div>
+  );
+}
+
+// ─── Turnover card — status timeline, photos, host actions ─────────────────
+const TIMELINE_STEPS = [
+  { key: "paid", label: "Booked" },
+  { key: "assigned", label: "Assigned" },
+  { key: "cleaner_confirmed", label: "Confirmed" },
+  { key: "in_progress", label: "In progress" },
+  { key: "completed", label: "Complete" },
+];
+// How far along each status is on the 5-step timeline.
+const STATUS_STEP: Record<string, number> = {
+  pending_payment: 0, paid: 0, unassigned_alert: 0,
+  assigned: 1, cleaner_confirmed: 2, in_progress: 3, completed: 4,
+};
+
+function TurnoverCard({
+  turnover: t, propertyName, onReschedule, onRate, onViewPhotos, onChanged,
+}: {
+  turnover: Turnover; propertyName: string;
+  onReschedule: () => void; onRate: () => void; onViewPhotos: () => void; onChanged: () => void;
+}) {
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const st = STATUS_LABEL[t.status] || { label: t.status, cls: "bg-slate-100 text-slate-600" };
+  const modifiable = isModifiable(t);
+  const cancelled = t.status === "cancelled";
+  const completed = t.status === "completed";
+  const photoCount = (t.before_photos?.length || 0) + (t.after_photos?.length || 0);
+  const showTimeline = !cancelled && t.status !== "pending_payment";
+  const currentStep = STATUS_STEP[t.status] ?? 0;
+
+  const doCancel = async () => {
+    setCancelling(true);
+    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+      body: { action: "turnover.cancel", turnoverId: t.id },
+    });
+    setCancelling(false);
+    if (error || (data as any)?.error) { toast.error((data as any)?.error || "Could not cancel"); return; }
+    toast.success("Turnover cancelled");
+    setConfirmCancel(false);
+    onChanged();
+  };
+
+  return (
+    <Card className={cn(cancelled && "opacity-70")}>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate flex items-center gap-1.5"><RiMapPinLine className="w-4 h-4 text-primary" />{propertyName}</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+              <RiTimeLine className="w-3 h-3" />{format(new Date(`${t.requested_date}T12:00:00`), "EEE, MMM d")}
+              {t.window_start ? ` · ${t.window_start.slice(0, 5)}–${(t.window_end || "").slice(0, 5)}` : ""}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <Badge className={cn("text-[11px]", st.cls)}>{st.label}</Badge>
+            <p className="text-sm font-semibold mt-1">${Number(t.price).toFixed(0)}</p>
+          </div>
+        </div>
+
+        {showTimeline && (
+          <div className="flex items-center gap-1 pt-1">
+            {TIMELINE_STEPS.map((step, i) => {
+              const done = i <= currentStep;
+              return (
+                <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="flex items-center w-full">
+                    <div className={cn("h-1 flex-1 rounded-full", i === 0 ? "bg-transparent" : done ? "bg-[#5C0FFE]" : "bg-slate-200")} />
+                    <div className={cn("h-2.5 w-2.5 rounded-full shrink-0", done ? "bg-[#5C0FFE]" : "bg-slate-200")} />
+                    <div className={cn("h-1 flex-1 rounded-full", i === TIMELINE_STEPS.length - 1 ? "bg-transparent" : i < currentStep ? "bg-[#5C0FFE]" : "bg-slate-200")} />
+                  </div>
+                  <span className={cn("text-[9px] leading-none text-center", done ? "text-[#5C0FFE] font-medium" : "text-slate-400")}>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {t.status === "unassigned_alert" && (
+          <p className="text-[11px] text-amber-600">We're matching you with a cleaner and will confirm shortly.</p>
+        )}
+
+        {/* Host rating (completed) */}
+        {completed && t.host_rating ? (
+          <div className="flex items-center gap-1 text-amber-500">
+            {[1, 2, 3, 4, 5].map((n) => (
+              n <= (t.host_rating || 0) ? <RiStarFill key={n} className="w-4 h-4" /> : <RiStarLine key={n} className="w-4 h-4 text-slate-300" />
+            ))}
+            <span className="text-xs text-muted-foreground ml-1">Your rating</span>
+          </div>
+        ) : null}
+
+        {/* Actions */}
+        {(modifiable || (completed && !t.host_rating) || photoCount > 0) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {photoCount > 0 && (
+              <Button size="sm" variant="outline" onClick={onViewPhotos}>
+                <RiImage2Line className="w-3.5 h-3.5 mr-1" /> Photos ({photoCount})
+              </Button>
+            )}
+            {completed && !t.host_rating && (
+              <Button size="sm" onClick={onRate}>
+                <RiStarLine className="w-3.5 h-3.5 mr-1" /> Rate clean
+              </Button>
+            )}
+            {modifiable && !confirmCancel && (
+              <>
+                <Button size="sm" variant="outline" onClick={onReschedule}>
+                  <RiCalendarEventLine className="w-3.5 h-3.5 mr-1" /> Reschedule
+                </Button>
+                <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => setConfirmCancel(true)}>
+                  <RiCloseLine className="w-3.5 h-3.5 mr-1" /> Cancel
+                </Button>
+              </>
+            )}
+            {modifiable && confirmCancel && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Cancel this turnover?</span>
+                <Button size="sm" variant="outline" onClick={() => setConfirmCancel(false)}>Keep</Button>
+                <Button size="sm" disabled={cancelling} className="bg-red-600 hover:bg-red-700" onClick={doCancel}>
+                  {cancelling ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Yes, cancel"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+        {!modifiable && !completed && !cancelled && t.status !== "pending_payment" && (
+          <p className="text-[11px] text-muted-foreground">Within 24 hours of service — contact support to make changes.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Reschedule (modal) ────────────────────────────────────────────────────
+function RescheduleForm({ turnover, onClose, onDone }: { turnover: Turnover; onClose: () => void; onDone: () => void }) {
+  const [date, setDate] = useState(turnover.requested_date);
+  const [start, setStart] = useState((turnover.window_start || "11:00").slice(0, 5));
+  const [end, setEnd] = useState((turnover.window_end || "15:00").slice(0, 5));
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!date) { toast.error("Pick a date."); return; }
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+      body: { action: "turnover.reschedule", turnoverId: turnover.id, requested_date: date, window_start: start, window_end: end },
+    });
+    setBusy(false);
+    if (error || (data as any)?.error) { toast.error((data as any)?.error || "Could not reschedule"); return; }
+    toast.success("Turnover rescheduled — re-assigning your crew.");
+    onDone();
+  };
+  return (
+    <Modal onClose={onClose} title="Reschedule turnover">
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">Pick a new date and window. We'll re-assign a cleaner automatically — no extra charge.</p>
+        <div><Label>New date *</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label>Checkout time</Label><Input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></div>
+          <div><Label>Next check-in by</Label><Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+        </div>
+        <Button onClick={submit} disabled={busy} className="w-full h-11">
+          {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Confirm new date"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Rate clean (modal) ────────────────────────────────────────────────────
+function RateForm({ turnover, onClose, onDone }: { turnover: Turnover; onClose: () => void; onDone: () => void }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [review, setReview] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (rating < 1) { toast.error("Tap a star to rate."); return; }
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+      body: { action: "turnover.rate", turnoverId: turnover.id, rating, review },
+    });
+    setBusy(false);
+    if (error || (data as any)?.error) { toast.error((data as any)?.error || "Could not save rating"); return; }
+    toast.success("Thanks for the feedback!");
+    onDone();
+  };
+  return (
+    <Modal onClose={onClose} title="Rate your clean">
+      <div className="space-y-4">
+        <div className="flex justify-center gap-1.5">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} type="button" onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)} onClick={() => setRating(n)}>
+              {n <= (hover || rating)
+                ? <RiStarFill className="w-9 h-9 text-amber-400" />
+                : <RiStarLine className="w-9 h-9 text-slate-300" />}
+            </button>
+          ))}
+        </div>
+        <div><Label>Comments (optional)</Label><Textarea rows={3} value={review} onChange={(e) => setReview(e.target.value)} placeholder="How did the crew do?" /></div>
+        <Button onClick={submit} disabled={busy} className="w-full h-11">
+          {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Submit rating"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Before / after photos (modal) ─────────────────────────────────────────
+function PhotosViewer({ turnover, onClose }: { turnover: Turnover; onClose: () => void }) {
+  const before = turnover.before_photos || [];
+  const after = turnover.after_photos || [];
+  const Section = ({ title, urls }: { title: string; urls: string[] }) => (
+    urls.length ? (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold">{title}</p>
+        <div className="grid grid-cols-2 gap-2">
+          {urls.map((u, i) => (
+            <a key={i} href={u} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-lg border bg-slate-100">
+              <img src={u} alt={`${title} ${i + 1}`} className="h-full w-full object-cover" />
+            </a>
+          ))}
+        </div>
+      </div>
+    ) : null
+  );
+  return (
+    <Modal onClose={onClose} title="Turnover photos">
+      <div className="space-y-4">
+        {before.length === 0 && after.length === 0 && <p className="text-sm text-muted-foreground">No photos yet.</p>}
+        <Section title="Before" urls={before} />
+        <Section title="After" urls={after} />
+      </div>
+    </Modal>
   );
 }
 
@@ -623,13 +902,25 @@ function PropertyForm({ property, onClose, onSaved }: { property: Property | nul
   );
 }
 
-// ─── Request turnover (modal → Stripe checkout) ────────────────────────────
-function RequestForm({ property, onClose }: { property: Property; onClose: () => void }) {
+// ─── Request turnover (modal → one-tap saved card or Stripe checkout) ──────
+function RequestForm({ property, onClose, onPaid }: { property: Property; onClose: () => void; onPaid: () => void }) {
   const [date, setDate] = useState("");
   const [start, setStart] = useState("11:00");
   const [end, setEnd] = useState("15:00");
   const [busy, setBusy] = useState(false);
-  const submit = async () => {
+  const [savedCard, setSavedCard] = useState<{ brand: string; last4: string } | null>(null);
+  const priceLabel = `$${Number(property.turnover_price).toFixed(0)}`;
+
+  useEffect(() => {
+    supabase.functions.invoke("partner-turnover", { body: { action: "turnover.paymentInfo" } })
+      .then(({ data }) => {
+        if ((data as any)?.hasSavedCard) setSavedCard({ brand: (data as any).brand, last4: (data as any).last4 });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Hosted Stripe Checkout (new card, or fallback when one-tap can't charge).
+  const checkout = async () => {
     if (!date) { toast.error("Pick a date."); return; }
     setBusy(true);
     const { data, error } = await supabase.functions.invoke("partner-turnover", {
@@ -642,21 +933,57 @@ function RequestForm({ property, onClose }: { property: Property; onClose: () =>
     }
     window.location.href = (data as any).url;
   };
+
+  // One-tap: charge the saved card off-session; fall back to Checkout if the
+  // card needs authentication or is declined.
+  const oneTap = async () => {
+    if (!date) { toast.error("Pick a date."); return; }
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+      body: { action: "turnover.requestSaved", propertyId: property.id, requested_date: date, window_start: start, window_end: end },
+    });
+    if (error || (data as any)?.error) {
+      setBusy(false);
+      toast.error((data as any)?.error || "Could not complete payment");
+      return;
+    }
+    if ((data as any)?.paid) {
+      toast.success("Turnover booked — assigning your crew.");
+      onPaid();
+      return;
+    }
+    // needsCheckout → seamless fallback to hosted Checkout.
+    await checkout();
+  };
+
+  const cardName = savedCard ? `${savedCard.brand[0].toUpperCase()}${savedCard.brand.slice(1)} ••${savedCard.last4}` : "";
+
   return (
     <Modal onClose={onClose} title={`Request turnover — ${property.nickname || "Property"}`}>
       <div className="space-y-3">
         <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 flex items-center justify-between">
           <span className="text-sm">Per-turnover price</span>
-          <span className="font-bold text-primary">${Number(property.turnover_price).toFixed(0)}</span>
+          <span className="font-bold text-primary">{priceLabel}</span>
         </div>
         <div><Label>Date *</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div className="grid grid-cols-2 gap-2">
           <div><Label>Checkout time</Label><Input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></div>
           <div><Label>Next check-in by</Label><Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
         </div>
-        <Button onClick={submit} disabled={busy} className="h-11 w-full">
-          {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay $${Number(property.turnover_price).toFixed(0)} & request`}
-        </Button>
+        {savedCard ? (
+          <>
+            <Button onClick={oneTap} disabled={busy} className="w-full h-11">
+              {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay ${priceLabel} with ${cardName}`}
+            </Button>
+            <button type="button" disabled={busy} onClick={checkout} className="w-full text-center text-xs font-medium text-[#5C0FFE] hover:underline disabled:opacity-50">
+              Use a different card
+            </button>
+          </>
+        ) : (
+          <Button onClick={checkout} disabled={busy} className="w-full h-11">
+            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay ${priceLabel} & request`}
+          </Button>
+        )}
         <p className="text-[11px] text-center text-muted-foreground">Your turnover is confirmed once payment succeeds, then we assign your cleaning crew.</p>
       </div>
     </Modal>
