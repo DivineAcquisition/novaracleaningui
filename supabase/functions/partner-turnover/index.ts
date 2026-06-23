@@ -5,7 +5,7 @@ import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 
-// ─── Partner Turnover Portal — server engine ─────────────────────────────
+// --- Partner Turnover Portal - server engine -----------------------------
 //
 // All pricing, payment, and assignment runs here (never trust the client).
 // Host writes go through this function (service role); hosts can only READ
@@ -13,12 +13,12 @@ import { notifyDiscord } from "../_shared/discord.ts";
 // (Telnyx), Discord notifier, and Stripe account.
 //
 // Actions:
-//   host.ensure        → upsert the host row for the signed-in user
-//   property.save      → create/update a property (NEVER sets price)
-//   turnover.request   → lock price, create request, return Stripe Checkout URL
-//   turnover.finalize  → verify payment server-side, then auto-assign + notify
-//   turnover.cancel    → host cancellation (24h cutoff)
-//   admin.assign       → admin manual (re)assign + re-notify (role-gated)
+//   host.ensure        -> upsert the host row for the signed-in user
+//   property.save      -> create/update a property (NEVER sets price)
+//   turnover.request   -> lock price, create request, return Stripe Checkout URL
+//   turnover.finalize  -> verify payment server-side, then auto-assign + notify
+//   turnover.cancel    -> host cancellation (24h cutoff)
+//   admin.assign       -> admin manual (re)assign + re-notify (role-gated)
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +35,16 @@ function json(body: unknown, status = 200) {
   });
 }
 const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
+
+// Fire a branded host email (best-effort).
+async function sendHostEmail(admin: SB, type: string, email: string | null | undefined, data: Record<string, unknown>) {
+  if (!email) return;
+  try {
+    await admin.functions.invoke("send-partner-email", { body: { type, email, data } });
+  } catch (e) {
+    console.warn("[partner-turnover] email failed", type, e instanceof Error ? e.message : String(e));
+  }
+}
 function fmtWindow(start?: string | null, end?: string | null): string {
   const t = (s?: string | null) => {
     if (!s) return "";
@@ -66,6 +76,10 @@ serve(async (req) => {
     const { data: u } = await admin.auth.getUser(jwt);
     const userId: string | undefined = u?.user?.id;
     const userEmail: string | undefined = u?.user?.email?.toLowerCase();
+    const userMeta = (u?.user?.user_metadata || {}) as Record<string, unknown>;
+    const metaName = (userMeta.full_name as string) || (userMeta.name as string) ||
+      [userMeta.first_name, userMeta.last_name].filter(Boolean).join(" ") || "";
+    const metaPhone = (userMeta.phone as string) || "";
     if (!userId) return json({ error: "Not signed in" }, 401);
 
     const body = await req.json();
@@ -77,22 +91,28 @@ serve(async (req) => {
       return data;
     };
 
-    // ─── host.ensure ───────────────────────────────────────────────────
+    // --- host.ensure ---------------------------------------------------
     if (action === "host.ensure") {
       let host = await getHost();
       if (!host) {
+        const resolvedName = (body.name || metaName || "").trim() || null;
+        const resolvedPhone = (body.phone || metaPhone || "").replace(/\D/g, "") || null;
         const { data, error } = await admin.from("hosts").insert({
           user_id: userId,
           email: userEmail,
-          name: (body.name || "").trim() || null,
-          phone: (body.phone || "").replace(/\D/g, "") || null,
+          name: resolvedName,
+          phone: resolvedPhone,
         }).select("*").single();
         if (error) return json({ error: error.message }, 500);
         host = data;
-      } else if (body.name || body.phone) {
+        // First-time host -> welcome email.
+        await sendHostEmail(admin, "welcome", userEmail, {
+          name: (resolvedName || "").split(" ")[0] || "",
+        });
+      } else if (body.name || body.phone || (!host.name && metaName) || (!host.phone && metaPhone)) {
         await admin.from("hosts").update({
-          name: body.name?.trim() || host.name,
-          phone: body.phone ? body.phone.replace(/\D/g, "") : host.phone,
+          name: body.name?.trim() || host.name || metaName || null,
+          phone: body.phone ? body.phone.replace(/\D/g, "") : (host.phone || (metaPhone ? metaPhone.replace(/\D/g, "") : null)),
         }).eq("id", host.id);
       }
       return json({ host });
@@ -100,10 +120,10 @@ serve(async (req) => {
 
     const host = await getHost();
     if (!host && action !== "admin.assign") {
-      return json({ error: "No host profile — call host.ensure first" }, 400);
+      return json({ error: "No host profile - call host.ensure first" }, 400);
     }
 
-    // ─── property.save (never accepts turnover_price) ───────────────────
+    // --- property.save (never accepts turnover_price) -------------------
     if (action === "property.save") {
       const fields = {
         host_id: host.id,
@@ -130,7 +150,7 @@ serve(async (req) => {
       return json({ property: data });
     }
 
-    // ─── turnover.request ───────────────────────────────────────────────
+    // --- turnover.request -----------------------------------------------
     if (action === "turnover.request") {
       const { data: property } = await admin.from("properties").select("*").eq("id", body.propertyId).maybeSingle();
       if (!property || property.host_id !== host.id) return json({ error: "Property not found" }, 404);
@@ -175,7 +195,7 @@ serve(async (req) => {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: `Turnover — ${property.nickname || property.address || "Property"}` },
+            product_data: { name: `Turnover - ${property.nickname || property.address || "Property"}` },
             unit_amount: priceCents,
           },
           quantity: 1,
@@ -190,7 +210,7 @@ serve(async (req) => {
       return json({ url: session.url, turnoverId: tr.id });
     }
 
-    // ─── turnover.finalize (verify payment server-side → assign + notify) ─
+    // --- turnover.finalize (verify payment server-side -> assign + notify) -
     if (action === "turnover.finalize") {
       if (!body.sessionId) return json({ error: "sessionId required" }, 400);
       const { data: tr } = await admin.from("turnover_requests").select("*").eq("stripe_checkout_session_id", body.sessionId).maybeSingle();
@@ -207,6 +227,16 @@ serve(async (req) => {
           paid_at: new Date().toISOString(),
           stripe_payment_intent_id: (session.payment_intent as string) || null,
         }).eq("id", tr.id).eq("status", "pending_payment");
+        // Payment-received confirmation email to the host.
+        const { property: paidProp, hostRow: paidHost } = await loadContext(admin, tr);
+        await sendHostEmail(admin, "turnover_confirmed", paidHost?.email, {
+          name: (paidHost?.name || "").split(" ")[0] || "",
+          property: paidProp?.nickname || paidProp?.address || "",
+          address: paidProp?.address || "",
+          date: formatServiceDate(tr.requested_date as string),
+          window: fmtWindow(tr.window_start as string, tr.window_end as string),
+          price: money(Number(tr.price || 0)),
+        });
         // Run assignment on the freshly-paid request.
         const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
         await runAssignment(admin, fresh, "auto");
@@ -216,7 +246,7 @@ serve(async (req) => {
       return json({ paid, status: tr.status });
     }
 
-    // ─── turnover.cancel (host) ─────────────────────────────────────────
+    // --- turnover.cancel (host) -----------------------------------------
     if (action === "turnover.cancel") {
       const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", body.turnoverId).maybeSingle();
       if (!tr || tr.host_id !== host.id) return json({ error: "Turnover not found" }, 404);
@@ -224,13 +254,19 @@ serve(async (req) => {
       // Cancellation cutoff: no self-cancel within 24h of the service date.
       const svc = new Date(`${tr.requested_date}T12:00:00`);
       if (svc.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
-        return json({ error: "Within 24 hours of service — contact support to cancel." }, 409);
+        return json({ error: "Within 24 hours of service - contact support to cancel." }, 409);
       }
       await admin.from("turnover_requests").update({ status: "cancelled" }).eq("id", tr.id);
+      const { property: cProp } = await loadContext(admin, tr);
+      await sendHostEmail(admin, "turnover_cancelled", host.email, {
+        name: (host.name || "").split(" ")[0] || "",
+        property: cProp?.nickname || cProp?.address || "",
+        date: formatServiceDate(tr.requested_date as string),
+      });
       return json({ ok: true });
     }
 
-    // ─── admin.assign (role-gated manual override) ──────────────────────
+    // --- admin.assign (role-gated manual override) ----------------------
     if (action === "admin.assign") {
       const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", userId);
       const isAdmin = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
@@ -251,7 +287,7 @@ serve(async (req) => {
         await notifyAssignment(admin, fresh);
         return json({ status: "assigned", assignment_type: "manual" });
       }
-      // No cleaner specified → re-run the auto engine.
+      // No cleaner specified -> re-run the auto engine.
       await admin.from("turnover_requests").update({ assigned_by: userId }).eq("id", tr.id);
       await runAssignment(admin, tr, "auto");
       const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
@@ -264,7 +300,7 @@ serve(async (req) => {
   }
 });
 
-// ─── Assignment engine ─────────────────────────────────────────────────
+// --- Assignment engine -------------------------------------------------
 async function runAssignment(admin: SB, tr: Record<string, unknown>, defaultType: "auto" | "preferred") {
   const propertyId = tr.property_id as string;
   const date = tr.requested_date as string;
@@ -293,7 +329,7 @@ async function runAssignment(admin: SB, tr: Record<string, unknown>, defaultType
     .eq("requested_date", date)
     .in("status", ["assigned", "cleaner_confirmed", "in_progress"]);
   const overlaps = (s1?: string | null, e1?: string | null, s2?: string | null, e2?: string | null) => {
-    if (!s1 || !e1 || !s2 || !e2) return true; // unknown windows → treat as conflict (same day)
+    if (!s1 || !e1 || !s2 || !e2) return true; // unknown windows -> treat as conflict (same day)
     return s1 < e2 && s2 < e1;
   };
   const busy = new Set<string>();
@@ -317,16 +353,16 @@ async function runAssignment(admin: SB, tr: Record<string, unknown>, defaultType
     return;
   }
 
-  // No one available → escalate (never silently leave unassigned).
+  // No one available -> escalate (never silently leave unassigned).
   await admin.from("turnover_requests").update({ status: "unassigned_alert" }).eq("id", tr.id);
   const { property, hostRow } = await loadContext(admin, tr);
   await notifyDiscord(admin, {
-    title: "⚠️ UNASSIGNED turnover needs manual assignment",
+    title: "UNASSIGNED turnover needs manual assignment",
     color: 15158332,
     fields: [
-      { name: "Property", value: property?.nickname || property?.address || "—", inline: true },
+      { name: "Property", value: property?.nickname || property?.address || "-", inline: true },
       { name: "Date", value: `${formatServiceDate(date)} ${fmtWindow(tr.window_start as string, tr.window_end as string)}`, inline: true },
-      { name: "Host", value: hostRow?.name || hostRow?.email || "—", inline: true },
+      { name: "Host", value: hostRow?.name || hostRow?.email || "-", inline: true },
       { name: "Why", value: "No turnover crew available for this date/window.", inline: false },
     ],
   });
@@ -335,7 +371,7 @@ async function runAssignment(admin: SB, tr: Record<string, unknown>, defaultType
     await sendSms(admin, {
       toPhone: opsPhone,
       type: "reminder",
-      message: `Novara: UNASSIGNED turnover ${property?.nickname || property?.address || ""} on ${formatServiceDate(date)} — no crew free. Assign manually in admin.`,
+      message: `Novara: UNASSIGNED turnover ${property?.nickname || property?.address || ""} on ${formatServiceDate(date)} - no crew free. Assign manually in admin.`,
     });
   }
 }
@@ -350,7 +386,7 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
   const { property, hostRow } = await loadContext(admin, tr);
   const cleanerId = tr.assigned_cleaner_id as string | null;
   if (!cleanerId) return;
-  const { data: cleaner } = await admin.from("cleaners").select("first_name, phone").eq("id", cleanerId).maybeSingle();
+  const { data: cleaner } = await admin.from("cleaners").select("first_name, phone, email").eq("id", cleanerId).maybeSingle();
   const dateLabel = formatServiceDate(tr.requested_date as string);
   const windowLabel = fmtWindow(tr.window_start as string, tr.window_end as string);
   const priceNum = Number(tr.price || 0);
@@ -358,7 +394,7 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
   const nickname = property?.nickname || property?.address || "Property";
   const assignmentType = (tr.assignment_type as string) || "auto";
 
-  // 1. Cleaner SMS — reply YES to confirm.
+  // 1. Cleaner SMS - reply YES to confirm.
   if (cleaner?.phone) {
     await sendSms(admin, {
       toPhone: cleaner.phone,
@@ -369,23 +405,43 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
 
   // 2. Discord ops.
   await notifyDiscord(admin, {
-    title: "🧹 Turnover assigned",
+    title: "Turnover assigned",
     color: 3066993,
     fields: [
       { name: "Property", value: nickname, inline: true },
       { name: "When", value: `${dateLabel} ${windowLabel}`, inline: true },
       { name: "Cleaner", value: `${cleaner?.first_name || "Cleaner"} (${assignmentType})`, inline: true },
-      { name: "Host", value: hostRow?.name || hostRow?.email || "—", inline: true },
+      { name: "Host", value: hostRow?.name || hostRow?.email || "-", inline: true },
       { name: "Price", value: money(priceNum), inline: true },
     ],
   });
 
-  // 3. Host SMS.
+  // 3. Host SMS + email.
   if (hostRow?.phone) {
     await sendSms(admin, {
       toPhone: hostRow.phone,
       type: "confirmation",
       message: `Your turnover for ${nickname} on ${dateLabel} is confirmed and assigned. We'll have it guest-ready${windowLabel ? ` by the end of your ${windowLabel} window` : ""}. - NovaraCleaning`,
+    });
+  }
+  await sendHostEmail(admin, "turnover_assigned", hostRow?.email, {
+    name: (hostRow?.name || "").split(" ")[0] || "",
+    property: nickname,
+    address: property?.address || "",
+    date: dateLabel,
+    window: windowLabel,
+    cleaner: cleaner?.first_name || "Your cleaner",
+  });
+
+  // 4. Cleaner email (if on file) - SMS already sent above.
+  if (cleaner?.email) {
+    await sendHostEmail(admin, "turnover_assigned", cleaner.email, {
+      name: cleaner.first_name || "",
+      property: nickname,
+      address: property?.address || "",
+      date: dateLabel,
+      window: windowLabel,
+      cleaner: cleaner.first_name || "you",
     });
   }
 }

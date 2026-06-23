@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import {
   RiHome4Line, RiAddLine, RiLoader4Line, RiCalendarLine, RiMapPinLine,
   RiLogoutBoxRLine, RiCheckboxCircleLine, RiTimeLine, RiEditLine, RiSparklingLine,
+  RiMailSendLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -54,52 +55,116 @@ const digits = (s: string) => s.replace(/\D/g, "");
 export default function PartnerPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+    });
+    // Callback hands recovery sessions back here with ?mode=reset.
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "reset") {
+      setRecovery(true);
+    }
     return () => sub.subscription.unsubscribe();
   }, []);
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
   }
+  if (session && recovery) return <SetPasswordForm onDone={() => setRecovery(false)} />;
   return session ? <Dashboard /> : <AuthScreen />;
 }
 
+// ─── Set a new password (recovery) ─────────────────────────────────────────
+function SetPasswordForm({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (password.length < 6) { toast.error("Use a 6+ character password."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Password updated.");
+    if (typeof window !== "undefined") window.history.replaceState({}, "", "/partner/dashboard");
+    onDone();
+  };
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#EDE9FE] to-white flex items-center justify-center px-4">
+      <SEO title="Set a new password" noindex />
+      <Card className="w-full max-w-md shadow-xl border-0">
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5500FF,#918CFF)" }} />
+        <CardHeader className="text-center pt-8"><CardTitle className="text-2xl">Set a new password</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div><Label>New password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></div>
+          <Button onClick={submit} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
+            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Update password"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────
+type AuthMode = "login" | "signup" | "forgot" | "check-email";
+
 function AuthScreen() {
-  const [mode, setMode] = useState<"login" | "signup">("signup");
+  const [mode, setMode] = useState<AuthMode>("signup");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
+  const cleanEmail = () => email.trim().toLowerCase();
+
+  const doSignup = async () => {
+    if (!name.trim() || digits(phone).length < 10) { toast.error("Add your name and phone."); return; }
     if (!email.trim() || password.length < 6) { toast.error("Enter your email and a 6+ character password."); return; }
     setBusy(true);
     try {
-      if (mode === "signup") {
-        if (!name.trim() || digits(phone).length < 10) { toast.error("Add your name and phone."); setBusy(false); return; }
-        const { error } = await supabase.auth.signUp({
-          email: email.trim().toLowerCase(),
-          password,
-          options: { data: { full_name: name.trim(), phone: digits(phone) } },
-        });
-        if (error) throw error;
-        // Establish the host profile (works whether or not email confirmation is on).
-        await supabase.functions.invoke("partner-turnover", { body: { action: "host.ensure", name: name.trim(), phone: digits(phone) } }).catch(() => {});
-        toast.success("Welcome! Add your first property to get started.");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-        if (error) throw error;
-      }
+      // Route through send-auth-email → branded confirmation link (creates the
+      // user via admin.generateLink). Never reveals if the email exists.
+      const { error } = await supabase.functions.invoke("send-partner-auth-email", {
+        body: { kind: "signup", email: cleanEmail(), password, firstName: name.trim(), metadata: { phone: digits(phone) } },
+      });
+      if (error) throw error;
+      setMode("check-email");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Authentication failed");
-    } finally {
-      setBusy(false);
+      toast.error(e instanceof Error ? e.message : "Could not create account");
+    } finally { setBusy(false); }
+  };
+
+  const doLogin = async () => {
+    if (!email.trim() || !password) { toast.error("Enter your email and password."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail(), password });
+    setBusy(false);
+    if (error) {
+      if (/not confirmed/i.test(error.message)) {
+        toast.error("Please confirm your email first — check your inbox.");
+        setMode("check-email");
+      } else {
+        toast.error("Invalid email or password.");
+      }
     }
+  };
+
+  const doForgot = async () => {
+    if (!email.trim()) { toast.error("Enter your email."); return; }
+    setBusy(true);
+    await supabase.functions.invoke("send-partner-auth-email", { body: { kind: "password_reset", email: cleanEmail() } }).catch(() => {});
+    setBusy(false);
+    toast.success("If that email has an account, a reset link is on its way.");
+    setMode("login");
+  };
+
+  const resendConfirm = async () => {
+    await supabase.functions.invoke("send-partner-auth-email", { body: { kind: "signup", email: cleanEmail(), password: password || undefined, firstName: name.trim() || undefined } }).catch(() => {});
+    toast.success("Confirmation email resent.");
   };
 
   return (
@@ -115,23 +180,49 @@ function AuthScreen() {
           <p className="text-sm text-muted-foreground">Turnover cleanings for your rentals — booked in seconds.</p>
         </CardHeader>
         <CardContent className="space-y-3">
-          {mode === "signup" && (
+          {mode === "check-email" ? (
+            <div className="text-center space-y-4 py-2">
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-[#EDE9FE] flex items-center justify-center">
+                <RiMailSendLine className="w-7 h-7" style={{ color: "#5500FF" }} />
+              </div>
+              <div>
+                <p className="font-semibold">Check your email</p>
+                <p className="text-sm text-muted-foreground mt-1">We sent a confirmation link to <span className="font-medium">{cleanEmail() || "your inbox"}</span>. Click it to finish setting up your account.</p>
+              </div>
+              <Button variant="outline" className="w-full" onClick={resendConfirm}>Resend confirmation</Button>
+              <button className="text-sm text-primary underline" onClick={() => setMode("login")}>Back to sign in</button>
+            </div>
+          ) : (
             <>
-              <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" /></div>
-              <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" /></div>
+              {mode === "signup" && (
+                <>
+                  <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" /></div>
+                  <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" /></div>
+                </>
+              )}
+              <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" /></div>
+              {mode !== "forgot" && (
+                <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></div>
+              )}
+              {mode === "login" && (
+                <div className="text-right -mt-1">
+                  <button className="text-xs text-primary underline" onClick={() => setMode("forgot")}>Forgot password?</button>
+                </div>
+              )}
+              <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
+                {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : mode === "signup" ? "Create account" : mode === "forgot" ? "Send reset link" : "Sign in"}
+              </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                {mode === "forgot" ? (
+                  <button className="text-primary font-medium underline" onClick={() => setMode("login")}>Back to sign in</button>
+                ) : mode === "signup" ? (
+                  <>Already have an account? <button className="text-primary font-medium underline" onClick={() => setMode("login")}>Sign in</button></>
+                ) : (
+                  <>New here? <button className="text-primary font-medium underline" onClick={() => setMode("signup")}>Create one</button></>
+                )}
+              </p>
             </>
           )}
-          <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" /></div>
-          <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></div>
-          <Button onClick={submit} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
-            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : mode === "signup" ? "Create account" : "Sign in"}
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === "signup" ? "Already have an account?" : "New here?"}{" "}
-            <button className="text-primary font-medium underline" onClick={() => setMode(mode === "signup" ? "login" : "signup")}>
-              {mode === "signup" ? "Sign in" : "Create one"}
-            </button>
-          </p>
         </CardContent>
       </Card>
     </div>
