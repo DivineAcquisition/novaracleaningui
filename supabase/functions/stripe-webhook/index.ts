@@ -836,7 +836,8 @@ serve(async (req) => {
           // preferences so workflow automations (SMS, email
           // sequences) can route on them.
           try {
-            const { syncContactAndOpportunity, fmtMoney } = await import("../_shared/ghl-client.ts");
+            const { upsertContact, createOpportunity, updateOpportunity, fmtMoney } =
+              await import("../_shared/ghl-client.ts");
             // File the membership opportunity on the SALES pipeline (never
             // hiring/dispatch). Prefer the configured sales pipeline secret.
             let salesPipelineId: string | undefined;
@@ -851,50 +852,71 @@ serve(async (req) => {
                 if (s.key === "GHL_SALES_PIPELINE_STAGE_ID" && s.value) salesStageId = String(s.value).trim();
               }
             } catch (_) { /* fall back to auto-discovery */ }
-            await syncContactAndOpportunity({
-              contact: {
-                email,
-                phone: phone || null,
-                firstName: subMeta.first_name || (name.split(' ')[0] || null),
-                lastName: subMeta.last_name || (name.split(' ').slice(1).join(' ') || null),
-                address1: subMeta.address || null,
-                city: subMeta.city || null,
-                state: subMeta.state || null,
-                postalCode: subMeta.zip_code || null,
-                source: "Novara Membership Signup",
-                tags: [
-                  "membership",
-                  `member-${plan}`,
-                  subMeta.home_size_id ? `home-${subMeta.home_size_id}` : null,
-                  subMeta.preferred_day_of_week ? `pref-day-${subMeta.preferred_day_of_week}` : null,
-                ].filter(Boolean) as string[],
-                customFieldsByKey: {
-                  membership_status: "active",
-                  membership_plan: plan,
-                  cleaning_type: planLabels[plan],
-                  market: subMeta.state || undefined,
-                  customer_source: "Novara Membership",
-                  stripe_customer_id: customerId,
-                  monthly_membership_price: fmtMoney(monthlyPriceCentsMeta),
-                  preferred_day_of_week: subMeta.preferred_day_of_week || undefined,
-                  preferred_time_window: subMeta.preferred_time_window || undefined,
-                },
+
+            const contactId = await upsertContact({
+              email,
+              phone: phone || null,
+              firstName: subMeta.first_name || (name.split(' ')[0] || null),
+              lastName: subMeta.last_name || (name.split(' ').slice(1).join(' ') || null),
+              address1: subMeta.address || null,
+              city: subMeta.city || null,
+              state: subMeta.state || null,
+              postalCode: subMeta.zip_code || null,
+              source: "Novara Membership Signup",
+              tags: [
+                "membership",
+                `member-${plan}`,
+                subMeta.home_size_id ? `home-${subMeta.home_size_id}` : null,
+                subMeta.preferred_day_of_week ? `pref-day-${subMeta.preferred_day_of_week}` : null,
+              ].filter(Boolean) as string[],
+              customFieldsByKey: {
+                membership_status: "Active",
+                membership_plan: plan,
+                cleaning_type: planLabels[plan],
+                market: subMeta.state || undefined,
+                customer_source: "Novara Membership",
+                stripe_customer_id: customerId,
+                monthly_membership_price: fmtMoney(monthlyPriceCentsMeta),
+                preferred_day_of_week: subMeta.preferred_day_of_week || undefined,
+                preferred_time_window: subMeta.preferred_time_window || undefined,
               },
-              opportunity: {
-                name: `Novara Membership — ${planLabels[plan]} (${(name || email).trim()})`,
+            });
+
+            // Promote the lead opportunity create-checkout already filed
+            // (id threaded through subscription metadata) to "won" instead of
+            // creating a duplicate. Fall back to creating one only when no
+            // pre-created opportunity exists (e.g. legacy links).
+            const preOppId = (subMeta.ghl_opportunity_id || "").trim();
+            const oppName = `Novara Membership — ${planLabels[plan]} (${(name || email).trim()})`;
+            const oppMonetary = monthlyPriceCentsMeta ? Math.round(monthlyPriceCentsMeta / 100) : undefined;
+            const oppCustomFields = {
+              membership_plan: plan,
+              membership_status: "Active",
+              preferred_day_of_week: subMeta.preferred_day_of_week || undefined,
+              preferred_time_window: subMeta.preferred_time_window || undefined,
+            };
+            if (preOppId) {
+              await updateOpportunity(preOppId, {
+                name: oppName,
+                status: "won",
+                monetaryValue: oppMonetary,
+                pipelineId: salesPipelineId,
+                pipelineStageId: salesStageId,
+                customFieldsByKey: oppCustomFields,
+              });
+              logStep("GHL membership opportunity promoted to won", { preOppId });
+            } else if (contactId) {
+              await createOpportunity({
+                contactId,
+                name: oppName,
                 status: "won",
                 source: "Novara Membership Signup",
                 pipelineId: salesPipelineId,
                 pipelineStageId: salesStageId,
-                monetaryValue: monthlyPriceCentsMeta ? Math.round(monthlyPriceCentsMeta / 100) : undefined,
-                customFieldsByKey: {
-                  membership_plan: plan,
-                  membership_status: "active",
-                  preferred_day_of_week: subMeta.preferred_day_of_week || undefined,
-                  preferred_time_window: subMeta.preferred_time_window || undefined,
-                },
-              },
-            });
+                monetaryValue: oppMonetary,
+                customFieldsByKey: oppCustomFields,
+              });
+            }
             logStep("GHL membership sync complete", { email, plan });
           } catch (ghlErr) {
             logStep("GHL membership sync failed (non-blocking)", { error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr) });

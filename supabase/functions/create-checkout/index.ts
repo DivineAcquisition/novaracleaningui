@@ -26,6 +26,12 @@ import {
   MEMBERSHIP_PRICES,
   getServiceFinalPrice,
 } from "../_shared/pricing.ts";
+import {
+  ghlIsConfigured,
+  upsertContact,
+  createOpportunity,
+  fmtMoney,
+} from "../_shared/ghl-client.ts";
 
 const ADD_ON_PRICING: Record<string, { label: string; price: number }> = {
   fridge:  { label: "Inside Fridge",     price: SHARED_ADD_ONS.fridge.price },
@@ -271,6 +277,72 @@ serve(async (req) => {
         });
       }
 
+      // ─── Map the membership/recurring lead into GHL NOW ─────────────────
+      // Previously a recurring membership only reached GHL AFTER the customer
+      // paid (the customer.subscription.created webhook). That meant a VA who
+      // created an Internal Booking recurring signup saw NOTHING in the CRM
+      // until conversion — "recurring internal bookings don't map to GHL at
+      // all". Upsert the contact + an OPEN membership opportunity here, then
+      // thread the ids through Stripe metadata so the webhook promotes the
+      // SAME opportunity to "won" on payment instead of creating a duplicate.
+      // Fully best-effort: a GHL hiccup never blocks the checkout link.
+      let ghlContactId = "";
+      let ghlOpportunityId = "";
+      if (ghlIsConfigured() && (email || bodyPhone)) {
+        try {
+          const GLOW_LABEL: Record<string, string> = {
+            monthly: "Monthly", biweekly: "Bi-Weekly", weekly: "Weekly",
+          };
+          const FREQ_LABEL: Record<string, string> = {
+            monthly: "Monthly", biweekly: "Bi-Weekly", weekly: "Weekly",
+          };
+          const leadName = [bodyFirstName, bodyLastName].filter(Boolean).join(" ").trim();
+          const membershipCustomFields = {
+            novara_glow_plan: GLOW_LABEL[membershipPlan] || "",
+            billing_frequency: "Monthly",
+            service_frequency: FREQ_LABEL[membershipPlan] || "",
+            membership_status: "Not Started",
+            membership_plan: membershipPlan,
+            monthly_membership_price: fmtMoney(monthlyPriceCents),
+            monthly_subscription_total_: fmtMoney(monthlyPriceCents),
+            cleaning_type: "Standard Cleaning",
+            csr_name: csrName ? String(csrName) : "",
+            market: bodyState || "",
+            customer_source: "Novara Membership",
+            preferred_day_of_week: preferredDayOfWeek ? String(preferredDayOfWeek) : "",
+            preferred_time_window: preferredTimeWindow ? String(preferredTimeWindow) : "",
+          };
+          ghlContactId = (await upsertContact({
+            email: email || undefined,
+            phone: bodyPhone || undefined,
+            firstName: bodyFirstName || undefined,
+            lastName: bodyLastName || undefined,
+            address1: bodyAddress || undefined,
+            city: bodyCity || undefined,
+            state: bodyState || undefined,
+            postalCode: bodyZip || undefined,
+            source: "Novara Membership Signup",
+            tags: ["membership", "lead - new", `member-${membershipPlan}`],
+            customFieldsByKey: membershipCustomFields,
+          })) || "";
+          if (ghlContactId) {
+            ghlOpportunityId = (await createOpportunity({
+              contactId: ghlContactId,
+              name: `Novara Membership — ${planLabel}${leadName ? ` (${leadName})` : email ? ` (${email})` : ""}`,
+              status: "open",
+              monetaryValue: monthlyPriceCents ? Math.round(monthlyPriceCents / 100) : undefined,
+              source: "Novara Membership Signup",
+              customFieldsByKey: membershipCustomFields,
+            })) || "";
+          }
+          logStep("GHL membership lead mapped", { ghlContactId, ghlOpportunityId });
+        } catch (ghlErr) {
+          logStep("GHL membership lead mapping failed (non-blocking)", {
+            error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr),
+          });
+        }
+      }
+
       // Push the schedule + customer hints into both the Checkout
       // Session metadata AND the resulting Subscription metadata. The
       // subscription metadata is what the `customer.subscription.*`
@@ -302,6 +374,11 @@ serve(async (req) => {
         city: bodyCity ? String(bodyCity) : '',
         state: bodyState ? String(bodyState) : '',
         zip_code: bodyZip ? String(bodyZip) : '',
+        // GHL ids of the pre-created membership lead so the subscription
+        // webhook promotes the SAME contact/opportunity to "won" on payment
+        // instead of spawning a duplicate.
+        ghl_contact_id: ghlContactId,
+        ghl_opportunity_id: ghlOpportunityId,
       };
 
       const session = await stripe.checkout.sessions.create({
