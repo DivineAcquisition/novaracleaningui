@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import {
   RiLoader4Line, RiPriceTag3Line, RiTeamLine, RiAlarmWarningLine, RiCalendarCheckLine,
   RiSearchLine, RiStarFill, RiImage2Line, RiMoneyDollarCircleLine, RiCheckboxCircleLine,
-  RiFileTextLine,
+  RiFileTextLine, RiRepeatLine, RiUserStarLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +38,22 @@ interface Turnover {
 }
 interface Cleaner { id: string; first_name: string | null; last_name: string | null; phone: string | null; }
 interface Crew { id: string; cleaner_id: string; property_id: string | null; priority: number; active: boolean; is_turnover_crew: boolean; }
+interface RecurringSchedule {
+  id: string; host_id: string; property_id: string; frequency: string | null;
+  days_of_week: number[] | null; day_of_month: number | null;
+  window_start: string | null; window_end: string | null;
+  active: boolean; paused_until: string | null; price_snapshot: number | null;
+}
+interface Batch {
+  id: string; host_id: string; week_start: string; source: string;
+  turnover_count: number; total_amount: number; status: string; created_at: string;
+}
+
+const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ordinal = (n: number) => {
+  const s = ["th", "st", "nd", "rd"]; const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
 
 const STATUS_TONE: Record<string, string> = {
   unassigned_alert: "bg-amber-100 text-amber-700",
@@ -57,6 +73,9 @@ export default function PartnerAdmin() {
   const [turnovers, setTurnovers] = useState<Turnover[]>([]);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [crew, setCrew] = useState<Crew[]>([]);
+  const [recurring, setRecurring] = useState<RecurringSchedule[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [crewProperty, setCrewProperty] = useState<string>("");
   const [sendingAgreement, setSendingAgreement] = useState<string | null>(null);
   const [payDate, setPayDate] = useState<Record<string, string>>({});
   const [sendingPayLink, setSendingPayLink] = useState<string | null>(null);
@@ -67,18 +86,22 @@ export default function PartnerAdmin() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: props }, { data: hs }, { data: trs }, { data: cl }, { data: cr }] = await Promise.all([
+    const [{ data: props }, { data: hs }, { data: trs }, { data: cl }, { data: cr }, { data: rec }, { data: bt }] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
       (supabase.from as any)("hosts").select("id, name, email, phone, status").order("created_at", { ascending: false }),
       (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }).limit(500),
       (supabase.from as any)("cleaners").select("id, first_name, last_name, phone").order("first_name"),
       (supabase.from as any)("turnover_crew").select("*"),
+      (supabase.from as any)("recurring_schedules").select("*").order("created_at", { ascending: false }),
+      (supabase.from as any)("booking_batches").select("*").order("week_start", { ascending: false }).limit(100),
     ]);
     setProperties((props as Property[]) || []);
     setHosts((hs as Host[]) || []);
     setTurnovers((trs as Turnover[]) || []);
     setCleaners((cl as Cleaner[]) || []);
     setCrew((cr as Crew[]) || []);
+    setRecurring((rec as RecurringSchedule[]) || []);
+    setBatches((bt as Batch[]) || []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -131,6 +154,44 @@ export default function PartnerAdmin() {
   const setPriority = async (crewId: string, priority: number) => {
     await (supabase.from as any)("turnover_crew").update({ priority }).eq("id", crewId);
     load();
+  };
+
+  // Pin a cleaner to a SPECIFIC property so they are consistently tried first
+  // for that STR client's turnovers (runAssignment checks property-scoped crew
+  // before the global pool). Toggling re-uses turnover_crew with property_id set.
+  const togglePropertyCrew = async (cleanerId: string, propertyId: string) => {
+    const existing = crew.find((c) => c.cleaner_id === cleanerId && c.property_id === propertyId);
+    if (existing) {
+      const { error } = await (supabase.from as any)("turnover_crew").delete().eq("id", existing.id);
+      if (error) { toast.error(error.message); return; }
+      toast.success("Removed from this property's crew.");
+    } else {
+      const { error } = await (supabase.from as any)("turnover_crew").insert({
+        cleaner_id: cleanerId, property_id: propertyId, is_turnover_crew: true, active: true, priority: 10,
+      });
+      if (error) { toast.error(error.message); return; }
+      toast.success("Pinned to this property — they'll be assigned first.");
+    }
+    load();
+  };
+
+  // Admin pause/resume of a host's recurring schedule (RLS admin_all grants
+  // direct write). Pausing stops the cron from generating the next week.
+  const toggleRecurringActive = async (sched: RecurringSchedule) => {
+    const { error } = await (supabase.from as any)("recurring_schedules")
+      .update({ active: !sched.active }).eq("id", sched.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(sched.active ? "Recurring plan paused." : "Recurring plan resumed.");
+    load();
+  };
+
+  const cadenceLabel = (s: RecurringSchedule) => {
+    if (s.frequency === "monthly") {
+      return s.day_of_month ? `Monthly · ${ordinal(s.day_of_month)}` : "Monthly";
+    }
+    const days = (s.days_of_week || []).slice().sort((a, b) => a - b).map((d) => DOW_LABELS[d]).join(", ");
+    const perWeek = (s.days_of_week || []).length;
+    return `Weekly · ${perWeek} clean${perWeek === 1 ? "" : "s"}/wk${days ? ` (${days})` : ""}`;
   };
 
   const pending = properties.filter((p) => p.turnover_price == null || Number(p.turnover_price) <= 0);
@@ -235,8 +296,8 @@ export default function PartnerAdmin() {
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Partner Turnover Ops</h1>
-          <p className="text-sm text-muted-foreground mt-1">Price properties, manage the turnover crew, and handle assignments.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Turnover &amp; STR Ops</h1>
+          <p className="text-sm text-muted-foreground mt-1">Price properties, group a consistent crew per STR client, review recurring plans, and handle assignments.</p>
         </div>
         <PartnerOnboardingLinkDialog refTag="partner-admin" />
       </div>
@@ -385,6 +446,92 @@ export default function PartnerAdmin() {
               </div>
             );
           })}
+        </CardContent>
+      </Card>
+
+      {/* Consistent crew per STR property — pin cleaners to a property so they
+          are always tried first for that host's turnovers. */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><RiUserStarLine className="w-5 h-5 text-primary" /> Consistent crew per property</CardTitle>
+          <p className="text-xs text-muted-foreground pt-1">Pin specific cleaners to an STR property. Pinned cleaners are assigned first (before the global crew) for every turnover at that property — keeping the same team on each STR client.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {properties.length === 0 && <p className="text-sm text-muted-foreground">No properties yet.</p>}
+          {properties.length > 0 && (
+            <Select value={crewProperty} onValueChange={setCrewProperty}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Choose a property to set its crew…" /></SelectTrigger>
+              <SelectContent>
+                {properties.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {(p.nickname || p.address || "Property")} · {hostName(p.host_id)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {crewProperty && (
+            <div className="space-y-1.5 rounded-lg border p-2">
+              {cleaners.map((c) => {
+                const pinned = crew.some((x) => x.cleaner_id === c.id && x.property_id === crewProperty);
+                return (
+                  <div key={c.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50">
+                    <span className="text-sm font-medium">{`${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner"}</span>
+                    <Button size="sm" variant={pinned ? "default" : "outline"} onClick={() => togglePropertyCrew(c.id, crewProperty)}>
+                      {pinned ? "Pinned" : "Pin to property"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recurring schedules + paid batches — admin visibility & approval */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><RiRepeatLine className="w-5 h-5 text-primary" /> Recurring plans ({recurring.length})</CardTitle>
+          <p className="text-xs text-muted-foreground pt-1">Weekly / monthly turnover plans hosts have set up. The cron auto-generates &amp; charges each upcoming week; pause to stop generation.</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {recurring.length === 0 && <p className="text-sm text-muted-foreground">No recurring plans yet.</p>}
+          {recurring.map((s) => (
+            <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+              <div className="text-sm min-w-0">
+                <p className="font-medium truncate">{propName(s.property_id)} · {hostName(s.host_id)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {cadenceLabel(s)}
+                  {s.window_start ? ` · ${s.window_start.slice(0, 5)}–${(s.window_end || "").slice(0, 5)}` : ""}
+                  {s.price_snapshot != null ? ` · ~$${Number(s.price_snapshot).toFixed(0)}/clean` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={cn("text-[11px]", s.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                  {s.active ? "Active" : "Paused"}
+                </Badge>
+                <Button size="sm" variant={s.active ? "outline" : "default"} onClick={() => toggleRecurringActive(s)}>
+                  {s.active ? "Pause" : "Resume"}
+                </Button>
+              </div>
+            </div>
+          ))}
+          {batches.length > 0 && (
+            <div className="pt-2">
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Recent batches</p>
+              <div className="space-y-1">
+                {batches.slice(0, 8).map((b) => (
+                  <div key={b.id} className="flex items-center justify-between gap-2 text-xs rounded-md border px-2.5 py-1.5">
+                    <span>{hostName(b.host_id)} · week of {format(new Date(`${b.week_start}T12:00:00`), "MMM d")} · {b.turnover_count} clean{b.turnover_count === 1 ? "" : "s"} · {b.source}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="tabular-nums">${Number(b.total_amount).toFixed(0)}</span>
+                      <Badge className={cn("text-[10px]", STATUS_TONE[b.status] || "bg-slate-100")}>{b.status.replace(/_/g, " ")}</Badge>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
