@@ -51,12 +51,17 @@ async function ensureAdminOrVa(
 ): Promise<void> {
   const auth = req.headers.get("Authorization");
   if (!auth) throw new Error("Admin authorization required");
+  // Validate the JWT by passing it EXPLICITLY to getUser(token). Relying on
+  // the no-arg getUser() (which reads a stored session) returns "Not signed
+  // in" on a server-side client in supabase-js 2.39.x even when a valid
+  // Authorization header is present — that was the admin-reschedule 500.
+  const token = auth.replace(/^Bearer\s+/i, "");
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    { global: { headers: { Authorization: auth } } },
+    { global: { headers: { Authorization: `Bearer ${token}` } } },
   );
-  const { data: u } = await userClient.auth.getUser();
+  const { data: u } = await userClient.auth.getUser(token);
   if (!u?.user?.id) throw new Error("Not signed in");
   const { data: roles } = await supabase
     .from("user_roles")
