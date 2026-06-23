@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { getServiceFinalPrice, getHomeSize } from "../_shared/pricing.ts";
+import { runPostConfirmFanout } from "../_shared/post-confirm-booking.ts";
 
 // ─── Member-portal hosted checkout ──────────────────────────────────────
 //
@@ -44,6 +45,34 @@ function json(body: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
     status,
   });
+}
+
+/**
+ * Run the shared post-confirm fan-out for a freshly-confirmed in-app
+ * booking. WITHOUT this, member portal bookings confirmed here never
+ * reach GHL (send-zapier-webhook), the confirmation email/SMS, dispatch,
+ * the Google Calendar, or the post-booking referral SMS — i.e. "no data
+ * mapped, no comms". Idempotent + non-blocking: the helper gates on
+ * bookings.confirmation_email_sent and swallows downstream failures so a
+ * GHL/email hiccup can never fail the customer's checkout.
+ */
+// deno-lint-ignore no-explicit-any
+async function fanoutConfirmedBooking(supabase: any, bookingId: string): Promise<void> {
+  try {
+    const { data: fresh } = await supabase
+      .from("bookings")
+      .select("*")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (!fresh) return;
+    await runPostConfirmFanout(supabase, fresh, { source: "customer" });
+    logStep("post-confirm fan-out complete", { bookingId });
+  } catch (err) {
+    logStep("post-confirm fan-out failed (non-blocking)", {
+      bookingId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 serve(async (req) => {
@@ -98,10 +127,12 @@ serve(async (req) => {
           .from("bookings")
           .update({
             status: "confirmed",
+            confirmed_at: new Date().toISOString(),
             payment_intent_id: (session.payment_intent as string) || booking.payment_intent_id,
           })
           .eq("id", booking.id);
         logStep("Booking confirmed via verify", { bookingId: booking.id });
+        await fanoutConfirmedBooking(supabase, booking.id);
       }
 
       return json({
@@ -109,6 +140,42 @@ serve(async (req) => {
         status: paid ? "confirmed" : booking.status,
         bookingId: booking.id,
       });
+    }
+
+    // ─── CONFIRM ─────────────────────────────────────────────────────────
+    // Free ($0) membership-credit bookings are inserted already-confirmed
+    // client-side without ever touching Stripe. They still need the full
+    // post-confirm fan-out (GHL sync, confirmation email/SMS, auto-dispatch,
+    // Google Calendar, post-booking SMS) — otherwise a member books in-app
+    // and nothing maps to GHL and no cleaner is ever dispatched. This action
+    // runs that fan-out for an already-confirmed booking the caller owns.
+    if (action === "confirm") {
+      const confirmBookingId: string | undefined = body.bookingId;
+      if (!confirmBookingId) return json({ error: "bookingId required" }, 400);
+
+      const { data: booking } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("id", confirmBookingId)
+        .maybeSingle();
+
+      if (!booking) return json({ error: "Booking not found" }, 404);
+      if ((booking.email || "").toLowerCase() !== email) {
+        return json({ error: "Forbidden" }, 403);
+      }
+      // Only fan out for bookings that are actually confirmed — never
+      // promote a pending_payment booking to confirmed for free here.
+      if (booking.status !== "confirmed") {
+        return json({ confirmed: false, status: booking.status, bookingId: booking.id });
+      }
+      if (!booking.confirmed_at) {
+        await supabase
+          .from("bookings")
+          .update({ confirmed_at: new Date().toISOString() })
+          .eq("id", booking.id);
+      }
+      await fanoutConfirmedBooking(supabase, booking.id);
+      return json({ confirmed: true, status: "confirmed", bookingId: booking.id });
     }
 
     // ─── CREATE ──────────────────────────────────────────────────────────
@@ -196,9 +263,14 @@ serve(async (req) => {
         if (pi.status === "succeeded") {
           await supabase
             .from("bookings")
-            .update({ status: "confirmed", payment_intent_id: pi.id })
+            .update({
+              status: "confirmed",
+              confirmed_at: new Date().toISOString(),
+              payment_intent_id: pi.id,
+            })
             .eq("id", booking.id);
           logStep("Charged saved card off-session", { bookingId: booking.id, amountCents });
+          await fanoutConfirmedBooking(supabase, booking.id);
           return json({ paid: true, instant: true, bookingId: booking.id, amountCents });
         }
         logStep("Saved-card PI not succeeded, falling back to Checkout", { status: pi.status });

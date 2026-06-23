@@ -343,76 +343,27 @@ export default function MemberBooking() {
 
       const isConfirmed = !needsPayment || paidInstantly;
 
-      // ── GHL sync for every portal booking, mirroring the public funnel so
-      //    the team sees the contact + opportunity in the pipeline.
-      try {
-        await supabase.functions.invoke('sync-to-ghl', {
-          body: {
-            kind: 'booking',
-            payload: {
-              firstName: customer.first_name,
-              lastName: customer.last_name,
-              email: user.email,
-              phone: phoneDigits,
-              address: bookingData.address,
-              city: bookingData.city,
-              state: bookingData.state,
-              zipCode: bookingData.zip_code,
-              bookingId: booking.id,
-              bookingNumber: (booking as any).booking_number,
-              serviceType,
-              cleaningType: serviceType === 'deep' ? 'Deep Clean' : 'Standard Clean',
-              serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
-              timeSlot: selectedTimeSlot,
-              homeSize: addressData.sqft_tier,
-              membershipPlan: credits?.membership_plan,
-              frequency: usingCredit ? 'recurring' : 'one-time',
-              quotedPriceCents: chargeCents,
-              totalCents: chargeCents,
-              depositPaid: isConfirmed,
-              usesCredit: usingCredit,
-              customerSource: 'Member Portal',
-              market: bookingData.state,
-              tags: [
-                'portal-booking',
-                usingCredit ? `member-${credits?.membership_plan ?? 'none'}` : 'paid-extra-clean',
-              ],
-            },
-          },
-        });
-      } catch (ghlErr) {
-        console.error('GHL sync failed (non-blocking):', ghlErr);
-      }
-
-      // Confirmation email only once the booking is actually confirmed
-      // (free credit clean or an instant saved-card charge). Hosted-checkout
-      // bookings get their confirmation after payment, via the success page.
-      if (isConfirmed) {
+      // ── Post-confirm side effects are now owned SERVER-SIDE so every
+      //    portal booking gets the SAME treatment as the public funnel:
+      //    rich GHL contact + opportunity mapping (send-zapier-webhook),
+      //    confirmation email + SMS, auto-dispatch, Google Calendar, and the
+      //    post-booking referral SMS. We no longer fire a partial GHL sync /
+      //    email from the client (that produced duplicate opportunities and
+      //    skipped dispatch + calendar).
+      //
+      //      • instant saved-card charge → portal-book-checkout 'create'
+      //        already ran the fan-out before returning paid:true.
+      //      • hosted Checkout redirect   → the fan-out runs after payment in
+      //        the 'verify' action on the success page.
+      //      • free ($0) credit booking   → trigger the fan-out now via the
+      //        'confirm' action (no Stripe round-trip happens for these).
+      if (isConfirmed && !paidInstantly) {
         try {
-          await supabase.functions.invoke('send-booking-email', {
-            body: {
-              type: 'confirmation',
-              email: user.email,
-              data: {
-                firstName: customer.first_name,
-                lastName: customer.last_name,
-                bookingId: booking.id,
-                serviceDate: format(selectedDate!, 'yyyy-MM-dd'),
-                timeSlot: selectedTimeSlot,
-                serviceType,
-                homeSize: addressData.sqft_tier,
-                address: bookingData.address,
-                city: bookingData.city,
-                state: bookingData.state,
-                zipCode: bookingData.zip_code,
-                totalAmount: chargeCents,
-                useCredit: usingCredit,
-                membershipPlan: credits?.membership_plan,
-              },
-            },
+          await supabase.functions.invoke('portal-book-checkout', {
+            body: { action: 'confirm', bookingId: booking.id },
           });
-        } catch (emailError) {
-          console.error('Email send failed:', emailError);
+        } catch (confirmErr) {
+          console.error('Post-confirm fan-out failed (non-blocking):', confirmErr);
         }
       }
 
