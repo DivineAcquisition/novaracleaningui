@@ -667,6 +667,31 @@ serve(async (req) => {
           break;
         }
 
+        // ── Partner weekly batch (book a week, pay per clean) ─────────────
+        // Mark the batch paid + assign every turnover from the webhook so a
+        // closed tab can't strand a paid batch. Idempotent via the status guard.
+        if (session.metadata?.kind === "turnover_batch") {
+          try {
+            const batchId = session.metadata.batch_id as string | undefined;
+            const { data: claimed } = await supabase
+              .from("booking_batches")
+              .update({ status: "paid", stripe_payment_intent_id: (session.payment_intent as string) || null })
+              .eq(batchId ? "id" : "stripe_checkout_session_id", batchId || session.id)
+              .eq("status", "pending_payment")
+              .select("id");
+            if (claimed && claimed.length > 0) {
+              const { finalizeBatch } = await import("../_shared/turnover-engine.ts");
+              await finalizeBatch(supabase, claimed[0].id);
+              logStep("Turnover batch finalized via webhook", { batchId: claimed[0].id });
+            }
+          } catch (batchErr) {
+            logStep("Turnover batch finalize failed (non-blocking)", {
+              error: batchErr instanceof Error ? batchErr.message : String(batchErr),
+            });
+          }
+          break;
+        }
+
         // Update booking status to 'booked'
         const { error: updateError } = await supabase
           .from('bookings')
