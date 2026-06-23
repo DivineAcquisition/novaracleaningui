@@ -685,12 +685,13 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
   const nickname = property?.nickname || property?.address || "Property";
   const assignmentType = (tr.assignment_type as string) || "auto";
 
-  // 1. Cleaner SMS - reply YES to confirm.
+  // 1. Cleaner SMS - reply YES to confirm. Access codes are NOT included in
+  // the text; the cleaner sees them in the authenticated app once assigned.
   if (cleaner?.phone) {
     await sendSms(admin, {
       toPhone: cleaner.phone,
       type: "job_offer",
-      message: `New turnover assigned: ${nickname}, ${property?.address || ""}. ${dateLabel}${windowLabel ? ` between ${windowLabel}` : ""}. Pay: ${share}. Reply YES to confirm. Access: ${property?.access_instructions || "see app"}.`,
+      message: `New turnover: ${nickname}, ${property?.address || ""}. ${dateLabel}${windowLabel ? ` between ${windowLabel}` : ""}. Pay: ${share}. Reply YES to confirm. Access details + checklist: https://app.novaracleaning.com/cleaner/turnovers`,
     });
   }
 
