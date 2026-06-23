@@ -17,6 +17,12 @@ import { updateSession } from "@/integrations/supabase/middleware";
 //                                    verification → ob-portal → ID/W-9/etc),
 //                                    sign-in, dashboard, mobile-dashboard,
 //                                    jobs, password reset
+//   partner.novaracleaning.com    — Airbnb/STR host turnover portal:
+//                                    host signup/login, properties, turnover
+//                                    requests, weekly schedule, dashboard,
+//                                    and its own auth callback. Owns ONLY
+//                                    /partner/* — everything else 308s away,
+//                                    and /partner/* is served ONLY here.
 //
 // hiring.novaracleaning.com is NOT served by this Next.js app — it is
 // hosted on Framer. DNS for hiring.* points away from this project.
@@ -64,11 +70,13 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/auth", "app"],
   ["/membership/success", "app"],
 
-  // Public marketing + booking funnel (try.*). /book/confirmation stays
-  // on try so the entire Stripe-checkout-return flow keeps a single host.
-  // Partner (Airbnb/STR host) turnover portal — its own subdomain.
+  // Partner (Airbnb/STR host) turnover portal — its own subdomain. Owns the
+  // whole /partner/* tree, including its auth callback (/partner/auth/callback).
+  // Listed before the try.* marketing prefixes so it can never fall through.
   ["/partner", "partner"],
 
+  // Public marketing + booking funnel (try.*). /book/confirmation stays
+  // on try so the entire Stripe-checkout-return flow keeps a single host.
   ["/book", "try"],
   ["/membership", "try"], // /membership and /membership/[planId] browse
   ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
@@ -84,25 +92,28 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   partner: "/partner",
 };
 
-// Paths that ALL subdomains may serve (system / OAuth callbacks /
-// long-lived deep links). Never redirect or rewrite these.
+// Paths that ALL subdomains may serve (framework / static / crawler files).
+// These are truly host-agnostic and must never be redirected or rewritten.
 //
-// Strict separation note — each portal has its OWN OAuth callback so
-// a Google sign-in started on one subdomain can NEVER land on
-// another portal's dashboard:
+// NOTE: OAuth / magic-link callbacks are intentionally NOT global. Each
+// portal's callback lives under that portal's owned prefix, so it is served
+// ONLY on its owning subdomain and 308-redirected anywhere else. This keeps
+// a sign-in started on one subdomain from EVER landing on another portal:
 //
-//   app.novaracleaning.com/auth/callback         → customer (/account)
-//   contractor.novaracleaning.com/cleaner/auth/callback → cleaner
-//   admin.novaracleaning.com/admin/auth/callback → admin (has_role gate)
+//   app.novaracleaning.com/auth/callback                 → customer (/account)
+//   contractor.novaracleaning.com/cleaner/auth/callback  → cleaner
+//   admin.novaracleaning.com/admin/auth/callback         → admin (has_role gate)
+//   partner.novaracleaning.com/partner/auth/callback     → host portal
+//
+// (308 preserves the ?code= query and the browser preserves the URL hash, so
+// a callback that somehow lands on the wrong host still completes after the
+// redirect to its owner.)
 const GLOBAL_ALLOWLIST = [
   "/api",
   "/_next",
   "/favicon",
   "/robots.txt",
   "/sitemap.xml",
-  "/auth/callback",
-  "/cleaner/auth/callback",
-  "/admin/auth/callback",
 ];
 
 function ownerOf(pathname: string): SubdomainKey {
