@@ -4,7 +4,7 @@
 //
 // One design language for every Novara auth surface (customer, cleaner,
 // admin, partner, password recovery). A split-screen layout: an aurora
-// brand panel (purple ramp #4F38FF/#6A57FF/#9A8CFF, glass value-prop chips,
+// brand panel (brand purple #5C0FFE → #8F7BFD, glass value-prop chips,
 // tabular-mono trust stats, one signature aurora-drift motion that honors
 // prefers-reduced-motion) beside a clean light form surface.
 //
@@ -14,10 +14,10 @@
 import * as React from "react";
 
 // Brand tokens — purple used as a scalpel, not a flood.
-export const AUTH_GRADIENT = "linear-gradient(135deg,#4F38FF 0%,#6A57FF 100%)";
+export const AUTH_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 export const AUTH_INPUT_CLS =
   "h-11 pl-10 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 " +
-  "focus-visible:border-[#6A57FF] focus-visible:ring-2 focus-visible:ring-[#6A57FF]/25";
+  "focus-visible:border-[#8F7BFD] focus-visible:ring-2 focus-visible:ring-[#8F7BFD]/30";
 
 const LOGO_SRC = "/novara-email-logo.png";
 
@@ -77,13 +77,13 @@ function BrandPanel({
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(55% 45% at 16% 12%, rgba(106,87,255,.55), transparent 60%)," +
-              "radial-gradient(45% 40% at 90% 18%, rgba(154,140,255,.32), transparent 60%)," +
-              "radial-gradient(70% 65% at 78% 98%, rgba(79,56,255,.5), transparent 62%)",
+              "radial-gradient(55% 45% at 16% 12%, rgba(143,123,253,.55), transparent 60%)," +
+              "radial-gradient(45% 40% at 90% 18%, rgba(171,158,253,.32), transparent 60%)," +
+              "radial-gradient(70% 65% at 78% 98%, rgba(92,15,254,.55), transparent 62%)",
           }}
         />
-        <div className="nv-auth-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(106,87,255,.45)" }} />
-        <div className="nv-auth-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(79,56,255,.4)" }} />
+        <div className="nv-auth-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(143,123,253,.45)" }} />
+        <div className="nv-auth-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(92,15,254,.45)" }} />
         <div
           className="absolute inset-0 opacity-[0.05]"
           style={{
@@ -164,7 +164,7 @@ export function AuthScaffold({
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-40 lg:hidden"
-          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(106,87,255,.10), transparent 70%)" }}
+          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(92,15,254,.10), transparent 70%)" }}
         />
         <div className="relative w-full max-w-[400px] space-y-8">
           <div className="flex flex-col items-center gap-2 lg:hidden">

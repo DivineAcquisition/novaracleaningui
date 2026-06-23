@@ -48,7 +48,7 @@ import { cn } from "@/lib/utils";
 
 // Brand ramp — matches the auth surfaces so the whole product reads as one
 // design language (purple as a precise accent on a clean light shell).
-const RAMP = "linear-gradient(135deg,#4F38FF 0%,#6A57FF 100%)";
+const RAMP = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 
 interface NavItem {
   title: string;
@@ -218,7 +218,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 min-w-0">
             {active ? (
               <>
-                <span className="w-7 h-7 rounded-lg text-[#4F38FF] inline-flex items-center justify-center shrink-0" style={{ background: "rgba(79,56,255,0.10)" }}>
+                <span className="w-7 h-7 rounded-lg text-[#5C0FFE] inline-flex items-center justify-center shrink-0" style={{ background: "rgba(92,15,254,0.10)" }}>
                   <active.icon className="w-4 h-4" />
                 </span>
                 <h1 className="font-jakarta text-sm font-semibold text-slate-900 truncate tracking-tight">
@@ -260,11 +260,11 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(120% 100% at 0% 0%, rgba(79,56,255,0.08), transparent 70%)" }}
+          style={{ background: "radial-gradient(120% 100% at 0% 0%, rgba(92,15,254,0.08), transparent 70%)" }}
         />
       )}
       <img src="/novara-email-logo.png" alt="Novara" className="relative h-[22px] w-auto" />
-      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#4F38FF]" style={{ background: "rgba(79,56,255,0.10)" }}>
+      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#5C0FFE]" style={{ background: "rgba(92,15,254,0.10)" }}>
         Admin
       </span>
     </div>
@@ -286,7 +286,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
             className={cn(
               "group relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
               isActive
-                ? "bg-[#4F38FF]/[0.07] text-[#4F38FF] font-semibold"
+                ? "bg-[#5C0FFE]/[0.07] text-[#5C0FFE] font-semibold"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70",
             )}
           >
@@ -297,7 +297,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
               className={cn(
                 "w-8 h-8 rounded-md flex items-center justify-center transition-all",
                 isActive
-                  ? "text-white shadow-[0_2px_6px_-1px_rgba(79,56,255,0.5)]"
+                  ? "text-white shadow-[0_2px_6px_-1px_rgba(92,15,254,0.5)]"
                   : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700",
               )}
               style={isActive ? { background: RAMP } : undefined}
@@ -310,7 +310,7 @@ function SidebarNav({ pathname }: { pathname: string | null }) {
                 className={cn(
                   "text-[11px] leading-tight truncate",
                   isActive
-                    ? "text-[#4F38FF]/70"
+                    ? "text-[#5C0FFE]/70"
                     : "text-slate-400 group-hover:text-slate-500",
                 )}
               >

@@ -139,7 +139,7 @@ export default function UpdatePassword() {
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC] px-4">
         <SEO title="Verifying reset link" description="Verifying your password reset link." noindex />
         <div className="flex flex-col items-center gap-3 text-slate-500">
-          <RiLoader4Line className="h-7 w-7 animate-spin text-[#4F38FF]" />
+          <RiLoader4Line className="h-7 w-7 animate-spin text-[#5C0FFE]" />
           <p className="text-sm">Verifying your reset link…</p>
         </div>
       </div>
@@ -151,12 +151,12 @@ export default function UpdatePassword() {
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC] px-4 py-6">
         <SEO title="Password updated" noindex />
         <AuthCard className="w-full max-w-sm text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg shadow-[#4F38FF]/25" style={{ background: AUTH_GRADIENT }}>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg shadow-[#5C0FFE]/25" style={{ background: AUTH_GRADIENT }}>
             <RiCheckboxCircleLine className="h-7 w-7" />
           </div>
           <h2 className="mt-4 font-jakarta text-xl font-bold tracking-tight text-slate-900">Password updated!</h2>
           <p className="mt-1 text-sm text-slate-500">Redirecting to your account…</p>
-          <RiLoader4Line className="mx-auto mt-4 h-5 w-5 animate-spin text-[#4F38FF]" />
+          <RiLoader4Line className="mx-auto mt-4 h-5 w-5 animate-spin text-[#5C0FFE]" />
         </AuthCard>
       </div>
     );
@@ -240,7 +240,7 @@ export default function UpdatePassword() {
 
           <Button
             type="submit"
-            className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95"
+            className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95"
             style={{ background: AUTH_GRADIENT }}
             disabled={isLoading || password !== confirmPassword}
           >

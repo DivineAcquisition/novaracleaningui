@@ -161,14 +161,14 @@ export default function AdminAuth() {
                 <Input id="admin-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} autoComplete="current-password" required />
               </div>
             </div>
-            <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+            <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
               {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Verifying…</> : <>Sign in<RiArrowRightLine className="ml-2 h-4 w-4" /></>}
             </Button>
           </form>
 
           <p className="text-center text-xs text-slate-500">
             Admin access only · Lost access? Email{" "}
-            <a className="text-[#4F38FF] hover:underline" href="mailto:support@novaracleaning.com">support@novaracleaning.com</a>
+            <a className="text-[#5C0FFE] hover:underline" href="mailto:support@novaracleaning.com">support@novaracleaning.com</a>
           </p>
         </div>
       </AuthCard>

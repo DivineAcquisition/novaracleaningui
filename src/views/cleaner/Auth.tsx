@@ -189,7 +189,7 @@ export default function CleanerAuth() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC]">
         <div className="text-center">
-          <RiLoader4Line className="mx-auto mb-4 h-8 w-8 animate-spin text-[#4F38FF]" />
+          <RiLoader4Line className="mx-auto mb-4 h-8 w-8 animate-spin text-[#5C0FFE]" />
           <p className="text-sm text-slate-500">Checking session…</p>
         </div>
       </div>
@@ -247,19 +247,19 @@ export default function CleanerAuth() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="signin-password" className="text-slate-700">Password</Label>
-                    <Link href="/cleaner/reset-password" className="text-xs font-medium text-[#4F38FF] hover:underline">Forgot password?</Link>
+                    <Link href="/cleaner/reset-password" className="text-xs font-medium text-[#5C0FFE] hover:underline">Forgot password?</Link>
                   </div>
                   <div className="relative">
                     <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <Input id="signin-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
                   </div>
                 </div>
-                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Signing in…</> : "Sign In"}
                 </Button>
                 <p className="text-center text-xs text-slate-500">
                   Joined via invite link?{" "}
-                  <Link href="/cleaner/reset-password" className="text-[#4F38FF] hover:underline">Set your password</Link>{" "}or use Google.
+                  <Link href="/cleaner/reset-password" className="text-[#5C0FFE] hover:underline">Set your password</Link>{" "}or use Google.
                 </p>
               </form>
             </TabsContent>
@@ -281,7 +281,7 @@ export default function CleanerAuth() {
                   </div>
                   <p className="text-xs text-slate-400">Must be at least 6 characters</p>
                 </div>
-                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Creating account…</> : <><RiSparklingLine className="mr-2 h-4 w-4" />Join Our Team</>}
                 </Button>
                 <p className="text-center text-xs text-slate-500">You'll complete your profile after signing up.</p>
@@ -293,7 +293,7 @@ export default function CleanerAuth() {
 
       <p className="text-center text-xs text-slate-500">
         Looking to book a cleaning?{" "}
-        <Link href="/auth" className="font-medium text-[#4F38FF] hover:underline">Customer Portal →</Link>
+        <Link href="/auth" className="font-medium text-[#5C0FFE] hover:underline">Customer Portal →</Link>
       </p>
     </AuthScaffold>
   );

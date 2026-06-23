@@ -17,6 +17,7 @@ import { z } from "zod";
 import { SEO } from "@/components/SEO";
 import { AuthScaffold, AuthCard, GoogleIcon, AUTH_INPUT_CLS, AUTH_GRADIENT } from "@/components/auth/AuthScaffold";
 
+// (accent color references below use #5C0FFE to match the brand scheme)
 const CUSTOMER_FEATURES = [
   { icon: RiShieldCheckLine, label: "Google Guaranteed", desc: "Fully insured and background-checked crews." },
   { icon: RiStarLine, label: "Loved by clients", desc: "4.9 average rating across 500+ cleans." },
@@ -158,14 +159,14 @@ export default function Auth() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="signin-password" className="text-slate-700">Password</Label>
-                    <Link href="/reset-password" className="text-xs font-medium text-[#4F38FF] hover:underline">Forgot password?</Link>
+                    <Link href="/reset-password" className="text-xs font-medium text-[#5C0FFE] hover:underline">Forgot password?</Link>
                   </div>
                   <div className="relative">
                     <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <Input id="signin-password" type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
                   </div>
                 </div>
-                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Signing in…</> : "Sign In"}
                 </Button>
               </form>
@@ -188,7 +189,7 @@ export default function Auth() {
                   </div>
                   <p className="text-xs text-slate-400">Must be at least 6 characters</p>
                 </div>
-                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#4F38FF]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Creating account…</> : <><RiSparklingLine className="mr-2 h-4 w-4" />Create Account</>}
                 </Button>
               </form>
@@ -200,7 +201,7 @@ export default function Auth() {
       <div className="space-y-2 text-center">
         <p className="text-xs text-slate-500">
           Are you a cleaner?{" "}
-          <Link href="/cleaner/auth" className="font-medium text-[#4F38FF] hover:underline">Cleaner Portal</Link>
+          <Link href="/cleaner/auth" className="font-medium text-[#5C0FFE] hover:underline">Cleaner Portal</Link>
         </p>
         <p className="text-[11px] text-slate-400">By continuing, you agree to our Terms of Service and Privacy Policy.</p>
       </div>
