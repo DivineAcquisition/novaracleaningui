@@ -126,8 +126,17 @@ serve(async (req) => {
       return await handleFinalize(admin, body, origin);
     }
     if (action === "cleaner.confirm" || action === "cleaner.checkin" || action === "cleaner.complete") {
-      if (!isInternal) return json({ error: "Forbidden" }, 403);
-      return await handleCleanerLifecycle(admin, action, body);
+      // Internal callers (sms-inbound) pass cleanerId explicitly. Cleaner-app
+      // callers are identified by their auth user → cleaners.user_id, and can
+      // only act on their own assignment (enforced in handleCleanerLifecycle).
+      let actingCleanerId = body.cleanerId as string | undefined;
+      if (!isInternal) {
+        if (!userId) return json({ error: "Not signed in" }, 401);
+        const { data: c } = await admin.from("cleaners").select("id").eq("user_id", userId).maybeSingle();
+        if (!c) return json({ error: "Cleaner profile not found" }, 403);
+        actingCleanerId = c.id;
+      }
+      return await handleCleanerLifecycle(admin, action, { ...body, cleanerId: actingCleanerId });
     }
 
     if (!userId) return json({ error: "Not signed in" }, 401);
