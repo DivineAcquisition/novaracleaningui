@@ -14,7 +14,8 @@ import { format } from "date-fns";
 import {
   RiHome4Line, RiAddLine, RiLoader4Line, RiCalendarLine, RiMapPinLine,
   RiLogoutBoxRLine, RiCheckboxCircleLine, RiTimeLine, RiEditLine, RiSparklingLine,
-  RiMailSendLine,
+  RiMailSendLine, RiLockLine, RiUser3Line, RiPhoneLine, RiMailLine,
+  RiShieldCheckLine, RiArrowRightLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
@@ -77,6 +78,38 @@ export default function PartnerPortal() {
   return session ? <Dashboard /> : <AuthScreen />;
 }
 
+// ─── Shared auth shell (premium gradient backdrop) ─────────────────────────
+function AuthShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="min-h-screen relative flex items-center justify-center px-4 py-10 overflow-hidden"
+      style={{ background: "linear-gradient(140deg,#1B0B45 0%,#5500FF 52%,#3D00B8 100%)" }}
+    >
+      {/* Decorative blurred glows for depth */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-28 -left-24 w-[22rem] h-[22rem] rounded-full blur-3xl opacity-40" style={{ background: "#918CFF" }} />
+        <div className="absolute -bottom-36 -right-20 w-[26rem] h-[26rem] rounded-full blur-3xl opacity-30" style={{ background: "#C4B5FD" }} />
+        <div className="absolute top-1/3 right-1/3 w-44 h-44 rounded-full blur-2xl opacity-20" style={{ background: "#FFFFFF" }} />
+      </div>
+      <div className="relative w-full max-w-md">{children}</div>
+    </div>
+  );
+}
+
+// Official multicolor Google "G" so the OAuth button reads as authentic.
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
+      <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
+      <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
+      <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
+    </svg>
+  );
+}
+
+const PURPLE_GRADIENT = "linear-gradient(135deg,#5500FF 0%,#7C3AED 100%)";
+
 // ─── Set a new password (recovery) ─────────────────────────────────────────
 function SetPasswordForm({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState("");
@@ -92,19 +125,29 @@ function SetPasswordForm({ onDone }: { onDone: () => void }) {
     onDone();
   };
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#EDE9FE] to-white flex items-center justify-center px-4">
+    <AuthShell>
       <SEO title="Set a new password" noindex />
-      <Card className="w-full max-w-md shadow-xl border-0">
-        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5500FF,#918CFF)" }} />
-        <CardHeader className="text-center pt-8"><CardTitle className="text-2xl">Set a new password</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div><Label>New password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></div>
-          <Button onClick={submit} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
+      <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl ring-1 ring-white/40 overflow-hidden">
+        <div className="h-1.5 w-full" style={{ background: PURPLE_GRADIENT }} />
+        <div className="px-7 pt-8 pb-7 space-y-5">
+          <div className="text-center space-y-2">
+            <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-7 w-auto mx-auto" />
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Set a new password</h1>
+            <p className="text-sm text-slate-500">Choose a strong password for your host account.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-slate-700">New password</Label>
+            <div className="relative">
+              <RiLockLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="pl-10 h-11" />
+            </div>
+          </div>
+          <Button onClick={submit} disabled={busy} className="w-full h-11 text-white font-semibold shadow-lg shadow-violet-500/25 hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
             {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Update password"}
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </div>
+    </AuthShell>
   );
 }
 
@@ -118,8 +161,26 @@ function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   const cleanEmail = () => email.trim().toLowerCase();
+
+  const doGoogle = async () => {
+    setGoogleBusy(true);
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://partner.novaracleaning.com";
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${origin}/partner/auth/callback`,
+        queryParams: { access_type: "offline", prompt: "consent" },
+      },
+    });
+    // On success the browser redirects to Google, so we only reach here on error.
+    if (error) {
+      toast.error(error.message || "Could not start Google sign-in");
+      setGoogleBusy(false);
+    }
+  };
 
   const doSignup = async () => {
     if (!name.trim() || digits(phone).length < 10) { toast.error("Add your name and phone."); return; }
@@ -167,65 +228,132 @@ function AuthScreen() {
     toast.success("Confirmation email resent.");
   };
 
+  const primaryLabel = mode === "signup" ? "Create account" : mode === "forgot" ? "Send reset link" : "Sign in";
+  const headline = mode === "login" ? "Welcome back" : mode === "forgot" ? "Reset your password" : "Create your host account";
+  const subline =
+    mode === "login" ? "Sign in to manage your turnovers."
+    : mode === "forgot" ? "We'll email you a secure reset link."
+    : "Turnover cleanings for your rentals — booked in seconds.";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#EDE9FE] to-white flex items-center justify-center px-4">
+    <AuthShell>
       <SEO title="Host Portal" description="Request Airbnb & short-term-rental turnover cleanings." noindex />
-      <Card className="w-full max-w-md shadow-xl border-0">
-        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5500FF,#918CFF)" }} />
-        <CardHeader className="text-center space-y-1 pt-8">
-          <div className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center mb-1" style={{ background: "#5500FF" }}>
-            <RiSparklingLine className="w-6 h-6 text-white" />
+
+      {/* Brand mark above the card */}
+      <div className="text-center mb-5">
+        <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-8 w-auto mx-auto drop-shadow-sm" style={{ filter: "brightness(0) invert(1)" }} />
+        <p className="text-white/70 text-xs font-medium tracking-[0.18em] uppercase mt-2">Host Portal</p>
+      </div>
+
+      <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl ring-1 ring-white/40 overflow-hidden">
+        <div className="h-1.5 w-full" style={{ background: PURPLE_GRADIENT }} />
+        <div className="px-7 pt-7 pb-7 space-y-5">
+          <div className="text-center space-y-1.5">
+            <div className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30" style={{ background: PURPLE_GRADIENT }}>
+              <RiSparklingLine className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 pt-1">{headline}</h1>
+            <p className="text-sm text-slate-500">{subline}</p>
           </div>
-          <CardTitle className="text-2xl">Novara Host Portal</CardTitle>
-          <p className="text-sm text-muted-foreground">Turnover cleanings for your rentals — booked in seconds.</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
+
           {mode === "check-email" ? (
             <div className="text-center space-y-4 py-2">
-              <div className="mx-auto w-14 h-14 rounded-2xl bg-[#EDE9FE] flex items-center justify-center">
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center">
                 <RiMailSendLine className="w-7 h-7" style={{ color: "#5500FF" }} />
               </div>
               <div>
-                <p className="font-semibold">Check your email</p>
-                <p className="text-sm text-muted-foreground mt-1">We sent a confirmation link to <span className="font-medium">{cleanEmail() || "your inbox"}</span>. Click it to finish setting up your account.</p>
+                <p className="font-semibold text-slate-900">Check your email</p>
+                <p className="text-sm text-slate-500 mt-1">We sent a confirmation link to <span className="font-medium text-slate-700">{cleanEmail() || "your inbox"}</span>. Click it to finish setting up your account.</p>
               </div>
-              <Button variant="outline" className="w-full" onClick={resendConfirm}>Resend confirmation</Button>
-              <button className="text-sm text-primary underline" onClick={() => setMode("login")}>Back to sign in</button>
+              <Button variant="outline" className="w-full h-11" onClick={resendConfirm}>Resend confirmation</Button>
+              <button className="text-sm text-[#5500FF] font-medium hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
             </div>
           ) : (
             <>
-              {mode === "signup" && (
+              {/* Google OAuth — works for both sign in and sign up */}
+              {mode !== "forgot" && (
                 <>
-                  <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" /></div>
-                  <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" /></div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={doGoogle}
+                    disabled={googleBusy || busy}
+                    className="w-full h-11 gap-2.5 border-slate-200 text-slate-700 font-semibold hover:bg-slate-50"
+                  >
+                    {googleBusy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <GoogleIcon className="w-5 h-5" />}
+                    Continue with Google
+                  </Button>
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">or {mode === "signup" ? "sign up" : "sign in"} with email</span>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
                 </>
               )}
-              <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" /></div>
+
+              {mode === "signup" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-700">Name</Label>
+                    <div className="relative">
+                      <RiUser3Line className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="pl-10 h-11" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-slate-700">Phone</Label>
+                    <div className="relative">
+                      <RiPhoneLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" className="pl-10 h-11" />
+                    </div>
+                  </div>
+                </>
+              )}
+              <div className="space-y-1.5">
+                <Label className="text-slate-700">Email</Label>
+                <div className="relative">
+                  <RiMailLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" className="pl-10 h-11" />
+                </div>
+              </div>
               {mode !== "forgot" && (
-                <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></div>
+                <div className="space-y-1.5">
+                  <Label className="text-slate-700">Password</Label>
+                  <div className="relative">
+                    <RiLockLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="pl-10 h-11" />
+                  </div>
+                </div>
               )}
               {mode === "login" && (
                 <div className="text-right -mt-1">
-                  <button className="text-xs text-primary underline" onClick={() => setMode("forgot")}>Forgot password?</button>
+                  <button className="text-xs text-[#5500FF] font-medium hover:underline" onClick={() => setMode("forgot")}>Forgot password?</button>
                 </div>
               )}
-              <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy} className="w-full h-11" style={{ background: "#5500FF" }}>
-                {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : mode === "signup" ? "Create account" : mode === "forgot" ? "Send reset link" : "Sign in"}
+              <Button onClick={mode === "signup" ? doSignup : mode === "forgot" ? doForgot : doLogin} disabled={busy || googleBusy} className="w-full h-11 text-white font-semibold shadow-lg shadow-violet-500/25 hover:opacity-95" style={{ background: PURPLE_GRADIENT }}>
+                {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : (<>{primaryLabel}<RiArrowRightLine className="w-4 h-4 ml-1.5" /></>)}
               </Button>
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-sm text-slate-500">
                 {mode === "forgot" ? (
-                  <button className="text-primary font-medium underline" onClick={() => setMode("login")}>Back to sign in</button>
+                  <button className="text-[#5500FF] font-semibold hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
                 ) : mode === "signup" ? (
-                  <>Already have an account? <button className="text-primary font-medium underline" onClick={() => setMode("login")}>Sign in</button></>
+                  <>Already have an account? <button className="text-[#5500FF] font-semibold hover:underline" onClick={() => setMode("login")}>Sign in</button></>
                 ) : (
-                  <>New here? <button className="text-primary font-medium underline" onClick={() => setMode("signup")}>Create one</button></>
+                  <>New here? <button className="text-[#5500FF] font-semibold hover:underline" onClick={() => setMode("signup")}>Create one</button></>
                 )}
               </p>
             </>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </div>
+
+      {/* Trust strip */}
+      <div className="flex items-center justify-center gap-5 mt-6 text-white/75 text-xs">
+        <span className="flex items-center gap-1.5"><RiShieldCheckLine className="w-4 h-4" /> Vetted cleaners</span>
+        <span className="flex items-center gap-1.5"><RiCheckboxCircleLine className="w-4 h-4" /> Secure payments</span>
+        <span className="flex items-center gap-1.5"><RiTimeLine className="w-4 h-4" /> Guest-ready turnovers</span>
+      </div>
+    </AuthShell>
   );
 }
 

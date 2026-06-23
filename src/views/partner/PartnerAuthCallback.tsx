@@ -18,7 +18,15 @@ export default function PartnerAuthCallback() {
   useEffect(() => {
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // OAuth (Google) returns a ?code that supabase-js exchanges for a
+        // session via detectSessionInUrl. That can lag the first getSession()
+        // read, so retry briefly before giving up — otherwise a valid Google
+        // sign-in bounces back to the login screen.
+        let session = (await supabase.auth.getSession()).data.session;
+        for (let i = 0; i < 5 && !session; i++) {
+          await new Promise((r) => setTimeout(r, 500));
+          session = (await supabase.auth.getSession()).data.session;
+        }
         if (!session) { router.replace("/partner"); return; }
 
         const hashType = new URLSearchParams(window.location.hash.substring(1)).get("type");
