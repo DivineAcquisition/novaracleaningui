@@ -595,6 +595,7 @@ export default function VaBooking() {
       if (data?.error) throw new Error(data.error);
       if (!data?.url) throw new Error("No subscription checkout URL returned");
 
+      const notify = (data?.notify || {}) as { sms?: boolean; email?: boolean };
       setResult({
         membershipCheckout: true,
         url: data.url,
@@ -603,8 +604,15 @@ export default function VaBooking() {
         monthlyEstimateCents: pricing.totalCents,
         depositCents: priceOverride.deposit ?? 0,
         overrideApplied: priceOverride.total != null,
+        notifySms: !!notify.sms,
+        notifyEmail: !!notify.email,
       });
-      toast.success("Subscription link ready — send it to the customer to start their membership.");
+      const channels = [notify.sms ? "text" : null, notify.email ? "email" : null].filter(Boolean);
+      toast.success(
+        channels.length
+          ? `Membership link sent to the customer by ${channels.join(" & ")}.`
+          : "Subscription link ready — send it to the customer to start their membership.",
+      );
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to create subscription link: ${m}`);
@@ -791,8 +799,14 @@ export default function VaBooking() {
               {planLabel} — {`${firstName} ${lastName}`.trim() || email}
             </CardTitle>
             <CardDescription className="mt-1">
-              Send this secure link to the customer to start their recurring
-              membership. Their first clean auto-books once they subscribe.
+              {result.notifySms || result.notifyEmail ? (
+                <>We sent the secure signup link to the customer by{" "}
+                  {[result.notifySms ? "text" : null, result.notifyEmail ? "email" : null].filter(Boolean).join(" & ")}.
+                  Their first clean auto-books once they subscribe. You can resend below if needed.</>
+              ) : (
+                <>Send this secure link to the customer to start their recurring
+                  membership. Their first clean auto-books once they subscribe.</>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pb-8">

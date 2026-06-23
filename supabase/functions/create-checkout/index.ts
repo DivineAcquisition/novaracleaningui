@@ -32,6 +32,8 @@ import {
   createOpportunity,
   fmtMoney,
 } from "../_shared/ghl-client.ts";
+import { buildGhlCustomFields } from "../_shared/ghl-field-map.ts";
+import { sendSms } from "../_shared/sms.ts";
 
 const ADD_ON_PRICING: Record<string, { label: string; price: number }> = {
   fridge:  { label: "Inside Fridge",     price: SHARED_ADD_ONS.fridge.price },
@@ -293,22 +295,53 @@ serve(async (req) => {
           const GLOW_LABEL: Record<string, string> = {
             monthly: "Monthly", biweekly: "Bi-Weekly", weekly: "Weekly",
           };
-          const FREQ_LABEL: Record<string, string> = {
-            monthly: "Monthly", biweekly: "Bi-Weekly", weekly: "Weekly",
-          };
           const leadName = [bodyFirstName, bodyLastName].filter(Boolean).join(" ").trim();
+
+          // Build the FULL, canonical custom-field bag — the exact same mapper
+          // one-time customer bookings use — so a recurring/membership internal
+          // booking maps with the same fields and formatting (service date/
+          // time, home size, address market, deposit, csr, billing/service
+          // frequency, monthly totals, etc.). Previously the recurring path
+          // sent a thin ~12-field subset, so the CRM record looked half-empty
+          // and inconsistent with customer bookings.
+          const baseFields = buildGhlCustomFields({
+            booking: {
+              email: email || undefined,
+              phone: bodyPhone || undefined,
+              first_name: bodyFirstName || undefined,
+              last_name: bodyLastName || undefined,
+              service_type: "standard",
+              service_date: firstServiceDate ? String(firstServiceDate) : undefined,
+              time_slot: (firstTimeSlot || preferredTimeWindow)
+                ? String(firstTimeSlot || preferredTimeWindow)
+                : undefined,
+              home_size_id: homeSizeId,
+              membership_plan: membershipPlan,
+              base_price_cents: monthlyPriceCents,
+              total_estimate_cents: monthlyPriceCents,
+              deposit_cents: collectsDeposit ? depositCents : 0,
+              payment_option: collectsDeposit ? "deposit" : "full",
+              address: bodyAddress || undefined,
+              city: bodyCity || undefined,
+              state: bodyState || undefined,
+              zip_code: bodyZip || undefined,
+              sdr_rep_name: csrName ? String(csrName) : undefined,
+              booking_channel: "internal",
+              status: "pending_payment",
+            },
+            cleaners: [],
+            stripeCustomerId: customerId || undefined,
+          });
+
+          // Membership-lead specifics that override the generic mapper:
+          // the lead hasn't paid yet (mapper would mark a plan-bearing row
+          // "Active"), and capture the preferred cadence + headline price.
           const membershipCustomFields = {
-            novara_glow_plan: GLOW_LABEL[membershipPlan] || "",
-            billing_frequency: "Monthly",
-            service_frequency: FREQ_LABEL[membershipPlan] || "",
+            ...baseFields,
             membership_status: "Not Started",
             membership_plan: membershipPlan,
+            novara_glow_plan: GLOW_LABEL[membershipPlan] || "",
             monthly_membership_price: fmtMoney(monthlyPriceCents),
-            monthly_subscription_total_: fmtMoney(monthlyPriceCents),
-            cleaning_type: "Standard Cleaning",
-            csr_name: csrName ? String(csrName) : "",
-            market: bodyState || "",
-            customer_source: "Novara Membership",
             preferred_day_of_week: preferredDayOfWeek ? String(preferredDayOfWeek) : "",
             preferred_time_window: preferredTimeWindow ? String(preferredTimeWindow) : "",
           };
@@ -406,8 +439,57 @@ serve(async (req) => {
         invoiceMode: invoiceMode || null,
       });
 
+      // ─── Send the checkout link to the CUSTOMER (not just the admin) ────
+      // Internal bookings previously only surfaced the link to the VA, so the
+      // customer never received it. Text + email the link to the customer by
+      // default (caller can opt out with notifyCustomer:false). Best-effort —
+      // a delivery hiccup never blocks returning the link to the admin.
+      const notify: { sms: boolean; email: boolean } = { sms: false, email: false };
+      const wantNotify = body.notifyCustomer !== false;
+      if (wantNotify && session.url) {
+        const firstNm = bodyFirstName ? String(bodyFirstName) : "there";
+        const planNm = MEMBERSHIP_PLAN_LABELS[membershipPlan] || planLabel;
+        const dateBit = firstServiceDate ? ` Your first clean is set for ${firstServiceDate}.` : "";
+        if (bodyPhone) {
+          try {
+            notify.sms = await sendSms(supabase, {
+              toPhone: String(bodyPhone),
+              type: "confirmation",
+              message: `Hi ${firstNm}! Here's your secure Novara ${planNm} signup link: ${session.url} — add your card to activate your membership.${dateBit}`,
+            });
+          } catch (smsErr) {
+            logStep("Customer membership SMS failed (non-blocking)", {
+              error: smsErr instanceof Error ? smsErr.message : String(smsErr),
+            });
+          }
+        }
+        if (email) {
+          try {
+            await supabase.functions.invoke("send-membership-email", {
+              body: {
+                type: "checkout_link",
+                email,
+                data: {
+                  name: firstNm,
+                  plan: planNm,
+                  url: session.url,
+                  monthlyAmount: monthlyPriceCents,
+                  depositAmount: collectsDeposit ? depositCents : 0,
+                  firstServiceDate: firstServiceDate ? String(firstServiceDate) : "",
+                },
+              },
+            });
+            notify.email = true;
+          } catch (emailErr) {
+            logStep("Customer membership email failed (non-blocking)", {
+              error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+            });
+          }
+        }
+      }
+
       return new Response(
-        JSON.stringify({ url: session.url, sessionId: session.id }),
+        JSON.stringify({ url: session.url, sessionId: session.id, notify }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
