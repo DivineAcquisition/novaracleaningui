@@ -911,13 +911,20 @@ function PropertyForm({ property, onClose, onSaved }: { property: Property | nul
 }
 
 // ─── Request turnover (modal → one-tap saved card or Stripe checkout) ──────
+type PayOption = "full" | "split" | "pay_after";
+
 function RequestForm({ property, onClose, onPaid }: { property: Property; onClose: () => void; onPaid: () => void }) {
   const [date, setDate] = useState("");
   const [start, setStart] = useState("11:00");
   const [end, setEnd] = useState("15:00");
   const [busy, setBusy] = useState(false);
   const [savedCard, setSavedCard] = useState<{ brand: string; last4: string } | null>(null);
-  const priceLabel = `$${Number(property.turnover_price).toFixed(0)}`;
+  const [payOption, setPayOption] = useState<PayOption>("full");
+
+  const price = Number(property.turnover_price);
+  const fmt = (n: number) => `$${n.toFixed(0)}`;
+  const priceLabel = fmt(price);
+  const halfLabel = fmt(price / 2);
 
   useEffect(() => {
     supabase.functions.invoke("partner-turnover", { body: { action: "turnover.paymentInfo" } })
@@ -927,13 +934,21 @@ function RequestForm({ property, onClose, onPaid }: { property: Property; onClos
       .catch(() => {});
   }, []);
 
-  // Hosted Stripe Checkout (new card, or fallback when one-tap can't charge).
+  // Save a card on file (no charge) — required before a "pay after" turnover.
+  const startSetup = async () => {
+    const { data } = await supabase.functions.invoke("partner-turnover", { body: { action: "host.setupPaymentMethod" } });
+    if ((data as any)?.url) { window.location.href = (data as any).url; return true; }
+    toast.error("Could not open the card-setup page.");
+    setBusy(false);
+    return false;
+  };
+
+  // Hosted Stripe Checkout (new card) — used for full/split when no saved card.
   const checkout = async () => {
-    if (!date) { toast.error("Pick a date."); return; }
-    setBusy(true);
     const { data, error } = await supabase.functions.invoke("partner-turnover", {
-      body: { action: "turnover.request", propertyId: property.id, requested_date: date, window_start: start, window_end: end },
+      body: { action: "turnover.request", propertyId: property.id, requested_date: date, window_start: start, window_end: end, paymentOption: payOption },
     });
+    if ((data as any)?.needsSetup) { await startSetup(); return; }
     if (error || (data as any)?.error || !(data as any)?.url) {
       setBusy(false);
       toast.error((data as any)?.error || "Could not start checkout");
@@ -942,29 +957,48 @@ function RequestForm({ property, onClose, onPaid }: { property: Property; onClos
     window.location.href = (data as any).url;
   };
 
-  // One-tap: charge the saved card off-session; fall back to Checkout if the
-  // card needs authentication or is declined.
-  const oneTap = async () => {
+  const submit = async () => {
     if (!date) { toast.error("Pick a date."); return; }
     setBusy(true);
-    const { data, error } = await supabase.functions.invoke("partner-turnover", {
-      body: { action: "turnover.requestSaved", propertyId: property.id, requested_date: date, window_start: start, window_end: end },
-    });
-    if (error || (data as any)?.error) {
-      setBusy(false);
-      toast.error((data as any)?.error || "Could not complete payment");
+
+    // pay_after never uses Checkout (nothing to charge now); split/full one-tap
+    // when a card is on file, else hosted Checkout.
+    if (payOption === "pay_after" || savedCard) {
+      const { data, error } = await supabase.functions.invoke("partner-turnover", {
+        body: { action: "turnover.requestSaved", propertyId: property.id, requested_date: date, window_start: start, window_end: end, paymentOption: payOption },
+      });
+      if (error || (data as any)?.error) {
+        setBusy(false);
+        toast.error((data as any)?.error || "Could not complete request");
+        return;
+      }
+      if ((data as any)?.paid || (data as any)?.scheduled) {
+        toast.success(payOption === "pay_after" ? "Turnover scheduled — you'll be charged after it's completed." : "Turnover booked — assigning your crew.");
+        onPaid();
+        return;
+      }
+      if ((data as any)?.needsSetup) { await startSetup(); return; }
+      // needsCheckout → hosted Checkout (full/split only).
+      await checkout();
       return;
     }
-    if ((data as any)?.paid) {
-      toast.success("Turnover booked — assigning your crew.");
-      onPaid();
-      return;
-    }
-    // needsCheckout → seamless fallback to hosted Checkout.
     await checkout();
   };
 
   const cardName = savedCard ? `${savedCard.brand[0].toUpperCase()}${savedCard.brand.slice(1)} ••${savedCard.last4}` : "";
+  const cta = (() => {
+    if (busy) return null;
+    if (payOption === "pay_after") return savedCard ? `Schedule — pay ${priceLabel} after` : "Save a card to schedule";
+    const amt = payOption === "split" ? halfLabel : priceLabel;
+    const suffix = payOption === "split" ? " now" : "";
+    return savedCard ? `Pay ${amt}${suffix} with ${cardName}` : `Pay ${amt}${suffix} & request`;
+  })();
+
+  const OPTIONS: { key: PayOption; title: string; sub: string }[] = [
+    { key: "full", title: "Pay in full", sub: `${priceLabel} now` },
+    { key: "split", title: "Split 50/50", sub: `${halfLabel} now · ${halfLabel} on completion` },
+    { key: "pay_after", title: "Pay after", sub: `$0 now · ${priceLabel} when complete` },
+  ];
 
   return (
     <Modal onClose={onClose} title={`Request turnover — ${property.nickname || "Property"}`}>
@@ -978,21 +1012,45 @@ function RequestForm({ property, onClose, onPaid }: { property: Property; onClos
           <div><Label>Checkout time</Label><Input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></div>
           <div><Label>Next check-in by</Label><Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
         </div>
-        {savedCard ? (
-          <>
-            <Button onClick={oneTap} disabled={busy} className="w-full h-11">
-              {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay ${priceLabel} with ${cardName}`}
-            </Button>
-            <button type="button" disabled={busy} onClick={checkout} className="w-full text-center text-xs font-medium text-[#5C0FFE] hover:underline disabled:opacity-50">
-              Use a different card
-            </button>
-          </>
-        ) : (
-          <Button onClick={checkout} disabled={busy} className="w-full h-11">
-            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : `Pay ${priceLabel} & request`}
-          </Button>
+
+        <div className="space-y-1.5">
+          <Label>Payment</Label>
+          <div className="grid gap-1.5">
+            {OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setPayOption(o.key)}
+                className={`flex items-center justify-between rounded-lg border p-2.5 text-left transition-colors ${payOption === o.key ? "border-primary bg-primary/5" : "border-slate-200 hover:bg-slate-50"}`}
+              >
+                <span>
+                  <span className="block text-sm font-medium">{o.title}</span>
+                  <span className="block text-[11px] text-muted-foreground">{o.sub}</span>
+                </span>
+                <span className={`w-4 h-4 rounded-full border-2 shrink-0 ${payOption === o.key ? "border-primary bg-primary" : "border-slate-300"}`} />
+              </button>
+            ))}
+          </div>
+          {payOption === "pay_after" && !savedCard && (
+            <p className="text-[11px] text-amber-600">We'll save a card on file (no charge today) and charge {priceLabel} after the clean is completed.</p>
+          )}
+        </div>
+
+        <Button onClick={submit} disabled={busy} className="w-full h-11">
+          {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : cta}
+        </Button>
+        {savedCard && payOption !== "pay_after" && (
+          <button type="button" disabled={busy} onClick={() => { setBusy(true); checkout(); }} className="w-full text-center text-xs font-medium text-[#5C0FFE] hover:underline disabled:opacity-50">
+            Use a different card
+          </button>
         )}
-        <p className="text-[11px] text-center text-muted-foreground">Your turnover is confirmed once payment succeeds, then we assign your cleaning crew.</p>
+        <p className="text-[11px] text-center text-muted-foreground">
+          {payOption === "pay_after"
+            ? "Charged in full after the cleaner completes the turnover and uploads photos."
+            : payOption === "split"
+              ? "Half now; the remaining half is charged automatically when the turnover is completed."
+              : "Your turnover is confirmed once payment succeeds, then we assign your cleaning crew."}
+        </p>
       </div>
     </Modal>
   );

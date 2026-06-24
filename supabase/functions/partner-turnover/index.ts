@@ -224,8 +224,40 @@ serve(async (req) => {
       }
       if (!body.requested_date) return json({ error: "requested_date required" }, 400);
 
+      // Payment option (spec): 'full' = charge 100% now; 'split' = 50% now +
+      // 50% auto-charged on completion; 'pay_after' = $0 now, full charge on
+      // completion (requires a card on file).
+      const paymentOption = ["full", "split", "pay_after"].includes(body.paymentOption)
+        ? (body.paymentOption as string)
+        : "full";
       const priceCents = Math.round(Number(property.turnover_price) * 100);
+      const depositCents =
+        paymentOption === "split" ? Math.floor(priceCents / 2) : paymentOption === "pay_after" ? 0 : priceCents;
+      const balanceCents = priceCents - depositCents;
 
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+      // pay_after charges nothing now — we just need a card on file to charge on
+      // completion. No card → tell the client to run host.setupPaymentMethod.
+      if (paymentOption === "pay_after") {
+        const card = host.stripe_customer_id ? await getDefaultCard(stripe, host.stripe_customer_id) : null;
+        if (!card) return json({ needsSetup: true });
+        const { data: tr, error: trErr } = await admin.from("turnover_requests").insert({
+          property_id: property.id, host_id: host.id,
+          requested_date: body.requested_date,
+          window_start: body.window_start || null, window_end: body.window_end || null,
+          price: Number(property.turnover_price), status: "pending_payment",
+          notes: (body.notes || "").trim() || null,
+          payment_option: "pay_after", deposit_cents: 0, balance_cents: balanceCents, card_on_file: true,
+        }).select("*").single();
+        if (trErr) return json({ error: trErr.message }, 500);
+        const after = await markPaidAndAssign(admin, tr.id, null);
+        return json({ scheduled: true, turnoverId: tr.id, status: after?.status, assignment_type: after?.assignment_type });
+      }
+
+      // full / split → collect the deposit (50% or 100%) via Checkout, saving
+      // the card so the balance can be charged off-session on completion.
       const { data: tr, error: trErr } = await admin.from("turnover_requests").insert({
         property_id: property.id,
         host_id: host.id,
@@ -235,11 +267,9 @@ serve(async (req) => {
         price: Number(property.turnover_price),
         status: "pending_payment",
         notes: (body.notes || "").trim() || null,
+        payment_option: paymentOption, deposit_cents: depositCents, balance_cents: balanceCents,
       }).select("*").single();
       if (trErr) return json({ error: trErr.message }, 500);
-
-      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
       // Reuse / create the host's Stripe customer for one-tap repeat booking.
       let customerId = host.stripe_customer_id || undefined;
@@ -253,6 +283,10 @@ serve(async (req) => {
         await admin.from("hosts").update({ stripe_customer_id: customerId }).eq("id", host.id);
       }
 
+      const label =
+        paymentOption === "split"
+          ? `Turnover deposit (50%) - ${property.nickname || property.address || "Property"}`
+          : `Turnover - ${property.nickname || property.address || "Property"}`;
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         customer_email: customerId ? undefined : host.email,
@@ -260,19 +294,41 @@ serve(async (req) => {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: `Turnover - ${property.nickname || property.address || "Property"}` },
-            unit_amount: priceCents,
+            product_data: { name: label },
+            unit_amount: depositCents,
           },
           quantity: 1,
         }],
         success_url: `${origin}/partner/turnover/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/partner/dashboard`,
         payment_intent_data: { setup_future_usage: "off_session" },
-        metadata: { kind: "turnover", turnover_id: tr.id, host_id: host.id },
+        metadata: { kind: "turnover", turnover_id: tr.id, host_id: host.id, payment_option: paymentOption },
       });
 
       await admin.from("turnover_requests").update({ stripe_checkout_session_id: session.id }).eq("id", tr.id);
       return json({ url: session.url, turnoverId: tr.id });
+    }
+
+    // --- host.setupPaymentMethod (save a card on file, no charge) -------
+    if (action === "host.setupPaymentMethod") {
+      const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      let customerId = host.stripe_customer_id || undefined;
+      if (!customerId) {
+        const list = host.email ? await stripe.customers.list({ email: host.email, limit: 1 }) : { data: [] };
+        customerId = list.data[0]?.id ||
+          (await stripe.customers.create({ email: host.email || undefined, name: host.name || undefined })).id;
+        await admin.from("hosts").update({ stripe_customer_id: customerId }).eq("id", host.id);
+      }
+      // mode:"setup" collects + saves a card WITHOUT any charge.
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: "setup",
+        success_url: `${origin}/partner/dashboard?card=saved`,
+        cancel_url: `${origin}/partner/dashboard`,
+        metadata: { kind: "host_setup", host_id: host.id },
+      });
+      return json({ url: session.url });
     }
 
     // --- turnover.paymentInfo (does the host have a card on file?) -------
@@ -298,15 +354,21 @@ serve(async (req) => {
       }
       if (!body.requested_date) return json({ error: "requested_date required" }, 400);
 
+      const paymentOption = ["full", "split", "pay_after"].includes(body.paymentOption)
+        ? (body.paymentOption as string)
+        : "full";
       const priceCents = Math.round(Number(property.turnover_price) * 100);
+      const depositCents =
+        paymentOption === "split" ? Math.floor(priceCents / 2) : paymentOption === "pay_after" ? 0 : priceCents;
+      const balanceCents = priceCents - depositCents;
       const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
-      // Need a saved card to charge off-session; otherwise tell the client
-      // to fall back to the hosted Checkout flow.
-      if (!host.stripe_customer_id) return json({ needsCheckout: true });
+      // Need a saved card to charge off-session; otherwise tell the client to
+      // fall back to Checkout (or the setup flow for pay_after).
+      if (!host.stripe_customer_id) return json(paymentOption === "pay_after" ? { needsSetup: true } : { needsCheckout: true });
       const card = await getDefaultCard(stripe, host.stripe_customer_id);
-      if (!card) return json({ needsCheckout: true });
+      if (!card) return json(paymentOption === "pay_after" ? { needsSetup: true } : { needsCheckout: true });
 
       const { data: tr, error: trErr } = await admin.from("turnover_requests").insert({
         property_id: property.id,
@@ -317,20 +379,31 @@ serve(async (req) => {
         price: Number(property.turnover_price),
         status: "pending_payment",
         notes: (body.notes || "").trim() || null,
+        payment_option: paymentOption, deposit_cents: depositCents, balance_cents: balanceCents,
+        card_on_file: true,
       }).select("*").single();
       if (trErr) return json({ error: trErr.message }, 500);
 
+      // pay_after: no charge now — card is on file for completion.
+      if (paymentOption === "pay_after") {
+        const after = await markPaidAndAssign(admin, tr.id, null);
+        return json({ scheduled: true, turnoverId: tr.id, status: after?.status, assignment_type: after?.assignment_type });
+      }
+
       try {
         const pi = await stripe.paymentIntents.create({
-          amount: priceCents,
+          amount: depositCents,
           currency: "usd",
           customer: host.stripe_customer_id,
           payment_method: card.id,
           off_session: true,
           confirm: true,
-          metadata: { kind: "turnover", turnover_id: tr.id, host_id: host.id },
+          metadata: { kind: "turnover", turnover_id: tr.id, host_id: host.id, payment_option: paymentOption },
         });
         if (pi.status === "succeeded") {
+          if (paymentOption === "split") {
+            await admin.from("turnover_requests").update({ deposit_payment_intent_id: pi.id }).eq("id", tr.id);
+          }
           const after = await markPaidAndAssign(admin, tr.id, pi.id);
           return json({ paid: true, turnoverId: tr.id, status: after?.status, assignment_type: after?.assignment_type });
         }
@@ -837,6 +910,66 @@ async function handleFinalize(admin: SB, body: Record<string, unknown>, _origin:
   return json({ paid, status: tr.status });
 }
 
+// Charge the outstanding amount when a turnover is completed:
+//   • split     → the remaining 50% balance
+//   • pay_after → the full price
+//   • full      → no-op (already paid up front)
+// Off-session against the host's saved card. Idempotent via balance_charged_at.
+async function chargeOnCompletion(admin: SB, trId: string) {
+  const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", trId).maybeSingle();
+  if (!tr) return;
+  const option = (tr.payment_option as string) || "full";
+  if (option === "full") return;
+  if (tr.balance_charged_at) return; // already settled
+
+  const priceCents = Math.round(Number(tr.price || 0) * 100);
+  const balanceCents =
+    tr.balance_cents != null
+      ? Number(tr.balance_cents)
+      : option === "split"
+        ? priceCents - Number(tr.deposit_cents || 0)
+        : priceCents;
+  if (!(balanceCents > 0)) {
+    await admin.from("turnover_requests").update({ balance_charged_at: new Date().toISOString() }).eq("id", trId);
+    return;
+  }
+
+  const { data: host } = await admin.from("hosts").select("*").eq("id", tr.host_id).maybeSingle();
+  if (!host?.stripe_customer_id) {
+    console.warn("[partner-turnover] completion charge skipped — no Stripe customer", { trId });
+    return;
+  }
+  const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+  const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+  const card = await getDefaultCard(stripe, host.stripe_customer_id);
+  if (!card) {
+    console.warn("[partner-turnover] completion charge skipped — no card on file", { trId });
+    return;
+  }
+  try {
+    const pi = await stripe.paymentIntents.create({
+      amount: balanceCents,
+      currency: "usd",
+      customer: host.stripe_customer_id,
+      payment_method: card.id,
+      off_session: true,
+      confirm: true,
+      metadata: { kind: "turnover_balance", turnover_id: trId, host_id: tr.host_id },
+    });
+    if (pi.status === "succeeded") {
+      await admin.from("turnover_requests").update({
+        balance_payment_intent_id: pi.id,
+        balance_charged_at: new Date().toISOString(),
+      }).eq("id", trId);
+    } else {
+      console.warn("[partner-turnover] completion charge not succeeded", { trId, status: pi.status });
+    }
+  } catch (e) {
+    // Leave balance_charged_at null so it can be retried / resolved by admin.
+    console.warn("[partner-turnover] completion charge failed", e instanceof Error ? e.message : String(e));
+  }
+}
+
 // Shared: claim a pending_payment turnover → paid, then confirm + assign +
 // notify. Idempotent via the optimistic status guard, so concurrent callers
 // (webhook, success page, off-session one-tap) never double-fan-out.
@@ -937,13 +1070,29 @@ async function handleCleanerLifecycle(admin: SB, action: string, body: Record<st
   }
 
   if (action === "cleaner.complete") {
+    // STRICT (spec): cannot complete without photos. Merge any photos passed on
+    // this call with what was already uploaded (check-in / "add photos"), and
+    // refuse if there are still zero after-photos. This gate also blocks the
+    // SMS "DONE" path, which never carries photos — forcing the app upload.
+    const incoming = Array.isArray(body.after_photos) ? (body.after_photos as string[]) : [];
+    const existing = Array.isArray(tr.after_photos) ? (tr.after_photos as string[]) : [];
+    const afterPhotos = Array.from(new Set([...existing, ...incoming].filter(Boolean)));
+    if (afterPhotos.length === 0) {
+      return json(
+        { error: "Photos required — upload at least one 'after' photo in the app before marking complete.", needsPhotos: true },
+        422,
+      );
+    }
     await admin.from("turnover_requests").update({
       status: "completed",
       completed_at: new Date().toISOString(),
+      after_photos: afterPhotos,
     }).eq("id", tr.id);
-    if (Array.isArray(body.after_photos) && body.after_photos.length) {
-      await admin.from("turnover_requests").update({ after_photos: body.after_photos }).eq("id", tr.id);
-    }
+
+    // Charge the balance (split) or full amount (pay_after) off-session now
+    // that the service is verified complete. No-op for already-fully-paid.
+    await chargeOnCompletion(admin, tr.id);
+
     const { data: fresh } = await admin.from("turnover_requests").select("*").eq("id", tr.id).single();
     await notifyTurnoverCompleted(admin, fresh);
     return json({ ok: true, status: "completed" });
@@ -1146,6 +1295,8 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
   const { property, hostRow } = await loadContext(admin, tr);
   const nickname = property?.nickname || property?.address || "your property";
   const dateLabel = formatServiceDate(tr.requested_date as string);
+  // CRITICAL: every completion sends the proof photos to the host (SMS + email).
+  const photos = Array.isArray(tr.after_photos) ? (tr.after_photos as string[]).filter(Boolean) : [];
 
   await notifyDiscord(admin, {
     title: "Turnover completed",
@@ -1154,12 +1305,16 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
       { name: "Property", value: nickname, inline: true },
       { name: "When", value: dateLabel, inline: true },
       { name: "Host", value: hostRow?.name || hostRow?.email || "-", inline: true },
+      { name: "Photos", value: String(photos.length), inline: true },
     ],
   });
   if (hostRow?.phone) {
+    const photoLine = photos.length
+      ? ` View the ${photos.length} completion photo${photos.length === 1 ? "" : "s"}: ${photos[0]}`
+      : "";
     await sendSms(admin, {
       toPhone: hostRow.phone, type: "confirmation",
-      message: `${nickname} is guest-ready! Your ${dateLabel} turnover is complete. Rate your clean in the portal: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
+      message: `${nickname} is guest-ready! Your ${dateLabel} turnover is complete.${photoLine} Rate your clean: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
     });
   }
   await sendHostEmail(admin, "turnover_completed", hostRow?.email, {
@@ -1167,6 +1322,7 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
     property: nickname,
     address: property?.address || "",
     date: dateLabel,
+    photos,
   });
   try {
     await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: { ...tr, status: "completed" } });

@@ -109,6 +109,8 @@ interface PartnerEmailData {
   propertyCount?: number; agreementUrl?: string; rateSummary?: string; deadline?: string;
   // Payment link.
   checkoutUrl?: string;
+  // Completion proof photos (public URLs).
+  photos?: string[];
 }
 
 function build(type: string, d: PartnerEmailData): { subject: string; html: string } | null {
@@ -244,17 +246,30 @@ function build(type: string, d: PartnerEmailData): { subject: string; html: stri
           ctaLabel: "View my turnovers", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
         }),
       };
-    case "turnover_completed":
+    case "turnover_completed": {
+      const photos = Array.isArray(d.photos) ? d.photos.filter(Boolean) : [];
+      const photosHtml = photos.length
+        ? `<p style="margin:16px 0 8px;font-weight:600">Completion photos (${photos.length})</p>` +
+          `<div>${photos
+            .map(
+              (u) =>
+                `<a href="${u}"><img src="${u}" alt="Turnover photo" style="width:160px;height:120px;object-fit:cover;border-radius:8px;margin:4px;border:1px solid #eee" /></a>`,
+            )
+            .join("")}</div>`
+        : "";
       return {
         subject: `Guest-ready - ${d.property || "your property"} turnover complete`.trim(),
         html: renderHtml({
           preheader: "Your turnover is complete and guest-ready.",
           heading: "Your turnover is complete",
-          bodyHtml: `<p>${hi}</p><p>Great news — your turnover is done and the property is guest-ready. We'd love your feedback: rate your clean from the dashboard so we keep matching you with your best crews.</p>`,
+          bodyHtml:
+            `<p>${hi}</p><p>Great news — your turnover is done and the property is guest-ready. Photos from the clean are below.</p>` +
+            photosHtml,
           rows,
           ctaLabel: "Rate my clean", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
         }),
       };
+    }
     default:
       return null;
   }
