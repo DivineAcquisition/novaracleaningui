@@ -213,18 +213,123 @@ function signingUrlFromSlug(baseUrl: string, slug: string | null | undefined): s
  * Create a DocuSeal submission for one external signer and record it. The
  * company counter-signer (if any) is configured on the template itself.
  */
+// ─── Company counter-signer + per-audience completed-submission specs ─────────
+
+async function companyInfo(): Promise<{ name: string; rep: string; email: string }> {
+  const [name, rep, email] = await Promise.all([
+    resolveSecret("DOCUSEAL_COMPANY_NAME"),
+    resolveSecret("DOCUSEAL_COMPANY_REP"),
+    resolveSecret("DOCUSEAL_COMPANY_EMAIL"),
+  ]);
+  return {
+    name: name || "Novara Cleaning LLC",
+    rep: rep || "Novara Cleaning",
+    email: email || "hello@novaracleaning.com",
+  };
+}
+
+interface AudienceSpec {
+  signerRole: string;
+  /** Signature fields on the signer role to auto-fill with their typed name. */
+  signerSignatures?: string[];
+  /** Optional "Initials" field on the signer role. */
+  signerInitials?: string;
+  /** The company counter-signer role + its field values. */
+  companyRole: string;
+  companyValues: (c: { name: string; rep: string; email: string }) => Record<string, string | number>;
+  /** Host agreement also has a Guarantor role. */
+  guarantorRole?: string;
+}
+
+const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
+  one_time: {
+    signerRole: "Client",
+    companyRole: "Company",
+    companyValues: (c) => ({
+      "Company": c.name, "Full Name": c.rep, "Email": c.email, "Representative": c.rep,
+      "Date": today(), "Signature": c.rep,
+    }),
+  },
+  str_host: {
+    signerRole: "Host",
+    signerSignatures: ["Signature", "Host Signature"],
+    companyRole: "Company Representative",
+    companyValues: (c) => ({ "Signature": c.rep }),
+    guarantorRole: "Guarantor",
+  },
+  membership: {
+    signerRole: "Member",
+    signerSignatures: ["Signature"],
+    signerInitials: "Initials",
+    companyRole: "Company",
+    companyValues: (c) => ({ "Date": today(), "Signature": c.rep }),
+  },
+  contractor: {
+    signerRole: "Contractor",
+    signerSignatures: ["Signature"],
+    companyRole: "Company",
+    companyValues: (c) => ({ "Effective Date": today(), "Name": c.rep, "Title": "Owner", "Signature": c.rep, "Date": today() }),
+  },
+  va_contractor: {
+    signerRole: "Contractor",
+    signerSignatures: ["Signature"],
+    companyRole: "Company",
+    companyValues: (c) => ({ "Effective Date": today(), "Name": c.rep, "Date": today(), "Signature": c.rep }),
+  },
+};
+
+function initialsOf(name: string): string {
+  return name.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 3).toUpperCase();
+}
+
+/**
+ * Create + COMPLETE the agreement (all fields filled on every role, including
+ * signatures) and email the customer a copy of the finished document. We treat
+ * the booking/onboarding acceptance as the signature, so the customer receives
+ * a completed copy rather than a sign request (spec: "completed document sent
+ * as a copy across all docs"). The company side is auto-signed by the rep.
+ */
 export async function sendAgreement(input: SendAgreementInput): Promise<SendAgreementResult> {
   if (!input.email) throw new Error("A signer email is required.");
   const { token, baseUrl, templateId } = await getConfig(input.audience);
-  const role = input.role || AUDIENCE_ROLE[input.audience];
+  const spec = AUDIENCE_SPECS[input.audience];
+  const co = await companyInfo();
+  const role = input.role || spec.signerRole;
+  const name = input.name || "";
 
-  const submitter: Record<string, unknown> = {
-    role,
-    email: input.email,
-    ...(input.name ? { name: input.name } : {}),
-  };
-  if (input.values && Object.keys(input.values).length > 0) {
-    submitter.values = input.values;
+  // Signer fields: the caller's data values + auto signature(s)/initials/date.
+  const signerValues: Record<string, string | number | boolean> = { ...(input.values || {}) };
+  for (const f of spec.signerSignatures || []) signerValues[f] = name || "Accepted electronically";
+  if (spec.signerInitials && name) signerValues[spec.signerInitials] = initialsOf(name);
+  if (!("Date" in signerValues)) signerValues["Date"] = today();
+
+  const submitters: Array<Record<string, unknown>> = [
+    {
+      role,
+      email: input.email,
+      ...(name ? { name } : {}),
+      completed: true,
+      send_email: input.sendEmail !== false, // emails the customer the completed copy
+      values: signerValues,
+    },
+    {
+      role: spec.companyRole,
+      email: co.email,
+      name: co.name,
+      completed: true,
+      send_email: false,
+      values: spec.companyValues(co),
+    },
+  ];
+  if (spec.guarantorRole) {
+    submitters.push({
+      role: spec.guarantorRole,
+      email: input.email,
+      ...(name ? { name } : {}),
+      completed: true,
+      send_email: false,
+      values: { "Guarantor Name": name || co.name, "Guarantor Signature": name || "Accepted electronically", "Guarantor Date": today() },
+    });
   }
 
   const res = await fetch(`${baseUrl}/submissions`, {
@@ -233,7 +338,7 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
     body: JSON.stringify({
       template_id: Number(templateId),
       send_email: input.sendEmail !== false,
-      submitters: [submitter],
+      submitters,
     }),
   });
 
@@ -245,8 +350,8 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
   }
 
   // POST /submissions returns an array of submitter objects.
-  const submitters: any[] = Array.isArray(body) ? body : body?.submitters || [];
-  const first = submitters[0] || {};
+  const respSubmitters: any[] = Array.isArray(body) ? body : body?.submitters || [];
+  const first = respSubmitters[0] || {};
   const submissionId = String(first.submission_id ?? body?.id ?? "") || null;
   const signingUrl =
     first.embed_src || signingUrlFromSlug(baseUrl, first.slug) || null;
@@ -264,7 +369,7 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
         submitter_email: input.email,
         submitter_name: input.name || null,
         role,
-        status: "sent",
+        status: "completed",
         signing_url: signingUrl,
         booking_id: input.bookingId || null,
         host_email: input.hostEmail || null,
