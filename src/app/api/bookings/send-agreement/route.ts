@@ -44,7 +44,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     const supabase = getAdminSupabase();
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, email, first_name, last_name, status")
+      .select(
+        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option",
+      )
       .eq("id", bookingId)
       .maybeSingle();
     if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
@@ -61,10 +63,34 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const name = `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || undefined;
+
+    // Pre-fill the Client-role fields so the customer just reviews + signs.
+    const totalCents = Number(booking.total_estimate_cents || 0);
+    const depositCents = Number(booking.deposit_cents || 0);
+    const fullDiscount = Number(booking.full_payment_discount || 0);
+    const balanceCents = booking.payment_option === "full"
+      ? Math.max(0, totalCents - fullDiscount)
+      : Math.max(0, totalCents - depositCents);
+    const addressLine = [booking.address, booking.city, [booking.state, booking.zip_code].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
+    const dollars = (cents: number) => Number((cents / 100).toFixed(2));
+
+    const values: Record<string, string | number> = {};
+    if (booking.service_date) values["Service Date"] = String(booking.service_date);
+    if (name) values["Client Name"] = name;
+    if (addressLine) values["Service Address"] = addressLine;
+    if (booking.phone) values["Phone"] = String(booking.phone);
+    values["Email"] = String(booking.email);
+    if (totalCents > 0) values["Total Service Fee"] = dollars(totalCents);
+    values["Deposit Amount"] = dollars(depositCents);
+    values["Balance Due"] = dollars(balanceCents);
+
     const result = await sendAgreement({
       audience: "one_time",
       email: String(booking.email),
       name,
+      values,
       bookingId,
       createdBy: "auto:booking-confirm",
       metadata: { source: "booking-confirm" },
