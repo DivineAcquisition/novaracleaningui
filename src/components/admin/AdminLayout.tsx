@@ -34,6 +34,7 @@ import {
   RiRocket2Line,
   RiBuilding2Line,
   RiHotelLine,
+  RiRepeatLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -102,6 +103,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/customers",
     icon: RiGroupLine,
     description: "Accounts, credits, billing",
+  },
+  {
+    title: "Recurring",
+    url: "/admin/recurring",
+    icon: RiRepeatLine,
+    description: "Member recurring cleans · cadence · crew",
   },
   {
     title: "Map",
