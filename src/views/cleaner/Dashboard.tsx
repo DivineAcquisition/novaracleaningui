@@ -48,7 +48,7 @@ interface CleanerProfile {
 
 type JobSource = "assignments" | "bookings";
 
-interface TurnoverPayRow {
+interface EarningsRow {
   id: string;
   propertyName: string;
   date: string | null;
@@ -56,12 +56,12 @@ interface TurnoverPayRow {
   status: string;
 }
 
-interface TurnoverPay {
+interface EarningsSummary {
   thisWeekCents: number;
   lifetimeCents: number;
   scheduledCents: number;
   completedCount: number;
-  recent: TurnoverPayRow[];
+  recent: EarningsRow[];
 }
 
 const TURNOVER_CLEANER_SHARE = 0.7;
@@ -178,13 +178,15 @@ export default function CleanerDashboard() {
   const [completedJobs, setCompletedJobs] = useState<CompletedJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [turnoverPay, setTurnoverPay] = useState<TurnoverPay>({
+  const emptyEarnings: EarningsSummary = {
     thisWeekCents: 0,
     lifetimeCents: 0,
     scheduledCents: 0,
     completedCount: 0,
     recent: [],
-  });
+  };
+  const [turnoverPay, setTurnoverPay] = useState<EarningsSummary>(emptyEarnings);
+  const [jobPay, setJobPay] = useState<EarningsSummary>(emptyEarnings);
 
   const fetchJobs = useCallback(
     async (cleanerId: string) => {
@@ -404,7 +406,7 @@ export default function CleanerDashboard() {
       let lifetimeCents = 0;
       let scheduledCents = 0;
       let completedCount = 0;
-      const recent: TurnoverPayRow[] = [];
+      const recent: EarningsRow[] = [];
 
       for (const r of rows) {
         const cents = payOf(r);
@@ -425,6 +427,69 @@ export default function CleanerDashboard() {
       setTurnoverPay({ thisWeekCents, lifetimeCents, scheduledCents, completedCount, recent });
     } catch (err) {
       console.error("Error fetching turnover earnings:", err);
+    }
+  }, []);
+
+  // Residential job pay also wasn't reflecting: cleaners.total_earnings_cents
+  // is stuck at 0 (the rollup isn't maintained), so the headline showed $0 even
+  // though completed bookings carry real cleaner_payout_cents. Compute it live
+  // from bookings (the authoritative layer — job_assignments mirror the same
+  // jobs, so we use bookings only to avoid double counting).
+  const fetchJobEarnings = useCallback(async (cleanerId: string, payPct: number | null | undefined) => {
+    try {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, status, service_date, completed_at, cleaner_payout_cents, total_estimate_cents, address, city")
+        .eq("cleaner_id", cleanerId)
+        .order("service_date", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+
+      const rows = (data || []) as unknown as Array<{
+        id: string;
+        status: string | null;
+        service_date: string | null;
+        completed_at: string | null;
+        cleaner_payout_cents: number | null;
+        total_estimate_cents: number | null;
+        address: string | null;
+        city: string | null;
+      }>;
+
+      const pct = (payPct ?? 35) / 100;
+      const payOf = (b: { cleaner_payout_cents: number | null; total_estimate_cents: number | null }) =>
+        b.cleaner_payout_cents != null
+          ? b.cleaner_payout_cents
+          : Math.round(Number(b.total_estimate_cents || 0) * pct);
+
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const SCHEDULED = ["confirmed", "assigned", "accepted", "in_progress"];
+
+      let thisWeekCents = 0;
+      let lifetimeCents = 0;
+      let scheduledCents = 0;
+      let completedCount = 0;
+      const recent: EarningsRow[] = [];
+
+      for (const b of rows) {
+        const cents = payOf(b);
+        const name = b.address ? `${b.address}${b.city ? `, ${b.city}` : ""}` : "Cleaning";
+        if (b.status === "completed") {
+          lifetimeCents += cents;
+          completedCount += 1;
+          const when = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+          if (when >= weekAgo) thisWeekCents += cents;
+          if (recent.length < 6) {
+            recent.push({ id: b.id, propertyName: name, date: b.completed_at || b.service_date, payCents: cents, status: b.status });
+          }
+        } else if (b.status && SCHEDULED.includes(b.status)) {
+          scheduledCents += cents;
+        }
+      }
+
+      setJobPay({ thisWeekCents, lifetimeCents, scheduledCents, completedCount, recent });
+    } catch (err) {
+      console.error("Error fetching job earnings:", err);
     }
   }, []);
 
@@ -467,14 +532,18 @@ export default function CleanerDashboard() {
       }
 
       setProfile(full as CleanerProfile);
-      await Promise.all([fetchJobs(full.id), fetchTurnoverEarnings(full.id)]);
+      await Promise.all([
+        fetchJobs(full.id),
+        fetchTurnoverEarnings(full.id),
+        fetchJobEarnings(full.id, (full as CleanerProfile).pay_percentage),
+      ]);
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("Failed to load profile");
     } finally {
       setLoading(false);
     }
-  }, [router, fetchJobs, fetchTurnoverEarnings]);
+  }, [router, fetchJobs, fetchTurnoverEarnings, fetchJobEarnings]);
 
   useEffect(() => {
     checkAuthAndLoadProfile();
@@ -601,8 +670,16 @@ export default function CleanerDashboard() {
       ? "pending"
       : "not_setup";
 
-  const totalEarnings = (profile.total_earnings_cents ?? 0) + turnoverPay.lifetimeCents;
-  const jobsCompleted = (profile.completed_bookings ?? 0) + turnoverPay.completedCount;
+  // Compute totals live (cleaners.total_earnings_cents / completed_bookings
+  // rollups aren't maintained — they read 0 even with paid completed jobs).
+  const totalEarnings = Math.max(
+    profile.total_earnings_cents ?? 0,
+    jobPay.lifetimeCents,
+  ) + turnoverPay.lifetimeCents;
+  const jobsCompleted = Math.max(
+    profile.completed_bookings ?? 0,
+    jobPay.completedCount,
+  ) + turnoverPay.completedCount;
   const rating = profile.average_rating ?? 0;
   const totalRatings = profile.total_ratings ?? 0;
   const upcomingCount = upcomingJobs.length;
@@ -1004,6 +1081,51 @@ export default function CleanerDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Job earnings (residential) */}
+        {(jobPay.lifetimeCents > 0 || jobPay.scheduledCents > 0) && (
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <RiMoneyDollarCircleLine className="w-5 h-5 text-green-600" />
+                Job Earnings
+              </CardTitle>
+              <CardDescription>Your pay from completed & upcoming cleanings</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-green-500/5 p-3 text-center">
+                  <p className="text-[11px] font-medium text-muted-foreground">This week</p>
+                  <p className="text-base font-bold text-green-600">{formatCurrency(jobPay.thisWeekCents)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 p-3 text-center">
+                  <p className="text-[11px] font-medium text-muted-foreground">Lifetime</p>
+                  <p className="text-base font-bold">{formatCurrency(jobPay.lifetimeCents)}</p>
+                </div>
+                <div className="rounded-lg bg-amber-500/5 p-3 text-center">
+                  <p className="text-[11px] font-medium text-muted-foreground">Scheduled</p>
+                  <p className="text-base font-bold text-amber-600">{formatCurrency(jobPay.scheduledCents)}</p>
+                </div>
+              </div>
+              {jobPay.recent.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Recent job payments</p>
+                  {jobPay.recent.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{r.propertyName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.date ? format(new Date(r.date), "MMM d, yyyy") : "—"}
+                        </p>
+                      </div>
+                      <p className="font-semibold text-green-600 flex-shrink-0">{formatCurrency(r.payCents)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Turnover earnings */}
         {(turnoverPay.lifetimeCents > 0 || turnoverPay.scheduledCents > 0) && (
