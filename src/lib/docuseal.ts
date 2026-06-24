@@ -248,19 +248,25 @@ interface AudienceSpec {
 }
 
 const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
-  // One-Time: the execution page holds BOTH the Organization block (Company,
-  // Representative) AND the Client/Customer block (Full Name, Email, Signature).
-  // The customer's Full Name/Email/Signature must be the CLIENT's details.
+  // One-Time execution page. The template's FIELD NAMES do NOT match their
+  // on-page positions, so we map by the actual slot each field renders in
+  // (verified against the generated PDF):
+  //   field "Company"        → Client/Customer · Full Name
+  //   field "Full Name"      → Client/Customer · Email
+  //   field "Representative" → Client/Customer · Date
+  //   field "Signature"      → Client/Customer · Signature (cursive)
+  //   field "Email"          → Organization · Date
+  //   field "Date"           → Organization · Signature (date-type, holds text)
   one_time: {
     signerRole: "Client",
     companyRole: "Company",
     companyValues: (c, s) => ({
-      "Company": c.name,
-      "Representative": c.rep,
-      "Full Name": s.name,        // Client/Customer block
-      "Email": s.email,           // Client/Customer block
-      "Signature": s.name || s.email, // Client signs with their name
-      "Date": today(),
+      "Company": s.name,                 // Customer Full Name
+      "Full Name": s.email,              // Customer Email
+      "Representative": today(),          // Customer Date
+      "Signature": s.name || s.email,     // Customer Signature
+      "Email": today(),                   // Organization Date
+      "Date": c.rep,                      // Organization Signature (rep name)
     }),
   },
   str_host: {
