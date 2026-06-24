@@ -178,12 +178,16 @@ export function buildContractorValues(c: {
   name?: string; legalName?: string; email: string; phone?: string; address?: string;
 }): Record<string, string | number | boolean> {
   const t = today();
+  // "Mobile Number" is a NUMBER-type field → a formatted phone string maps to 0.
+  // Pass digits only so the actual number renders.
+  const digits = c.phone ? String(c.phone).replace(/\D/g, "") : "";
   return compact({
     "Contractor Name": c.name,
     "Full Name": c.name,
+    // Legal name defaults to the full name when not explicitly provided.
     "Legal Name": c.legalName || c.name,
     "Full Address": c.address,
-    "Mobile Number": c.phone,
+    "Mobile Number": digits ? Number(digits) : undefined,
     "Email": c.email,
     "Date": t,
   });

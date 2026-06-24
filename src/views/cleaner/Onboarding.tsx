@@ -236,6 +236,15 @@ export default function CleanerOnboarding() {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
+  // Default the legal name to the full name when reaching the sign step.
+  useEffect(() => {
+    if (currentStep === 5 && !legalName) {
+      const full = `${formData.firstName} ${formData.lastName}`.trim();
+      if (full) setLegalName(full);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
   const authHeaders = async (): Promise<Record<string, string>> => {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
