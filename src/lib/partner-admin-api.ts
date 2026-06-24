@@ -73,3 +73,19 @@ export async function runAction(body: Record<string, unknown>): Promise<ActionRe
   });
   return handle<ActionResponse>(res);
 }
+
+export interface SyncResponse {
+  ok: true;
+  hostsSynced: number;
+  propertiesSynced: number;
+  warnings?: string[];
+}
+
+/** Backfill Supabase turnover-portal hosts/properties into the Airtable base. */
+export async function syncPartners(): Promise<SyncResponse> {
+  const res = await fetch(`/api/partner-admin/sync`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  return handle<SyncResponse>(res);
+}

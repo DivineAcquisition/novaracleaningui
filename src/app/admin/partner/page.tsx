@@ -1,15 +1,15 @@
 import { Suspense } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import PartnerAdmin from "@/views/admin/PartnerAdmin";
+import Partnerships from "@/views/admin/Partnerships";
 
-// Partner turnover portal operations (pricing, crew, assignment).
+// Unified Partnerships console — Host Accounts (Airtable) + Turnover Ops (Supabase).
 export default function Page() {
   return (
     <ProtectedRoute requiredRole="admin">
       <AdminLayout>
         <Suspense>
-          <PartnerAdmin />
+          <Partnerships />
         </Suspense>
       </AdminLayout>
     </ProtectedRoute>

@@ -26,7 +26,6 @@ import {
   RiToolsLine,
   RiMapPin2Line,
   RiFileEditLine,
-  RiBankCardLine,
   RiLogoutBoxRLine,
   RiMenuLine,
   RiCloseLine,
@@ -93,16 +92,10 @@ const NAV_ITEMS: NavItem[] = [
     description: "Office · commercial · partnerships",
   },
   {
-    title: "Turnover & STR",
+    title: "Partnerships",
     url: "/admin/partner",
     icon: RiHotelLine,
-    description: "STR hosts · turnovers · crew · recurring",
-  },
-  {
-    title: "Host Accounts",
-    url: "/admin/partner-accounts",
-    icon: RiHotelLine,
-    description: "STR partner lifecycle · revenue",
+    description: "STR host accounts · pricing · revenue · turnovers · crew",
   },
   {
     title: "Customers",
@@ -115,12 +108,6 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/map",
     icon: RiMapPin2Line,
     description: "Coverage × booking heatmap",
-  },
-  {
-    title: "Payroll",
-    url: "/admin/payroll",
-    icon: RiBankCardLine,
-    description: "Stripe Connect payouts",
   },
   {
     title: "Team",

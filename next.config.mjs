@@ -22,6 +22,8 @@ const nextConfig = {
       { source: '/cleaner/onboarding-landing', destination: '/cleaner/onboarding', permanent: true },
       { source: '/cleaner/onboard', destination: '/cleaner/onboarding', permanent: true },
       { source: '/pricing', destination: '/pricing-sheet', permanent: true },
+      // Host Accounts merged into the unified Partnerships tab.
+      { source: '/admin/partner-accounts', destination: '/admin/partner', permanent: false },
     ];
   },
 };
