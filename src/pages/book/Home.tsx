@@ -1,6 +1,4 @@
-"use client";
-
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,14 +22,14 @@ const BOOKING_STEPS = [
 ];
 
 export default function BookingHome() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { bookingData, updateBookingData, currentStep, setCurrentStep } = useBooking();
 
   // Swipe gesture handlers
   const swipeHandlers = useBookingSwipe({
     onSwipeRight: () => {
       setCurrentStep(1);
-      router.push("/");
+      navigate("/");
     },
     step: 2,
   });
@@ -39,18 +37,18 @@ export default function BookingHome() {
   const handleSelect = (sizeId: string) => {
     // If >5,000 sqft, redirect to custom quote page
     if (sizeId === '5000_plus') {
-      router.push("/book/custom-quote");
+      navigate("/book/custom-quote");
       return;
     }
     
     updateBookingData({ homeSizeId: sizeId });
     setCurrentStep(3);
-    router.push("/book/offer");
+    navigate("/book/offer");
   };
 
   const handleBack = () => {
     setCurrentStep(1);
-    router.push("/");
+    navigate("/");
   };
 
   return (
@@ -118,7 +116,7 @@ export default function BookingHome() {
               </p>
               <Button
                 variant="outline"
-                onClick={() => router.push("/book/custom-quote")}
+                onClick={() => navigate("/book/custom-quote")}
                 className="bg-foreground text-background hover:bg-foreground/90 border-foreground"
               >
                 Call for Custom Quote

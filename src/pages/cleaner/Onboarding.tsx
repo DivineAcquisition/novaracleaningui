@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,7 +62,7 @@ const STEPS = [
 ];
 
 export default function CleanerOnboarding() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -94,7 +92,7 @@ export default function CleanerOnboarding() {
       
       if (!session) {
         toast.error("Please sign in to continue");
-        router.push("/cleaner/auth");
+        navigate("/cleaner/auth");
         return;
       }
       
@@ -109,14 +107,14 @@ export default function CleanerOnboarding() {
         .maybeSingle();
 
       if (existingCleaner?.onboarding_complete) {
-        router.push("/cleaner/dashboard");
+        navigate("/cleaner/dashboard");
         return;
       }
 
       setCheckingAuth(false);
     } catch (error) {
       console.error("Auth check error:", error);
-      router.push("/cleaner/auth");
+      navigate("/cleaner/auth");
     }
   };
 
@@ -259,7 +257,7 @@ export default function CleanerOnboarding() {
       if (insertError) {
         if (insertError.code === '23505') {
           toast.info("Profile already exists. Redirecting...");
-          router.push("/cleaner/dashboard");
+          navigate("/cleaner/dashboard");
           return;
         }
         throw insertError;
@@ -274,7 +272,7 @@ export default function CleanerOnboarding() {
 
       if (stripeError || !stripeData?.url) {
         toast.info("Profile saved! You can set up payments later.");
-        router.push("/cleaner/dashboard");
+        navigate("/cleaner/dashboard");
         return;
       }
 

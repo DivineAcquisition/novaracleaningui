@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";
@@ -16,7 +14,7 @@ import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useCapacitor } from "@/hooks/use-capacitor";
 
 export default function MobileDashboard() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [cleaner, setCleaner] = useState<any>(null);
   const [upcomingJobs, setUpcomingJobs] = useState<any[]>([]);
@@ -34,7 +32,7 @@ export default function MobileDashboard() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/cleaner/auth");
+        navigate("/cleaner/auth");
         return;
       }
 

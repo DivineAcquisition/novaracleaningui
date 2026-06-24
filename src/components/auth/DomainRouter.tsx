@@ -1,7 +1,5 @@
-"use client";
-
 import { ReactNode, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface DomainRouterProps {
   children: ReactNode;
@@ -9,19 +7,19 @@ interface DomainRouterProps {
 
 /**
  * Routes users based on the subdomain they're accessing:
- * - app.novaracleaning.com -> Customer portal (redirects to /auth if on home)
- * - admin.novaracleaning.com -> Admin portal (redirects to /admin/auth if on home)
- * - contractor.novaracleaning.com -> Cleaner portal
- * - try.novaracleaning.com -> Booking flow (no redirect)
+ * - app.novaracleaning.com → Customer portal (redirects to /auth if on home)
+ * - admin.novaracleaning.com → Admin portal (redirects to /admin/auth if on home)
+ * - contractor.novaracleaning.com → Cleaner portal
+ * - try.novaracleaning.com → Booking flow (no redirect)
  */
 export function DomainRouter({ children }: DomainRouterProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hostname = window.location.hostname;
 
   useEffect(() => {
     // Only redirect on the root path
-    if (pathname !== '/') return;
+    if (location.pathname !== '/') return;
 
     // Check subdomain
     const isAppDomain = hostname === 'app.novaracleaning.com';
@@ -30,16 +28,16 @@ export function DomainRouter({ children }: DomainRouterProps) {
 
     if (isAppDomain) {
       // Customer portal - redirect to auth/account
-      router.replace('/auth');
+      navigate('/auth', { replace: true });
     } else if (isAdminDomain) {
       // Admin portal - redirect to admin auth
-      router.replace('/admin/auth');
+      navigate('/admin/auth', { replace: true });
     } else if (isContractorDomain) {
       // Contractor/cleaner portal - redirect to cleaner auth
-      router.replace('/cleaner/auth');
+      navigate('/cleaner/auth', { replace: true });
     }
     // For other domains (try.novaracleaning.com, localhost), show normal home page
-  }, [hostname, pathname, router]);
+  }, [hostname, location.pathname, navigate]);
 
   return <>{children}</>;
 }
@@ -48,7 +46,7 @@ export function DomainRouter({ children }: DomainRouterProps) {
  * Hook to get current domain context
  */
 export function useDomainContext() {
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const hostname = window.location.hostname;
   
   const isLocalhost = hostname === 'localhost' || 
                       hostname === '127.0.0.1' ||

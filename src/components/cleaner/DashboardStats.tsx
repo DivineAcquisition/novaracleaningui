@@ -1,5 +1,3 @@
-"use client";
-
 import { Card } from "@/components/ui/card";
 import { DollarSign, Briefcase, Star, TrendingUp } from "lucide-react";
 

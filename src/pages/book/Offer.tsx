@@ -1,8 +1,6 @@
-"use client";
-
 import { useState, useEffect, useMemo } from "react";
 import { trackViewContent } from "@/lib/meta-pixel";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,7 +49,7 @@ const MEMBERSHIP_FEATURES = [
 ];
 
 export default function BookingOffer() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showDeepCleanModal, setShowDeepCleanModal] = useState(false);
   const [showMembershipModal, setShowMembershipModal] = useState(false);
@@ -128,12 +126,12 @@ export default function BookingOffer() {
       return;
     }
     setCurrentStep(4);
-    router.push("/book/checkout");
+    navigate("/book/checkout");
   };
 
   const handleBack = () => {
     setCurrentStep(2);
-    router.push("/book/sqft");
+    navigate("/book/sqft");
   };
 
   // Custom Quote View

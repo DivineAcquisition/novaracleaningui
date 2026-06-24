@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 export default function UpdatePassword() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,7 +24,7 @@ export default function UpdatePassword() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         toast.error("Invalid or expired reset link");
-        router.push("/reset-password");
+        navigate("/reset-password");
       }
     });
   }, [navigate]);
@@ -71,7 +69,7 @@ export default function UpdatePassword() {
       setPasswordUpdated(true);
       toast.success("Password updated successfully!");
       setTimeout(() => {
-        router.push("/account");
+        navigate("/account");
       }, 2000);
     }
   };

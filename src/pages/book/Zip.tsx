@@ -1,10 +1,8 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { ArrowRight, Crown, CheckCircle, Clock, MapPin, Gift } from "lucide-react";
 import { BookingHeader } from "@/components/booking/BookingHeader";
@@ -15,8 +13,8 @@ import { formatPhoneNumber } from "@/lib/input-formatters";
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
 export default function BookingZip() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { updateBookingData } = useBooking();
   const referralCode = searchParams.get('ref');
 
@@ -110,7 +108,7 @@ export default function BookingZip() {
       }
     }).catch(err => console.error('Lead webhook error:', err));
     
-    router.push("/book/sqft");
+    navigate("/book/sqft");
   };
 
   const handleWaitlistSubmit = async (e: React.FormEvent) => {
@@ -512,7 +510,7 @@ export default function BookingZip() {
                       Perfect for regular cleaning schedules.
                     </p>
                   </div>
-                  <Button onClick={() => router.push("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
+                  <Button onClick={() => navigate("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
                     Learn More
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>

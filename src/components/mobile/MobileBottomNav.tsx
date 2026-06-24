@@ -1,13 +1,11 @@
-"use client";
-
 import { Home, Briefcase, DollarSign, User } from "lucide-react";
-import { useRouter, usePathname } from "next/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";
 
 export function MobileBottomNav() {
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { impact } = useNativeHaptics();
 
   const navItems = [
@@ -19,7 +17,7 @@ export function MobileBottomNav() {
 
   const handleNavigation = (path: string) => {
     impact('light');
-    router.push(path);
+    navigate(path);
   };
 
   return (
@@ -27,7 +25,7 @@ export function MobileBottomNav() {
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.path;
+          const isActive = location.pathname === item.path;
           
           return (
             <button

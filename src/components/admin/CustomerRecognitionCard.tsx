@@ -1,5 +1,3 @@
-"use client";
-
 import { Card } from "@/components/ui/card";
 import { Sparkles, CheckCircle2, Crown } from "lucide-react";
 

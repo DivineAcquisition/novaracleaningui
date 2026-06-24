@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { format, addDays, parse } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";

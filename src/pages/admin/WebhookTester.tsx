@@ -8,9 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Send, Copy, CheckCircle, XCircle, Loader2, ArrowLeft } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-"use client";
-
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 interface WebhookResponse {
   success: boolean;
@@ -75,7 +73,7 @@ const WebhookTester = () => {
     <div className="container mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/admin/webhooks">
+          <Link to="/admin/webhooks">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Monitor

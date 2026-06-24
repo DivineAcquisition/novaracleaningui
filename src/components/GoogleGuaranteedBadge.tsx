@@ -1,5 +1,3 @@
-"use client";
-
 import { CheckCircle, Shield, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 

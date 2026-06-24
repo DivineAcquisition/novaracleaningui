@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +31,7 @@ interface CleanerProfile {
 }
 
 export default function CleanerDashboard() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [stripeLoading, setStripeLoading] = useState(false);
@@ -47,7 +45,7 @@ export default function CleanerDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        router.push("/cleaner/auth");
+        navigate("/cleaner/auth");
         return;
       }
 
@@ -60,7 +58,7 @@ export default function CleanerDashboard() {
       if (error) throw error;
 
       if (!cleaner || !cleaner.onboarding_complete) {
-        router.push("/cleaner/onboarding");
+        navigate("/cleaner/onboarding");
         return;
       }
 
@@ -75,7 +73,7 @@ export default function CleanerDashboard() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.push("/cleaner/auth");
+    navigate("/cleaner/auth");
   };
 
   const openStripeConnect = async () => {
@@ -271,7 +269,7 @@ export default function CleanerDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => router.push("/cleaner/ob-portal")}
+                onClick={() => navigate("/cleaner/ob-portal")}
               >
                 Open
                 <ExternalLink className="w-3 h-3 ml-1" />

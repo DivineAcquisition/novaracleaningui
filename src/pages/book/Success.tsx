@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -34,8 +32,8 @@ const logStep = (step: string, details?: any) => {
 };
 
 export default function BookingSuccess() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { bookingData, resetBookingData } = useBooking();
   const { user, openCustomerPortal } = useAuth();
   const sessionId = searchParams.get("session_id");
@@ -74,7 +72,7 @@ export default function BookingSuccess() {
       if (!bookingIdFromUrl && !paymentIntentParam) {
         logStep("No booking ID or payment intent found - redirecting to home");
         toast.error("No booking found. Please complete the booking process.");
-        router.push("/");
+        navigate("/");
         return;
       }
 
@@ -92,7 +90,7 @@ export default function BookingSuccess() {
           if (lookupError || !bookingByPayment) {
             logStep("Booking not found by payment intent", { paymentIntentParam });
             toast.error("Booking not found. Please contact support.");
-            router.push("/");
+            navigate("/");
             return;
           }
           
@@ -109,7 +107,7 @@ export default function BookingSuccess() {
         if (bookingError || !booking) {
           logStep("Booking not found in database", { bookingId });
           toast.error("Booking not found. Please contact support.");
-          router.push("/");
+          navigate("/");
           return;
         }
 
@@ -119,7 +117,7 @@ export default function BookingSuccess() {
         if (booking.status !== 'confirmed' && booking.status !== 'pending_payment') {
           logStep("Invalid booking status", { status: booking.status });
           toast.error("Invalid booking status. Please contact support.");
-          router.push("/");
+          navigate("/");
           return;
         }
 
@@ -130,7 +128,7 @@ export default function BookingSuccess() {
         if (missingFields.length > 0) {
           logStep("Missing required fields - redirecting to property details", { missingFields });
           toast.info("Please complete your booking details");
-          router.push(`/book/details?booking_id=${bookingId}`);
+          navigate(`/book/details?booking_id=${bookingId}`);
           return;
         }
 
@@ -149,14 +147,14 @@ export default function BookingSuccess() {
       } catch (error) {
         console.error("Error validating booking:", error);
         toast.error("Error validating booking. Please contact support.");
-        router.push("/");
+        navigate("/");
       } finally {
         setIsValidating(false);
       }
     };
 
     validateBooking();
-  }, [searchParams, router]);
+  }, [searchParams, navigate]);
 
   // Check if Web Share API is available
   useEffect(() => {
@@ -372,7 +370,7 @@ export default function BookingSuccess() {
 
   const handleReturnHome = () => {
     resetBookingData();
-    router.push("/");
+    navigate("/");
   };
 
   const handleShare = async () => {
@@ -699,7 +697,7 @@ export default function BookingSuccess() {
                       </div>
                     </div>
                     <Button
-                      onClick={() => router.push('/auth')}
+                      onClick={() => navigate('/auth')}
                       className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
                     >
                       <UserPlus className="w-4 h-4 mr-2" />

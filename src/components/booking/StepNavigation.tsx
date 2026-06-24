@@ -1,7 +1,5 @@
-"use client";
-
 import { Check } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 interface Step {
@@ -25,14 +23,14 @@ const STEP_ROUTES: Record<number, string> = {
 };
 
 export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const handleStepClick = (stepNumber: number) => {
     // Only allow navigation to completed steps (steps before current)
     if (stepNumber < currentStep) {
       const route = STEP_ROUTES[stepNumber];
       if (route) {
-        router.push(route);
+        navigate(route);
       }
     }
   };

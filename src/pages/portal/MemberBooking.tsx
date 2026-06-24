@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMembershipCredits } from '@/hooks/use-membership-credits';
 import { useAvailability } from '@/hooks/use-availability';
@@ -57,7 +55,7 @@ interface SavedAddress {
 }
 
 export default function MemberBooking() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { user, subscription } = useAuth();
   const { credits, loading: creditsLoading, hasCredits } = useMembershipCredits();
 
@@ -142,14 +140,14 @@ export default function MemberBooking() {
     // Not logged in - redirect to auth
     if (!user) {
       toast.error('Please sign in to access member booking');
-      router.push('/auth', { state: { returnTo: '/portal/book' } });
+      navigate('/auth', { state: { returnTo: '/portal/book' } });
       return;
     }
     
     // Not a member - redirect to membership page
     if (!subscription?.subscribed) {
       toast.error('You need an active membership to use credits');
-      router.push('/membership');
+      navigate('/membership');
     }
   }, [creditsLoading, user, subscription, navigate]);
 
@@ -226,7 +224,7 @@ export default function MemberBooking() {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     } else {
-      router.push('/account');
+      navigate('/account');
     }
   };
 
@@ -381,7 +379,7 @@ export default function MemberBooking() {
       if (serviceType === 'deep') {
         toast.success('Booking created! Redirecting to payment...');
         // Redirect to checkout for the upsell payment
-        router.push(`/book/checkout?booking_id=${booking.id}&upsell=deep`);
+        navigate(`/book/checkout?booking_id=${booking.id}&upsell=deep`);
         return;
       }
 
@@ -395,7 +393,7 @@ export default function MemberBooking() {
       }
 
       toast.success('Booking confirmed! Check your email for details.');
-      router.push('/account');
+      navigate('/account');
     } catch (error: any) {
       console.error('Booking error:', error);
       toast.error(error.message || 'Failed to create booking');
@@ -436,11 +434,11 @@ export default function MemberBooking() {
                 .
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-                <Button onClick={() => router.push('/account')} variant="outline">
+                <Button onClick={() => navigate('/account')} variant="outline">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back to Account
                 </Button>
-                <Button onClick={() => router.push('/book/zip')} className="bg-gradient-primary">
+                <Button onClick={() => navigate('/book/zip')} className="bg-gradient-primary">
                   Book Without Credit
                 </Button>
               </div>

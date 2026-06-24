@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +34,7 @@ interface Cleaner {
 }
 
 export default function BookingIntake() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
 
@@ -563,7 +561,7 @@ export default function BookingIntake() {
         description: `Booking ID: ${booking.id}`,
       });
 
-      router.push("/admin/dispatch");
+      navigate("/admin/dispatch");
     } catch (error: any) {
       console.error("Error creating booking:", error);
       toast({
@@ -646,7 +644,7 @@ export default function BookingIntake() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => router.push("/admin/dispatch")}>
+              <Button variant="ghost" size="icon" onClick={() => navigate("/admin/dispatch")}>
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               <div>

@@ -1,8 +1,5 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,14 +8,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Mail, Lock, Sparkles } from "lucide-react";
-const logo = "/logo.png";
+import logo from "@/assets/logo.png";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 export default function Auth() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { user, signIn, signUp, signInWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -34,7 +31,7 @@ export default function Auth() {
 
   useEffect(() => {
     if (user) {
-      router.push("/");
+      navigate("/");
     }
   }, [user, navigate]);
 
@@ -66,7 +63,7 @@ export default function Auth() {
       }
     } else {
       toast.success("Welcome back!");
-      router.push("/account");
+      navigate("/account");
     }
     setIsLoading(false);
   };
@@ -90,7 +87,7 @@ export default function Auth() {
       toast.success("Account created! Please check your email to verify your account.");
     } else if (data?.session) {
       toast.success("Account created successfully!");
-      router.push("/account");
+      navigate("/account");
     }
     setIsLoading(false);
   };
@@ -178,7 +175,7 @@ export default function Auth() {
                         Password
                       </Label>
                       <Link 
-                        href="/reset-password" 
+                        to="/reset-password" 
                         className="text-xs text-primary hover:text-primary/80 font-medium"
                       >
                         Forgot password?
@@ -286,7 +283,7 @@ export default function Auth() {
         <div className="mt-6 text-center space-y-2">
           <p className="text-xs text-muted-foreground">
             Are you a cleaner?{" "}
-            <Link href="/cleaner/auth" className="text-primary hover:underline font-medium">
+            <Link to="/cleaner/auth" className="text-primary hover:underline font-medium">
               Cleaner Portal →
             </Link>
           </p>

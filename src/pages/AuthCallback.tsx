@@ -1,13 +1,11 @@
-"use client";
-
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function AuthCallback() {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -18,13 +16,13 @@ export default function AuthCallback() {
         if (error) {
           console.error("Auth callback error:", error);
           toast.error("Authentication failed. Please try again.");
-          router.push("/auth");
+          navigate("/auth");
           return;
         }
 
         if (!session) {
           toast.error("No session found. Please sign in again.");
-          router.push("/auth");
+          navigate("/auth");
           return;
         }
 
@@ -37,7 +35,7 @@ export default function AuthCallback() {
         
         if (type === 'recovery') {
           // Password reset flow - redirect to update password
-          router.push("/update-password");
+          navigate("/update-password");
         } else if (provider === 'google') {
           // Google OAuth authentication
           // Check if user has a cleaner profile
@@ -51,10 +49,10 @@ export default function AuthCallback() {
             // User is a cleaner
             if (!cleanerData.onboarding_complete) {
               toast.success("Welcome! Complete your profile.");
-              router.push("/cleaner/onboarding");
+              navigate("/cleaner/onboarding");
             } else {
               toast.success("Welcome back!");
-              router.push("/cleaner/dashboard");
+              navigate("/cleaner/dashboard");
             }
           } else {
             // Regular customer
@@ -74,7 +72,7 @@ export default function AuthCallback() {
             }
 
             toast.success("Welcome!");
-            router.push("/account");
+            navigate("/account");
           }
         } else if (type === 'magiclink') {
           // Magic link authentication - check if it's cleaner onboarding
@@ -83,25 +81,25 @@ export default function AuthCallback() {
           
           if (isCleanerOnboarding) {
             toast.success("Email verified! Complete your profile.");
-            router.push("/cleaner/onboarding");
+            navigate("/cleaner/onboarding");
           } else {
             toast.success("Email verified successfully!");
-            router.push("/account");
+            navigate("/account");
           }
         } else {
           // Email verification or other auth flow
           toast.success("Email verified successfully!");
-          router.push("/account");
+          navigate("/account");
         }
       } catch (error) {
         console.error("Unexpected error in auth callback:", error);
         toast.error("Something went wrong. Please try again.");
-        router.push("/auth");
+        navigate("/auth");
       }
     };
 
     handleAuthCallback();
-  }, [router]);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-hero flex items-center justify-center">

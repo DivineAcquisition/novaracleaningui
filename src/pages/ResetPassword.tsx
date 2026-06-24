@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,7 +69,7 @@ export default function ResetPassword() {
                   Reset link sent to <strong>{email}</strong>
                 </p>
               </div>
-              <Link href="/auth">
+              <Link to="/auth">
                 <Button variant="outline" className="w-full" size="sm">
                   <ArrowLeft className="mr-1 w-4 h-4" />
                   Back to Sign In
@@ -113,7 +111,7 @@ export default function ResetPassword() {
                 )}
               </Button>
 
-              <Link href="/auth">
+              <Link to="/auth">
                 <Button variant="ghost" className="w-full" size="sm">
                   <ArrowLeft className="mr-1 w-4 h-4" />
                   Back to Sign In

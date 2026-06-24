@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -114,7 +112,7 @@ const WebhookMonitor = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href="/admin/webhook-tester">
+            <Link to="/admin/webhook-tester">
               <Button variant="default">
                 <TestTube2 className="mr-2 h-4 w-4" />
                 Payload Tester
