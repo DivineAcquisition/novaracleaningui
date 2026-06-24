@@ -66,26 +66,32 @@ export async function POST(req: Request): Promise<NextResponse> {
   const email = (body.email || "").trim().toLowerCase();
   if (!email) return NextResponse.json({ error: "email is required" }, { status: 400 });
 
-  // Resolve phone + name from the Supabase host record when not supplied.
+  // Resolve phone + name + the open-scheduler token from the Supabase host.
   let phone = (body.phone || "").trim();
   let name = (body.name || "").trim();
+  let calendarToken = "";
   try {
     const supabase = getAdminSupabase();
     const { data: host } = await supabase
       .from("hosts")
-      .select("name, phone")
+      .select("name, phone, calendar_token")
       .eq("email", email)
       .maybeSingle();
     if (host) {
       if (!phone && host.phone) phone = String(host.phone);
       if (!name && host.name) name = String(host.name);
+      if (host.calendar_token) calendarToken = String(host.calendar_token);
     }
   } catch {
     /* best-effort */
   }
 
   const firstName = (name || "there").split(" ")[0];
-  const scheduleUrl = `${PORTAL_BASE}/partner/schedule`;
+  // Tokenized open scheduler (no login) when we have the host's token; else the
+  // authenticated portal scheduler.
+  const scheduleUrl = calendarToken
+    ? `${PORTAL_BASE}/partner/schedule/${calendarToken}`
+    : `${PORTAL_BASE}/partner/schedule`;
 
   const smsMessage =
     `Hi ${firstName}! Here's your Novara weekly cleaning scheduler — pick the days you need turnovers this week here: ${scheduleUrl}`;
