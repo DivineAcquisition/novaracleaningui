@@ -85,8 +85,10 @@ async function getConfig(audience: AgreementAudience): Promise<{
 
 const today = () => new Date().toISOString().slice(0, 10);
 const dollars = (cents: number | null | undefined) => Number((Number(cents || 0) / 100).toFixed(2));
-function compact(v: Record<string, string | number | undefined | null>): Record<string, string | number> {
-  const out: Record<string, string | number> = {};
+function compact(
+  v: Record<string, string | number | boolean | undefined | null>,
+): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
   for (const [k, val] of Object.entries(v)) {
     if (val === undefined || val === null || val === "") continue;
     out[k] = val;
@@ -98,13 +100,14 @@ function compact(v: Record<string, string | number | undefined | null>): Record<
 export function buildOneTimeValues(b: {
   name?: string; email: string; phone?: string; serviceDate?: string; address?: string;
   totalCents?: number; depositCents?: number; balanceCents?: number;
-}): Record<string, string | number> {
+}): Record<string, string | number | boolean> {
   return compact({
     "Service Date": b.serviceDate,
     "Client Name": b.name,
     "Service Address": b.address,
     "Phone": b.phone,
     "Email": b.email,
+    "Selected service type": true,
     "Total Service Fee": b.totalCents != null ? dollars(b.totalCents) : undefined,
     "Deposit Amount": b.depositCents != null ? dollars(b.depositCents) : undefined,
     "Balance Due": b.balanceCents != null ? dollars(b.balanceCents) : undefined,
@@ -116,7 +119,7 @@ export function buildHostValues(h: {
   name?: string; company?: string; email: string; entityType?: "individual" | "entity";
   propertyNickname?: string; rate?: number | null; rateEndDate?: string | null;
   linen?: string; notes?: string;
-}): Record<string, string | number> {
+}): Record<string, string | number | boolean> {
   const t = today();
   return compact({
     "Effective Date": t,
@@ -140,7 +143,7 @@ export function buildMembershipValues(m: {
   name?: string; email: string; serviceAddress?: string; plan?: string;
   membershipRateCents?: number; oneTimeRateCents?: number; firstServiceDate?: string;
   cardLast4?: string; initialDeepClean?: string;
-}): Record<string, string | number> {
+}): Record<string, string | number | boolean> {
   const t = today();
   return compact({
     "Effective Date": t,
@@ -161,7 +164,7 @@ export function buildMembershipValues(m: {
 /** Contractor / VA Independent Contractor Agreement (role: Contractor). */
 export function buildContractorValues(c: {
   name?: string; legalName?: string; email: string; phone?: string; address?: string;
-}): Record<string, string | number> {
+}): Record<string, string | number | boolean> {
   const t = today();
   return compact({
     "Contractor Name": c.name,
