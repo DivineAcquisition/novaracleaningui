@@ -127,6 +127,13 @@ serve(async (req) => {
     if (action === "turnover.finalize") {
       return await handleFinalize(admin, body, origin);
     }
+    // Invoice paid (stripe-webhook, service role) → mark paid + assign + notify.
+    if (action === "turnover.finalizeByInvoice") {
+      const tId = body.turnoverId as string | undefined;
+      if (!tId) return json({ error: "turnoverId required" }, 400);
+      const after = await markPaidAndAssign(admin, tId, (body.paymentIntentId as string) || null);
+      return json({ ok: true, status: after?.status, assignment_type: after?.assignment_type });
+    }
     if (action === "cleaner.confirm" || action === "cleaner.checkin" || action === "cleaner.complete") {
       // Internal callers (sms-inbound) pass cleanerId explicitly. Cleaner-app
       // callers are identified by their auth user → cleaners.user_id, and can

@@ -18,10 +18,6 @@ import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const PORTAL_BASE = (
-  process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || "https://app.novaracleaning.com"
-).replace(/\/+$/, "");
-
 function mondayOf(d = new Date()): string {
   const x = new Date(d);
   const day = (x.getUTCDay() + 6) % 7; // 0 = Monday
@@ -117,17 +113,20 @@ export async function POST(req: Request, { params }: { params: { token: string }
     .eq("host_id", host.id);
   const byId = new Map((props || []).map((p) => [p.id as string, p]));
 
-  // Validate + price each slot.
-  const rows: Array<Record<string, unknown>> = [];
-  let totalCents = 0;
+  if (!host.email) {
+    return NextResponse.json({ error: "No email on file to invoice." }, { status: 400 });
+  }
+
+  // Build the rows to insert (pending_payment until each invoice is paid).
+  const dbRows: Array<Record<string, unknown>> = [];
+  const labels: string[] = [];
   for (const it of items) {
     const p = byId.get(it.propertyId);
     if (!p || p.turnover_price == null || Number(p.turnover_price) <= 0) continue;
     if (!it.date) continue;
     const priceCents = Math.round(Number(p.turnover_price) * 100);
     const depositCents = paymentOption === "split" ? Math.floor(priceCents / 2) : priceCents;
-    totalCents += depositCents;
-    rows.push({
+    dbRows.push({
       property_id: it.propertyId,
       host_id: host.id,
       requested_date: it.date,
@@ -139,72 +138,72 @@ export async function POST(req: Request, { params }: { params: { token: string }
       deposit_cents: depositCents,
       balance_cents: priceCents - depositCents,
     });
+    labels.push(p.nickname || "Property");
   }
-  if (rows.length === 0) return NextResponse.json({ error: "No valid priced turnovers selected." }, { status: 400 });
+  if (dbRows.length === 0) return NextResponse.json({ error: "No valid priced turnovers selected." }, { status: 400 });
 
-  const weekStart = mondayOf(new Date(`${rows[0].requested_date}T00:00:00Z`));
-  const totalAmount = rows.reduce((s, r) => s + Number(r.price), 0);
-
-  // Create the batch, then the turnover rows linked to it.
-  const { data: batch, error: batchErr } = await supabase
-    .from("booking_batches")
-    .insert({
-      host_id: host.id,
-      week_start: weekStart,
-      source: "manual",
-      turnover_count: rows.length,
-      total_amount: totalAmount,
-      status: "pending_payment",
-    })
-    .select("id")
-    .single();
-  if (batchErr || !batch) return NextResponse.json({ error: batchErr?.message || "Could not create batch" }, { status: 500 });
-
-  const { error: insErr } = await supabase
+  const { data: created, error: insErr } = await supabase
     .from("turnover_requests")
-    .insert(rows.map((r) => ({ ...r, batch_id: batch.id })));
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    .insert(dbRows)
+    .select("id, property_id, requested_date, deposit_cents");
+  if (insErr || !created) return NextResponse.json({ error: insErr?.message || "Could not create turnovers" }, { status: 500 });
 
-  // Stripe Checkout for the deposit total (full or 50%).
   const stripeKey = await (async () => {
     const { data } = await supabase.from("app_secrets").select("value").eq("key", "STRIPE_SECRET_KEY").maybeSingle();
     return (data?.value as string) || process.env.STRIPE_SECRET_KEY || "";
   })();
   if (!stripeKey) return NextResponse.json({ error: "Payments are not configured." }, { status: 500 });
 
-  // Reuse / create the host's Stripe customer so the card is saved.
+  // Reuse / create the host's Stripe customer (the card is saved when they pay
+  // the invoice — see stripe-webhook invoice.payment_succeeded).
   let customerId = host.stripe_customer_id || "";
-  if (!customerId && host.email) {
+  if (!customerId) {
     const cust = await stripeRest("customers", { email: host.email, name: host.name || "" }, stripeKey).catch(() => null);
     customerId = cust?.id || "";
     if (customerId) await supabase.from("hosts").update({ stripe_customer_id: customerId }).eq("id", host.id);
   }
+  if (!customerId) return NextResponse.json({ error: "Could not set up billing for this host." }, { status: 502 });
 
-  const label =
-    paymentOption === "split"
-      ? `Weekly turnovers (${rows.length}) deposit (50%) — week of ${weekStart}`
-      : `Weekly turnovers (${rows.length}) — week of ${weekStart}`;
-  const checkoutParams: Record<string, string> = {
-    mode: "payment",
-    "line_items[0][price_data][currency]": "usd",
-    "line_items[0][price_data][product_data][name]": label,
-    "line_items[0][price_data][unit_amount]": String(totalCents),
-    "line_items[0][quantity]": "1",
-    success_url: `${PORTAL_BASE}/partner/turnover/batch-success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${PORTAL_BASE}/partner/schedule/${token}`,
-    "payment_intent_data[setup_future_usage]": "off_session",
-    "metadata[kind]": "turnover_batch",
-    "metadata[batch_id]": batch.id,
-    "metadata[host_id]": host.id,
-  };
-  if (customerId) checkoutParams.customer = customerId;
-  else if (host.email) checkoutParams.customer_email = host.email;
-
-  try {
-    const session = await stripeRest("checkout/sessions", checkoutParams, stripeKey);
-    await supabase.from("booking_batches").update({ stripe_checkout_session_id: session.id }).eq("id", batch.id);
-    return NextResponse.json({ ok: true, url: session.url, batchId: batch.id, count: rows.length });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 502 });
+  // One Stripe INVOICE per turnover (collection_method=send_invoice → emailed
+  // hosted invoice; paying it stores the card and, via the webhook, books +
+  // assigns the turnover). Split bills 50% now; the balance is charged
+  // off-session on completion.
+  const invoices: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < created.length; i++) {
+    const row = created[i];
+    const label = byId.get(row.property_id as string)?.nickname || labels[i] || "Turnover";
+    const amount = Number(row.deposit_cents) || 0;
+    const desc = `STR turnover — ${label} on ${row.requested_date}${paymentOption === "split" ? " (50% deposit)" : ""}`;
+    try {
+      const inv = await stripeRest("invoices", {
+        customer: customerId,
+        collection_method: "send_invoice",
+        days_until_due: "3",
+        auto_advance: "false",
+        description: desc,
+        "metadata[kind]": "turnover",
+        "metadata[turnover_id]": String(row.id),
+        "metadata[host_id]": String(host.id),
+      }, stripeKey);
+      await stripeRest("invoiceitems", {
+        customer: customerId,
+        invoice: String(inv.id),
+        amount: String(amount),
+        currency: "usd",
+        description: desc,
+      }, stripeKey);
+      const sent = await stripeRest(`invoices/${inv.id}/send`, {}, stripeKey);
+      await supabase.from("turnover_requests").update({
+        stripe_invoice_id: inv.id,
+        stripe_invoice_url: sent.hosted_invoice_url || null,
+        invoiced_at: new Date().toISOString(),
+      }).eq("id", row.id);
+      invoices.push({ turnoverId: row.id, date: row.requested_date, property: label, amountCents: amount, url: sent.hosted_invoice_url || null });
+    } catch (e) {
+      invoices.push({ turnoverId: row.id, date: row.requested_date, property: label, error: (e as Error).message });
+    }
   }
+
+  const okCount = invoices.filter((v) => !v.error).length;
+  return NextResponse.json({ ok: true, invoiced: okCount, count: created.length, invoices });
 }

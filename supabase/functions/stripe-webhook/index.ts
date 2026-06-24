@@ -1460,6 +1460,26 @@ serve(async (req) => {
           logStep("Booking updated from deposit/full invoice payment", { bookingId, purpose });
         }
 
+        // ── STR turnover invoice paid → mark paid + assign + calendar sync ──
+        // The card was already saved to the customer above, so the balance (for
+        // split) can be charged off-session on completion.
+        const turnoverId = invoice.metadata?.turnover_id;
+        if (turnoverId && invoice.metadata?.kind === "turnover") {
+          try {
+            const piId = typeof invoice.payment_intent === "string"
+              ? invoice.payment_intent
+              : invoice.payment_intent?.id || null;
+            await supabase.functions.invoke("partner-turnover", {
+              body: { action: "turnover.finalizeByInvoice", turnoverId, paymentIntentId: piId },
+            });
+            logStep("Turnover finalized from invoice payment", { turnoverId });
+          } catch (e) {
+            logStep("Turnover invoice finalize failed (non-blocking)", {
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+
         // ── Membership renewal: reset credits ────────────────────────────
         // invoice.billing_reason === 'subscription_cycle' fires reliably on
         // every auto-renewal. We use this instead of parsing
