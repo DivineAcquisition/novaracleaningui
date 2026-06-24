@@ -6,17 +6,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EarningsPayouts } from "@/components/cleaner/EarningsPayouts";
+import { CompletedJobs } from "@/components/cleaner/CompletedJobs";
 import { toast } from "sonner";
-import { 
-  Loader2, 
-  LogOut, 
-  ExternalLink, 
-  CheckCircle2, 
+import {
+  Loader2,
+  LogOut,
+  ExternalLink,
+  CheckCircle2,
   AlertCircle,
   DollarSign,
   User,
   CreditCard,
-  Settings
+  Settings,
+  Briefcase,
+  Clock,
+  Star,
 } from "lucide-react";
 
 interface CleanerProfile {
@@ -30,6 +36,11 @@ interface CleanerProfile {
   stripe_account_id: string | null;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
+  pay_rate_hr: number;
+  total_earnings_cents: number | null;
+  completed_bookings: number | null;
+  average_rating: number | null;
+  total_ratings: number | null;
 }
 
 export default function CleanerDashboard() {
@@ -37,15 +48,19 @@ export default function CleanerDashboard() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [stripeLoading, setStripeLoading] = useState(false);
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [completedJobs, setCompletedJobs] = useState<any[]>([]);
+  const [financialsLoading, setFinancialsLoading] = useState(true);
 
   useEffect(() => {
     checkAuthAndLoadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuthAndLoadProfile = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         router.push("/cleaner/auth");
         return;
@@ -65,11 +80,41 @@ export default function CleanerDashboard() {
       }
 
       setProfile(cleaner as CleanerProfile);
+      loadFinancials(cleaner.id);
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("Failed to load profile");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFinancials = async (cleanerId: string) => {
+    setFinancialsLoading(true);
+    try {
+      // Payout history (with the related booking address for display)
+      const { data: payoutData } = await supabase
+        .from("payouts")
+        .select("*, booking:bookings(address, service_date, service_type)")
+        .eq("cleaner_id", cleanerId)
+        .order("created_at", { ascending: false });
+
+      // Completed jobs assigned to this cleaner
+      const { data: jobsData } = await supabase
+        .from("bookings")
+        .select(
+          "id, service_type, service_date, address, city, first_name, last_name, cleaner_payout_cents, payout_status, estimated_duration_hours, cleaner_hourly_rate_cents, rating_submitted"
+        )
+        .eq("cleaner_id", cleanerId)
+        .eq("status", "completed")
+        .order("service_date", { ascending: false });
+
+      setPayouts(payoutData || []);
+      setCompletedJobs(jobsData || []);
+    } catch (error) {
+      console.error("Error loading financials:", error);
+    } finally {
+      setFinancialsLoading(false);
     }
   };
 
@@ -140,22 +185,37 @@ export default function CleanerDashboard() {
     return null;
   }
 
-  const stripeStatus = profile.payouts_enabled 
-    ? "active" 
-    : profile.stripe_account_id 
-      ? "pending" 
+  const stripeStatus = profile.payouts_enabled
+    ? "active"
+    : profile.stripe_account_id
+      ? "pending"
       : "not_setup";
+
+  // Earnings figures (in cents)
+  const totalPaidOut = payouts
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + (p.cleaner_payout_cents || 0), 0);
+
+  const pendingAmount = payouts
+    .filter((p) => p.status === "processing" || p.status === "pending")
+    .reduce((sum, p) => sum + (p.cleaner_payout_cents || 0), 0);
+
+  const totalEarnings = profile.total_earnings_cents || totalPaidOut;
+  const jobsCompleted = profile.completed_bookings ?? completedJobs.length;
+  const payRate = profile.pay_rate_hr || 18;
+
+  const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {profile.avatar_url ? (
-              <img 
-                src={profile.avatar_url} 
-                alt="Avatar" 
+              <img
+                src={profile.avatar_url}
+                alt="Avatar"
                 className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
               />
             ) : (
@@ -165,8 +225,8 @@ export default function CleanerDashboard() {
             )}
             <div>
               <p className="font-semibold text-sm">{profile.first_name} {profile.last_name}</p>
-              <Badge 
-                variant="secondary" 
+              <Badge
+                variant="secondary"
                 className={profile.status === "active" ? "bg-green-500/10 text-green-600 text-xs" : "text-xs"}
               >
                 {profile.status === "active" ? "Active" : profile.status}
@@ -180,16 +240,56 @@ export default function CleanerDashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-lg mx-auto px-4 py-6 space-y-4">
-        {/* Welcome Card */}
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-primary to-purple-600 text-white">
-          <CardContent className="p-6">
-            <h1 className="text-xl font-bold mb-2">Welcome back!</h1>
-            <p className="text-white/80 text-sm">
-              Manage your earnings and view financial metrics in your Stripe dashboard.
-            </p>
-          </CardContent>
-        </Card>
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+        {/* Earnings summary stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-primary to-purple-600 text-white">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-white/80" />
+                <p className="text-xs text-white/80">Total Earnings</p>
+              </div>
+              <p className="text-2xl font-bold">{formatCurrency(totalEarnings)}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4 text-amber-500" />
+                <p className="text-xs text-muted-foreground">Pending</p>
+              </div>
+              <p className="text-2xl font-bold text-amber-600">{formatCurrency(pendingAmount)}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Briefcase className="w-4 h-4 text-blue-500" />
+                <p className="text-xs text-muted-foreground">Jobs Completed</p>
+              </div>
+              <p className="text-2xl font-bold">{jobsCompleted}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Star className="w-4 h-4 text-yellow-500" />
+                <p className="text-xs text-muted-foreground">Avg Rating</p>
+              </div>
+              <p className="text-2xl font-bold">
+                {profile.average_rating ? profile.average_rating.toFixed(1) : "—"}
+                {profile.total_ratings ? (
+                  <span className="text-xs text-muted-foreground font-normal ml-1">
+                    ({profile.total_ratings})
+                  </span>
+                ) : null}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Stripe Connect Status */}
         <Card className="border-0 shadow-lg">
@@ -197,7 +297,7 @@ export default function CleanerDashboard() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-primary" />
-                Payments & Earnings
+                Payments & Payouts
               </CardTitle>
               {stripeStatus === "active" && (
                 <Badge className="bg-green-500/10 text-green-600 border-0">
@@ -213,8 +313,8 @@ export default function CleanerDashboard() {
               )}
             </div>
             <CardDescription>
-              {stripeStatus === "active" 
-                ? "View your earnings, payouts, and financial reports"
+              {stripeStatus === "active"
+                ? "Your payouts are sent to your linked bank account via Stripe"
                 : stripeStatus === "pending"
                   ? "Complete your Stripe setup to start receiving payouts"
                   : "Set up Stripe to receive payments for your work"
@@ -222,7 +322,7 @@ export default function CleanerDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
-            <Button 
+            <Button
               onClick={openStripeConnect}
               disabled={stripeLoading}
               className="w-full h-12"
@@ -246,14 +346,38 @@ export default function CleanerDashboard() {
                 </>
               )}
             </Button>
-
-            {stripeStatus === "active" && (
-              <p className="text-xs text-muted-foreground text-center mt-3">
-                Your Stripe dashboard shows earnings, payouts, tax info, and more
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              Your pay rate is{" "}
+              <span className="font-semibold text-foreground">${payRate}/hour</span>
+            </p>
           </CardContent>
         </Card>
+
+        {/* Payouts & Completed Jobs */}
+        <Tabs defaultValue="payouts" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="payouts">Payout History</TabsTrigger>
+            <TabsTrigger value="jobs">Completed Jobs</TabsTrigger>
+          </TabsList>
+          <TabsContent value="payouts" className="mt-4">
+            {financialsLoading ? (
+              <div className="text-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+              </div>
+            ) : (
+              <EarningsPayouts payouts={payouts} />
+            )}
+          </TabsContent>
+          <TabsContent value="jobs" className="mt-4">
+            {financialsLoading ? (
+              <div className="text-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+              </div>
+            ) : (
+              <CompletedJobs jobs={completedJobs} />
+            )}
+          </TabsContent>
+        </Tabs>
 
         {/* Onboarding Portal Link */}
         <Card className="border-0 shadow-lg border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
@@ -276,24 +400,6 @@ export default function CleanerDashboard() {
                 Open
                 <ExternalLink className="w-3 h-3 ml-1" />
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Info Card */}
-        <Card className="border-0 shadow-lg bg-blue-500/5 border-blue-500/20">
-          <CardContent className="p-4">
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                <DollarSign className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">Your Pay Rate</p>
-                <p className="text-2xl font-bold text-blue-600">$18/hour</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  You'll receive assignments via email and SMS
-                </p>
-              </div>
             </div>
           </CardContent>
         </Card>
