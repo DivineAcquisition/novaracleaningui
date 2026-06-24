@@ -174,33 +174,65 @@ export interface AddressSuggestion {
 // rotate the token after each resolved place (Google's recommended pattern).
 let sessionToken: unknown = null;
 
+// Surfaced for diagnostics — the last error from a suggestion fetch (e.g.
+// REQUEST_DENIED when the API key isn't authorized for Places API New). The
+// hook logs a one-time, actionable console error when this is set.
+let lastPlacesError: string | null = null;
+export function getLastPlacesError(): string | null {
+  return lastPlacesError;
+}
+
+function placesNs(): any {
+  return window.google?.maps?.places as any;
+}
+
 /** True when the modern AutocompleteSuggestion API is present (Places New). */
 export function newPlacesAutocompleteAvailable(): boolean {
-  const places = window.google?.maps?.places as unknown as { AutocompleteSuggestion?: unknown } | undefined;
-  return !!places?.AutocompleteSuggestion;
+  return !!placesNs()?.AutocompleteSuggestion;
+}
+
+/**
+ * True when EITHER the modern (AutocompleteSuggestion) or the legacy
+ * (AutocompleteService) predictions API is present. We try modern first and
+ * fall back to legacy so the dropdown works regardless of which Places API the
+ * project's key is authorized for.
+ */
+export function placesAutocompleteAvailable(): boolean {
+  const p = placesNs();
+  return !!(p?.AutocompleteSuggestion || p?.AutocompleteService);
 }
 
 function getSessionToken(reset = false): unknown {
-  const places = window.google?.maps?.places as unknown as { AutocompleteSessionToken?: new () => unknown } | undefined;
+  const places = placesNs();
   if (!places?.AutocompleteSessionToken) return undefined;
   if (reset || !sessionToken) sessionToken = new places.AutocompleteSessionToken();
   return sessionToken;
 }
 
-/**
- * Fetch US address autocomplete suggestions for `input`. Returns [] when the
- * API isn't available or the input is too short — callers fall back to manual
- * entry + server-side geocoding.
- */
-export async function fetchAddressSuggestions(input: string): Promise<AddressSuggestion[]> {
-  const trimmed = input.trim();
-  const places = window.google?.maps?.places as any;
-  if (!places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions || trimmed.length < 3) {
-    return [];
-  }
+// ─── Legacy programmatic services (fallback for older keys) ───────────────────
+
+let legacyAutocompleteService: any = null;
+let legacyPlacesService: any = null;
+function getLegacyAutocompleteService(): any {
+  const p = placesNs();
+  if (!p?.AutocompleteService) return null;
+  if (!legacyAutocompleteService) legacyAutocompleteService = new p.AutocompleteService();
+  return legacyAutocompleteService;
+}
+function getLegacyPlacesService(): any {
+  const p = placesNs();
+  if (!p?.PlacesService) return null;
+  if (!legacyPlacesService) legacyPlacesService = new p.PlacesService(document.createElement("div"));
+  return legacyPlacesService;
+}
+
+/** Try the modern API. Returns null (not []) to signal "fall back to legacy". */
+async function fetchNewSuggestions(input: string): Promise<AddressSuggestion[] | null> {
+  const places = placesNs();
+  if (!places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions) return null;
   try {
     const res = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-      input: trimmed,
+      input,
       sessionToken: getSessionToken(),
       includedRegionCodes: ["us"],
     });
@@ -212,21 +244,95 @@ export async function fetchAddressSuggestions(input: string): Promise<AddressSug
         id: String(p.placeId || p.place || Math.random().toString(36).slice(2)),
         primary: p.mainText?.text || p.text?.text || "",
         secondary: p.secondaryText?.text || "",
-        _prediction: p,
+        _prediction: { kind: "new", p },
       });
     }
     return out;
   } catch (err) {
-    console.warn("[google-places] fetchAutocompleteSuggestions failed", err);
-    return [];
+    lastPlacesError = (err as Error)?.message || String(err);
+    console.error(
+      "[google-places] Places API (New) request failed — check the API key is authorized for 'Places API (New)' and billing is enabled:",
+      lastPlacesError,
+    );
+    return null; // fall back to legacy
   }
+}
+
+/** Legacy AutocompleteService.getPlacePredictions (callback → promise). */
+function fetchLegacySuggestions(input: string): Promise<AddressSuggestion[]> {
+  const svc = getLegacyAutocompleteService();
+  if (!svc) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    svc.getPlacePredictions(
+      { input, componentRestrictions: { country: "us" }, types: ["address"] },
+      (preds: any[], statusStr: string) => {
+        if (statusStr !== "OK") {
+          if (statusStr !== "ZERO_RESULTS") {
+            lastPlacesError = `legacy AutocompleteService status: ${statusStr}`;
+            console.error("[google-places] legacy getPlacePredictions:", statusStr);
+          }
+          resolve([]);
+          return;
+        }
+        resolve(
+          (preds || []).map((pr) => ({
+            id: String(pr.place_id),
+            primary: pr.structured_formatting?.main_text || pr.description || "",
+            secondary: pr.structured_formatting?.secondary_text || "",
+            _prediction: { kind: "legacy", placeId: pr.place_id },
+          })),
+        );
+      },
+    );
+  });
+}
+
+/**
+ * Fetch US address autocomplete suggestions for `input`. Tries the modern
+ * Places API (New) first, then the legacy service, so it works no matter which
+ * the key is authorized for. Returns [] (with a console error in lastPlacesError
+ * on failure) so callers fall back to manual entry + server-side geocoding.
+ */
+export async function fetchAddressSuggestions(input: string): Promise<AddressSuggestion[]> {
+  const trimmed = input.trim();
+  if (trimmed.length < 3 || !placesNs()) return [];
+  lastPlacesError = null;
+
+  const fromNew = await fetchNewSuggestions(trimmed);
+  if (fromNew && fromNew.length > 0) return fromNew;
+
+  const fromLegacy = await fetchLegacySuggestions(trimmed);
+  if (fromLegacy.length > 0) return fromLegacy;
+
+  return fromNew || [];
 }
 
 /** Resolve a suggestion to full address components, then rotate the session. */
 export async function resolveAddressSuggestion(
   suggestion: AddressSuggestion,
 ): Promise<PlacesAddressComponents | null> {
-  const p = suggestion._prediction as any;
+  const pred = suggestion._prediction as any;
+
+  // Legacy prediction → PlacesService.getDetails.
+  if (pred?.kind === "legacy") {
+    const svc = getLegacyPlacesService();
+    if (!svc) return null;
+    return new Promise((resolve) => {
+      svc.getDetails(
+        { placeId: pred.placeId, fields: ["address_components", "geometry", "formatted_address"] },
+        (place: google.maps.places.PlaceResult | null) => {
+          if (!place) {
+            resolve(null);
+            return;
+          }
+          resolve(parsePlaceResult(place));
+        },
+      );
+    });
+  }
+
+  // Modern prediction → place.fetchFields.
+  const p = pred?.p ?? pred;
   if (!p?.toPlace) return null;
   try {
     const place = p.toPlace();
@@ -234,7 +340,8 @@ export async function resolveAddressSuggestion(
     getSessionToken(true); // end the billing session
     return parsePlaceNew(place);
   } catch (err) {
-    console.warn("[google-places] resolveAddressSuggestion failed", err);
+    lastPlacesError = (err as Error)?.message || String(err);
+    console.error("[google-places] resolveAddressSuggestion failed:", lastPlacesError);
     return null;
   }
 }

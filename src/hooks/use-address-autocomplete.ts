@@ -19,8 +19,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchAddressSuggestions,
+  getLastPlacesError,
   loadGooglePlaces,
-  newPlacesAutocompleteAvailable,
+  placesAutocompleteAvailable,
   resolveAddressSuggestion,
   type AddressSuggestion,
   type PlacesAddressComponents,
@@ -50,7 +51,7 @@ export function useAddressAutocomplete() {
         setStatus("manual");
         return;
       }
-      setStatus(newPlacesAutocompleteAvailable() ? "ready" : "manual");
+      setStatus(placesAutocompleteAvailable() ? "ready" : "manual");
     })();
     return () => {
       cancelled = true;
@@ -90,7 +91,18 @@ export function useAddressAutocomplete() {
       debounceRef.current = setTimeout(async () => {
         const results = await fetchAddressSuggestions(input);
         // Ignore out-of-order responses from earlier keystrokes.
-        if (seq === seqRef.current) setSuggestions(results);
+        if (seq !== seqRef.current) return;
+        setSuggestions(results);
+        // Surface an actionable hint once if the API rejected the request.
+        if (results.length === 0) {
+          const err = getLastPlacesError();
+          if (err) {
+            console.error(
+              "[address-autocomplete] No suggestions returned. Likely the API key isn't authorized for Places API (New) or billing/referrers aren't set. Google said:",
+              err,
+            );
+          }
+        }
       }, DEBOUNCE_MS);
     },
     [],
