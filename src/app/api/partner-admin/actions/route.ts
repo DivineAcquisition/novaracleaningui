@@ -25,6 +25,7 @@ import {
   type PropertyPatch,
 } from "@/lib/airtable/partner-admin";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
+import { sendAgreement } from "@/lib/docuseal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -174,8 +175,17 @@ export async function POST(req: Request): Promise<NextResponse> {
       }
       case "resend_agreement": {
         if (!body.hostId) throw new Error("hostId is required.");
-        const res = await resendGhl(body.hostId, "agreement");
-        if (!res.ok) throw new Error(res.error || "Could not resend agreement.");
+        const host = await getHostDetail(body.hostId, true);
+        if (!host?.email) throw new Error("Host has no email on file.");
+        // Send the Host Partnership Agreement for e-signature via DocuSeal.
+        await sendAgreement({
+          audience: "str_host",
+          email: host.email,
+          name: host.name || undefined,
+          hostEmail: host.email,
+          createdBy: principal.email,
+          metadata: { hostRecordId: body.hostId, source: "partner-admin" },
+        });
         break;
       }
       case "resend_payment": {
