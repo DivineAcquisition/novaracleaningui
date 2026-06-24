@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendAgreement } from "@/lib/docuseal";
+import { sendAgreement, buildOneTimeValues } from "@/lib/docuseal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,17 +74,17 @@ export async function POST(req: Request): Promise<NextResponse> {
     const addressLine = [booking.address, booking.city, [booking.state, booking.zip_code].filter(Boolean).join(" ")]
       .filter(Boolean)
       .join(", ");
-    const dollars = (cents: number) => Number((cents / 100).toFixed(2));
 
-    const values: Record<string, string | number> = {};
-    if (booking.service_date) values["Service Date"] = String(booking.service_date);
-    if (name) values["Client Name"] = name;
-    if (addressLine) values["Service Address"] = addressLine;
-    if (booking.phone) values["Phone"] = String(booking.phone);
-    values["Email"] = String(booking.email);
-    if (totalCents > 0) values["Total Service Fee"] = dollars(totalCents);
-    values["Deposit Amount"] = dollars(depositCents);
-    values["Balance Due"] = dollars(balanceCents);
+    const values = buildOneTimeValues({
+      name,
+      email: String(booking.email),
+      phone: booking.phone || undefined,
+      serviceDate: booking.service_date || undefined,
+      address: addressLine || undefined,
+      totalCents,
+      depositCents,
+      balanceCents,
+    });
 
     const result = await sendAgreement({
       audience: "one_time",

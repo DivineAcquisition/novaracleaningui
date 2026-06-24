@@ -25,7 +25,7 @@ import {
   type PropertyPatch,
 } from "@/lib/airtable/partner-admin";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
-import { sendAgreement } from "@/lib/docuseal";
+import { sendAgreement, buildHostValues } from "@/lib/docuseal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,11 +177,29 @@ export async function POST(req: Request): Promise<NextResponse> {
         if (!body.hostId) throw new Error("hostId is required.");
         const host = await getHostDetail(body.hostId, true);
         if (!host?.email) throw new Error("Host has no email on file.");
-        // Send the Host Partnership Agreement for e-signature via DocuSeal.
+        // Pre-fill from the host + first priced property so they just sign.
+        const prop = host.properties.find((p) => (p.standardTurnoverRate ?? 0) > 0) || host.properties[0];
+        const linen = prop
+          ? [prop.linenIncluded ? "Linen included" : null, prop.restockIncluded ? "Restock included" : null]
+              .filter(Boolean)
+              .join(", ") || "Not included"
+          : undefined;
+        const values = buildHostValues({
+          name: host.name || undefined,
+          company: host.company || undefined,
+          email: host.email,
+          entityType: host.entityType,
+          propertyNickname: prop?.nickname || undefined,
+          rate: prop?.standardTurnoverRate ?? undefined,
+          rateEndDate: prop?.introRateEndDate || undefined,
+          linen,
+          notes: prop?.stagingNotes || "STR turnover cleaning",
+        });
         await sendAgreement({
           audience: "str_host",
           email: host.email,
           name: host.name || undefined,
+          values,
           hostEmail: host.email,
           createdBy: principal.email,
           metadata: { hostRecordId: body.hostId, source: "partner-admin" },

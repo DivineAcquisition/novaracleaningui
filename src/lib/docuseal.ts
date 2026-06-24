@@ -77,6 +77,103 @@ async function getConfig(audience: AgreementAudience): Promise<{
   return { token, baseUrl, templateId };
 }
 
+// ─── Per-audience field pre-fill builders ─────────────────────────────────────
+//
+// Keys are the EXACT DocuSeal template field names (signer-role fields only —
+// the Company/Representative side is left for our countersignature). Pass the
+// result as `values` to sendAgreement so the signer just reviews + signs.
+
+const today = () => new Date().toISOString().slice(0, 10);
+const dollars = (cents: number | null | undefined) => Number((Number(cents || 0) / 100).toFixed(2));
+function compact(v: Record<string, string | number | undefined | null>): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const [k, val] of Object.entries(v)) {
+    if (val === undefined || val === null || val === "") continue;
+    out[k] = val;
+  }
+  return out;
+}
+
+/** One-Time Service Agreement (role: Client). */
+export function buildOneTimeValues(b: {
+  name?: string; email: string; phone?: string; serviceDate?: string; address?: string;
+  totalCents?: number; depositCents?: number; balanceCents?: number;
+}): Record<string, string | number> {
+  return compact({
+    "Service Date": b.serviceDate,
+    "Client Name": b.name,
+    "Service Address": b.address,
+    "Phone": b.phone,
+    "Email": b.email,
+    "Total Service Fee": b.totalCents != null ? dollars(b.totalCents) : undefined,
+    "Deposit Amount": b.depositCents != null ? dollars(b.depositCents) : undefined,
+    "Balance Due": b.balanceCents != null ? dollars(b.balanceCents) : undefined,
+  });
+}
+
+/** Host Partnership Agreement (role: Host). */
+export function buildHostValues(h: {
+  name?: string; company?: string; email: string; entityType?: "individual" | "entity";
+  propertyNickname?: string; rate?: number | null; rateEndDate?: string | null;
+  linen?: string; notes?: string;
+}): Record<string, string | number> {
+  const t = today();
+  return compact({
+    "Effective Date": t,
+    "Host/Entity Name": h.name,
+    "Company Name": h.company,
+    "Entity": h.entityType === "entity" ? "Business Entity" : "Individual",
+    "Email": h.email,
+    "Host/Entity": h.company || h.name,
+    "Printed Name": h.name,
+    "Date": t,
+    "Property Nickname": h.propertyNickname,
+    "Rate": h.rate != null ? Number(h.rate) : undefined,
+    "Rate End Date": h.rateEndDate || undefined,
+    "Linen Restock": h.linen,
+    "Notes/Scope": h.notes,
+  });
+}
+
+/** Recurring Service & Membership Agreement (role: Member). */
+export function buildMembershipValues(m: {
+  name?: string; email: string; serviceAddress?: string; plan?: string;
+  membershipRateCents?: number; oneTimeRateCents?: number; firstServiceDate?: string;
+  cardLast4?: string; initialDeepClean?: string;
+}): Record<string, string | number> {
+  const t = today();
+  return compact({
+    "Effective Date": t,
+    "Member Name": m.name,
+    "Service Address": m.serviceAddress,
+    "Plan / Frequency": m.plan,
+    "Membership Rate": m.membershipRateCents != null ? dollars(m.membershipRateCents) : undefined,
+    "One‑Time Rate": m.oneTimeRateCents != null ? dollars(m.oneTimeRateCents) : undefined,
+    "Initial Deep Clean": m.initialDeepClean,
+    "First Service Date": m.firstServiceDate,
+    "Card on File (last 4)": m.cardLast4,
+    "Name": m.name,
+    "Email": m.email,
+    "Date": t,
+  });
+}
+
+/** Contractor / VA Independent Contractor Agreement (role: Contractor). */
+export function buildContractorValues(c: {
+  name?: string; legalName?: string; email: string; phone?: string; address?: string;
+}): Record<string, string | number> {
+  const t = today();
+  return compact({
+    "Contractor Name": c.name,
+    "Full Name": c.name,
+    "Legal Name": c.legalName || c.name,
+    "Full Address": c.address,
+    "Mobile Number": c.phone,
+    "Email": c.email,
+    "Date": t,
+  });
+}
+
 // ─── Submission ───────────────────────────────────────────────────────────────
 
 export interface SendAgreementInput {
