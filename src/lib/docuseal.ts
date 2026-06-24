@@ -195,6 +195,8 @@ export interface SendAgreementInput {
   cleanerId?: string;
   createdBy?: string;
   metadata?: Record<string, unknown>;
+  /** When true, the caller owns the docuseal_submissions tracking row. */
+  skipTracking?: boolean;
 }
 
 export interface SendAgreementResult {
@@ -377,6 +379,9 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
 
   // Record the send (best-effort — never block on the tracking write).
   let recordId: string | null = null;
+  if (input.skipTracking) {
+    return { ok: true, submissionId, signingUrl, recordId: null };
+  }
   try {
     const supabase = getAdminSupabase();
     const { data } = await supabase

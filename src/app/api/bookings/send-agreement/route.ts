@@ -51,14 +51,29 @@ export async function POST(req: Request): Promise<NextResponse> {
       .maybeSingle();
     if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     if (!booking.email) return NextResponse.json({ ok: true, skipped: "no email" });
+    // Only confirmed/completed bookings get the agreement.
+    if (booking.status !== "confirmed" && booking.status !== "completed") {
+      return NextResponse.json({ ok: true, skipped: `status=${booking.status}` });
+    }
 
-    // Idempotent: only one agreement per booking.
-    const { data: existing } = await supabase
+    // CLAIM the booking atomically (unique index on booking_id). If the row
+    // already exists, the trigger or a prior cron run already handled it — skip.
+    // This makes the send exactly-once even with the trigger + reconcile cron
+    // both firing.
+    const { data: claim, error: claimErr } = await supabase
       .from("docuseal_submissions")
+      .insert({
+        booking_id: bookingId,
+        audience: "one_time",
+        submitter_email: String(booking.email),
+        role: "Client",
+        status: "sending",
+        created_by: "auto:booking-confirm",
+      })
       .select("id")
-      .eq("booking_id", bookingId)
-      .limit(1);
-    if (existing && existing.length > 0) {
+      .single();
+    if (claimErr || !claim) {
+      // Unique violation (already claimed) or other → treat as already handled.
       return NextResponse.json({ ok: true, alreadySent: true });
     }
 
@@ -86,16 +101,34 @@ export async function POST(req: Request): Promise<NextResponse> {
       balanceCents,
     });
 
-    const result = await sendAgreement({
-      audience: "one_time",
-      email: String(booking.email),
-      name,
-      values,
-      bookingId,
-      createdBy: "auto:booking-confirm",
-      metadata: { source: "booking-confirm" },
-    });
-    return NextResponse.json({ ok: true, ...result });
+    try {
+      const result = await sendAgreement({
+        audience: "one_time",
+        email: String(booking.email),
+        name,
+        values,
+        bookingId,
+        createdBy: "auto:booking-confirm",
+        metadata: { source: "booking-confirm" },
+        skipTracking: true, // we own the claim row
+      });
+      // Finalize the claim row with the DocuSeal result.
+      await supabase
+        .from("docuseal_submissions")
+        .update({
+          submission_id: result.submissionId,
+          signing_url: result.signingUrl,
+          submitter_name: name || null,
+          status: "completed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", claim.id);
+      return NextResponse.json({ ok: true, ...result });
+    } catch (sendErr) {
+      // Release the claim so the reconcile cron retries on the next pass.
+      await supabase.from("docuseal_submissions").delete().eq("id", claim.id);
+      throw sendErr;
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[bookings/send-agreement]", (err as Error).message);
