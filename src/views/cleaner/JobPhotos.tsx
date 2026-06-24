@@ -314,7 +314,6 @@ function PhotoGroup({
           type="file"
           accept="image/*"
           multiple
-          capture="environment"
           onChange={(e) => onAdd(e.target.files)}
           className="hidden"
         />

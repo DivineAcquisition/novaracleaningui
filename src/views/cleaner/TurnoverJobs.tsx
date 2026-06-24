@@ -305,7 +305,7 @@ function PhotoButton({
       busy && "opacity-60 pointer-events-none",
     )} style={variant === "outline" ? undefined : style}>
       {busy ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : label}
-      <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
+      <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
     </label>
   );
 }
