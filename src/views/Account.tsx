@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { RecurringPlanCard } from "@/components/portal/RecurringPlanCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -472,6 +473,9 @@ export default function Account() {
 
         {/* Membership + Account Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+          {/* Recurring plan management (renders only for recurring members) */}
+          <RecurringPlanCard />
+
           {/* Membership Credits Card */}
           {membershipCredits ? (
             <Card className="animate-fade-in-up stagger-1 shadow-md border-primary/15 overflow-hidden">
