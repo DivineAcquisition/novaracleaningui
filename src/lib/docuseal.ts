@@ -225,11 +225,14 @@ async function companyInfo(): Promise<{ name: string; rep: string; email: string
     resolveSecret("DOCUSEAL_COMPANY_EMAIL"),
   ]);
   return {
-    name: name || "Novara Cleaning LLC",
-    rep: rep || "Novara Cleaning",
+    name: name || "NovaraCleaning LLC",
+    rep: rep || "Malik Sannie",
     email: email || "hello@novaracleaning.com",
   };
 }
+
+interface CompanyInfo { name: string; rep: string; email: string }
+interface SignerInfo { name: string; email: string }
 
 interface AudienceSpec {
   signerRole: string;
@@ -237,20 +240,27 @@ interface AudienceSpec {
   signerSignatures?: string[];
   /** Optional "Initials" field on the signer role. */
   signerInitials?: string;
-  /** The company counter-signer role + its field values. */
+  /** The second submitter role (the execution/company page) + its field values. */
   companyRole: string;
-  companyValues: (c: { name: string; rep: string; email: string }) => Record<string, string | number>;
+  companyValues: (c: CompanyInfo, signer: SignerInfo) => Record<string, string | number>;
   /** Host agreement also has a Guarantor role. */
   guarantorRole?: string;
 }
 
 const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
+  // One-Time: the execution page holds BOTH the Organization block (Company,
+  // Representative) AND the Client/Customer block (Full Name, Email, Signature).
+  // The customer's Full Name/Email/Signature must be the CLIENT's details.
   one_time: {
     signerRole: "Client",
     companyRole: "Company",
-    companyValues: (c) => ({
-      "Company": c.name, "Full Name": c.rep, "Email": c.email, "Representative": c.rep,
-      "Date": today(), "Signature": c.rep,
+    companyValues: (c, s) => ({
+      "Company": c.name,
+      "Representative": c.rep,
+      "Full Name": s.name,        // Client/Customer block
+      "Email": s.email,           // Client/Customer block
+      "Signature": s.name || s.email, // Client signs with their name
+      "Date": today(),
     }),
   },
   str_host: {
@@ -321,7 +331,7 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
       name: co.name,
       completed: true,
       send_email: false,
-      values: spec.companyValues(co),
+      values: spec.companyValues(co, { name, email: input.email }),
     },
   ];
   if (spec.guarantorRole) {
