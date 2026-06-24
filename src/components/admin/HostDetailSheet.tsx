@@ -19,6 +19,7 @@ import {
   RiLoader4Line, RiCheckLine, RiPauseCircleLine, RiLogoutCircleRLine, RiSendPlaneLine,
   RiBankCard2Line, RiPriceTag3Line, RiAddLine, RiSaveLine, RiHistoryLine,
   RiMoneyDollarCircleLine, RiStickyNoteLine, RiUser3Line, RiBuilding2Line,
+  RiCalendarCheckLine,
 } from "@remixicon/react";
 
 import {
@@ -40,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
-  fetchHostDetail, runAction, type HostDetail, type PropertyView,
+  fetchHostDetail, runAction, sendCalendarLink, type HostDetail, type PropertyView,
 } from "@/lib/partner-admin-api";
 
 const LIFECYCLE_OPTIONS = ["Lead", "Onboarding", "Active", "Paused", "Churned"];
@@ -134,6 +135,27 @@ export function HostDetailSheet({
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={() => act({ action: "resend_payment" }, "Payment-setup link resent.")}>
                 <RiBankCard2Line className="w-4 h-4 mr-1" /> Resend payment
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || !host.email}
+                onClick={async () => {
+                  if (!host.email) return;
+                  setBusy(true);
+                  try {
+                    const res = await sendCalendarLink({ email: host.email, name: host.name || undefined });
+                    toast.success(
+                      `Scheduler link sent${res.smsSent ? " · SMS" : ""}${res.emailSent ? " · email" : ""}.`,
+                    );
+                  } catch (err) {
+                    toast.error((err as Error).message || "Could not send scheduler link.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <RiCalendarCheckLine className="w-4 h-4 mr-1" /> Send scheduler
               </Button>
               <OffboardButton busy={busy} onConfirm={() => act({ action: "offboard_host" }, "Host offboarded (history retained).")} />
             </div>

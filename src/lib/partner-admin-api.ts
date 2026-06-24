@@ -89,3 +89,25 @@ export async function syncPartners(): Promise<SyncResponse> {
   });
   return handle<SyncResponse>(res);
 }
+
+export interface SendCalendarLinkResponse {
+  ok: true;
+  smsSent: boolean;
+  emailSent: boolean;
+  scheduleUrl: string;
+  warnings?: string[];
+}
+
+/** Text + email a host their weekly cleaning scheduler link. */
+export async function sendCalendarLink(input: {
+  email: string;
+  name?: string;
+  phone?: string;
+}): Promise<SendCalendarLinkResponse> {
+  const res = await fetch(`/api/partner-admin/send-calendar-link`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify(input),
+  });
+  return handle<SendCalendarLinkResponse>(res);
+}
