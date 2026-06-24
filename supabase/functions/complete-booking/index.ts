@@ -75,7 +75,48 @@ serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    logStep("Booking marked complete, triggering payout");
+    logStep("Booking marked complete");
+
+    // Send SMS to the assigned cleaner asking them to submit job photos.
+    // This fires the moment the service is marked complete.
+    try {
+      const { data: cleaner } = await supabase
+        .from("cleaners")
+        .select("first_name, phone, sms_notifications_enabled")
+        .eq("id", booking.cleaner_id)
+        .maybeSingle();
+
+      if (cleaner?.phone && cleaner.sms_notifications_enabled !== false) {
+        const contractorAppUrl =
+          Deno.env.get("CONTRACTOR_APP_URL") ?? "https://contractor.novaracleaning.com";
+        const uploadUrl = `${contractorAppUrl}/cleaner/job-photos?booking_id=${bookingId}`;
+
+        const message =
+          `🧹 Novara: Job complete! Please upload your before & after photos ` +
+          `for ${booking.address || "your last job"} now: ${uploadUrl}`;
+
+        const smsResponse = await supabase.functions.invoke("send-sms-notification", {
+          body: {
+            toPhone: cleaner.phone,
+            message,
+            type: "confirmation",
+          },
+        });
+
+        if (smsResponse.error) {
+          logStep("Photo-request SMS failed (non-critical)", { error: smsResponse.error });
+        } else {
+          logStep("Photo-request SMS sent to cleaner");
+        }
+      } else {
+        logStep("Skipping photo-request SMS (no phone or SMS disabled)");
+      }
+    } catch (smsError) {
+      // Don't fail completion if SMS fails
+      logStep("Photo-request SMS error (non-critical)", { error: String(smsError) });
+    }
+
+    logStep("Triggering payout");
 
     // Trigger payout
     const payoutResponse = await supabase.functions.invoke('process-payout', {

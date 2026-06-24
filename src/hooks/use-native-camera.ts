@@ -52,7 +52,7 @@ export function useNativeCamera() {
       const fileName = `${bookingId}/${type}/${Date.now()}.jpg`;
 
       const { data, error } = await supabase.storage
-        .from('cleaner-avatars')
+        .from('job-photos')
         .upload(fileName, compressedFile, {
           contentType: 'image/jpeg',
           upsert: false,
@@ -61,7 +61,7 @@ export function useNativeCamera() {
       if (error) throw error;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('cleaner-avatars')
+        .from('job-photos')
         .getPublicUrl(data.path);
 
       return publicUrl;
