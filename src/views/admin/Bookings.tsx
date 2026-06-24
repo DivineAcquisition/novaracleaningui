@@ -23,6 +23,8 @@ import {
   RiCheckLine,
   RiArrowRightLine,
   RiInformationLine,
+  RiEdit2Line,
+  RiDeleteBin6Line,
 } from "@remixicon/react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -39,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { cn } from "@/lib/utils";
+import { calculatePrice, SERVICE_TIER_PRICING, HOME_SIZE_RANGES, ADD_ONS } from "@/lib/pricing";
 
 interface BookingRow {
   id: string;
@@ -562,6 +565,28 @@ function BookingSheet({
   const [working, setWorking] = useState<string | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  // Adjust-service state (prefilled from the booking when the sheet opens).
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [svcType, setSvcType] = useState<string>("standard");
+  const [svcHomeSize, setSvcHomeSize] = useState<string>("");
+  const [svcAddOns, setSvcAddOns] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!booking) return;
+    setAdjustOpen(false);
+    setSvcType(booking.service_type || "standard");
+    setSvcHomeSize(booking.home_size_id || "");
+    setSvcAddOns([]);
+    // add_ons isn't in the list payload — pull the current ones so the
+    // adjust form starts from the real selection.
+    void (async () => {
+      const { data } = await (supabase.from as any)("bookings")
+        .select("add_ons")
+        .eq("id", booking.id)
+        .maybeSingle();
+      setSvcAddOns(Array.isArray(data?.add_ons) ? (data.add_ons as string[]) : []);
+    })();
+  }, [booking?.id]);
 
   if (!booking) return null;
 
@@ -586,6 +611,65 @@ function BookingSheet({
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Booking cancelled (${refundType === "none" ? "no refund" : refundType + " refund"})`);
+      onMutated();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const toggleAddOn = (id: string) =>
+    setSvcAddOns((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const newQuoteCents = Math.round(
+    (calculatePrice(svcHomeSize, svcType, svcAddOns, "none", booking.uses_credit ?? false, "B").total || 0) * 100,
+  );
+
+  const adjustService = async () => {
+    if (!svcHomeSize || !svcType) {
+      toast.error("Pick a service type and home size.");
+      return;
+    }
+    setWorking("adjust");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
+        body: {
+          bookingId: booking.id,
+          serviceType: svcType,
+          homeSizeId: svcHomeSize,
+          addOns: svcAddOns,
+          totalEstimateCents: newQuoteCents,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Service updated — customer notified via SMS & email.");
+      onMutated();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const deleteBooking = async () => {
+    if (
+      !confirm(
+        "Permanently DELETE this booking? The customer will NOT be notified. This cannot be undone.",
+      )
+    )
+      return;
+    setWorking("delete");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-delete-booking", {
+        body: { bookingId: booking.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Booking deleted (customer not notified).");
       onMutated();
       onClose();
     } catch (err) {
@@ -690,6 +774,101 @@ function BookingSheet({
               </CardContent>
             </Card>
 
+            {/* Adjust service */}
+            {booking.status !== "cancelled" && booking.status !== "completed" && (
+              <Card className="border-slate-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <RiEdit2Line className="w-4 h-4 text-violet-700" />
+                    Adjust service
+                  </CardTitle>
+                  <CardDescription>
+                    Change service type, home size, or add-ons. The customer is notified via SMS &amp; email and the new total syncs to GHL.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!adjustOpen ? (
+                    <Button variant="outline" className="w-full" onClick={() => setAdjustOpen(true)}>
+                      Adjust service <RiArrowRightLine className="w-4 h-4 ml-2" />
+                    </Button>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Service type</Label>
+                          <Select value={svcType} onValueChange={setSvcType}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(SERVICE_TIER_PRICING).map(([id, v]) => (
+                                <SelectItem key={id} value={id}>{v.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Home size</Label>
+                          <Select value={svcHomeSize} onValueChange={setSvcHomeSize}>
+                            <SelectTrigger><SelectValue placeholder="Select size" /></SelectTrigger>
+                            <SelectContent>
+                              {HOME_SIZE_RANGES.map((h) => (
+                                <SelectItem key={h.id} value={h.id}>{h.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Add-ons</Label>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {Object.entries(ADD_ONS).map(([id, v]) => {
+                            const on = svcAddOns.includes(id);
+                            return (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => toggleAddOn(id)}
+                                className={cn(
+                                  "text-xs px-2 py-1 rounded-full border transition-colors",
+                                  on
+                                    ? "bg-violet-600 text-white border-violet-600"
+                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                                )}
+                              >
+                                {v.label} (${v.price})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <span className="text-slate-500">New total</span>
+                        <span className="font-semibold tabular-nums">
+                          {fmtMoney(newQuoteCents)}
+                          <span className="text-slate-400 font-normal"> (was {fmtMoney(totalCents)})</span>
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1" onClick={() => setAdjustOpen(false)} disabled={working === "adjust"}>
+                          Cancel
+                        </Button>
+                        <Button
+                          className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
+                          onClick={adjustService}
+                          disabled={working === "adjust"}
+                        >
+                          {working === "adjust" ? (
+                            <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+                          ) : (
+                            "Save & notify customer"
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Mark complete */}
             {booking.status !== "completed" && booking.status !== "cancelled" && (
               <Card className="border-slate-200">
@@ -782,6 +961,33 @@ function BookingSheet({
                 </CardContent>
               </Card>
             )}
+
+            {/* Delete booking — permanent, NO customer notification */}
+            <Card className="border-rose-300 bg-rose-50/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-rose-900 flex items-center gap-1.5">
+                  <RiDeleteBin6Line className="w-4 h-4" />
+                  Delete booking
+                </CardTitle>
+                <CardDescription className="text-rose-800/80">
+                  Permanently removes this booking. The customer is <strong>not</strong> notified and this cannot be undone. Use cancel + refund if the customer should be told.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  onClick={deleteBooking}
+                  disabled={working === "delete"}
+                  className="w-full border-rose-300 text-rose-700 hover:bg-rose-100"
+                >
+                  {working === "delete" ? (
+                    <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Deleting…</>
+                  ) : (
+                    <><RiDeleteBin6Line className="w-4 h-4 mr-2" /> Delete booking (no notice)</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </SheetContent>
       </Sheet>
