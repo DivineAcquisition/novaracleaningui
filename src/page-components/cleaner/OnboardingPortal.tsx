@@ -34,9 +34,6 @@ import {
   Sparkles,
   ArrowRight,
   Circle,
-  FileText,
-  Maximize2,
-  Minimize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 const logo = "/logo.png";
@@ -167,7 +164,6 @@ export default function OnboardingPortal() {
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [signatureName, setSignatureName] = useState("");
   const [signingAgreement, setSigningAgreement] = useState(false);
-  const [showDocPreview, setShowDocPreview] = useState(false);
 
   // Other step states
   const [savingStep, setSavingStep] = useState(false);
@@ -637,49 +633,6 @@ export default function OnboardingPortal() {
                             </p>
                           </div>
 
-                          {/* In-app full document preview */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs font-semibold flex items-center gap-1.5">
-                                <FileText className="w-4 h-4 text-primary" />
-                                Document Preview
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setShowDocPreview((v) => !v)}
-                                className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
-                              >
-                                {showDocPreview ? (
-                                  <>
-                                    <Minimize2 className="w-3.5 h-3.5" />
-                                    Hide
-                                  </>
-                                ) : (
-                                  <>
-                                    <Maximize2 className="w-3.5 h-3.5" />
-                                    Show full document
-                                  </>
-                                )}
-                              </button>
-                            </div>
-
-                            {showDocPreview && (
-                              <div className="rounded-lg border border-border overflow-hidden bg-white">
-                                <iframe
-                                  src={AGREEMENT_URL}
-                                  title="Independent Contractor Agreement"
-                                  className="w-full h-[70vh] min-h-[480px]"
-                                  loading="lazy"
-                                />
-                                <div className="p-2 bg-muted/40 text-center">
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Trouble viewing or signing? Open the document in a new tab below.
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
                           <Button
                             variant="outline"
                             className="w-full h-12 text-sm font-semibold border-primary/30"
@@ -688,7 +641,7 @@ export default function OnboardingPortal() {
                             }
                           >
                             <ExternalLink className="w-4 h-4 mr-2" />
-                            Open & Sign in New Tab
+                            Open & Sign Agreement Document
                           </Button>
 
                           <Separator />

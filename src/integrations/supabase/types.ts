@@ -263,7 +263,6 @@ export type Database = {
           payout_status: string | null
           pets: string | null
           phone: string
-          photos_submitted_at: string | null
           platform_fee_cents: number | null
           rated_at: string | null
           rating: number | null
@@ -335,7 +334,6 @@ export type Database = {
           payout_status?: string | null
           pets?: string | null
           phone: string
-          photos_submitted_at?: string | null
           platform_fee_cents?: number | null
           rated_at?: string | null
           rating?: number | null
@@ -407,7 +405,6 @@ export type Database = {
           payout_status?: string | null
           pets?: string | null
           phone?: string
-          photos_submitted_at?: string | null
           platform_fee_cents?: number | null
           rated_at?: string | null
           rating?: number | null
