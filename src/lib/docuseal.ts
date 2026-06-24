@@ -61,6 +61,18 @@ export async function getDocusealWebhookSecret(): Promise<string> {
   return resolveSecret("DOCUSEAL_WEBHOOK_SECRET");
 }
 
+/** Fetch the (blank) template PDF URL for an audience — used for in-app preview. */
+export async function getAgreementPreviewUrl(audience: AgreementAudience): Promise<string | null> {
+  const { token, baseUrl, templateId } = await getConfig(audience);
+  const res = await fetch(`${baseUrl}/templates/${templateId}`, {
+    headers: { "X-Auth-Token": token },
+  });
+  if (!res.ok) return null;
+  const t = await res.json().catch(() => null);
+  const docs = (t?.documents || []) as Array<{ url?: string }>;
+  return docs[0]?.url || null;
+}
+
 async function getConfig(audience: AgreementAudience): Promise<{
   token: string;
   baseUrl: string;
@@ -197,6 +209,8 @@ export interface SendAgreementInput {
   metadata?: Record<string, unknown>;
   /** When true, the caller owns the docuseal_submissions tracking row. */
   skipTracking?: boolean;
+  /** Drawn signature as a data:image/png;base64 URL — rendered in the doc. */
+  signatureImage?: string;
 }
 
 export interface SendAgreementResult {
@@ -319,8 +333,14 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
   const name = input.name || "";
 
   // Signer fields: the caller's data values + auto signature(s)/initials/date.
+  // A drawn signature image (data URL) renders the actual signature; otherwise
+  // we fall back to the typed name (DocuSeal renders it in a signature font).
   const signerValues: Record<string, string | number | boolean> = { ...(input.values || {}) };
-  for (const f of spec.signerSignatures || []) signerValues[f] = name || "Accepted electronically";
+  const sigValue =
+    input.signatureImage && /^data:image\/(png|jpe?g);base64,/.test(input.signatureImage)
+      ? input.signatureImage
+      : name || "Accepted electronically";
+  for (const f of spec.signerSignatures || []) signerValues[f] = sigValue;
   if (spec.signerInitials && name) signerValues[spec.signerInitials] = initialsOf(name);
   if (!("Date" in signerValues)) signerValues["Date"] = today();
 

@@ -78,3 +78,23 @@ export async function requireAdmin(req: Request): Promise<AdminPrincipal> {
 
   return { userId: user.id, email: user.email || "admin" };
 }
+
+/**
+ * Validate the request is from ANY signed-in user (no role requirement).
+ * Used by self-service flows (e.g. a contractor signing their own agreement).
+ */
+export async function requireUser(req: Request): Promise<AdminPrincipal> {
+  const token = bearerToken(req);
+  if (!token) throw new AdminAuthError("Not signed in.", 401);
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) throw new AdminAuthError("Server auth is not configured.", 500);
+  const userClient = createClient(url, anonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: userData, error: userErr } = await userClient.auth.getUser(token);
+  const user = userData?.user;
+  if (userErr || !user?.id) throw new AdminAuthError("Invalid or expired session.", 401);
+  return { userId: user.id, email: user.email || "" };
+}

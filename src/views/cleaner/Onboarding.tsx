@@ -33,6 +33,7 @@ import { formatPhoneNumber } from "@/lib/input-formatters";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
+import { SignaturePad } from "@/components/booking/SignaturePad";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 const US_STATES = [
@@ -96,6 +97,11 @@ export default function CleanerOnboarding() {
     avatarFile: null as File | null
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [legalName, setLegalName] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -230,9 +236,36 @@ export default function CleanerOnboarding() {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  };
+
+  // Toggle the in-app preview of the contractor agreement PDF.
+  const togglePreview = async () => {
+    if (showPreview) { setShowPreview(false); return; }
+    if (previewUrl) { setShowPreview(true); return; }
+    setLoadingPreview(true);
+    try {
+      const res = await fetch("/api/cleaner/agreement-preview", { headers: await authHeaders() });
+      const d = await res.json();
+      if (res.ok && d.url) { setPreviewUrl(d.url); setShowPreview(true); }
+      else toast.error(d.error || "Could not load the agreement preview.");
+    } catch {
+      toast.error("Could not load the agreement preview.");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateStep() || !userId) return;
+    if (!signatureDataUrl) {
+      toast.error("Please sign the Independent Contractor Agreement to finish.");
+      return;
+    }
 
     setIsLoading(true);
 
@@ -278,6 +311,8 @@ export default function CleanerOnboarding() {
         onboarding_complete: true,
         activated_at: new Date().toISOString(),
         phone_verified: phoneVerified === true,
+        ob_agreement_signed: true,
+        ob_agreement_signed_at: new Date().toISOString(),
       };
       if (formData.homeAddress) insertPayload.home_address = formData.homeAddress;
       if (formData.homeCity) insertPayload.home_city = formData.homeCity;
@@ -327,6 +362,28 @@ export default function CleanerOnboarding() {
         } catch (geoErr) {
           console.warn("Geocoding failed (non-critical):", geoErr);
         }
+      }
+
+      // Send the completed Independent Contractor Agreement (mapped fields +
+      // their drawn signature) — DocuSeal emails them the finished copy.
+      // Best-effort: a hiccup here never blocks onboarding.
+      try {
+        await fetch("/api/cleaner/sign-agreement", {
+          method: "POST",
+          headers: await authHeaders(),
+          body: JSON.stringify({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            phone: formData.phone,
+            address: [formData.homeAddress, formData.homeCity, formData.state, formData.homeZip]
+              .filter(Boolean)
+              .join(", "),
+            legalName: legalName || undefined,
+            signatureDataUrl,
+          }),
+        });
+      } catch (agreementErr) {
+        console.warn("[Onboarding] agreement send failed (non-blocking):", agreementErr);
       }
 
       // Initiate Stripe Connect
@@ -710,8 +767,8 @@ export default function CleanerOnboarding() {
                     <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
                       <RiSparklingLine className="w-8 h-8 text-green-500" />
                     </div>
-                    <h2 className="text-lg font-semibold">Review Your Profile</h2>
-                    <p className="text-sm text-muted-foreground">Make sure everything looks good</p>
+                    <h2 className="text-lg font-semibold">Review &amp; Sign</h2>
+                    <p className="text-sm text-muted-foreground">Confirm your details, then sign your agreement</p>
                   </div>
 
                   <div className="space-y-4 bg-muted/30 rounded-xl p-4">
@@ -769,6 +826,43 @@ export default function CleanerOnboarding() {
                     </div>
                   </div>
 
+                  {/* Independent Contractor Agreement — preview + sign */}
+                  <div className="rounded-xl border p-4 space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-sm">Independent Contractor Agreement</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Preview the agreement, then sign below. We&apos;ll email you a completed copy.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={togglePreview} disabled={loadingPreview}>
+                      {loadingPreview ? (
+                        <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Loading…</>
+                      ) : showPreview ? "Hide agreement" : "Preview agreement"}
+                    </Button>
+                    {showPreview && previewUrl && (
+                      <iframe
+                        src={previewUrl}
+                        title="Independent Contractor Agreement"
+                        className="w-full h-80 rounded-lg border bg-white"
+                      />
+                    )}
+                    <div>
+                      <Label className="text-xs">Legal name</Label>
+                      <Input
+                        value={legalName}
+                        onChange={(e) => setLegalName(e.target.value)}
+                        placeholder={`${formData.firstName} ${formData.lastName}`.trim() || "Your legal name"}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Signature *</Label>
+                      <SignaturePad onChange={setSignatureDataUrl} />
+                      {!signatureDataUrl && (
+                        <p className="text-[11px] text-muted-foreground mt-1">Draw your signature above to enable Finish.</p>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
                       <strong>Next step:</strong> After submitting, you'll be redirected to Stripe to set up your payment account for receiving payouts.
@@ -806,7 +900,7 @@ export default function CleanerOnboarding() {
                   <Button
                     type="submit"
                     className="flex-1 h-11"
-                    disabled={isLoading}
+                    disabled={isLoading || !signatureDataUrl}
                   >
                     {isLoading ? (
                       <>
@@ -816,7 +910,7 @@ export default function CleanerOnboarding() {
                     ) : (
                       <>
                         <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
-                        Complete & Setup Payments
+                        Sign & Setup Payments
                       </>
                     )}
                   </Button>
