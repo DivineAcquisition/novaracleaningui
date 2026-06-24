@@ -259,6 +259,9 @@ verify_jwt = false
 [functions.admin-modify-booking]
 verify_jwt = false
 
+[functions.customer-recurring-generate]
+verify_jwt = false
+
 [functions.admin-charge-booking-balance]
 verify_jwt = false
 
