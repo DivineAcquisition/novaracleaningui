@@ -417,6 +417,40 @@ export async function listTableFields(tableId: string): Promise<MetaField[]> {
   return table?.fields || [];
 }
 
+export interface CreateFieldSpec {
+  name: string;
+  type: string;
+  description?: string;
+  options?: Record<string, unknown>;
+}
+
+/**
+ * Create a new table in the base via the Meta API. The first field becomes the
+ * primary field. Returns the created table (with field ids).
+ */
+export async function createTable(
+  name: string,
+  fields: CreateFieldSpec[],
+  description?: string,
+): Promise<MetaTable> {
+  const baseId = getBaseId();
+  return airtableRequest<MetaTable>(`/bases/${baseId}/tables`, {
+    meta: true,
+    method: "POST",
+    body: { name, ...(description ? { description } : {}), fields },
+  });
+}
+
+/** Add a field to an existing table via the Meta API. Returns the new field. */
+export async function createField(tableId: string, field: CreateFieldSpec): Promise<MetaField> {
+  const baseId = getBaseId();
+  return airtableRequest<MetaField>(`/bases/${baseId}/tables/${tableId}/fields`, {
+    meta: true,
+    method: "POST",
+    body: field,
+  });
+}
+
 /**
  * Create a multipleRecordLinks field on `tableId` pointing at `linkedTableId`.
  * Airtable auto-creates the symmetric reverse field on the linked table.

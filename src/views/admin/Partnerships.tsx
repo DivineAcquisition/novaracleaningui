@@ -21,11 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
-import { syncPartners } from "@/lib/partner-admin-api";
+import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
 export default function Partnerships() {
   const [tab, setTab] = useState("accounts");
   const [syncing, setSyncing] = useState(false);
+  const [syncingContractors, setSyncingContractors] = useState(false);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -44,6 +45,23 @@ export default function Partnerships() {
     }
   };
 
+  const handleSyncContractors = async () => {
+    setSyncingContractors(true);
+    try {
+      const res = await syncContractors();
+      toast.success(
+        `${res.created ? "Created Contractors table · " : ""}Synced ${res.contractorsSynced} contractor${res.contractorsSynced === 1 ? "" : "s"} (${res.withPay} with pay, ${res.withAgreement} with agreement).`,
+      );
+      if (res.warnings && res.warnings.length > 0) {
+        toast.warning(`Some steps were skipped — check logs.`);
+      }
+    } catch (err) {
+      toast.error((err as Error).message || "Contractor sync failed.");
+    } finally {
+      setSyncingContractors(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-1 sm:px-4 py-2 space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -53,10 +71,16 @@ export default function Partnerships() {
             STR host accounts, pricing, revenue, turnovers, crew, and recurring schedules — in one place.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-          {syncing ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiRefreshLine className="w-4 h-4 mr-1.5" />}
-          Sync to Airtable
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleSyncContractors} disabled={syncingContractors}>
+            {syncingContractors ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiToolsLine className="w-4 h-4 mr-1.5" />}
+            Sync contractors
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+            {syncing ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiRefreshLine className="w-4 h-4 mr-1.5" />}
+            Sync to Airtable
+          </Button>
+        </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">

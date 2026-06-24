@@ -90,6 +90,24 @@ export async function syncPartners(): Promise<SyncResponse> {
   return handle<SyncResponse>(res);
 }
 
+export interface ContractorsSyncResponse {
+  ok: true;
+  created: boolean;
+  contractorsSynced: number;
+  withPay: number;
+  withAgreement: number;
+  warnings?: string[];
+}
+
+/** Create + sync the Airtable Contractors table (pay, payroll, agreements). */
+export async function syncContractors(): Promise<ContractorsSyncResponse> {
+  const res = await fetch(`/api/partner-admin/contractors-sync`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  return handle<ContractorsSyncResponse>(res);
+}
+
 export interface SendCalendarLinkResponse {
   ok: true;
   smsSent: boolean;
