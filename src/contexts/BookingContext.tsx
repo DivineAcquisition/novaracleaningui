@@ -62,7 +62,6 @@ const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [bookingData, setBookingData] = useState<BookingData>(() => {
-    if (typeof window === 'undefined') return initialBookingData;
     const saved = localStorage.getItem('bookingData');
     return saved ? JSON.parse(saved) : initialBookingData;
   });
