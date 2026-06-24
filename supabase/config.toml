@@ -253,6 +253,12 @@ verify_jwt = true
 [functions.admin-list-bookings]
 verify_jwt = true
 
+[functions.admin-delete-booking]
+verify_jwt = false
+
+[functions.admin-modify-booking]
+verify_jwt = false
+
 [functions.admin-charge-booking-balance]
 verify_jwt = false
 
