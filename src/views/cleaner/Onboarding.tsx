@@ -236,11 +236,15 @@ export default function CleanerOnboarding() {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  // Default the legal name to the full name when reaching the sign step.
+  // Default the legal name to the full name + auto-load the agreement preview
+  // when reaching the sign step.
   useEffect(() => {
-    if (currentStep === 5 && !legalName) {
-      const full = `${formData.firstName} ${formData.lastName}`.trim();
-      if (full) setLegalName(full);
+    if (currentStep === 5) {
+      if (!legalName) {
+        const full = `${formData.firstName} ${formData.lastName}`.trim();
+        if (full) setLegalName(full);
+      }
+      if (!previewUrl && !loadingPreview) void togglePreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep]);
@@ -843,17 +847,43 @@ export default function CleanerOnboarding() {
                         Preview the agreement, then sign below. We&apos;ll email you a completed copy.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={togglePreview} disabled={loadingPreview}>
-                      {loadingPreview ? (
-                        <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Loading…</>
-                      ) : showPreview ? "Hide agreement" : "Preview agreement"}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={togglePreview} disabled={loadingPreview}>
+                        {loadingPreview ? (
+                          <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Loading…</>
+                        ) : showPreview ? "Hide agreement" : "Preview agreement"}
+                      </Button>
+                      {previewUrl && (
+                        <a
+                          href={previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          Open full document in a new tab →
+                        </a>
+                      )}
+                    </div>
                     {showPreview && previewUrl && (
-                      <iframe
-                        src={previewUrl}
+                      <object
+                        data={`${previewUrl}#view=FitH&toolbar=1&navpanes=0`}
+                        type="application/pdf"
                         title="Independent Contractor Agreement"
-                        className="w-full h-80 rounded-lg border bg-white"
-                      />
+                        className="w-full h-[75vh] min-h-[480px] rounded-lg border bg-white"
+                      >
+                        <iframe
+                          src={`${previewUrl}#view=FitH`}
+                          title="Independent Contractor Agreement"
+                          className="w-full h-[75vh] min-h-[480px] rounded-lg border bg-white"
+                        />
+                        <p className="text-xs text-muted-foreground p-3">
+                          Can&apos;t display the document here.{" "}
+                          <a href={previewUrl} target="_blank" rel="noreferrer" className="text-primary underline">
+                            Open it in a new tab
+                          </a>{" "}
+                          to read the full agreement.
+                        </p>
+                      </object>
                     )}
                     <div>
                       <Label className="text-xs">Legal name</Label>

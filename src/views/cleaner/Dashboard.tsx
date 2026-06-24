@@ -48,6 +48,24 @@ interface CleanerProfile {
 
 type JobSource = "assignments" | "bookings";
 
+interface TurnoverPayRow {
+  id: string;
+  propertyName: string;
+  date: string | null;
+  payCents: number;
+  status: string;
+}
+
+interface TurnoverPay {
+  thisWeekCents: number;
+  lifetimeCents: number;
+  scheduledCents: number;
+  completedCount: number;
+  recent: TurnoverPayRow[];
+}
+
+const TURNOVER_CLEANER_SHARE = 0.7;
+
 interface UpcomingJob {
   id: string;
   assignmentId?: string;
@@ -160,6 +178,13 @@ export default function CleanerDashboard() {
   const [completedJobs, setCompletedJobs] = useState<CompletedJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [turnoverPay, setTurnoverPay] = useState<TurnoverPay>({
+    thisWeekCents: 0,
+    lifetimeCents: 0,
+    scheduledCents: 0,
+    completedCount: 0,
+    recent: [],
+  });
 
   const fetchJobs = useCallback(
     async (cleanerId: string) => {
@@ -341,6 +366,68 @@ export default function CleanerDashboard() {
     []
   );
 
+  // Turnover (STR) pay isn't part of cleaners.total_earnings_cents (that rollup
+  // is residential bookings only), so cleaners couldn't see their turnover
+  // earnings anywhere. Pull them straight from turnover_requests (RLS lets a
+  // cleaner read their own assignments) and compute the 70% share when an
+  // explicit payout hasn't been stamped yet.
+  const fetchTurnoverEarnings = useCallback(async (cleanerId: string) => {
+    try {
+      // turnover_requests isn't in the generated Supabase types; cast like the
+      // rest of the turnover UI does.
+      const { data, error } = await (supabase.from as any)("turnover_requests")
+        .select("id, status, price, cleaner_payout_cents, requested_date, completed_at, properties(nickname, address)")
+        .eq("assigned_cleaner_id", cleanerId)
+        .order("requested_date", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+
+      const rows = (data || []) as unknown as Array<{
+        id: string;
+        status: string;
+        price: number | null;
+        cleaner_payout_cents: number | null;
+        requested_date: string | null;
+        completed_at: string | null;
+        properties: { nickname: string | null; address: string | null } | null;
+      }>;
+
+      const payOf = (r: { price: number | null; cleaner_payout_cents: number | null }) =>
+        r.cleaner_payout_cents != null
+          ? r.cleaner_payout_cents
+          : Math.round(Number(r.price || 0) * 100 * TURNOVER_CLEANER_SHARE);
+
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const SCHEDULED = ["assigned", "cleaner_confirmed", "in_progress"];
+
+      let thisWeekCents = 0;
+      let lifetimeCents = 0;
+      let scheduledCents = 0;
+      let completedCount = 0;
+      const recent: TurnoverPayRow[] = [];
+
+      for (const r of rows) {
+        const cents = payOf(r);
+        const propertyName = r.properties?.nickname || r.properties?.address || "Turnover";
+        if (r.status === "completed") {
+          lifetimeCents += cents;
+          completedCount += 1;
+          const when = r.completed_at ? new Date(r.completed_at).getTime() : 0;
+          if (when >= weekAgo) thisWeekCents += cents;
+          if (recent.length < 6) {
+            recent.push({ id: r.id, propertyName, date: r.completed_at || r.requested_date, payCents: cents, status: r.status });
+          }
+        } else if (SCHEDULED.includes(r.status)) {
+          scheduledCents += cents;
+        }
+      }
+
+      setTurnoverPay({ thisWeekCents, lifetimeCents, scheduledCents, completedCount, recent });
+    } catch (err) {
+      console.error("Error fetching turnover earnings:", err);
+    }
+  }, []);
+
   const checkAuthAndLoadProfile = useCallback(async () => {
     try {
       // Use the shared cleaner-auth resolver so admin-invited cleaners
@@ -380,14 +467,14 @@ export default function CleanerDashboard() {
       }
 
       setProfile(full as CleanerProfile);
-      await fetchJobs(full.id);
+      await Promise.all([fetchJobs(full.id), fetchTurnoverEarnings(full.id)]);
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("Failed to load profile");
     } finally {
       setLoading(false);
     }
-  }, [router, fetchJobs]);
+  }, [router, fetchJobs, fetchTurnoverEarnings]);
 
   useEffect(() => {
     checkAuthAndLoadProfile();
@@ -514,8 +601,8 @@ export default function CleanerDashboard() {
       ? "pending"
       : "not_setup";
 
-  const totalEarnings = profile.total_earnings_cents ?? 0;
-  const jobsCompleted = profile.completed_bookings ?? 0;
+  const totalEarnings = (profile.total_earnings_cents ?? 0) + turnoverPay.lifetimeCents;
+  const jobsCompleted = (profile.completed_bookings ?? 0) + turnoverPay.completedCount;
   const rating = profile.average_rating ?? 0;
   const totalRatings = profile.total_ratings ?? 0;
   const upcomingCount = upcomingJobs.length;
@@ -917,6 +1004,54 @@ export default function CleanerDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Turnover earnings */}
+        {(turnoverPay.lifetimeCents > 0 || turnoverPay.scheduledCents > 0) && (
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <RiMoneyDollarCircleLine className="w-5 h-5 text-green-600" />
+                Turnover Earnings
+              </CardTitle>
+              <CardDescription>Your STR / Airbnb turnover pay (70% share)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-green-500/5 p-3 text-center">
+                  <p className="text-[11px] font-medium text-muted-foreground">This week</p>
+                  <p className="text-base font-bold text-green-600">{formatCurrency(turnoverPay.thisWeekCents)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 p-3 text-center">
+                  <p className="text-[11px] font-medium text-muted-foreground">Lifetime</p>
+                  <p className="text-base font-bold">{formatCurrency(turnoverPay.lifetimeCents)}</p>
+                </div>
+                <div className="rounded-lg bg-amber-500/5 p-3 text-center">
+                  <p className="text-[11px] font-medium text-muted-foreground">Scheduled</p>
+                  <p className="text-base font-bold text-amber-600">{formatCurrency(turnoverPay.scheduledCents)}</p>
+                </div>
+              </div>
+              {turnoverPay.recent.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Recent turnover payments</p>
+                  {turnoverPay.recent.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{r.propertyName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.date ? format(new Date(r.date), "MMM d, yyyy") : "—"}
+                        </p>
+                      </div>
+                      <p className="font-semibold text-green-600 flex-shrink-0">{formatCurrency(r.payCents)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Turnover pay is settled through your weekly payroll. Scheduled is work assigned but not yet completed.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Turnover crew jobs */}
         <Card className="border-0 shadow-lg border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">

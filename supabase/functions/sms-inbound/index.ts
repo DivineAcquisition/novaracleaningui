@@ -223,7 +223,7 @@ serve(async (req) => {
           : ["in_progress", "cleaner_confirmed"];
       const { data: turnoverRow } = await supabase
         .from("turnover_requests")
-        .select("id, status, requested_date")
+        .select("id, status, requested_date, photo_upload_token")
         .eq("assigned_cleaner_id", cleanerRow.id)
         .in("status", wantStatuses)
         .gte("requested_date", todayIso)
@@ -236,18 +236,36 @@ serve(async (req) => {
           : TOKEN_START.has(upper)
             ? "cleaner.checkin"
             : "cleaner.complete";
+        let actionResult: Record<string, unknown> | null = null;
         try {
-          await supabase.functions.invoke("partner-turnover", {
+          const { data } = await supabase.functions.invoke("partner-turnover", {
             body: { action: lifecycleAction, turnoverId: turnoverRow.id, cleanerId: cleanerRow.id },
           });
+          actionResult = (data as Record<string, unknown>) || null;
         } catch (e) {
           log("turnover lifecycle invoke failed", { error: e instanceof Error ? e.message : String(e) });
         }
-        const reply = TOKEN_YES.has(upper)
-          ? `Novara: You're confirmed for the ${formatServiceDate(turnoverRow.requested_date)} turnover. Reply START when you arrive, DONE when it's guest-ready. Details + access are in your cleaner app.`
-          : TOKEN_START.has(upper)
-            ? `Novara: Marked you on-site. Reply DONE when the turnover is guest-ready. Thank you!`
-            : `Novara: Turnover marked complete — the host has been notified it's guest-ready. Thank you!`;
+        // DONE can't complete without photos (strict gate). When that happens,
+        // text the cleaner their tokenized upload link instead of a (false)
+        // "complete" confirmation, so they can finish from their phone.
+        const uploadBase = (Deno.env.get("TURNOVER_PHOTO_BASE") || "https://app.novaracleaning.com").replace(/\/$/, "");
+        const needsPhotos = TOKEN_DONE.has(upper) && actionResult?.needsPhotos === true;
+        let reply: string;
+        if (needsPhotos) {
+          let tk = (turnoverRow as { photo_upload_token?: string | null }).photo_upload_token || "";
+          if (!tk) {
+            try { await supabase.functions.invoke("turnover-photos", { body: { op: "sendlink", turnoverId: turnoverRow.id } }); } catch { /* best effort */ }
+          }
+          reply = tk
+            ? `Novara: Almost done! Upload your before & after photos here to finish & get paid: ${uploadBase}/cleaner/turnover-photos/${tk}`
+            : `Novara: Almost done! We just texted you a link to upload your turnover photos so you can finish.`;
+        } else {
+          reply = TOKEN_YES.has(upper)
+            ? `Novara: You're confirmed for the ${formatServiceDate(turnoverRow.requested_date)} turnover. Reply START when you arrive, DONE when it's guest-ready. Details + access are in your cleaner app.`
+            : TOKEN_START.has(upper)
+              ? `Novara: Marked you on-site. Reply DONE when the turnover is guest-ready. Thank you!`
+              : `Novara: Turnover marked complete — the host has been notified it's guest-ready. Thank you!`;
+        }
         return finalize(`turnover_${lifecycleAction.split(".")[1]}`, reply);
       }
     }
