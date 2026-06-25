@@ -162,6 +162,85 @@ export async function loadActiveCleaners(): Promise<PayrollCleaner[]> {
   return (((data as any)?.cleaners) as PayrollCleaner[]) || [];
 }
 
+// ─── Auto Payroll (Review → Approve & Pay) ─────────────────────────────────
+export interface PreviewLine {
+  runId: string;
+  cleanerId: string;
+  cleanerName: string;
+  totalJobs: number;
+  grossCents: number;
+  bonusCents: number;
+  deductionCents: number;
+  netCents: number;
+  status: string;
+  paymentMethod: string;
+  connectReady: boolean;
+  flag: "payable" | "blocked" | "skip" | "done";
+  flagReason?: string;
+}
+export interface PreviewResult {
+  period: string;
+  periodEnd: string;
+  lines: PreviewLine[];
+  totals: { payable: number; blocked: number; done: number; netPayable: number; netDone: number };
+}
+export interface ExecuteLineResult {
+  runId: string;
+  cleanerId: string;
+  cleanerName: string;
+  netCents: number;
+  status: "paid" | "failed" | "skipped" | "blocked";
+  transferId?: string;
+  reason?: string;
+}
+export interface ExecuteResult {
+  ok: boolean;
+  halted?: boolean;
+  reason?: string;
+  period: string;
+  totals: { payable: number; blocked: number; paidCount: number; failedCount: number; netPaidCents: number };
+  results: ExecuteLineResult[];
+}
+
+/** Load the per-cleaner review lines + totals for a pay period. */
+export async function loadPeriodPreview(period: string): Promise<PreviewResult> {
+  const { data, error } = await supabase.functions.invoke("payroll-execute", {
+    body: { action: "preview", period },
+  });
+  if (error) throw new Error(error.message || "Failed to load payroll preview");
+  // deno-lint-ignore no-explicit-any
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as PreviewResult;
+}
+
+/** One-click: approve & auto-execute every payable line in the period. */
+export async function executePayrollPeriod(period: string): Promise<ExecuteResult> {
+  const { data, error } = await supabase.functions.invoke("payroll-execute", {
+    body: { action: "execute", period },
+  });
+  // payroll-execute returns 409 + {halted} when guardrails stop it — surface
+  // that as data, not a thrown error, so the UI can show the reason.
+  // deno-lint-ignore no-explicit-any
+  const d = data as any;
+  if (error && !d) throw new Error(error.message || "Execution failed");
+  if (d?.error && !d?.results) throw new Error(d.error);
+  return d as ExecuteResult;
+}
+
+/** (Re)build draft runs for a period from approved jobs (admin build_runs). */
+export async function buildDraftRuns(period: string): Promise<{ runs: number }> {
+  return payrollAction<{ runs: number }>("build_runs", { payPeriod: period });
+}
+
+/** Edit a draft run's bonus / deduction (server recomputes net). */
+export async function updateRunAdjustments(
+  runId: string,
+  bonusCents: number,
+  deductionCents: number,
+): Promise<{ netCents: number }> {
+  return payrollAction<{ netCents: number }>("update_run", { runId, bonusCents, deductionCents });
+}
+
 export const STATUS_TONE: Record<string, string> = {
   pending: "bg-slate-100 text-slate-700 border-slate-200",
   approved: "bg-sky-50 text-sky-700 border-sky-200",
