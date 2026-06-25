@@ -1305,6 +1305,22 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
   // CRITICAL: every completion sends the proof photos to the host (SMS + email).
   const photos = Array.isArray(tr.after_photos) ? (tr.after_photos as string[]).filter(Boolean) : [];
 
+  // Open before/after gallery — a single login-free link the host can view and
+  // forward (e.g. to a co-host or guest). Mint once and reuse.
+  let galleryUrl = "https://partner.novaracleaning.com/partner/dashboard";
+  try {
+    let viewToken = (tr.photo_view_token as string | null) || null;
+    if (!viewToken) {
+      const bytes = new Uint8Array(20);
+      crypto.getRandomValues(bytes);
+      viewToken = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+      await admin.from("turnover_requests").update({ photo_view_token: viewToken }).eq("id", tr.id);
+    }
+    galleryUrl = `https://try.novaracleaning.com/photos/${viewToken}`;
+  } catch (e) {
+    console.warn("[partner-turnover] view token mint failed (non-blocking)", e instanceof Error ? e.message : String(e));
+  }
+
   await notifyDiscord(admin, {
     title: "Turnover completed",
     color: 3066993,
@@ -1317,7 +1333,7 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
   });
   if (hostRow?.phone) {
     const photoLine = photos.length
-      ? ` View the ${photos.length} completion photo${photos.length === 1 ? "" : "s"}: ${photos[0]}`
+      ? ` View the ${photos.length} before/after photo${photos.length === 1 ? "" : "s"}: ${galleryUrl}`
       : "";
     await sendSms(admin, {
       toPhone: hostRow.phone, type: "confirmation",
@@ -1330,6 +1346,7 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
     address: property?.address || "",
     date: dateLabel,
     photos,
+    galleryUrl,
   });
   try {
     await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: { ...tr, status: "completed" } });
