@@ -56,7 +56,14 @@ interface Job {
   checked_in?: boolean;
   check_in_time?: string;
   cleaner_id?: string;
+  photo_upload_token?: string | null;
+  photo_view_token?: string | null;
+  before_photos?: string[] | null;
+  after_photos?: string[] | null;
 }
+
+const PHOTO_UPLOAD_BASE = "https://contractor.novaracleaning.com/cleaner/job-photos/";
+const PHOTO_VIEW_BASE = "https://try.novaracleaning.com/photos/";
 
 function getStatusConfig(status: string) {
   const configs: Record<string, { label: string; class: string; dot: string }> = {
@@ -193,9 +200,10 @@ export default function ContractorJobs() {
         },
       });
       if (response.error) throw response.error;
-      toast.success("Job marked as completed! Payout will be processed.");
+      const uploadToken = (response.data as { photoUploadToken?: string | null })?.photoUploadToken || null;
+      toast.success("Job marked as completed! Now add your before & after photos to release your payout.");
       setJobs((prev) =>
-        prev.map((j) => j.id === job.id ? { ...j, status: "completed" } : j)
+        prev.map((j) => j.id === job.id ? { ...j, status: "completed", photo_upload_token: uploadToken ?? j.photo_upload_token } : j)
       );
     } catch (error: any) {
       toast.error(error.message || "Failed to complete job");
@@ -405,30 +413,59 @@ export default function ContractorJobs() {
             {completedJobs.length > 0 && (
               <div className="space-y-3">
                 <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Completed ({completedJobs.length})</h2>
-                {completedJobs.slice(0, 10).map((job) => (
-                  <Card key={job.id} className="bg-muted/20 border-border/60 shadow-none">
-                    <CardContent className="p-3.5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="text-center min-w-[40px]">
-                            <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.service_date), "MMM")}</p>
-                            <p className="text-base font-bold leading-tight">{format(new Date(job.service_date), "d")}</p>
+                {completedJobs.slice(0, 10).map((job) => {
+                  const photoCount = (job.before_photos?.length || 0) + (job.after_photos?.length || 0);
+                  const uploadHref = job.photo_upload_token ? `${PHOTO_UPLOAD_BASE}${job.photo_upload_token}` : null;
+                  const viewHref = job.photo_view_token ? `${PHOTO_VIEW_BASE}${job.photo_view_token}` : null;
+                  return (
+                    <Card key={job.id} className="bg-muted/20 border-border/60 shadow-none">
+                      <CardContent className="p-3.5 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="text-center min-w-[40px]">
+                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.service_date), "MMM")}</p>
+                              <p className="text-base font-bold leading-tight">{format(new Date(job.service_date), "d")}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{job.service_type}</p>
+                              <p className="text-xs text-muted-foreground truncate">{job.address}, {job.city}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm truncate">{job.service_type}</p>
-                            <p className="text-xs text-muted-foreground truncate">{job.address}, {job.city}</p>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                              <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Done
+                            </Badge>
+                            <span className="text-sm font-semibold text-emerald-600">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.35)) / 100).toFixed(0)}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                            <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Done
-                          </Badge>
-                          <span className="text-sm font-semibold text-emerald-600">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.35)) / 100).toFixed(0)}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        {(uploadHref || viewHref) && (
+                          <div className="flex flex-wrap items-center gap-2 pl-[52px]">
+                            {uploadHref && (
+                              <Button
+                                variant={photoCount > 0 ? "outline" : "default"}
+                                size="sm"
+                                className={cn("text-xs h-7", photoCount === 0 && "bg-emerald-600 hover:bg-emerald-700")}
+                                onClick={() => window.open(uploadHref, "_blank")}
+                              >
+                                <RiSparklingLine className="w-3.5 h-3.5 mr-1" />
+                                {photoCount > 0 ? "Add more photos" : "Upload photos"}
+                              </Button>
+                            )}
+                            {viewHref && (
+                              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => window.open(viewHref, "_blank")}>
+                                <RiExternalLinkLine className="w-3.5 h-3.5 mr-1" />
+                                Customer gallery
+                              </Button>
+                            )}
+                            {photoCount > 0 && (
+                              <span className="text-[11px] text-muted-foreground">{photoCount} photo{photoCount === 1 ? "" : "s"}</span>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
 
