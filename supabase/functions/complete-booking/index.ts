@@ -236,6 +236,8 @@ serve(async (req) => {
     let balanceChargeStatus: "skipped_full_payment" | "skipped_no_balance" |
       "already_charged" | "charged" | "captured_hold" | "failed" = "skipped_no_balance";
     let balanceChargeError: string | null = null;
+    let photoUploadToken: string | null = null;
+    let photoUploadUrl: string | null = null;
     try {
       const remainingCents = Math.max(
         0,
@@ -490,31 +492,31 @@ serve(async (req) => {
           logStep("Cleaner completion email sent");
         }
 
-        // Mint a single-use photo-upload token and SMS the cleaner with
-        // a public form to drop before / after photos for this job.
-        // Idempotent — if a token already exists we reuse it.
-        if (cleaner?.phone) {
-          try {
-            let token = (booking as any).photo_upload_token as string | null;
-            if (!token) {
-              const bytes = new Uint8Array(20);
-              crypto.getRandomValues(bytes);
-              token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-              await supabase
-                .from("bookings")
-                .update({
-                  photo_upload_token: token,
-                  photo_upload_sent_at: new Date().toISOString(),
-                })
-                .eq("id", bookingId);
-            } else {
-              await supabase
-                .from("bookings")
-                .update({ photo_upload_sent_at: new Date().toISOString() })
-                .eq("id", bookingId);
-            }
-            const url = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}`;
-            const msg = `Novara: Job marked completed. Please upload your before & after photos here so we can wrap this up and release your payout:\n${url}\n\nReply STOP to opt out.`;
+        // Mint a single-use photo-upload token (idempotent) so both the SMS
+        // and the contractor portal can link the cleaner to the public
+        // before/after upload form. Minted regardless of phone so the portal
+        // always has an upload link even when SMS can't be delivered.
+        try {
+          let token = (booking as any).photo_upload_token as string | null;
+          if (!token) {
+            const bytes = new Uint8Array(20);
+            crypto.getRandomValues(bytes);
+            token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+            await supabase
+              .from("bookings")
+              .update({ photo_upload_token: token })
+              .eq("id", bookingId);
+          }
+          photoUploadToken = token;
+          photoUploadUrl = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}`;
+
+          // Text the cleaner the upload link (best-effort).
+          if (cleaner?.phone) {
+            await supabase
+              .from("bookings")
+              .update({ photo_upload_sent_at: new Date().toISOString() })
+              .eq("id", bookingId);
+            const msg = `Novara: Job marked completed. Please upload your before & after photos here so we can wrap this up and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
             await supabase.functions.invoke("send-ghl-sms", {
               body: {
                 phone: cleaner.phone,
@@ -525,9 +527,9 @@ serve(async (req) => {
               },
             });
             logStep("Cleaner photo-upload SMS sent");
-          } catch (smsErr) {
-            logStep("Cleaner photo SMS failed (non-critical)", { error: smsErr });
           }
+        } catch (smsErr) {
+          logStep("Cleaner photo upload link/SMS failed (non-critical)", { error: smsErr });
         }
       } catch (emailError) {
         logStep("Cleaner email failed (non-critical)", { error: emailError });
@@ -651,6 +653,8 @@ serve(async (req) => {
           status: balanceChargeStatus,
           error: balanceChargeError,
         },
+        photoUploadToken,
+        photoUploadUrl,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

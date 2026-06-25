@@ -30,7 +30,7 @@ const MIGMA_TEMPLATES = {
 };
 
 interface BookingEmailRequest {
-  type: 'confirmation' | 'payment_receipt' | 'modification' | 'cancellation' | 'completion';
+  type: 'confirmation' | 'payment_receipt' | 'modification' | 'cancellation' | 'completion' | 'photo_gallery';
   email: string;
   data: {
     firstName?: string;
@@ -279,6 +279,38 @@ serve(async (req: Request) => {
       const { BookingThankYou } = await import('../_shared/email-templates/BookingThankYou.tsx');
       html = await renderAsync(React.createElement(BookingThankYou, data));
       subject = `Thank You for Choosing Novara Cleaning! ✨`;
+    } else if (type === 'photo_gallery') {
+      const first = (data.firstName as string) || 'there';
+      const galleryUrl = (data.galleryUrl as string) || 'https://try.novaracleaning.com';
+      const beforeCount = Number(data.beforeCount || 0);
+      const afterCount = Number(data.afterCount || 0);
+      const countLine = (beforeCount || afterCount)
+        ? `${beforeCount} before &amp; ${afterCount} after photo${(beforeCount + afterCount) === 1 ? '' : 's'}`
+        : 'your before &amp; after photos';
+      html = `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f1f5f9;padding:24px;">
+          <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+            <div style="background:linear-gradient(135deg,#059669,#14b8a6);padding:28px 24px;color:#ffffff;">
+              <img src="https://app.novaracleaning.com/novara-email-logo.png" alt="Novara Cleaning" height="32" style="display:block;margin-bottom:14px;" />
+              <h1 style="margin:0;font-size:20px;font-weight:700;">Your clean is done, ${first}! ✨</h1>
+            </div>
+            <div style="padding:24px;color:#0f172a;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#334155;">
+                We've uploaded ${countLine} from your cleaning. Tap below to view the full gallery — no login needed.
+              </p>
+              <a href="${galleryUrl}" style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 26px;border-radius:10px;">
+                View before &amp; after photos
+              </a>
+              <p style="margin:18px 0 0;font-size:12px;color:#94a3b8;word-break:break-all;">
+                Or copy this link: ${galleryUrl}
+              </p>
+            </div>
+            <div style="padding:16px 24px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;">
+              Questions? Call us at (844) 735-2070 or reply to this email.
+            </div>
+          </div>
+        </div>`;
+      subject = `Your before & after photos are ready 📸`;
     } else {
       throw new Error(`Unknown email type: ${type}`);
     }

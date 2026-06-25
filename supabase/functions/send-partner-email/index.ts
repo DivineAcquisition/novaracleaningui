@@ -111,6 +111,8 @@ interface PartnerEmailData {
   checkoutUrl?: string;
   // Completion proof photos (public URLs).
   photos?: string[];
+  // Open before/after gallery link (tokenized, login-free).
+  galleryUrl?: string;
 }
 
 function build(type: string, d: PartnerEmailData): { subject: string; html: string } | null {
@@ -257,6 +259,7 @@ function build(type: string, d: PartnerEmailData): { subject: string; html: stri
             )
             .join("")}</div>`
         : "";
+      const galleryUrl = (d.galleryUrl as string) || "";
       return {
         subject: `Guest-ready - ${d.property || "your property"} turnover complete`.trim(),
         html: renderHtml({
@@ -264,9 +267,13 @@ function build(type: string, d: PartnerEmailData): { subject: string; html: stri
           heading: "Your turnover is complete",
           bodyHtml:
             `<p>${hi}</p><p>Great news — your turnover is done and the property is guest-ready. Photos from the clean are below.</p>` +
-            photosHtml,
+            photosHtml +
+            (galleryUrl
+              ? `<p style="margin:16px 0 0;font-size:13px;color:#64748b">View &amp; share the full before/after gallery anytime: <a href="${galleryUrl}">${galleryUrl}</a></p>`
+              : ""),
           rows,
-          ctaLabel: "Rate my clean", ctaUrl: "https://partner.novaracleaning.com/partner/dashboard",
+          ctaLabel: galleryUrl ? "View before & after photos" : "Rate my clean",
+          ctaUrl: galleryUrl || "https://partner.novaracleaning.com/partner/dashboard",
         }),
       };
     }

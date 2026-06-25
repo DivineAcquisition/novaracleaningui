@@ -82,6 +82,11 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
   ["/demo", "try"],
   ["/pricing-sheet", "try"],
+
+  // Open before/after photo gallery (tokenized public link sent to
+  // customers + partner hosts). Lives on the marketing host so a single
+  // shareable URL works for everyone without a portal login.
+  ["/photos", "try"],
 ];
 
 const DEFAULT_LANDING: Record<SubdomainKey, string> = {
