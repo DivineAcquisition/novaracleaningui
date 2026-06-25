@@ -1643,7 +1643,7 @@ serve(async (req) => {
           });
           q = runId ? q.eq("id", runId) : q.eq("stripe_transfer_id", transferId);
           // Only clear runs that actually went out (don't resurrect drafts).
-          const { data: updated } = await q.in("status", ["sent", "failed"]).select("id");
+          const { data: updated } = await q.in("status", ["sent", "paid", "processing", "failed"]).select("id");
           logStep("Payroll run cleared via transfer event", { runId, transferId, count: (updated || []).length });
         } catch (err) {
           logStep("Payroll transfer-event handling failed (non-blocking)", { error: err instanceof Error ? err.message : String(err) });
