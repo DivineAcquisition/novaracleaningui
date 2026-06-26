@@ -86,7 +86,7 @@ serve(async (req) => {
       source: "submit-cleaner-photos",
       summary: `Cleaner uploaded ${beforeUrls.length} before / ${afterUrls.length} after photos`,
       data: { beforeCount: beforeUrls.length, afterCount: afterUrls.length },
-    }).then(() => undefined).catch(() => undefined);
+    }).then(() => undefined, () => undefined);
 
     // ─── Open before/after gallery for the customer ──────────────────────
     // Mint a single-use view token (idempotent) and text/email the customer
