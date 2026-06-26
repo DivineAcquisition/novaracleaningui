@@ -375,14 +375,14 @@ function PayrollOverview() {
 
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <CardTitle className="text-base">Cleaners ({rows.length})</CardTitle>
               <CardDescription className="text-xs">
                 Sorted by largest unpaid balance first.
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
                 value={search}

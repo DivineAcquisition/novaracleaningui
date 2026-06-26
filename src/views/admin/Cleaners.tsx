@@ -338,7 +338,7 @@ export default function AdminCleaners() {
                 className="pl-10"
               />
             </div>
-            <div className="flex gap-1 bg-slate-100 rounded-lg p-1 self-start">
+            <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 self-start">
               {STATUS_FILTERS.map((f) => (
                 <button
                   key={f.id}
