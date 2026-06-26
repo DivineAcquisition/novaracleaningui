@@ -18,7 +18,8 @@ import {
   RiMailSendLine, RiLockLine, RiUser3Line, RiPhoneLine, RiMailLine,
   RiShieldCheckLine, RiArrowRightLine, RiFlashlightFill, RiKey2Line,
   RiStarFill, RiStarLine, RiCalendarEventLine, RiCloseLine, RiImage2Line,
-  RiCalendarScheduleLine,
+  RiCalendarScheduleLine, RiDashboardLine, RiTeamLine, RiGroupLine,
+  RiExchangeFundsLine, RiUserAddLine, RiBuilding2Line, RiArrowRightUpLine,
 } from "@remixicon/react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +37,15 @@ interface Property {
   access_instructions: string | null; bedrooms: number | null; bathrooms: number | null;
   sqft: number | null; laundry_included: boolean; restock_included: boolean;
   turnover_price: number | null; special_notes: string | null;
+  target_crew_size?: number | null;
+}
+interface CrewMember { id: string; firstName: string; source?: string }
+interface HostCleaners {
+  roster: { id: string; firstName: string }[];
+  rosterMax: number;
+  perPropertyMax: number;
+  byProperty: Record<string, CrewMember[]>;
+  openRequests: { id: string; property_id: string | null; current_cleaner_id: string | null; kind: string; reason: string | null; status: string }[];
 }
 interface Turnover {
   id: string; property_id: string; requested_date: string; window_start: string | null;
@@ -477,27 +487,35 @@ function AuthScreen() {
 }
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────
+type HostTab = "overview" | "properties" | "turnovers" | "cleaners" | "photos";
+
 function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
   const [turnovers, setTurnovers] = useState<Turnover[]>([]);
+  const [cleaners, setCleaners] = useState<HostCleaners | null>(null);
+  const [tab, setTab] = useState<HostTab>("overview");
   const [showPropForm, setShowPropForm] = useState(false);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [requestFor, setRequestFor] = useState<Property | null>(null);
   const [rescheduleFor, setRescheduleFor] = useState<Turnover | null>(null);
   const [rateFor, setRateFor] = useState<Turnover | null>(null);
   const [photoFor, setPhotoFor] = useState<Turnover | null>(null);
+  const [requestCleanerFor, setRequestCleanerFor] = useState<{ property: Property; current?: CrewMember; kind: "replace" | "additional" } | null>(null);
   const router = useRouter();
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     await supabase.functions.invoke("partner-turnover", { body: { action: "host.ensure" } }).catch(() => {});
-    const [{ data: props }, { data: trs }] = await Promise.all([
+    const [{ data: props }, { data: trs }, cleanersRes] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
       (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }),
+      supabase.functions.invoke("partner-turnover", { body: { action: "host.cleaners" } }).catch(() => ({ data: null })),
     ]);
     setProperties((props as Property[]) || []);
     setTurnovers((trs as Turnover[]) || []);
+    const cd = (cleanersRes as { data: unknown })?.data as HostCleaners | null;
+    if (cd && !(cd as unknown as { error?: string }).error) setCleaners(cd);
     setLoading(false);
   }, []);
 
@@ -516,101 +534,157 @@ function Dashboard() {
 
   const propName = (id: string) => properties.find((p) => p.id === id)?.nickname || properties.find((p) => p.id === id)?.address || "Property";
 
+  const todayYmd = new Date().toISOString().slice(0, 10);
+  const todays = turnovers.filter((t) => t.requested_date === todayYmd && t.status !== "cancelled");
+  const upcoming = turnovers.filter((t) => t.requested_date >= todayYmd && !["cancelled", "completed"].includes(t.status));
+  const activeProps = properties.filter((p) => p.turnover_price != null && Number(p.turnover_price) > 0);
+  const ratings = turnovers.filter((t) => t.host_rating).map((t) => t.host_rating as number);
+  const avgRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
+  const photoTurnovers = turnovers.filter((t) => (t.before_photos?.length || 0) + (t.after_photos?.length || 0) > 0);
+
+  const TABS: { id: HostTab; label: string; icon: typeof RiDashboardLine }[] = [
+    { id: "overview", label: "Overview", icon: RiDashboardLine },
+    { id: "properties", label: "Properties", icon: RiBuilding2Line },
+    { id: "turnovers", label: "Turnovers", icon: RiCalendarEventLine },
+    { id: "cleaners", label: "Cleaners", icon: RiTeamLine },
+    { id: "photos", label: "Photos", icon: RiImage2Line },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50">
       <SEO title="Host Dashboard" noindex />
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold"><RiSparklingLine className="w-5 h-5" style={{ color: "#5C0FFE" }} /> Host Portal</div>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => router.push("/partner/calendar")}>
-              <RiCalendarEventLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Calendar</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push("/partner/schedule")}>
-              <RiCalendarScheduleLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Schedule cleans</span>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}><RiLogoutBoxRLine className="w-4 h-4" /></Button>
+      {/* Premium gradient header */}
+      <header className="sticky top-0 z-20 text-white" style={{ background: "linear-gradient(120deg,#5C0FFE 0%,#7A3BFF 55%,#9F7BFF 100%)" }}>
+        <div className="max-w-4xl mx-auto px-4 pt-4 pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/15"><RiSparklingLine className="w-4 h-4" /></span>
+              Host Portal
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button variant="secondary" size="sm" className="bg-white/15 text-white border-0 hover:bg-white/25" onClick={() => router.push("/partner/calendar")}>
+                <RiCalendarEventLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Calendar</span>
+              </Button>
+              <Button variant="secondary" size="sm" className="bg-white/15 text-white border-0 hover:bg-white/25" onClick={() => router.push("/partner/schedule")}>
+                <RiCalendarScheduleLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Weekly</span>
+              </Button>
+              <Button variant="ghost" size="sm" className="text-white hover:bg-white/15" onClick={() => supabase.auth.signOut()}><RiLogoutBoxRLine className="w-4 h-4" /></Button>
+            </div>
+          </div>
+          {/* Tab nav */}
+          <div className="mt-4 flex gap-1 overflow-x-auto no-scrollbar -mx-1 px-1">
+            {TABS.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={cn("flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition", tab === t.id ? "bg-white text-[#5C0FFE] shadow-sm" : "text-white/85 hover:bg-white/10")}>
+                <t.icon className="w-4 h-4" /> {t.label}
+              </button>
+            ))}
           </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-8">
+      <main className="max-w-4xl mx-auto px-4 py-6">
         {loading ? (
           <div className="flex justify-center py-16"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>
-        ) : (
-          <>
-            {/* Properties */}
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold">Your properties</h2>
-                <Button size="sm" onClick={() => { setEditingProp(null); setShowPropForm(true); }}>
-                  <RiAddLine className="w-4 h-4 mr-1" /> Add property
-                </Button>
-              </div>
-              {properties.length === 0 && <p className="text-sm text-muted-foreground">No properties yet. Add your first rental to request turnovers.</p>}
-              <div className="grid gap-3">
-                {properties.map((p) => {
-                  const priced = p.turnover_price != null && Number(p.turnover_price) > 0;
-                  return (
-                    <Card key={p.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-semibold flex items-center gap-2"><RiHome4Line className="w-4 h-4 text-primary" /> {p.nickname || "Property"}</p>
-                            <p className="text-xs text-muted-foreground truncate">{p.address}</p>
-                            <div className="flex flex-wrap gap-1.5 mt-2 text-[11px]">
-                              {p.bedrooms != null && <Badge variant="secondary">{p.bedrooms} BR</Badge>}
-                              {p.bathrooms != null && <Badge variant="secondary">{p.bathrooms} BA</Badge>}
-                              {p.laundry_included && <Badge variant="secondary">Laundry on-site</Badge>}
-                              {p.restock_included && <Badge variant="secondary">Restock</Badge>}
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            {priced ? (
-                              <p className="font-bold text-primary">${Number(p.turnover_price).toFixed(0)}<span className="text-[11px] text-muted-foreground">/turnover</span></p>
-                            ) : (
-                              <div>
-                                <Badge className="bg-amber-100 text-amber-700">Pending pricing</Badge>
-                                <p className="text-[11px] text-muted-foreground mt-1">{estimateLabel(p)}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex gap-2 mt-3">
-                          <Button size="sm" variant="outline" onClick={() => { setEditingProp(p); setShowPropForm(true); }}>
-                            <RiEditLine className="w-3.5 h-3.5 mr-1" /> Edit
-                          </Button>
-                          <Button size="sm" disabled={!priced} onClick={() => setRequestFor(p)}>
-                            <RiCalendarLine className="w-3.5 h-3.5 mr-1" /> Request turnover
-                          </Button>
-                        </div>
-                        {!priced && <p className="text-[11px] text-amber-600 mt-2">Our team is confirming your per-turnover rate — {estimateLabel(p).toLowerCase()} You'll be able to book once it's set.</p>}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
+        ) : tab === "overview" ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiTile icon={RiBuilding2Line} label="Active properties" value={String(activeProps.length)} sub={properties.length > activeProps.length ? `${properties.length - activeProps.length} pending pricing` : "all priced"} />
+              <KpiTile icon={RiCalendarEventLine} label="Upcoming" value={String(upcoming.length)} sub="turnovers scheduled" />
+              <KpiTile icon={RiTimeLine} label="Today" value={String(todays.length)} sub="turnovers today" />
+              <KpiTile icon={RiStarFill} label="Avg rating" value={avgRating ? avgRating.toFixed(1) : "—"} sub={`${ratings.length} rated`} />
+            </div>
 
-            {/* Turnover history */}
+            <div className="grid sm:grid-cols-3 gap-3">
+              <QuickAction icon={RiAddLine} label="Add property" onClick={() => { setEditingProp(null); setShowPropForm(true); }} />
+              <QuickAction icon={RiCalendarEventLine} label="Open calendar" onClick={() => router.push("/partner/calendar")} />
+              <QuickAction icon={RiCalendarScheduleLine} label="Weekly schedule" onClick={() => router.push("/partner/schedule")} />
+            </div>
+
             <section className="space-y-3">
-              <h2 className="text-lg font-bold">Turnovers</h2>
-              {turnovers.length === 0 && <p className="text-sm text-muted-foreground">No turnover requests yet.</p>}
-              <div className="grid gap-3">
-                {turnovers.map((t) => (
-                  <TurnoverCard
-                    key={t.id}
-                    turnover={t}
-                    propertyName={propName(t.property_id)}
-                    onReschedule={() => setRescheduleFor(t)}
-                    onRate={() => setRateFor(t)}
-                    onViewPhotos={() => setPhotoFor(t)}
-                    onChanged={load}
-                  />
-                ))}
-              </div>
+              <h2 className="text-base font-bold flex items-center gap-2"><RiTimeLine className="w-4 h-4 text-[#5C0FFE]" /> Today's turnovers</h2>
+              {todays.length === 0 ? (
+                <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Nothing scheduled for today. Use the calendar to book turnovers.</CardContent></Card>
+              ) : (
+                <div className="grid gap-3">
+                  {todays.map((t) => (
+                    <TurnoverCard key={t.id} turnover={t} propertyName={propName(t.property_id)} cleanerName={cleanerNameFor(cleaners, t.assigned_cleaner_id)} onReschedule={() => setRescheduleFor(t)} onRate={() => setRateFor(t)} onViewPhotos={() => setPhotoFor(t)} onChanged={load} />
+                  ))}
+                </div>
+              )}
             </section>
-          </>
+          </div>
+        ) : tab === "properties" ? (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Your properties</h2>
+              <Button size="sm" style={{ background: "#5C0FFE" }} onClick={() => { setEditingProp(null); setShowPropForm(true); }}>
+                <RiAddLine className="w-4 h-4 mr-1" /> Add property
+              </Button>
+            </div>
+            {properties.length === 0 && <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">No properties yet. Add your first rental to request turnovers.</CardContent></Card>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {properties.map((p) => {
+                const priced = p.turnover_price != null && Number(p.turnover_price) > 0;
+                const crew = cleaners?.byProperty?.[p.id] || [];
+                return (
+                  <Card key={p.id} className="overflow-hidden">
+                    <div className="h-1.5" style={{ background: priced ? "linear-gradient(90deg,#5C0FFE,#9F7BFF)" : "#FCD34D" }} />
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold flex items-center gap-2"><RiHome4Line className="w-4 h-4 text-[#5C0FFE]" /> {p.nickname || "Property"}</p>
+                          <p className="text-xs text-muted-foreground truncate">{p.address}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-2 text-[11px]">
+                            {p.bedrooms != null && <Badge variant="secondary">{p.bedrooms} BR</Badge>}
+                            {p.bathrooms != null && <Badge variant="secondary">{p.bathrooms} BA</Badge>}
+                            {p.sqft ? <Badge variant="secondary">{p.sqft} sqft</Badge> : null}
+                            {p.target_crew_size ? <Badge variant="secondary" className="bg-violet-50 text-[#5C0FFE]">{p.target_crew_size}-person crew</Badge> : null}
+                            {p.laundry_included && <Badge variant="secondary">Laundry</Badge>}
+                            {p.restock_included && <Badge variant="secondary">Restock</Badge>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {priced ? (
+                            <p className="font-bold text-[#5C0FFE]">${Number(p.turnover_price).toFixed(0)}<span className="text-[11px] text-muted-foreground">/turnover</span></p>
+                          ) : (
+                            <div><Badge className="bg-amber-100 text-amber-700">Pending pricing</Badge><p className="text-[11px] text-muted-foreground mt-1">{estimateLabel(p)}</p></div>
+                          )}
+                        </div>
+                      </div>
+                      {crew.length > 0 && (
+                        <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5"><RiTeamLine className="w-3.5 h-3.5" /> Crew: {crew.map((c) => c.firstName).join(", ")}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Button size="sm" variant="outline" onClick={() => { setEditingProp(p); setShowPropForm(true); }}><RiEditLine className="w-3.5 h-3.5 mr-1" /> Edit</Button>
+                        <Button size="sm" variant="outline" onClick={() => setTab("cleaners")}><RiTeamLine className="w-3.5 h-3.5 mr-1" /> Cleaners</Button>
+                        <Button size="sm" disabled={!priced} style={priced ? { background: "#5C0FFE" } : undefined} onClick={() => setRequestFor(p)}><RiCalendarLine className="w-3.5 h-3.5 mr-1" /> Request</Button>
+                      </div>
+                      {!priced && <p className="text-[11px] text-amber-600 mt-2">Our team is confirming your per-turnover rate — {estimateLabel(p).toLowerCase()} You'll be able to book once it's set.</p>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </section>
+        ) : tab === "turnovers" ? (
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold">Turnovers</h2>
+            {turnovers.length === 0 && <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">No turnover requests yet.</CardContent></Card>}
+            <div className="grid gap-3">
+              {turnovers.map((t) => (
+                <TurnoverCard key={t.id} turnover={t} propertyName={propName(t.property_id)} cleanerName={cleanerNameFor(cleaners, t.assigned_cleaner_id)} onReschedule={() => setRescheduleFor(t)} onRate={() => setRateFor(t)} onViewPhotos={() => setPhotoFor(t)} onChanged={load} />
+              ))}
+            </div>
+          </section>
+        ) : tab === "cleaners" ? (
+          <CleanersTab
+            properties={properties}
+            cleaners={cleaners}
+            onRequest={(property, current, kind) => setRequestCleanerFor({ property, current, kind })}
+          />
+        ) : (
+          <TodayPhotosTab turnovers={photoTurnovers} propName={propName} todayYmd={todayYmd} />
         )}
       </main>
 
@@ -628,6 +702,13 @@ function Dashboard() {
       )}
       {photoFor && (
         <PhotosViewer turnover={photoFor} onClose={() => setPhotoFor(null)} />
+      )}
+      {requestCleanerFor && (
+        <RequestCleanerModal
+          ctx={requestCleanerFor}
+          onClose={() => setRequestCleanerFor(null)}
+          onDone={() => { setRequestCleanerFor(null); load(); }}
+        />
       )}
     </div>
   );
@@ -647,10 +728,15 @@ const STATUS_STEP: Record<string, number> = {
   assigned: 1, cleaner_confirmed: 2, in_progress: 3, completed: 4,
 };
 
+function cleanerNameFor(cleaners: HostCleaners | null, cleanerId: string | null): string | undefined {
+  if (!cleaners || !cleanerId) return undefined;
+  return cleaners.roster.find((c) => c.id === cleanerId)?.firstName;
+}
+
 function TurnoverCard({
-  turnover: t, propertyName, onReschedule, onRate, onViewPhotos, onChanged,
+  turnover: t, propertyName, cleanerName, onReschedule, onRate, onViewPhotos, onChanged,
 }: {
-  turnover: Turnover; propertyName: string;
+  turnover: Turnover; propertyName: string; cleanerName?: string;
   onReschedule: () => void; onRate: () => void; onViewPhotos: () => void; onChanged: () => void;
 }) {
   const [cancelling, setCancelling] = useState(false);
@@ -685,6 +771,11 @@ function TurnoverCard({
               <RiTimeLine className="w-3 h-3" />{format(new Date(`${t.requested_date}T12:00:00`), "EEE, MMM d")}
               {t.window_start ? ` · ${t.window_start.slice(0, 5)}–${(t.window_end || "").slice(0, 5)}` : ""}
             </p>
+            {cleanerName && (
+              <p className="text-xs text-[#5C0FFE] flex items-center gap-1.5 mt-0.5 font-medium">
+                <RiTeamLine className="w-3 h-3" /> Cleaner: {cleanerName}
+              </p>
+            )}
           </div>
           <div className="text-right shrink-0">
             <Badge className={cn("text-[11px]", st.cls)}>{st.label}</Badge>
@@ -1056,6 +1147,219 @@ function RequestForm({ property, onClose, onPaid }: { property: Property; onClos
         </p>
       </div>
     </Modal>
+  );
+}
+
+// ─── Overview building blocks ──────────────────────────────────────────────
+function KpiTile({ icon: Icon, label, value, sub }: { icon: typeof RiDashboardLine; label: string; value: string; sub?: string }) {
+  return (
+    <Card>
+      <CardContent className="p-3.5">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-slate-500">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-violet-50 text-[#5C0FFE]"><Icon className="w-3.5 h-3.5" /></span>
+          {label}
+        </div>
+        <p className="text-2xl font-bold mt-1.5 text-slate-900">{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickAction({ icon: Icon, label, onClick }: { icon: typeof RiDashboardLine; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="group flex items-center justify-between gap-2 rounded-xl border bg-white px-4 py-3 text-left transition hover:border-[#5C0FFE]/40 hover:shadow-sm">
+      <span className="flex items-center gap-2.5 text-sm font-medium text-slate-800">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-[#5C0FFE]"><Icon className="w-4 h-4" /></span>
+        {label}
+      </span>
+      <RiArrowRightUpLine className="w-4 h-4 text-slate-300 group-hover:text-[#5C0FFE]" />
+    </button>
+  );
+}
+
+// ─── Cleaners tab — roster (names only) + per-property crew management ───────
+function CleanersTab({
+  properties, cleaners, onRequest,
+}: {
+  properties: Property[];
+  cleaners: HostCleaners | null;
+  onRequest: (property: Property, current: CrewMember | undefined, kind: "replace" | "additional") => void;
+}) {
+  const roster = cleaners?.roster || [];
+  const rosterMax = cleaners?.rosterMax || 10;
+  const perPropertyMax = cleaners?.perPropertyMax || 2;
+  return (
+    <div className="space-y-6">
+      <Card className="border-violet-200 bg-gradient-to-br from-violet-50 to-white">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold flex items-center gap-2"><RiGroupLine className="w-4 h-4 text-[#5C0FFE]" /> Your cleaner roster</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Up to {perPropertyMax} regular cleaners per property · {rosterMax} on your roster. You see first names only — request a change and our team handles vetting & scheduling.</p>
+            </div>
+            <span className="text-sm font-bold text-[#5C0FFE] shrink-0">{roster.length}/{rosterMax}</span>
+          </div>
+          {roster.length > 0 ? (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {roster.map((c) => (
+                <span key={c.id} className="inline-flex items-center gap-1.5 rounded-full border bg-white px-3 py-1 text-xs font-medium">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#5C0FFE] text-white text-[10px]">{c.firstName.slice(0, 1).toUpperCase()}</span>
+                  {c.firstName}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-3">No cleaners assigned yet — they'll appear here once your first turnover is staffed.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-700">Crew by property</h3>
+        {properties.length === 0 && <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Add a property first.</CardContent></Card>}
+        {properties.map((p) => {
+          const crew = cleaners?.byProperty?.[p.id] || [];
+          const canAdd = crew.length < perPropertyMax;
+          return (
+            <Card key={p.id}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-sm flex items-center gap-2"><RiHome4Line className="w-4 h-4 text-[#5C0FFE]" /> {p.nickname || p.address || "Property"}</p>
+                  {p.target_crew_size ? <Badge variant="secondary" className="bg-violet-50 text-[#5C0FFE]">{p.target_crew_size}-person crew</Badge> : null}
+                </div>
+                {crew.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {crew.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#5C0FFE] text-white text-[11px]">{c.firstName.slice(0, 1).toUpperCase()}</span>
+                          {c.firstName}
+                        </span>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onRequest(p, c, "replace")}>
+                          <RiExchangeFundsLine className="w-3.5 h-3.5 mr-1" /> Replace
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-2">No regular cleaner yet — we assign one automatically on your next turnover, or request a specific change below.</p>
+                )}
+                <Button size="sm" variant="ghost" className="mt-2 text-[#5C0FFE]" disabled={!canAdd} onClick={() => onRequest(p, undefined, "additional")}>
+                  <RiUserAddLine className="w-3.5 h-3.5 mr-1" /> {canAdd ? "Request an additional cleaner" : `Max ${perPropertyMax} cleaners`}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RequestCleanerModal({
+  ctx, onClose, onDone,
+}: {
+  ctx: { property: Property; current?: CrewMember; kind: "replace" | "additional" };
+  onClose: () => void; onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const isReplace = ctx.kind === "replace";
+  const submit = async () => {
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+      body: {
+        action: "cleaner.requestChange",
+        kind: ctx.kind,
+        propertyId: ctx.property.id,
+        currentCleanerId: ctx.current?.id || null,
+        reason,
+      },
+    });
+    setBusy(false);
+    if (error || (data as { error?: string })?.error) { toast.error((data as { error?: string })?.error || "Could not send request"); return; }
+    toast.success("Request sent — our team will sort it out and update your crew.");
+    onDone();
+  };
+  return (
+    <Modal onClose={onClose} title={isReplace ? `Replace ${ctx.current?.firstName || "cleaner"}` : "Request another cleaner"}>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          {isReplace
+            ? `We'll find a new cleaner for ${ctx.property.nickname || "this property"} and update your crew. No charge for swapping.`
+            : `We'll add another vetted cleaner to ${ctx.property.nickname || "this property"} (up to 2 regulars).`}
+        </p>
+        <div>
+          <Label>Anything we should know? (optional)</Label>
+          <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={isReplace ? "e.g. scheduling conflicts, prefer someone for larger crews…" : "e.g. need a 2-person crew for back-to-back turnovers…"} />
+        </div>
+        <Button onClick={submit} disabled={busy} className="w-full h-11" style={{ background: "#5C0FFE" }}>
+          {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Send request to our team"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Today's photos tab — auto-deletes after 7 days ─────────────────────────
+function TodayPhotosTab({ turnovers, propName, todayYmd }: { turnovers: Turnover[]; propName: (id: string) => string; todayYmd: string }) {
+  const todays = turnovers.filter((t) => t.requested_date === todayYmd);
+  const recent = turnovers.filter((t) => t.requested_date !== todayYmd).slice(0, 12);
+  const Group = ({ t }: { t: Turnover }) => {
+    const before = t.before_photos || [];
+    const after = t.after_photos || [];
+    return (
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-sm flex items-center gap-2"><RiHome4Line className="w-4 h-4 text-[#5C0FFE]" /> {propName(t.property_id)}</p>
+            <span className="text-xs text-muted-foreground">{format(new Date(`${t.requested_date}T12:00:00`), "EEE, MMM d")}</span>
+          </div>
+          {before.length === 0 && after.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No photos uploaded yet.</p>
+          ) : (
+            <>
+              {(["Before", "After"] as const).map((label) => {
+                const urls = label === "Before" ? before : after;
+                if (!urls.length) return null;
+                return (
+                  <div key={label} className="space-y-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {urls.map((u, i) => (
+                        <a key={i} href={u} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-lg border bg-slate-100">
+                          <img src={u} alt={`${label} ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 flex items-center gap-2">
+        <RiTimeLine className="w-4 h-4 shrink-0" /> Turnover photos are kept for 7 days, then automatically deleted from the app.
+      </div>
+      <section className="space-y-3">
+        <h2 className="text-base font-bold flex items-center gap-2"><RiImage2Line className="w-4 h-4 text-[#5C0FFE]" /> Today</h2>
+        {todays.length === 0 ? (
+          <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">No photos for today's turnovers yet.</CardContent></Card>
+        ) : todays.map((t) => <Group key={t.id} t={t} />)}
+      </section>
+      {recent.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-base font-bold text-slate-700">Recent (last 7 days)</h2>
+          {recent.map((t) => <Group key={t.id} t={t} />)}
+        </section>
+      )}
+    </div>
   );
 }
 
