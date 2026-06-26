@@ -252,6 +252,10 @@ verify_jwt = false
 [functions.payroll-execute]
 verify_jwt = false
 
+# Cal.com interim turnover-request webhook (HMAC-verified inside the fn).
+[functions.calcom-webhook]
+verify_jwt = false
+
 # Admin/VA team-user provisioning (admin-only role check inside the fn).
 [functions.admin-create-team-user]
 verify_jwt = true
