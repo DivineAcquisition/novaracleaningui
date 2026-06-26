@@ -39,6 +39,13 @@ function json(body: unknown, status = 200) {
 }
 const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
 
+// Recommended dispatch crew size (2–3) from a property's square footage.
+// Larger homes get a 3-person crew so the turnover fits the checkout window.
+function targetCrewSize(sqft: number | null): number | null {
+  if (sqft == null || Number.isNaN(sqft) || sqft <= 0) return null;
+  return sqft >= 2500 ? 3 : 2;
+}
+
 // Fire a branded host email (best-effort).
 async function sendHostEmail(admin: SB, type: string, email: string | null | undefined, data: Record<string, unknown>) {
   if (!email) return;
@@ -197,6 +204,7 @@ serve(async (req) => {
 
     // --- property.save (never accepts turnover_price) -------------------
     if (action === "property.save") {
+      const sqftVal = body.sqft != null && body.sqft !== "" ? parseInt(String(body.sqft), 10) : null;
       const fields = {
         host_id: host.id,
         nickname: (body.nickname || "").trim() || null,
@@ -204,7 +212,10 @@ serve(async (req) => {
         access_instructions: (body.access_instructions || "").trim() || null,
         bedrooms: body.bedrooms != null && body.bedrooms !== "" ? parseInt(String(body.bedrooms), 10) : null,
         bathrooms: body.bathrooms != null && body.bathrooms !== "" ? parseFloat(String(body.bathrooms)) : null,
-        sqft: body.sqft != null && body.sqft !== "" ? parseInt(String(body.sqft), 10) : null,
+        sqft: sqftVal,
+        // Recommended dispatch crew size (2–3) derived from sqft. Larger homes
+        // get a 3-person crew so turnovers finish inside the checkout window.
+        target_crew_size: targetCrewSize(sqftVal),
         laundry_included: !!body.laundry_included,
         restock_included: !!body.restock_included,
         special_notes: (body.special_notes || "").trim() || null,
@@ -220,6 +231,123 @@ serve(async (req) => {
       const { data, error } = await admin.from("properties").insert(fields).select("*").single();
       if (error) return json({ error: error.message }, 500);
       return json({ property: data });
+    }
+
+    // --- host.cleaners — roster + per-property crew (NAMES ONLY) ---------
+    //
+    // Hosts see only first names of the cleaners on their properties (never
+    // contact info). Crew per property = property-preferred turnover_crew rows
+    // plus whoever is currently assigned on this property's turnovers. The
+    // roster is the distinct set across all the host's properties, capped 10.
+    if (action === "host.cleaners") {
+      const { data: props } = await admin.from("properties").select("id, nickname, address, sqft, target_crew_size").eq("host_id", host.id);
+      const propIds = (props || []).map((p: Record<string, unknown>) => p.id);
+      const byProperty: Record<string, Array<{ id: string; firstName: string; source: string }>> = {};
+      const rosterIds = new Set<string>();
+
+      // Property-preferred crew.
+      if (propIds.length) {
+        const { data: crew } = await admin
+          .from("turnover_crew")
+          .select("cleaner_id, property_id, priority, active")
+          .in("property_id", propIds)
+          .eq("active", true)
+          .eq("is_turnover_crew", true)
+          .order("priority", { ascending: true });
+        for (const c of crew || []) {
+          (byProperty[c.property_id] ||= []).push({ id: c.cleaner_id, firstName: "", source: "preferred" });
+          rosterIds.add(c.cleaner_id);
+        }
+      }
+      // Currently/last assigned cleaners on this host's turnovers.
+      const { data: trs } = await admin
+        .from("turnover_requests")
+        .select("property_id, assigned_cleaner_id, status, requested_date")
+        .eq("host_id", host.id)
+        .not("assigned_cleaner_id", "is", null)
+        .order("requested_date", { ascending: false });
+      for (const t of trs || []) {
+        const list = (byProperty[t.property_id] ||= []);
+        if (!list.find((x) => x.id === t.assigned_cleaner_id)) list.push({ id: t.assigned_cleaner_id, firstName: "", source: "assigned" });
+        rosterIds.add(t.assigned_cleaner_id);
+      }
+
+      // Resolve first names (the only PII a host may see).
+      const nameById = new Map<string, string>();
+      if (rosterIds.size) {
+        const { data: cs } = await admin.from("cleaners").select("id, first_name").in("id", Array.from(rosterIds));
+        for (const c of cs || []) nameById.set(String(c.id), c.first_name || "Cleaner");
+      }
+      for (const pid of Object.keys(byProperty)) {
+        byProperty[pid] = byProperty[pid].map((x) => ({ ...x, firstName: nameById.get(x.id) || "Cleaner" })).slice(0, 2);
+      }
+      const roster = Array.from(rosterIds).slice(0, 10).map((id) => ({ id, firstName: nameById.get(id) || "Cleaner" }));
+
+      const { data: openReqs } = await admin
+        .from("cleaner_change_requests")
+        .select("id, property_id, current_cleaner_id, kind, reason, status, created_at")
+        .eq("host_id", host.id)
+        .eq("status", "open");
+
+      return json({
+        roster,
+        rosterMax: 10,
+        perPropertyMax: 2,
+        byProperty,
+        properties: props || [],
+        openRequests: openReqs || [],
+      });
+    }
+
+    // --- cleaner.requestChange — host asks ops to swap/add a cleaner ------
+    if (action === "cleaner.requestChange") {
+      const kind = ["replace", "additional", "remove"].includes(body.kind) ? body.kind : "replace";
+      let propertyId: string | null = body.propertyId || null;
+      if (propertyId) {
+        const { data: prop } = await admin.from("properties").select("id, host_id").eq("id", propertyId).maybeSingle();
+        if (!prop || prop.host_id !== host.id) return json({ error: "Property not found" }, 404);
+      }
+      // Guard the roster cap for "additional" requests.
+      if (kind === "additional") {
+        const { count } = await admin
+          .from("turnover_crew")
+          .select("id", { count: "exact", head: true })
+          .eq("property_id", propertyId)
+          .eq("active", true);
+        if ((count || 0) >= 2) {
+          return json({ error: "Each property can have up to 2 regular cleaners. Replace one instead." }, 409);
+        }
+      }
+      const { data: reqRow, error: reqErr } = await admin.from("cleaner_change_requests").insert({
+        host_id: host.id,
+        property_id: propertyId,
+        turnover_id: body.turnoverId || null,
+        current_cleaner_id: body.currentCleanerId || null,
+        kind,
+        reason: (body.reason || "").trim() || null,
+      }).select("id").single();
+      if (reqErr) return json({ error: reqErr.message }, 500);
+
+      // Notify ops (names only — never expose host↔cleaner contact wiring here).
+      let propLabel = "a property";
+      if (propertyId) {
+        const { data: p } = await admin.from("properties").select("nickname, address").eq("id", propertyId).maybeSingle();
+        propLabel = p?.nickname || p?.address || propLabel;
+      }
+      const kindLabel = kind === "replace" ? "REPLACE a cleaner" : kind === "additional" ? "ADD a cleaner" : "REMOVE a cleaner";
+      await notifyDiscord(admin, {
+        title: "Host cleaner-change request",
+        color: 15844367,
+        fields: [
+          { name: "Host", value: host.name || host.email || "-", inline: true },
+          { name: "Property", value: propLabel, inline: true },
+          { name: "Request", value: kindLabel, inline: true },
+          { name: "Reason", value: (body.reason || "—").toString().slice(0, 500), inline: false },
+        ],
+        description: "Action it in admin → Partnerships → crew, then mark the request resolved.",
+      }).catch(() => undefined);
+
+      return json({ ok: true, requestId: reqRow.id });
     }
 
     // --- turnover.request -----------------------------------------------

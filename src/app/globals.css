@@ -316,3 +316,11 @@
   z-index: 10000 !important;
 }
 
+/* Hide scrollbars on horizontally-scrollable nav (host portal tab bar, etc.) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
