@@ -13,7 +13,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 import { notifyDiscord } from "../_shared/discord.ts";
-import { executePeriod, mondayOf, sundayOf } from "../_shared/payroll-engine.ts";
+import { executePeriod, clawbackRun, mondayOf, sundayOf } from "../_shared/payroll-engine.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,6 +56,9 @@ interface PreviewLine {
   connectReady: boolean;
   flag: "payable" | "blocked" | "skip" | "done";
   flagReason?: string;
+  stripeTransferId?: string | null;
+  sentCents?: number | null;
+  clawedBackCents?: number;
 }
 
 async function preview(admin: DB, period: string) {
@@ -105,6 +108,9 @@ async function preview(admin: DB, period: string) {
       bonusCents: Number(r.bonus_cents) || 0,
       deductionCents: Number(r.deduction_cents) || 0,
       netCents: net, status, paymentMethod: method, connectReady, flag, flagReason,
+      stripeTransferId: (r.stripe_transfer_id as string) || null,
+      sentCents: r.sent_amount_cents != null ? Number(r.sent_amount_cents) : null,
+      clawedBackCents: Number(r.clawed_back_cents) || 0,
     };
   });
 
@@ -143,8 +149,26 @@ serve(async (req) => {
       return json({ success: true, ...(await preview(admin, period)) });
     }
 
+    if (action === "clawback") {
+      const result = await clawbackRun(admin, {
+        runId: String(body?.runId || ""),
+        amountCents: Math.round(Number(body?.amountCents) || 0),
+        reason: body?.reason || null,
+        actor,
+      });
+      return json(result, result.ok ? 200 : 400);
+    }
+
     if (action === "execute") {
-      const result = await executePeriod(admin, { period, actor });
+      // Optional per-run send-amount overrides ({ [runId]: cents }).
+      const overrides: Record<string, number> = {};
+      if (body?.overrides && typeof body.overrides === "object") {
+        for (const [k, v] of Object.entries(body.overrides as Record<string, unknown>)) {
+          const n = Math.round(Number(v));
+          if (Number.isFinite(n) && n >= 0) overrides[k] = n;
+        }
+      }
+      const result = await executePeriod(admin, { period, actor, overrides });
 
       if (result.halted) {
         await notifyDiscord(admin, {
