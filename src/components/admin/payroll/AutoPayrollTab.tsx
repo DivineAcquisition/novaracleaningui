@@ -12,11 +12,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line, RiRefreshLine, RiAlertLine, RiCheckboxCircleFill,
   RiSecurePaymentLine, RiHammerLine, RiCloseCircleLine, RiTimeLine,
+  RiArrowGoBackLine, RiCloseLine,
 } from "@remixicon/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { usd, thisWeekMonday, formatPeriod, payPeriodMonday } from "@/lib/payroll";
 import {
   type PayrollCleaner, type PreviewLine, type PreviewResult, type ExecuteResult,
-  loadPeriodPreview, executePayrollPeriod, buildDraftRuns, updateRunAdjustments,
+  loadPeriodPreview, executePayrollPeriod, buildDraftRuns, updateRunAdjustments, clawbackPayroll,
 } from "./shared";
 
 const toCents = (dollars: string): number => Math.max(0, Math.round(parseFloat(dollars || "0") * 100) || 0);
@@ -42,8 +44,10 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
   const [building, setBuilding] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [edits, setEdits] = useState<Record<string, { bonus: string; deduction: string }>>({});
+  const [sendEdits, setSendEdits] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [results, setResults] = useState<ExecuteResult | null>(null);
+  const [clawbackFor, setClawbackFor] = useState<PreviewLine | null>(null);
 
   const periodOptions = useMemo(() => {
     const opts: string[] = [];
@@ -63,6 +67,8 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
       const res = await loadPeriodPreview(period);
       setData(res);
       setEdits(Object.fromEntries(res.lines.map((l) => [l.runId, { bonus: toDollars(l.bonusCents), deduction: toDollars(l.deductionCents) }])));
+      // Seed the editable send amount with the computed net for each line.
+      setSendEdits(Object.fromEntries(res.lines.map((l) => [l.runId, toDollars(l.netCents)])));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load payroll");
     } finally {
@@ -109,19 +115,33 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
     return !!e && (toCents(e.bonus) !== line.bonusCents || toCents(e.deduction) !== line.deductionCents);
   };
 
+  // Sum of the (editable) send amounts across payable lines.
+  const payableLines = useMemo(() => (data?.lines || []).filter((l) => l.flag === "payable"), [data]);
+  const sendTotalCents = useMemo(
+    () => payableLines.reduce((a, l) => a + toCents(sendEdits[l.runId] ?? toDollars(l.netCents)), 0),
+    [payableLines, sendEdits],
+  );
+
   const approveAndPay = async () => {
     if (!data) return;
-    const t = data.totals;
-    if (t.payable === 0) { toast.info("Nothing payable in this period."); return; }
-    if (Object.values(edits).some((_e) => false)) { /* noop */ }
+    if (payableLines.length === 0) { toast.info("Nothing payable in this period."); return; }
     const anyDirty = data.lines.some(isDirty);
-    if (anyDirty && !confirm("You have unsaved bonus/deduction edits that won't be included. Continue anyway?")) return;
-    if (!confirm(`Approve & Pay ${usd(t.netPayable)} to ${t.payable} cleaner(s)?\n\nThis fires every payable Stripe transfer automatically and cannot be undone.`)) return;
+    if (anyDirty && !confirm("You have unsaved bonus/deduction edits that won't be included. Save them first, or continue with the amounts shown?")) return;
+    // Build per-run overrides (exact cents to send).
+    const overrides: Record<string, number> = {};
+    let anyOverride = false;
+    for (const l of payableLines) {
+      const cents = toCents(sendEdits[l.runId] ?? toDollars(l.netCents));
+      overrides[l.runId] = cents;
+      if (cents !== l.netCents) anyOverride = true;
+    }
+    const overrideNote = anyOverride ? "\n\n⚠️ One or more amounts were manually changed from the computed net." : "";
+    if (!confirm(`Approve & Pay ${usd(sendTotalCents)} to ${payableLines.length} cleaner(s)?${overrideNote}\n\nThis fires every payable Stripe transfer automatically.`)) return;
 
     setExecuting(true);
     setResults(null);
     try {
-      const res = await executePayrollPeriod(period);
+      const res = await executePayrollPeriod(period, overrides);
       setResults(res);
       if (res.halted) {
         toast.error("Execution halted", { description: res.reason });
@@ -160,10 +180,10 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
             {building ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiHammerLine className="w-4 h-4 mr-1.5" />}
             Rebuild draft
           </Button>
-          {totals && totals.payable > 0 && (
+          {payableLines.length > 0 && (
             <Button onClick={approveAndPay} disabled={executing || loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {executing ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiSecurePaymentLine className="w-4 h-4 mr-1.5" />}
-              Approve &amp; Pay {usd(totals.netPayable)} to {totals.payable} cleaner{totals.payable === 1 ? "" : "s"}
+              Approve &amp; Pay {usd(sendTotalCents)} to {payableLines.length} cleaner{payableLines.length === 1 ? "" : "s"}
             </Button>
           )}
           <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading} className="ml-auto">
@@ -175,7 +195,7 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
       {/* Totals bar */}
       {totals && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Tile label="Net to pay" value={usd(totals.netPayable)} highlight />
+          <Tile label="To pay" value={usd(sendTotalCents)} highlight />
           <Tile label="Payable cleaners" value={String(totals.payable)} />
           <Tile label="Blocked" value={String(totals.blocked)} tone={totals.blocked > 0 ? "rose" : undefined} />
           <Tile label="Already paid" value={`${data?.totals.done ?? 0} · ${usd(totals.netDone)}`} />
@@ -212,6 +232,7 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
                     <TableHead className="text-right">Bonus</TableHead>
                     <TableHead className="text-right">Deduction</TableHead>
                     <TableHead className="text-right">Net</TableHead>
+                    <TableHead className="text-right">Send</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                     <TableHead />
                   </TableRow>
@@ -250,6 +271,31 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
                           ) : <span className="text-sm text-slate-500">{usd(l.deductionCents)}</span>}
                         </TableCell>
                         <TableCell className="text-right text-sm font-semibold text-slate-900">{usd(liveNet(l))}</TableCell>
+                        <TableCell className="text-right">
+                          {l.flag === "payable" ? (
+                            <div className="flex flex-col items-end">
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                                <Input
+                                  value={sendEdits[l.runId] ?? toDollars(l.netCents)}
+                                  onChange={(ev) => setSendEdits((p) => ({ ...p, [l.runId]: ev.target.value }))}
+                                  inputMode="decimal"
+                                  className="h-8 w-24 pl-5 text-right text-sm ml-auto"
+                                />
+                              </div>
+                              {toCents(sendEdits[l.runId] ?? "") !== l.netCents && (
+                                <span className="text-[10px] text-amber-600 mt-0.5">overridden</span>
+                              )}
+                            </div>
+                          ) : l.flag === "done" ? (
+                            <div className="text-right">
+                              <span className="text-sm text-slate-700">{usd(l.sentCents ?? l.netCents)}</span>
+                              {(l.clawedBackCents || 0) > 0 && (
+                                <p className="text-[10px] text-rose-600">−{usd(l.clawedBackCents || 0)} clawed back</p>
+                              )}
+                            </div>
+                          ) : <span className="text-sm text-slate-300">—</span>}
+                        </TableCell>
                         <TableCell className="text-center">
                           <FlagBadge line={l} result={rr} />
                         </TableCell>
@@ -257,6 +303,11 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
                           {editable && isDirty(l) && (
                             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={savingId === l.runId} onClick={() => saveAdjustments(l)}>
                               {savingId === l.runId ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                            </Button>
+                          )}
+                          {l.flag === "done" && l.stripeTransferId && (l.sentCents ?? l.netCents) - (l.clawedBackCents || 0) > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setClawbackFor(l)}>
+                              <RiArrowGoBackLine className="w-3.5 h-3.5 mr-1" /> Claw back
                             </Button>
                           )}
                         </TableCell>
@@ -273,8 +324,12 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
       <p className="text-[11px] text-slate-400">
         Computation is automatic (weekly <code className="px-1 bg-slate-100 rounded">payroll-draft</code> cron). Sending requires this one approval; after the click,
         <code className="mx-1 px-1 bg-slate-100 rounded">payroll-execute</code> fires every payable transfer automatically with a per-cleaner Stripe idempotency key,
-        a platform-balance check, and a per-run processing lock. Transfer outcomes reconcile via the Stripe webhook.
+        a platform-balance check, and a per-run processing lock. You can edit the exact <strong>Send</strong> amount per cleaner before paying, and claw back an overpayment from a contractor's connected account afterward. Transfer outcomes reconcile via the Stripe webhook.
       </p>
+
+      {clawbackFor && (
+        <ClawbackModal line={clawbackFor} onClose={() => setClawbackFor(null)} onDone={() => { setClawbackFor(null); void load(); }} />
+      )}
     </div>
   );
 }
@@ -290,6 +345,66 @@ function FlagBadge({ line, result }: { line: PreviewLine; result?: ExecuteResult
   if (line.flag === "blocked") return <Badge variant="outline" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200" title={line.flagReason}><RiAlertLine className="w-3 h-3 mr-1" />Blocked</Badge>;
   if (line.flag === "skip") return <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200" title={line.flagReason}><RiTimeLine className="w-3 h-3 mr-1" />Skip</Badge>;
   return <Badge variant="outline" className="text-[10px] bg-sky-50 text-sky-700 border-sky-200">Payable</Badge>;
+}
+
+function ClawbackModal({ line, onClose, onDone }: { line: PreviewLine; onClose: () => void; onDone: () => void }) {
+  const sent = line.sentCents ?? line.netCents;
+  const already = line.clawedBackCents || 0;
+  const recoverable = Math.max(0, sent - already);
+  const [amount, setAmount] = useState(toDollars(recoverable));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const cents = toCents(amount);
+    if (cents <= 0) { toast.error("Enter an amount greater than $0."); return; }
+    if (cents > recoverable) { toast.error(`You can claw back at most ${usd(recoverable)}.`); return; }
+    if (!confirm(`Reverse ${usd(cents)} from ${line.cleanerName}'s connected account?\n\nThis pulls funds back from their Stripe balance to the platform.`)) return;
+    setBusy(true);
+    try {
+      const res = await clawbackPayroll(line.runId, cents, reason);
+      if (!res.ok) { toast.error("Clawback failed", { description: res.reason }); return; }
+      toast.success(`Clawed back ${usd(cents)} from ${line.cleanerName}.`);
+      onDone();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Clawback failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm p-0 sm:p-4" onClick={onClose}>
+      <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-5 shadow-xl" onClick={(ev) => ev.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-sm">Claw back from {line.cleanerName}</h3>
+          <Button variant="ghost" size="icon" onClick={onClose}><RiCloseLine className="w-4 h-4" /></Button>
+        </div>
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600 mb-3 space-y-0.5">
+          <div className="flex justify-between"><span>Sent</span><span className="font-medium text-slate-900">{usd(sent)}</span></div>
+          {already > 0 && <div className="flex justify-between"><span>Already clawed back</span><span className="text-rose-600">−{usd(already)}</span></div>}
+          <div className="flex justify-between"><span>Recoverable</span><span className="font-semibold text-slate-900">{usd(recoverable)}</span></div>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Amount to reverse</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+              <Input value={amount} onChange={(ev) => setAmount(ev.target.value)} inputMode="decimal" className="pl-6" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">Reason</Label>
+            <Input value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="e.g. overpaid — wrong tier %" />
+          </div>
+          <Button onClick={submit} disabled={busy} className="w-full h-11 bg-rose-600 hover:bg-rose-700 text-white">
+            {busy ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiArrowGoBackLine className="w-4 h-4 mr-1.5" /> Reverse {usd(toCents(amount))}</>}
+          </Button>
+          <p className="text-[11px] text-slate-400">Reverses the original Stripe transfer, pulling funds from the contractor's connected-account balance back to the platform. Requires available balance on their account.</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Tile({ label, value, highlight, tone }: { label: string; value: string; highlight?: boolean; tone?: "rose" }) {
