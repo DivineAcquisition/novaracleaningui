@@ -256,6 +256,10 @@ verify_jwt = false
 [functions.calcom-webhook]
 verify_jwt = false
 
+# Daily 7-day photo retention sweep (pg_cron, service-role).
+[functions.purge-old-turnover-photos]
+verify_jwt = false
+
 # Admin/VA team-user provisioning (admin-only role check inside the fn).
 [functions.admin-create-team-user]
 verify_jwt = true
