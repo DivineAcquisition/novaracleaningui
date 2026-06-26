@@ -244,6 +244,14 @@ verify_jwt = false
 [functions.get-job-photos]
 verify_jwt = false
 
+# Weekly payroll auto-draft (pg_cron, service-role). No admin JWT.
+[functions.payroll-draft]
+verify_jwt = false
+
+# Payroll "Approve & Pay" preview + executor (admin/VA gated inside the fn).
+[functions.payroll-execute]
+verify_jwt = false
+
 # Admin/VA team-user provisioning (admin-only role check inside the fn).
 [functions.admin-create-team-user]
 verify_jwt = true
