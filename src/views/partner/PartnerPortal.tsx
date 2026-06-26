@@ -523,6 +523,9 @@ function Dashboard() {
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold"><RiSparklingLine className="w-5 h-5" style={{ color: "#5C0FFE" }} /> Host Portal</div>
           <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={() => router.push("/partner/calendar")}>
+              <RiCalendarEventLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Calendar</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => router.push("/partner/schedule")}>
               <RiCalendarScheduleLine className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Schedule cleans</span>
             </Button>
