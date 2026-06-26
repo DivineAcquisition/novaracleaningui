@@ -28,6 +28,16 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// bookings.customer_id is dual-use: it can hold a real customers.id (uuid)
+// OR a Stripe customer id ("cus_…") used by the balance-charge flows. jobs
+// .customer_id is a strict uuid column, so only copy the value through when
+// it actually looks like a uuid — otherwise the jobs insert throws
+// "invalid input syntax for type uuid" and the whole assign 500s.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function uuidOrNull(value: unknown): string | null {
+  return typeof value === "string" && UUID_RE.test(value) ? value : null;
+}
+
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -246,7 +256,7 @@ serve(async (req) => {
       const { data: job, error: jobErr } = await admin
         .from("jobs")
         .insert({
-          customer_id: booking.customer_id || null,
+          customer_id: uuidOrNull(booking.customer_id),
           address: booking.address,
           city: booking.city,
           state: booking.state,
