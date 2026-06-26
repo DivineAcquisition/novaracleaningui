@@ -7,13 +7,14 @@
 // a payment option, and submit — we invoice each turnover via Stripe (the card
 // is saved on payment; the turnover books + lands on the calendar once paid).
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line, RiCalendarCheckLine, RiCheckLine, RiMailSendLine,
-  RiArrowRightLine, RiShieldCheckLine, RiHome3Line,
+  RiArrowRightLine, RiShieldCheckLine, RiHome3Line, RiAddLine, RiCloseLine,
 } from "@remixicon/react";
 
 interface Property { id: string; nickname: string | null; address: string | null; turnover_price: number | null; }
+interface AddPropForm { nickname: string; address: string; bedrooms: string; bathrooms: string; sqft: string; laundry_included: boolean; restock_included: boolean; special_notes: string; }
 interface Existing { property_id: string; requested_date: string; status: string; }
 interface InvoiceResult { turnoverId: string; date: string; property: string; amountCents?: number; url?: string | null; error?: string }
 
@@ -34,31 +35,58 @@ export default function OpenScheduler({ token }: { token: string }) {
   const [hostName, setHostName] = useState("");
   const [weekStart, setWeekStart] = useState("");
   const [properties, setProperties] = useState<Property[]>([]);
+  const [pendingProperties, setPendingProperties] = useState<Property[]>([]);
   const [existing, setExisting] = useState<Existing[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [showAddProp, setShowAddProp] = useState(false);
+  const [addingProp, setAddingProp] = useState(false);
+  const [addForm, setAddForm] = useState<AddPropForm>({ nickname: "", address: "", bedrooms: "", bathrooms: "", sqft: "", laundry_included: false, restock_included: false, special_notes: "" });
   const [start, setStart] = useState("11:00");
   const [end, setEnd] = useState("15:00");
   const [payOption, setPayOption] = useState<"full" | "split">("full");
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState<InvoiceResult[] | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/partner-schedule/${token}`, { cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Could not load scheduler");
-        setHostName(data.host?.name || "");
-        setWeekStart(data.weekStart);
-        setProperties(data.properties || []);
-        setExisting(data.existing || []);
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/partner-schedule/${token}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not load scheduler");
+      setHostName(data.host?.name || "");
+      setWeekStart(data.weekStart);
+      setProperties(data.properties || []);
+      setPendingProperties(data.pendingProperties || []);
+      setExisting(data.existing || []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const addProperty = async () => {
+    if (!addForm.nickname.trim() && !addForm.address.trim()) { setError("Add a nickname or address for the property."); return; }
+    setAddingProp(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/partner-schedule/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "addProperty", property: addForm }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not add property");
+      setShowAddProp(false);
+      setAddForm({ nickname: "", address: "", bedrooms: "", bathrooms: "", sqft: "", laundry_included: false, restock_included: false, special_notes: "" });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAddingProp(false);
+    }
+  };
 
   const days = useMemo(() => (weekStart ? DOW.map((_, i) => addDays(weekStart, i)) : []), [weekStart]);
   const existingSet = useMemo(() => new Set(existing.map((e) => `${e.property_id}|${e.requested_date}`)), [existing]);
@@ -163,9 +191,58 @@ export default function OpenScheduler({ token }: { token: string }) {
       <Hero hostName={hostName} weekStart={weekStart} />
 
       <div className="max-w-2xl mx-auto px-4 -mt-6 space-y-4">
-        {properties.length === 0 && (
+        {/* Add a property */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {!showAddProp ? (
+            <button
+              type="button"
+              onClick={() => setShowAddProp(true)}
+              className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-slate-50 transition-colors"
+            >
+              <span className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(92,15,254,0.08)" }}>
+                  <RiAddLine className="w-5 h-5 text-[#5C0FFE]" />
+                </span>
+                <span>
+                  <span className="block font-semibold leading-tight">Add a property</span>
+                  <span className="block text-xs text-slate-500">Register a rental — we'll set your per-turnover rate</span>
+                </span>
+              </span>
+              <RiArrowRightLine className="w-4 h-4 text-slate-400" />
+            </button>
+          ) : (
+            <div className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">Add a property</p>
+                <button type="button" onClick={() => setShowAddProp(false)} className="text-slate-400 hover:text-slate-600"><RiCloseLine className="w-5 h-5" /></button>
+              </div>
+              <div className="space-y-2.5">
+                <input value={addForm.nickname} onChange={(e) => setAddForm((f) => ({ ...f, nickname: e.target.value }))} placeholder="Nickname (e.g. Lakehouse 2BR)" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                <input value={addForm.address} onChange={(e) => setAddForm((f) => ({ ...f, address: e.target.value }))} placeholder="Address" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                <div className="grid grid-cols-3 gap-2">
+                  <input value={addForm.bedrooms} onChange={(e) => setAddForm((f) => ({ ...f, bedrooms: e.target.value }))} inputMode="numeric" placeholder="Beds" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={addForm.bathrooms} onChange={(e) => setAddForm((f) => ({ ...f, bathrooms: e.target.value }))} inputMode="decimal" placeholder="Baths" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={addForm.sqft} onChange={(e) => setAddForm((f) => ({ ...f, sqft: e.target.value }))} inputMode="numeric" placeholder="Sq ft" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-wrap gap-4 text-sm text-slate-700 pt-0.5">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={addForm.laundry_included} onChange={(e) => setAddForm((f) => ({ ...f, laundry_included: e.target.checked }))} /> Laundry on-site</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={addForm.restock_included} onChange={(e) => setAddForm((f) => ({ ...f, restock_included: e.target.checked }))} /> Restock</label>
+                </div>
+                <textarea value={addForm.special_notes} onChange={(e) => setAddForm((f) => ({ ...f, special_notes: e.target.value }))} rows={2} placeholder="Access notes / anything we should know (optional)" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+              </div>
+              <button onClick={addProperty} disabled={addingProp} className="w-full h-11 rounded-xl text-white font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: RAMP }}>
+                {addingProp ? <RiLoader4Line className="w-5 h-5 animate-spin" /> : "Save property"}
+              </button>
+              <p className="text-[11px] text-slate-400 text-center">We'll confirm your per-turnover rate, then you can schedule it here.</p>
+            </div>
+          )}
+        </div>
+
+        {properties.length === 0 && !showAddProp && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-            No priced properties yet — your account manager is setting your rates. Check back soon.
+            {pendingProperties.length > 0
+              ? "Your properties are in — we're setting your per-turnover rates. You'll be able to schedule them here as soon as pricing is confirmed."
+              : "Add your first rental above to start scheduling turnovers."}
           </div>
         )}
 
@@ -216,6 +293,25 @@ export default function OpenScheduler({ token }: { token: string }) {
             </div>
           );
         })}
+
+        {pendingProperties.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+            <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2">Pricing pending</p>
+            <div className="space-y-2">
+              {pendingProperties.map((p) => (
+                <div key={p.id} className="flex items-center gap-2.5">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-white border border-amber-200">
+                    <RiHome3Line className="w-4 h-4 text-amber-600" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{p.nickname || p.address || "Property"}</p>
+                    <p className="text-[11px] text-amber-700">We're confirming your rate — schedulable once priced.</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {properties.length > 0 && (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">

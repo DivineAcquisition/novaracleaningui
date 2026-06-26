@@ -59,12 +59,14 @@ export async function GET(_req: Request, { params }: { params: { token: string }
   ]);
 
   const priced = (properties || []).filter((p) => p.turnover_price != null && Number(p.turnover_price) > 0);
+  const pending = (properties || []).filter((p) => !(p.turnover_price != null && Number(p.turnover_price) > 0));
 
   return NextResponse.json({
     ok: true,
     host: { name: host.name, email: host.email },
     weekStart,
     properties: priced,
+    pendingProperties: pending,
     existing: existing || [],
   });
 }
@@ -96,12 +98,57 @@ export async function POST(req: Request, { params }: { params: { token: string }
   if (!host) return NextResponse.json({ error: "Invalid scheduler link" }, { status: 404 });
   if (host.status === "blocked") return NextResponse.json({ error: "Account is not active." }, { status: 403 });
 
-  let body: { items?: SlotItem[]; paymentOption?: string };
+  let body: {
+    action?: string; items?: SlotItem[]; paymentOption?: string;
+    property?: Record<string, unknown>;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
+  // ── Add a property (no login) — host registers a rental from the scheduler.
+  // Price stays NULL ("pending pricing") so it can't be booked until an admin
+  // sets the per-turnover rate. Capped to keep abuse in check.
+  if (body.action === "addProperty") {
+    const supabase = getAdminSupabase();
+    const { count } = await supabase
+      .from("properties")
+      .select("id", { count: "exact", head: true })
+      .eq("host_id", host.id);
+    if ((count || 0) >= 50) {
+      return NextResponse.json({ error: "Property limit reached — contact your account manager." }, { status: 409 });
+    }
+    const p = (body.property || {}) as Record<string, unknown>;
+    const nickname = String(p.nickname || "").trim();
+    const address = String(p.address || "").trim();
+    if (!nickname && !address) {
+      return NextResponse.json({ error: "Add a nickname or address." }, { status: 400 });
+    }
+    const sqft = p.sqft != null && p.sqft !== "" ? parseInt(String(p.sqft), 10) : null;
+    const { data: created, error: addErr } = await supabase
+      .from("properties")
+      .insert({
+        host_id: host.id,
+        nickname: nickname || null,
+        address: address || null,
+        bedrooms: p.bedrooms != null && p.bedrooms !== "" ? parseInt(String(p.bedrooms), 10) : null,
+        bathrooms: p.bathrooms != null && p.bathrooms !== "" ? parseFloat(String(p.bathrooms)) : null,
+        sqft,
+        target_crew_size: sqft ? (sqft >= 2500 ? 3 : 2) : null,
+        laundry_included: !!p.laundry_included,
+        restock_included: !!p.restock_included,
+        access_instructions: String(p.access_instructions || "").trim() || null,
+        special_notes: String(p.special_notes || "").trim() || null,
+        turnover_price: null,
+      })
+      .select("id, nickname, address, turnover_price")
+      .single();
+    if (addErr) return NextResponse.json({ error: addErr.message }, { status: 500 });
+    return NextResponse.json({ ok: true, property: created });
+  }
+
   const items = Array.isArray(body.items) ? body.items : [];
   if (items.length === 0) return NextResponse.json({ error: "Pick at least one turnover." }, { status: 400 });
   const paymentOption = body.paymentOption === "split" ? "split" : "full";
