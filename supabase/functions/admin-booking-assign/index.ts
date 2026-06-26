@@ -254,9 +254,9 @@ serve(async (req) => {
           service_type: booking.service_type,
           start_datetime: startDatetime,
           duration_est_hours: duration,
-          sq_ft: booking.sqft || 2000,
-          bedrooms: booking.bedrooms || 0,
-          bathrooms: booking.bathrooms || 0,
+          sq_ft: Math.round(Number(booking.sqft) || 2000),
+          bedrooms: Math.round(Number(booking.bedrooms) || 0),
+          bathrooms: Number(booking.bathrooms) || 0,
           min_cleaners_required: cleanerIds.length,
           status: "Assigned",
           notes: booking.dispatch_notes || booking.team_notes || null,
@@ -319,8 +319,14 @@ serve(async (req) => {
       data: { cleanerIds, mode, by: callerId },
     });
 
-    await syncBookingOpsFieldsToGhl(admin, bookingId);
-    await invokeFullBookingGhlSync(admin, bookingId);
+    // Non-critical sync — must NEVER fail the assignment (cleaners are already
+    // saved at this point). A GHL outage previously 500'd the whole request.
+    try {
+      await syncBookingOpsFieldsToGhl(admin, bookingId);
+      await invokeFullBookingGhlSync(admin, bookingId);
+    } catch (syncErr) {
+      console.error("[admin-booking-assign] GHL sync failed (non-blocking)", syncErr instanceof Error ? syncErr.message : String(syncErr));
+    }
 
     const notifications: Array<{ cleanerId: string; email?: boolean; sms?: boolean; ghlTaskId?: string | null }> = [];
 
@@ -332,6 +338,7 @@ serve(async (req) => {
       for (let i = 0; i < cleaners.length; i++) {
         const c = cleaners[i];
         const role = i === 0 ? "Lead" : "Support";
+        try {
         const notifyResult = await notifyCleanerOfAssignment(admin, booking, c, { role });
         let ghlTaskId: string | null = null;
 
@@ -362,6 +369,11 @@ serve(async (req) => {
           sms: notifyResult.sms,
           ghlTaskId,
         });
+        } catch (notifyErr) {
+          // Notification/GHL-task failure must not fail the assignment.
+          console.error("[admin-booking-assign] notify failed (non-blocking)", c.id, notifyErr instanceof Error ? notifyErr.message : String(notifyErr));
+          notifications.push({ cleanerId: c.id, email: false, sms: false, ghlTaskId: null });
+        }
       }
     }
 
