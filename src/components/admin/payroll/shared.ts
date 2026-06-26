@@ -177,6 +177,9 @@ export interface PreviewLine {
   connectReady: boolean;
   flag: "payable" | "blocked" | "skip" | "done";
   flagReason?: string;
+  stripeTransferId?: string | null;
+  sentCents?: number | null;
+  clawedBackCents?: number;
 }
 export interface PreviewResult {
   period: string;
@@ -189,6 +192,7 @@ export interface ExecuteLineResult {
   cleanerId: string;
   cleanerName: string;
   netCents: number;
+  sentCents?: number;
   status: "paid" | "failed" | "skipped" | "blocked";
   transferId?: string;
   reason?: string;
@@ -213,10 +217,14 @@ export async function loadPeriodPreview(period: string): Promise<PreviewResult> 
   return data as PreviewResult;
 }
 
-/** One-click: approve & auto-execute every payable line in the period. */
-export async function executePayrollPeriod(period: string): Promise<ExecuteResult> {
+/** One-click: approve & auto-execute every payable line in the period.
+ *  `overrides` maps runId → exact cents to send (omit to use computed net). */
+export async function executePayrollPeriod(
+  period: string,
+  overrides?: Record<string, number>,
+): Promise<ExecuteResult> {
   const { data, error } = await supabase.functions.invoke("payroll-execute", {
-    body: { action: "execute", period },
+    body: { action: "execute", period, overrides: overrides || {} },
   });
   // payroll-execute returns 409 + {halted} when guardrails stop it — surface
   // that as data, not a thrown error, so the UI can show the reason.
@@ -230,6 +238,21 @@ export async function executePayrollPeriod(period: string): Promise<ExecuteResul
 /** (Re)build draft runs for a period from approved jobs (admin build_runs). */
 export async function buildDraftRuns(period: string): Promise<{ runs: number }> {
   return payrollAction<{ runs: number }>("build_runs", { payPeriod: period });
+}
+
+/** Claw back (reverse) part/all of a paid transfer from a contractor's account. */
+export async function clawbackPayroll(
+  runId: string,
+  amountCents: number,
+  reason: string,
+): Promise<{ ok: boolean; reason?: string; clawedBackTotalCents?: number }> {
+  const { data, error } = await supabase.functions.invoke("payroll-execute", {
+    body: { action: "clawback", runId, amountCents, reason },
+  });
+  // deno-lint-ignore no-explicit-any
+  const d = data as any;
+  if (error && !d) throw new Error(error.message || "Clawback failed");
+  return d as { ok: boolean; reason?: string; clawedBackTotalCents?: number };
 }
 
 /** Edit a draft run's bonus / deduction (server recomputes net). */

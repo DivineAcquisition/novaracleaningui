@@ -43,6 +43,19 @@ const audit = async (admin: DB, row: { run_id?: string; action: string; detail?:
   try { await admin.from("payroll_job_audit").insert(row); } catch (_) { /* non-blocking */ }
 };
 
+// Fat-finger guard for an admin-entered per-cleaner send amount ($20k cap).
+const MAX_LINE_CENTS = 2_000_000;
+
+/** Resolve the amount to actually send for a run: an admin override (if valid)
+ *  otherwise the computed net. Returns a non-negative integer, clamped to the
+ *  per-line ceiling. */
+function resolveSendCents(net: number, override: unknown): number {
+  if (override === undefined || override === null) return net;
+  const n = Math.round(Number(override));
+  if (!Number.isFinite(n) || n < 0) return net;
+  return Math.min(n, MAX_LINE_CENTS);
+}
+
 // ─── Step 1: auto-compute + draft the weekly run (idempotent) ───────────────
 //
 // Groups APPROVED payroll jobs in the period by cleaner, sums each cleaner's
@@ -169,9 +182,18 @@ export interface ExecuteLineResult {
   cleanerId: string;
   cleanerName: string;
   netCents: number;
+  sentCents?: number;
   status: "paid" | "failed" | "skipped" | "blocked";
   transferId?: string;
   reason?: string;
+}
+
+export interface ClawbackResult {
+  ok: boolean;
+  reason?: string;
+  reversalId?: string;
+  amountCents?: number;
+  clawedBackTotalCents?: number;
 }
 export interface ExecutePeriodResult {
   ok: boolean;
@@ -189,10 +211,11 @@ export interface ExecutePeriodResult {
 // fires idempotent Stripe transfers. One cleaner failing never blocks the rest.
 export async function executePeriod(
   admin: DB,
-  opts: { period: string; actor?: string | null },
+  opts: { period: string; actor?: string | null; overrides?: Record<string, number> },
 ): Promise<ExecutePeriodResult> {
   const period = mondayOf(opts.period);
   const actor = opts.actor || null;
+  const overrides = opts.overrides || {};
 
   const empty: ExecutePeriodResult = {
     ok: true, period,
@@ -231,9 +254,12 @@ export async function executePeriod(
     const net = Number(run.net_cents) || 0;
     const stripeId = (run.stripe_connect_id as string) || (c.stripe_account_id as string) || null;
 
+    // Admin can override the exact amount sent for this line.
+    const send = resolveSendCents(net, overrides[String(run.id)]);
+
     if (method !== "stripe_connect") {
       // Manual methods (ACH/Zelle/cash): tracked only, marked paid, no transfer.
-      payable.push({ ...run, __manual: true, __net: net, __stripeId: stripeId });
+      payable.push({ ...run, __manual: true, __net: net, __send: send, __stripeId: stripeId });
       continue;
     }
     if (!stripeId) {
@@ -248,11 +274,11 @@ export async function executePeriod(
       results.push({ runId: run.id, cleanerId: cid, cleanerName: nameOf(cid), netCents: net, status: "blocked", reason: "payouts_enabled = false" });
       continue;
     }
-    if (net <= 0) {
-      results.push({ runId: run.id, cleanerId: cid, cleanerName: nameOf(cid), netCents: net, status: "skipped", reason: "Net ≤ 0" });
+    if (send <= 0) {
+      results.push({ runId: run.id, cleanerId: cid, cleanerName: nameOf(cid), netCents: net, status: "skipped", reason: "Amount ≤ 0" });
       continue;
     }
-    payable.push({ ...run, __net: net, __stripeId: stripeId });
+    payable.push({ ...run, __net: net, __send: send, __stripeId: stripeId });
   }
 
   if (payable.length === 0) {
@@ -272,7 +298,7 @@ export async function executePeriod(
   const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
 
   // Balance check (Stripe transfers only) — halt before firing if short.
-  const stripeNet = payable.filter((r) => !r.__manual).reduce((a, r) => a + Number(r.__net || 0), 0);
+  const stripeNet = payable.filter((r) => !r.__manual).reduce((a, r) => a + Number(r.__send || 0), 0);
   if (stripeNet > 0) {
     try {
       const bal = await stripe.balance.retrieve();
@@ -316,6 +342,8 @@ export async function executePeriod(
     const runId = String(run.id);
     const cid = String(run.cleaner_id);
     const net = Number(run.__net || 0);
+    const send = Number(run.__send ?? net);
+    const overridden = send !== net;
     const cleanerName = nameOf(cid);
 
     // Claim the lock: only transition rows still draft/approved/hold.
@@ -327,19 +355,19 @@ export async function executePeriod(
       .select("id");
     if (!claimed || claimed.length === 0) {
       // Someone else already claimed it — skip silently (idempotent).
-      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, status: "skipped", reason: "Already processing/paid" });
+      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, sentCents: 0, status: "skipped", reason: "Already processing/paid" });
       continue;
     }
 
     // Manual (non-Stripe) method: record as paid, no transfer.
     if (run.__manual) {
       await admin.from("payroll_runs").update({
-        status: "paid", sent_at: new Date().toISOString(), executed_at: new Date().toISOString(), executed_by: actor, updated_at: new Date().toISOString(),
+        status: "paid", sent_amount_cents: send, sent_at: new Date().toISOString(), executed_at: new Date().toISOString(), executed_by: actor, updated_at: new Date().toISOString(),
       }).eq("id", runId);
       await markPaidJobs(runId);
-      await audit(admin, { run_id: runId, action: "execute_manual", detail: String(run.payment_method), actor });
-      paidCount++; netPaid += net;
-      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, status: "paid" });
+      await audit(admin, { run_id: runId, action: "execute_manual", detail: `${String(run.payment_method)} ${send}${overridden ? ` (override of ${net})` : ""}`, actor });
+      paidCount++; netPaid += send;
+      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, sentCents: send, status: "paid" });
       await syncRunToOps(admin, runId, cleanerName);
       continue;
     }
@@ -347,17 +375,20 @@ export async function executePeriod(
     try {
       const transfer = await stripe.transfers.create(
         {
-          amount: net,
+          amount: send,
           currency: "usd",
           destination: run.__stripeId as string,
           description: `Novara payroll ${period} — ${cleanerName}`,
-          metadata: { payroll_run_id: runId, cleaner_id: cid, pay_period: period },
+          metadata: { payroll_run_id: runId, cleaner_id: cid, pay_period: period, overridden: String(overridden) },
         },
-        { idempotencyKey: `payroll_run_${runId}` },
+        // Idempotency key includes the amount so a corrected re-send after a
+        // failure isn't blocked, while a true double-click (same amount) is.
+        { idempotencyKey: `payroll_run_${runId}_${send}` },
       );
       await admin.from("payroll_runs").update({
         status: "paid",
         stripe_transfer_id: transfer.id,
+        sent_amount_cents: send,
         sent_at: new Date().toISOString(),
         executed_at: new Date().toISOString(),
         executed_by: actor,
@@ -366,16 +397,16 @@ export async function executePeriod(
         updated_at: new Date().toISOString(),
       }).eq("id", runId);
       await markPaidJobs(runId);
-      await audit(admin, { run_id: runId, action: "execute_stripe", detail: transfer.id, actor });
-      paidCount++; netPaid += net;
-      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, status: "paid", transferId: transfer.id });
+      await audit(admin, { run_id: runId, action: "execute_stripe", detail: `${transfer.id} ${send}${overridden ? ` (override of ${net})` : ""}`, actor });
+      paidCount++; netPaid += send;
+      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, sentCents: send, status: "paid", transferId: transfer.id });
       await syncRunToOps(admin, runId, cleanerName);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await admin.from("payroll_runs").update({ status: "failed", failure_reason: msg, updated_at: new Date().toISOString() }).eq("id", runId);
       await audit(admin, { run_id: runId, action: "execute_failed", detail: msg.slice(0, 400), actor });
       failedCount++;
-      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, status: "failed", reason: msg });
+      results.push({ runId, cleanerId: cid, cleanerName, netCents: net, sentCents: 0, status: "failed", reason: msg });
       await syncRunToOps(admin, runId, cleanerName);
     }
   }
@@ -385,6 +416,97 @@ export async function executePeriod(
     totals: { payable: payable.length, blocked, paidCount, failedCount, netPaidCents: netPaid },
     results,
   };
+}
+
+// ─── Clawback: reverse part/all of a paid transfer ─────────────────────────
+//
+// If too much was sent, pull funds back from the contractor's connected account
+// to the platform via a Stripe transfer reversal. Amount is admin-entered and
+// capped at the un-recovered portion of what was sent. Recorded + audited.
+export async function clawbackRun(
+  admin: DB,
+  opts: { runId: string; amountCents: number; reason?: string | null; actor?: string | null },
+): Promise<ClawbackResult> {
+  const runId = String(opts.runId || "");
+  const actor = opts.actor || null;
+  const amount = Math.round(Number(opts.amountCents) || 0);
+  if (!runId) return { ok: false, reason: "runId required" };
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, reason: "Enter an amount greater than $0." };
+
+  const { data: run } = await admin.from("payroll_runs").select("*").eq("id", runId).maybeSingle();
+  if (!run) return { ok: false, reason: "Run not found" };
+  const transferId = run.stripe_transfer_id as string | null;
+  if (!transferId) return { ok: false, reason: "This run has no Stripe transfer to reverse." };
+  if (!["sent", "paid", "cleared"].includes(String(run.status))) {
+    return { ok: false, reason: `Run is not in a paid state (status: ${run.status}).` };
+  }
+
+  // Cap at what's still recoverable (sent minus already clawed back).
+  const sent = Number(run.sent_amount_cents ?? run.net_cents) || 0;
+  const already = Number(run.clawed_back_cents) || 0;
+  const recoverable = Math.max(0, sent - already);
+  if (amount > recoverable) {
+    return { ok: false, reason: `You can claw back at most $${(recoverable / 100).toFixed(2)} (already recovered $${(already / 100).toFixed(2)} of $${(sent / 100).toFixed(2)}).` };
+  }
+
+  const key = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+  if (!key) return { ok: false, reason: "STRIPE_SECRET_KEY not configured" };
+  const stripeEnv = (await resolveSecret(admin, "STRIPE_ENV")) || "test";
+  const guardErr = envGuard(stripeEnv, key);
+  if (guardErr) return { ok: false, reason: guardErr };
+  const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
+
+  // Record the attempt first so we have a stable idempotency key.
+  const { data: cb, error: cbErr } = await admin.from("payroll_clawbacks").insert({
+    run_id: runId,
+    cleaner_id: run.cleaner_id,
+    amount_cents: amount,
+    stripe_transfer_id: transferId,
+    reason: (opts.reason || "").toString().trim() || null,
+    created_by: actor,
+    status: "completed",
+  }).select("id").single();
+  if (cbErr) return { ok: false, reason: cbErr.message };
+
+  try {
+    const reversal = await stripe.transfers.createReversal(
+      transferId,
+      {
+        amount,
+        description: `Payroll clawback — run ${runId.slice(0, 8)}`,
+        metadata: { payroll_run_id: runId, clawback_id: cb.id, reason: (opts.reason || "").toString().slice(0, 200) },
+      },
+      { idempotencyKey: `payroll_clawback_${cb.id}` },
+    );
+    const newTotal = already + amount;
+    await admin.from("payroll_clawbacks").update({ stripe_reversal_id: reversal.id }).eq("id", cb.id);
+    await admin.from("payroll_runs").update({ clawed_back_cents: newTotal, updated_at: new Date().toISOString() }).eq("id", runId);
+    await audit(admin, { run_id: runId, action: "clawback", detail: `${reversal.id} -${amount}${opts.reason ? ` (${opts.reason})` : ""}`, actor });
+    try {
+      await notifyDiscordClawback(admin, { runId, amount, reason: opts.reason, reversalId: reversal.id });
+    } catch (_) { /* non-blocking */ }
+    return { ok: true, reversalId: reversal.id, amountCents: amount, clawedBackTotalCents: newTotal };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await admin.from("payroll_clawbacks").update({ status: "failed", failure_reason: msg }).eq("id", cb.id);
+    await audit(admin, { run_id: runId, action: "clawback_failed", detail: msg.slice(0, 400), actor });
+    return { ok: false, reason: msg };
+  }
+}
+
+async function notifyDiscordClawback(admin: DB, info: { runId: string; amount: number; reason?: string | null; reversalId: string }) {
+  // Lazy import to keep clawback self-contained; discord is best-effort.
+  const { notifyDiscord } = await import("./discord.ts");
+  await notifyDiscord(admin, {
+    title: "Payroll clawback executed",
+    color: 15158332,
+    fields: [
+      { name: "Run", value: info.runId.slice(0, 8), inline: true },
+      { name: "Amount", value: `$${(info.amount / 100).toFixed(2)}`, inline: true },
+      { name: "Reversal", value: info.reversalId, inline: false },
+      { name: "Reason", value: (info.reason || "—").toString().slice(0, 400), inline: false },
+    ],
+  });
 }
 
 async function syncRunToOps(admin: DB, runId: string, cleanerName: string) {
