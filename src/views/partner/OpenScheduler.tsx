@@ -152,7 +152,7 @@ export default function OpenScheduler({ token }: { token: string }) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Hero hostName={hostName} weekStart={weekStart} />
-        <div className="max-w-2xl mx-auto px-4 -mt-6">
+        <div className="max-w-2xl mx-auto px-4 mt-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
             <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: "rgba(92,15,254,0.1)" }}>
               <RiMailSendLine className="w-6 h-6 text-[#5C0FFE]" />
@@ -190,7 +190,7 @@ export default function OpenScheduler({ token }: { token: string }) {
     <div className="min-h-screen bg-slate-50 pb-40">
       <Hero hostName={hostName} weekStart={weekStart} />
 
-      <div className="max-w-2xl mx-auto px-4 -mt-6 space-y-4">
+      <div className="max-w-2xl mx-auto px-4 mt-4 space-y-4">
         {/* Add a property */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           {!showAddProp ? (
@@ -372,16 +372,16 @@ export default function OpenScheduler({ token }: { token: string }) {
 function Hero({ hostName, weekStart }: { hostName: string; weekStart: string }) {
   const weekEnd = weekStart ? addDays(weekStart, 6) : "";
   return (
-    <div className="relative overflow-hidden" style={{ background: RAMP }}>
+    <div className="relative overflow-hidden rounded-b-[28px]" style={{ background: RAMP }}>
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-20" style={{ background: "radial-gradient(80% 120% at 100% 0%, #fff, transparent 60%)" }} />
-      <div className="relative max-w-2xl mx-auto px-4 pt-10 pb-10 text-white">
-        <div className="flex items-center gap-2 text-white/80 text-xs font-semibold uppercase tracking-[0.14em]">
-          <RiCalendarCheckLine className="w-4 h-4" /> Novara · Weekly Scheduler
+      <div className="relative max-w-2xl mx-auto px-4 pt-5 pb-8 sm:pt-8 sm:pb-10 text-white">
+        <div className="flex items-center gap-1.5 text-white/80 text-[11px] font-semibold uppercase tracking-[0.14em]">
+          <RiCalendarCheckLine className="w-3.5 h-3.5" /> Novara · Weekly Scheduler
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-2">
+        <h1 className="text-xl sm:text-3xl font-bold tracking-tight mt-1.5 leading-snug">
           {hostName ? `Hi ${hostName.split(" ")[0]}, ` : ""}plan your turnovers
         </h1>
-        <p className="text-white/80 text-sm mt-1">
+        <p className="text-white/80 text-[13px] sm:text-sm mt-1 leading-snug">
           {weekStart ? `Week of ${fmtDay(weekStart)} – ${fmtDay(weekEnd)}. ` : ""}Tap the days each property needs a clean.
         </p>
       </div>
