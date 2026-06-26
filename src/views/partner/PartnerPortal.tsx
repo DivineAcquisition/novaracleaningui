@@ -93,6 +93,11 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 
 const digits = (s: string) => s.replace(/\D/g, "");
 
+// Recommended dispatch crew size (2–3) from sqft. Prefers the server-stored
+// value but falls back to a client estimate so the badge always shows.
+const crewSizeFor = (p: Pick<Property, "sqft" | "target_crew_size">): number | null =>
+  p.target_crew_size ?? (p.sqft ? (Number(p.sqft) >= 2500 ? 3 : 2) : null);
+
 export default function PartnerPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -510,7 +515,7 @@ function Dashboard() {
     const [{ data: props }, { data: trs }, cleanersRes] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
       (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }),
-      supabase.functions.invoke("partner-turnover", { body: { action: "host.cleaners" } }).catch(() => ({ data: null })),
+      supabase.functions.invoke("host-cleaners", { body: { action: "host.cleaners" } }).catch(() => ({ data: null })),
     ]);
     setProperties((props as Property[]) || []);
     setTurnovers((trs as Turnover[]) || []);
@@ -639,7 +644,7 @@ function Dashboard() {
                             {p.bedrooms != null && <Badge variant="secondary">{p.bedrooms} BR</Badge>}
                             {p.bathrooms != null && <Badge variant="secondary">{p.bathrooms} BA</Badge>}
                             {p.sqft ? <Badge variant="secondary">{p.sqft} sqft</Badge> : null}
-                            {p.target_crew_size ? <Badge variant="secondary" className="bg-violet-50 text-[#5C0FFE]">{p.target_crew_size}-person crew</Badge> : null}
+                            {crewSizeFor(p) ? <Badge variant="secondary" className="bg-violet-50 text-[#5C0FFE]">{crewSizeFor(p)}-person crew</Badge> : null}
                             {p.laundry_included && <Badge variant="secondary">Laundry</Badge>}
                             {p.restock_included && <Badge variant="secondary">Restock</Badge>}
                           </div>
@@ -1226,7 +1231,7 @@ function CleanersTab({
               <CardContent className="p-4">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-semibold text-sm flex items-center gap-2"><RiHome4Line className="w-4 h-4 text-[#5C0FFE]" /> {p.nickname || p.address || "Property"}</p>
-                  {p.target_crew_size ? <Badge variant="secondary" className="bg-violet-50 text-[#5C0FFE]">{p.target_crew_size}-person crew</Badge> : null}
+                  {crewSizeFor(p) ? <Badge variant="secondary" className="bg-violet-50 text-[#5C0FFE]">{crewSizeFor(p)}-person crew</Badge> : null}
                 </div>
                 {crew.length > 0 ? (
                   <div className="mt-3 space-y-2">
@@ -1268,7 +1273,7 @@ function RequestCleanerModal({
   const isReplace = ctx.kind === "replace";
   const submit = async () => {
     setBusy(true);
-    const { data, error } = await supabase.functions.invoke("partner-turnover", {
+    const { data, error } = await supabase.functions.invoke("host-cleaners", {
       body: {
         action: "cleaner.requestChange",
         kind: ctx.kind,

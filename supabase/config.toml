@@ -260,6 +260,10 @@ verify_jwt = false
 [functions.purge-old-turnover-photos]
 verify_jwt = false
 
+# Host cleaner roster + change requests (host-JWT gated inside the fn).
+[functions.host-cleaners]
+verify_jwt = false
+
 # Admin/VA team-user provisioning (admin-only role check inside the fn).
 [functions.admin-create-team-user]
 verify_jwt = true
