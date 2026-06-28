@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
+import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
 
 // customer-recurring-generate
 //
@@ -62,6 +63,25 @@ async function resolveCleaner(admin: any, sched: any): Promise<string | null> {
     .order("service_date", { ascending: false })
     .limit(1);
   return data && data.length ? data[0].cleaner_id : null;
+}
+
+// Shape a booking-like object the cleaner-assignment notifier understands,
+// from the recurring schedule (the insert only selects `id` back).
+// deno-lint-ignore no-explicit-any
+function buildBookingForNotify(sched: any, serviceDate: string): Record<string, any> {
+  return {
+    first_name: sched.first_name,
+    last_name: sched.last_name,
+    address: sched.address,
+    city: sched.city,
+    state: sched.state,
+    zip_code: sched.zip_code,
+    service_type: sched.service_type || "standard",
+    service_date: serviceDate,
+    time_slot: sched.preferred_time_slot,
+    total_estimate_cents: sched.price_cents ?? 0,
+    num_cleaners_assigned: 1,
+  };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -132,6 +152,29 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
   await admin.from("customer_recurring_schedules")
     .update({ last_generated_date: serviceDate, next_service_date: advance(serviceDate, sched.cadence), updated_at: new Date().toISOString() })
     .eq("id", sched.id);
+
+  // Notify the assigned contractor about the freshly-created recurring clean
+  // (email + SMS) so the "create → confirm → notify cleaner" sequence is
+  // complete. Best-effort: a notify failure never blocks generation.
+  if (cleanerId) {
+    try {
+      const { data: cleaner } = await admin
+        .from("cleaners")
+        .select("id, email, phone, first_name, last_name, pay_percentage")
+        .eq("id", cleanerId)
+        .maybeSingle();
+      if (cleaner) {
+        await notifyCleanerOfAssignment(
+          admin,
+          { ...booking, ...buildBookingForNotify(sched, serviceDate) },
+          cleaner,
+          { role: "Lead" },
+        );
+      }
+    } catch (e) {
+      console.error("[customer-recurring-generate] notify cleaner failed", e);
+    }
+  }
 
   // GHL + Airtable happen automatically via the bookings INSERT triggers
   // (notify_ghl_sync -> send-zapier-webhook, notify_airtable_revops_sync).
