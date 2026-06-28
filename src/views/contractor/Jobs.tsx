@@ -26,6 +26,7 @@ import {
   RiSparklingLine,
   RiExternalLinkLine,
   RiUserSharedLine,
+  RiCloseCircleLine,
 } from "@remixicon/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, isFuture, isPast } from "date-fns";
@@ -62,7 +63,10 @@ interface Job {
   photo_view_token?: string | null;
   before_photos?: string[] | null;
   after_photos?: string[] | null;
+  cancelled_at?: string | null;
 }
+
+const CANCELLED_VISIBLE_MS = 24 * 60 * 60 * 1000;
 
 const PHOTO_UPLOAD_BASE = "https://contractor.novaracleaning.com/cleaner/job-photos/";
 const PHOTO_VIEW_BASE = "https://try.novaracleaning.com/photos/";
@@ -146,7 +150,33 @@ export default function ContractorJobs() {
         .limit(30);
 
       if (jobErr) throw jobErr;
-      setJobs(bookingJobs || []);
+      // Keep the contractor view in lockstep with cancellations:
+      //   • Cancelled jobs are kept for 24h (shown greyed) then dropped.
+      //   • A cancelled job exposes NO client info — strip the PII fields so
+      //     they never reach the contractor's device once the job is dead.
+      const now = Date.now();
+      const cleaned = (bookingJobs || [])
+        .filter((j: Job) => {
+          if (j.status !== "cancelled") return true;
+          const ts = j.cancelled_at ? new Date(j.cancelled_at).getTime() : 0;
+          return ts > 0 && now - ts < CANCELLED_VISIBLE_MS;
+        })
+        .map((j: Job) =>
+          j.status === "cancelled"
+            ? {
+                ...j,
+                address: "",
+                city: "",
+                state: "",
+                zip_code: "",
+                first_name: "",
+                last_name: "",
+                email: "",
+                phone: "",
+              }
+            : j,
+        );
+      setJobs(cleaned);
       setSearched(true);
     } catch (error: any) {
       console.error("Search error:", error);
@@ -571,7 +601,36 @@ export default function ContractorJobs() {
               </div>
             )}
 
-            {upcomingJobs.length === 0 && completedJobs.length === 0 && (
+            {/* Cancelled — greyed out, no client info, auto-removed after 24h */}
+            {cancelledJobs.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Cancelled ({cancelledJobs.length})</h2>
+                {cancelledJobs.map((job) => (
+                  <Card key={job.id} className="bg-muted/30 border-border/50 shadow-none opacity-70">
+                    <CardContent className="p-3.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="text-center min-w-[40px]">
+                            <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.service_date), "MMM")}</p>
+                            <p className="text-base font-bold leading-tight text-muted-foreground line-through">{format(new Date(job.service_date), "d")}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm text-muted-foreground">{job.service_type || "Cleaning"}</p>
+                            <p className="text-xs text-muted-foreground">This job was cancelled — client details removed.</p>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 flex-shrink-0">
+                          <RiCloseCircleLine className="w-3 h-3 mr-0.5" />Cancelled
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                <p className="text-[11px] text-muted-foreground/70 px-1">Cancelled jobs disappear automatically 24 hours after cancellation.</p>
+              </div>
+            )}
+
+            {upcomingJobs.length === 0 && completedJobs.length === 0 && cancelledJobs.length === 0 && (
               <Card className="border-dashed">
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground">No active or past jobs found.</p>

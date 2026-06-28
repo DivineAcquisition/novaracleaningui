@@ -474,7 +474,31 @@ function BookingAssignBlock({
     }
   };
 
+  const unassign = async () => {
+    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment.")) return;
+    setWorking("unassign");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/unassign-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ bookingId: booking.id }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) throw new Error(json?.error || "Unassign failed");
+      toast.success("Cleaner(s) unassigned — removed from their dashboards, GHL + Airtable synced");
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   if (booking.status === "cancelled" || booking.status === "completed") return null;
+
+  const hasAssignment = Boolean(booking.cleaner_id) || (booking.num_cleaners_assigned ?? 0) > 0;
 
   return (
     <Card className="border-indigo-200 bg-indigo-50/20">
@@ -580,6 +604,26 @@ function BookingAssignBlock({
             "Save, notify cleaners & sync GHL"
           )}
         </Button>
+        {hasAssignment && (
+          <Button
+            onClick={unassign}
+            disabled={working === "unassign"}
+            variant="outline"
+            className="w-full border-rose-200 text-rose-700 hover:bg-rose-50"
+          >
+            {working === "unassign" ? (
+              <>
+                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                Unassigning…
+              </>
+            ) : (
+              <>
+                <RiCloseCircleLine className="w-4 h-4 mr-2" />
+                Unassign cleaner(s) — remove from their dashboard
+              </>
+            )}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
