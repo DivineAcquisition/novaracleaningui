@@ -23,6 +23,7 @@ export async function syncManualPayoutJob(
   bookingId: string,
   amountCents: number,
   status: "pending" | "paid" | "cancelled",
+  cleanerCountOverride?: number,
 ): Promise<string | null> {
   const supabase = getAdminSupabase();
   const { data: booking } = await supabase
@@ -73,7 +74,10 @@ export async function syncManualPayoutJob(
   }
 
   const customerPaidCents = booking.final_charge_cents ?? booking.total_estimate_cents ?? 0;
-  const numberOfCleaners = Math.max(1, booking.num_cleaners_assigned ?? (cleaners.length || 1));
+  const numberOfCleaners = Math.max(
+    1,
+    cleanerCountOverride ?? booking.num_cleaners_assigned ?? (cleaners.length || 1),
+  );
   const cleanerName = cleaners
     .map((c) => `${c.first_name || ""} ${c.last_name || ""}`.trim())
     .filter(Boolean)

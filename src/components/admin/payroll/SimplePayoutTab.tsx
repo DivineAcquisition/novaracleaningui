@@ -63,6 +63,14 @@ const fmtDate = (iso: string | null | undefined) => {
   }
 };
 
+interface CrewMember {
+  id: string;
+  name: string;
+  hasContact: boolean;
+  suggestedPayoutCents: number;
+  alreadyPaid: boolean;
+}
+
 interface JobOption {
   bookingId: string;
   bookingNumber: string | null;
@@ -71,11 +79,8 @@ interface JobOption {
   serviceDate: string | null;
   customer: string;
   revenueCents: number;
-  cleanerId: string | null;
-  cleanerName: string | null;
   cleanerCount: number;
-  suggestedPayoutCents: number;
-  suggestedPct: number;
+  crew: CrewMember[];
   existingPayout: { amountCents: number; status: string; pctPaid: number } | null;
 }
 
@@ -138,7 +143,8 @@ export default function SimplePayoutTab() {
   // Form state
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<JobOption | null>(null);
-  const [amountDollars, setAmountDollars] = useState("");
+  // Per-cleaner pay form: cleanerId → { selected, dollars }
+  const [crewPay, setCrewPay] = useState<Record<string, { selected: boolean; dollars: string }>>({});
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [period, setPeriod] = useState<"week" | "month" | "year">("month");
@@ -169,7 +175,7 @@ export default function SimplePayoutTab() {
     const needle = search.trim().toLowerCase();
     const list = needle
       ? jobs.filter((j) =>
-          [j.bookingNumber, j.customer, j.cleanerName, j.serviceType, j.serviceDate]
+          [j.bookingNumber, j.customer, j.serviceType, j.serviceDate, ...j.crew.map((c) => c.name)]
             .filter(Boolean)
             .some((v) => String(v).toLowerCase().includes(needle)),
         )
@@ -177,47 +183,61 @@ export default function SimplePayoutTab() {
     return list.slice(0, 40);
   }, [jobs, search]);
 
-  const amountCents = Math.round((parseFloat(amountDollars) || 0) * 100);
   const revenueCents = selected?.revenueCents || 0;
-  const profitCents = revenueCents - amountCents;
-  const pctPaid = revenueCents > 0 ? Math.round((amountCents / revenueCents) * 1000) / 10 : 0;
+  const selectedCrew = useMemo(
+    () => (selected?.crew || []).filter((c) => crewPay[c.id]?.selected),
+    [selected, crewPay],
+  );
+  const totalCents = selectedCrew.reduce(
+    (s, c) => s + Math.round((parseFloat(crewPay[c.id]?.dollars || "0") || 0) * 100),
+    0,
+  );
+  const profitCents = revenueCents - totalCents;
+  const pctPaid = revenueCents > 0 ? Math.round((totalCents / revenueCents) * 1000) / 10 : 0;
 
   const pickJob = (j: JobOption) => {
     setSelected(j);
-    const def = j.existingPayout?.amountCents ?? j.suggestedPayoutCents;
-    setAmountDollars(((def || 0) / 100).toFixed(2));
+    const init: Record<string, { selected: boolean; dollars: string }> = {};
+    for (const c of j.crew) {
+      init[c.id] = { selected: true, dollars: ((c.suggestedPayoutCents || 0) / 100).toFixed(2) };
+    }
+    setCrewPay(init);
   };
+
+  const setMemberPay = (id: string, dollars: string) =>
+    setCrewPay((prev) => ({ ...prev, [id]: { ...(prev[id] || { selected: true }), dollars } }));
+  const toggleMember = (id: string) =>
+    setCrewPay((prev) => ({ ...prev, [id]: { ...(prev[id] || { dollars: "" }), selected: !prev[id]?.selected } }));
 
   const submit = async () => {
     if (!selected) {
       toast.error("Pick a job first.");
       return;
     }
-    if (!(amountCents >= 0) || !amountDollars) {
-      toast.error("Enter a payout amount.");
-      return;
-    }
-    if (!selected.cleanerId) {
-      toast.error("This job has no assigned cleaner to pay.");
+    const cleaners = selectedCrew.map((c) => ({
+      cleanerId: c.id,
+      amountCents: Math.round((parseFloat(crewPay[c.id]?.dollars || "0") || 0) * 100),
+    }));
+    if (cleaners.length === 0) {
+      toast.error("Select at least one cleaner to pay.");
       return;
     }
     setSubmitting(true);
     try {
-      const res = await callApi<{ payout: { emailSent: boolean; smsSent: boolean; airtableSynced: boolean } }>(
+      const res = await callApi<{ payout: { emailSent: number; smsSent: number; airtableSynced: boolean; cleanerCount: number } }>(
         "submit",
         {
           bookingId: selected.bookingId,
-          cleanerId: selected.cleanerId,
-          amountCents,
+          cleaners,
           note: note.trim() || undefined,
         },
       );
-      const { emailSent, smsSent, airtableSynced } = res.payout;
+      const { emailSent, smsSent, airtableSynced, cleanerCount } = res.payout;
       toast.success(
-        `Payout logged. ${emailSent ? "Email sent." : ""} ${smsSent ? "SMS sent." : ""}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
+        `Payout logged for ${cleanerCount} cleaner(s). ${emailSent ? `${emailSent} email(s).` : ""} ${smsSent ? `${smsSent} SMS.` : ""}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
       );
       setSelected(null);
-      setAmountDollars("");
+      setCrewPay({});
       setNote("");
       await load({ silent: true });
     } catch (err) {
@@ -325,7 +345,7 @@ export default function SimplePayoutTab() {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[11px] text-slate-500">
-                            {fmtDate(j.serviceDate)} · {j.cleanerName || "No cleaner"} · {j.status?.replaceAll("_", " ")}
+                            {fmtDate(j.serviceDate)} · {j.cleanerCount} cleaner{j.cleanerCount === 1 ? "" : "s"} · {j.status?.replaceAll("_", " ")}
                           </span>
                           {j.existingPayout && (
                             <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -353,25 +373,64 @@ export default function SimplePayoutTab() {
                   <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
                     <span className="text-slate-500">Revenue</span>
                     <span className="text-right tabular-nums font-semibold">{usd(selected.revenueCents)}</span>
-                    <span className="text-slate-500">Cleaner</span>
-                    <span className="text-right">{selected.cleanerName || "—"}{selected.cleanerCount > 1 ? ` (+${selected.cleanerCount - 1})` : ""}</span>
+                    <span className="text-slate-500">Cleaners on job</span>
+                    <span className="text-right font-semibold">{selected.cleanerCount}</span>
                   </div>
                 </div>
 
+                {/* Crew + pay per cleaner */}
                 <div>
-                  <Label className="text-xs">Custom payout amount</Label>
-                  <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={amountDollars}
-                      onChange={(e) => setAmountDollars(e.target.value)}
-                      className="pl-7 h-10 text-lg font-semibold"
-                      placeholder="0.00"
-                    />
-                  </div>
+                  <Label className="text-xs">Who was on this job &amp; pay per cleaner</Label>
+                  {selected.crew.length === 0 ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-1">
+                      No cleaner is assigned to this job. Assign one in Bookings first.
+                    </p>
+                  ) : (
+                    <div className="mt-1 space-y-2">
+                      {selected.crew.map((c) => {
+                        const state = crewPay[c.id] || { selected: false, dollars: "" };
+                        return (
+                          <div
+                            key={c.id}
+                            className={cn(
+                              "flex items-center gap-2 rounded-lg border px-2.5 py-2",
+                              state.selected ? "border-violet-200 bg-violet-50/40" : "border-slate-200 opacity-70",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!state.selected}
+                              onChange={() => toggleMember(c.id)}
+                              className="h-4 w-4 accent-violet-600"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">{c.name}</p>
+                              {!c.hasContact && (
+                                <p className="text-[10px] text-amber-600">No email/phone — won't be notified</p>
+                              )}
+                            </div>
+                            <div className="relative w-28">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                disabled={!state.selected}
+                                value={state.dollars}
+                                onChange={(e) => setMemberPay(c.id, e.target.value)}
+                                className="pl-6 h-9 text-sm font-semibold"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="flex items-center justify-between px-1 pt-1">
+                        <span className="text-xs text-slate-500">Total payout</span>
+                        <span className="text-sm font-bold tabular-nums">{usd(totalCents)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Live calculations */}
@@ -393,15 +452,15 @@ export default function SimplePayoutTab() {
                   <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Bonus, deduction reason, etc." className="mt-1" />
                 </div>
 
-                <Button onClick={submit} disabled={submitting} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
+                <Button onClick={submit} disabled={submitting || selectedCrew.length === 0} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
                   {submitting ? (
                     <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Submitting…</>
                   ) : (
-                    <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Submit payout & notify contractor</>
+                    <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Submit payout & notify {selectedCrew.length || ""} contractor{selectedCrew.length === 1 ? "" : "s"}</>
                   )}
                 </Button>
                 <p className="text-[11px] text-slate-400 text-center">
-                  Sends the contractor an email + SMS that their payout is pending, and syncs to Airtable.
+                  Emails + texts each selected cleaner that their payout is pending for their amount, and syncs to Airtable.
                 </p>
               </div>
             )}
