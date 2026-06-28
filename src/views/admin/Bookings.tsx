@@ -376,6 +376,7 @@ function BookingAssignBlock({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loadingCleaners, setLoadingCleaners] = useState(true);
   const [loadingSuggest, setLoadingSuggest] = useState(true);
+  const [depositBlocked, setDepositBlocked] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -437,7 +438,7 @@ function BookingAssignBlock({
     });
   };
 
-  const assign = async () => {
+  const assign = async (allowUnpaid = false) => {
     if (selectedIds.length === 0) {
       toast.error("Pick at least one cleaner from the directory.");
       return;
@@ -445,10 +446,20 @@ function BookingAssignBlock({
     setWorking("assign");
     try {
       const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
-        body: { bookingId: booking.id, cleanerIds: selectedIds, mode: "replace" },
+        body: { bookingId: booking.id, cleanerIds: selectedIds, mode: "replace", allowUnpaid },
       });
+      // The deposit gate returns HTTP 402 with code "deposit_unpaid". The
+      // supabase client surfaces non-2xx via `error`, but the JSON body is
+      // still in `data` — check both so we can offer an override.
+      const payload = (data ?? (error as any)?.context ?? {}) as { error?: string; code?: string };
+      if (payload?.code === "deposit_unpaid") {
+        setDepositBlocked(true);
+        toast.error("Customer hasn't paid the deposit yet — assignment blocked.");
+        return;
+      }
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      setDepositBlocked(false);
       const notes = (data as { notifications?: Array<{ email?: boolean; sms?: boolean }> })?.notifications;
       const emailed = notes?.filter((n) => n.email).length ?? 0;
       const texted = notes?.filter((n) => n.sms).length ?? 0;
@@ -538,8 +549,25 @@ function BookingAssignBlock({
             })}
           </div>
         )}
+        {depositBlocked && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-2">
+            <p className="font-medium">
+              Deposit not received yet — this customer hasn&apos;t paid. Assigning a cleaner is
+              blocked until the deposit clears.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-amber-400 text-amber-900 hover:bg-amber-100"
+              onClick={() => assign(true)}
+              disabled={working === "assign"}
+            >
+              Assign anyway (override — cash / comp job)
+            </Button>
+          </div>
+        )}
         <Button
-          onClick={assign}
+          onClick={() => assign(false)}
           disabled={working === "assign"}
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
         >
@@ -576,6 +604,11 @@ function BookingSheet({
   const [svcType, setSvcType] = useState<string>("standard");
   const [svcHomeSize, setSvcHomeSize] = useState<string>("");
   const [svcAddOns, setSvcAddOns] = useState<string[]>([]);
+  // Editable per-add-on price (dollars, as strings for the inputs). Seeded
+  // from the catalog default but the admin can override any line.
+  const [addOnPrices, setAddOnPrices] = useState<Record<string, string>>({});
+  // Optional manual override of the whole new total (dollars). Blank = auto.
+  const [totalOverride, setTotalOverride] = useState<string>("");
 
   useEffect(() => {
     if (!booking) return;
@@ -583,14 +616,23 @@ function BookingSheet({
     setSvcType(booking.service_type || "standard");
     setSvcHomeSize(booking.home_size_id || "");
     setSvcAddOns([]);
+    setAddOnPrices({});
+    setTotalOverride("");
     // add_ons isn't in the list payload — pull the current ones so the
-    // adjust form starts from the real selection.
+    // adjust form starts from the real selection on the booking.
     void (async () => {
       const { data } = await (supabase.from as any)("bookings")
         .select("add_ons")
         .eq("id", booking.id)
         .maybeSingle();
-      setSvcAddOns(Array.isArray(data?.add_ons) ? (data.add_ons as string[]) : []);
+      const current = Array.isArray(data?.add_ons) ? (data.add_ons as string[]) : [];
+      setSvcAddOns(current);
+      const seeded: Record<string, string> = {};
+      for (const id of current) {
+        const def = (ADD_ONS as Record<string, { price: number }>)[id]?.price;
+        if (def != null) seeded[id] = String(def);
+      }
+      setAddOnPrices(seeded);
     })();
   }, [booking?.id]);
 
@@ -627,11 +669,39 @@ function BookingSheet({
   };
 
   const toggleAddOn = (id: string) =>
-    setSvcAddOns((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSvcAddOns((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      // Seed the editable price with the catalog default when first added.
+      setAddOnPrices((p) =>
+        p[id] != null
+          ? p
+          : { ...p, [id]: String((ADD_ONS as Record<string, { price: number }>)[id]?.price ?? 0) },
+      );
+      return [...prev, id];
+    });
 
-  const newQuoteCents = Math.round(
-    (calculatePrice(svcHomeSize, svcType, svcAddOns, "none", booking.uses_credit ?? false, "B").total || 0) * 100,
+  const setAddOnPrice = (id: string, value: string) =>
+    setAddOnPrices((p) => ({ ...p, [id]: value }));
+
+  // Move-In/Out includes fridge + oven free; everything else is chargeable.
+  const isFreeAddOn = (id: string) => svcType === "moveInOut" && (id === "fridge" || id === "oven");
+
+  // Service-only price (no add-ons), then add the (possibly overridden)
+  // per-add-on prices. Falls back to the catalog price when a field is blank.
+  const serviceOnlyCents = Math.round(
+    (calculatePrice(svcHomeSize, svcType, [], "none", booking.uses_credit ?? false, "B").total || 0) * 100,
   );
+  const addOnsTotalCents = svcAddOns.reduce((sum, id) => {
+    if (isFreeAddOn(id)) return sum;
+    const raw = addOnPrices[id];
+    const dollars = raw != null && raw !== "" ? Number(raw) : (ADD_ONS as Record<string, { price: number }>)[id]?.price ?? 0;
+    return sum + (Number.isFinite(dollars) ? Math.round(dollars * 100) : 0);
+  }, 0);
+  const computedQuoteCents = Math.max(0, serviceOnlyCents + addOnsTotalCents);
+  const overrideCents = totalOverride !== "" && Number.isFinite(Number(totalOverride))
+    ? Math.round(Number(totalOverride) * 100)
+    : null;
+  const newQuoteCents = overrideCents != null ? overrideCents : computedQuoteCents;
 
   const adjustService = async () => {
     if (!svcHomeSize || !svcType) {
@@ -640,12 +710,25 @@ function BookingSheet({
     }
     setWorking("adjust");
     try {
+      // Build the priced add-on map (dollars) we pass to the backend so the
+      // customer comms + ops notes show exactly what was charged per add-on.
+      const pricedAddOns: Record<string, number> = {};
+      for (const id of svcAddOns) {
+        if (isFreeAddOn(id)) {
+          pricedAddOns[id] = 0;
+          continue;
+        }
+        const raw = addOnPrices[id];
+        const dollars = raw != null && raw !== "" ? Number(raw) : (ADD_ONS as Record<string, { price: number }>)[id]?.price ?? 0;
+        if (Number.isFinite(dollars)) pricedAddOns[id] = dollars;
+      }
       const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
         body: {
           bookingId: booking.id,
           serviceType: svcType,
           homeSizeId: svcHomeSize,
           addOns: svcAddOns,
+          addOnPrices: pricedAddOns,
           totalEstimateCents: newQuoteCents,
         },
       });
@@ -846,12 +929,62 @@ function BookingSheet({
                           })}
                         </div>
                       </div>
+
+                      {/* Editable price per selected add-on */}
+                      {svcAddOns.length > 0 && (
+                        <div className="space-y-1.5 rounded-lg border border-slate-200 p-2">
+                          <Label className="text-xs text-slate-500">Add-on pricing (editable)</Label>
+                          {svcAddOns.map((id) => {
+                            const label = (ADD_ONS as Record<string, { label: string }>)[id]?.label || id;
+                            const free = isFreeAddOn(id);
+                            return (
+                              <div key={id} className="flex items-center justify-between gap-2 text-sm">
+                                <span className="text-slate-700">{label}</span>
+                                {free ? (
+                                  <span className="text-xs text-emerald-600 font-medium">Included free</span>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-slate-400 text-sm">$</span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={addOnPrices[id] ?? ""}
+                                      onChange={(e) => setAddOnPrice(id, e.target.value)}
+                                      className="h-8 w-20 text-right tabular-nums"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
                         <span className="text-slate-500">New total</span>
                         <span className="font-semibold tabular-nums">
                           {fmtMoney(newQuoteCents)}
                           <span className="text-slate-400 font-normal"> (was {fmtMoney(totalCents)})</span>
                         </span>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs text-slate-500">
+                          Override total (optional) — leave blank to use the computed price
+                        </Label>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-slate-400 text-sm">$</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder={(computedQuoteCents / 100).toFixed(2)}
+                            value={totalOverride}
+                            onChange={(e) => setTotalOverride(e.target.value)}
+                            className="h-8 w-32 text-right tabular-nums"
+                          />
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <Button variant="outline" className="flex-1" onClick={() => setAdjustOpen(false)} disabled={working === "adjust"}>

@@ -24,6 +24,32 @@ const SERVICE_LABELS: Record<string, string> = {
   moveInOut: "Move-In / Move-Out Clean",
 };
 
+// Add-on id → display label. Mirrors src/lib/pricing.ts ADD_ONS so the
+// customer SMS/email reads human labels rather than raw ids.
+const ADD_ON_LABELS: Record<string, string> = {
+  fridge: "Inside Fridge",
+  oven: "Inside Oven",
+  windows: "Interior Windows",
+  laundry: "Laundry — wash & fold",
+  changeLinens: "Change bed linens",
+  dishes: "Dishes & kitchen cleanup",
+  baseboards: "Baseboards (hand-wiped)",
+  blinds: "Blinds & shutters",
+  cabinets: "Inside cabinets",
+  walls: "Spot wall washing",
+  ceilingFans: "Ceiling fans",
+  microwave: "Inside microwave",
+  dishwasher: "Inside dishwasher",
+  garage: "Garage sweep-out",
+  patio: "Patio / balcony",
+  petHair: "Heavy pet-hair removal",
+  closets: "Inside closets / tidy",
+};
+
+function addOnLabel(id: string): string {
+  return ADD_ON_LABELS[id] || String(id).replace(/_/g, " ");
+}
+
 // deno-lint-ignore no-explicit-any
 async function sendSms(admin: any, toPhone: string | null | undefined, message: string) {
   const phone = (toPhone || "").toString().trim();
@@ -73,7 +99,7 @@ serve(async (req) => {
   try {
     const actorId = await ensureAdminOrVa(admin, req);
     const body = await req.json();
-    const { bookingId, serviceType, homeSizeId, addOns, bedrooms, bathrooms, dwellingType, totalEstimateCents } = body;
+    const { bookingId, serviceType, homeSizeId, addOns, bedrooms, bathrooms, dwellingType, totalEstimateCents, addOnPrices } = body;
     if (!bookingId) throw new Error("bookingId is required");
 
     const { data: booking, error: bErr } = await admin
@@ -92,6 +118,21 @@ serve(async (req) => {
       ? Math.round(totalEstimateCents)
       : booking.total_estimate_cents;
 
+    const prevTotalCents = Number(booking.total_estimate_cents || 0);
+
+    // Optional per-add-on price overrides (dollars) from the admin UI. We
+    // keep bookings.add_ons as the list of ids (downstream stays compatible)
+    // and record the priced breakdown in team_notes for the ops record.
+    const priceMap: Record<string, number> = (addOnPrices && typeof addOnPrices === "object")
+      ? addOnPrices as Record<string, number>
+      : {};
+    const addOnBreakdown = (newAddOns as string[]).map((id) => {
+      const dollars = Number(priceMap[id]);
+      return Number.isFinite(dollars)
+        ? `${addOnLabel(id)} ($${dollars.toFixed(2)})`
+        : addOnLabel(id);
+    });
+
     const update: Record<string, unknown> = {
       service_type: newServiceType,
       home_size_id: newHomeSize,
@@ -102,6 +143,13 @@ serve(async (req) => {
     if (bedrooms !== undefined && bedrooms !== null) update.bedrooms = bedrooms;
     if (bathrooms !== undefined && bathrooms !== null) update.bathrooms = bathrooms;
     if (dwellingType !== undefined && dwellingType !== null) update.dwelling_type = dwellingType;
+    if (addOnBreakdown.length > 0) {
+      const prevNotes = (booking.team_notes as string | null) || "";
+      const line = `Service adjusted ${new Date().toISOString().slice(0, 10)} — ` +
+        `${SERVICE_LABELS[newServiceType] || newServiceType}; add-ons: ${addOnBreakdown.join(", ")}; ` +
+        `total $${(Math.max(0, newTotalCents) / 100).toFixed(2)}.`;
+      update.team_notes = prevNotes ? `${prevNotes}\n${line}` : line;
+    }
 
     const { error: upErr } = await admin.from("bookings").update(update).eq("id", bookingId);
     if (upErr) throw upErr;
@@ -111,16 +159,29 @@ serve(async (req) => {
     // ── Notify the customer (SMS + email) ─────────────────────────────
     const svcLabel = SERVICE_LABELS[newServiceType] || newServiceType;
     const dollars = `$${(Math.max(0, newTotalCents) / 100).toFixed(2)}`;
+    const priceDiffDollars = (newTotalCents - prevTotalCents) / 100;
     const dateLabel = booking.service_date
       ? new Date(`${booking.service_date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
       : "your scheduled date";
 
+    // Human-readable add-on summary for the SMS (uses prices when provided).
+    const addOnSummary = addOnBreakdown.length > 0
+      ? addOnBreakdown.join(", ")
+      : (newAddOns as string[]).length > 0
+        ? (newAddOns as string[]).map(addOnLabel).join(", ")
+        : "None";
+
     try {
+      const diffLine = priceDiffDollars > 0
+        ? ` (+$${priceDiffDollars.toFixed(2)})`
+        : priceDiffDollars < 0
+          ? ` (-$${Math.abs(priceDiffDollars).toFixed(2)})`
+          : "";
       await sendSms(
         admin,
         booking.phone,
-        `Novara Cleaning: Your cleaning${booking.service_date ? ` on ${dateLabel}` : ""} has been updated to ${svcLabel}. ` +
-          `Updated total: ${dollars}. Questions? Call ${SUPPORT_PHONE_DISPLAY}.`,
+        `Novara Cleaning: Your cleaning${booking.service_date ? ` on ${dateLabel}` : ""} was updated to ${svcLabel}. ` +
+          `Add-ons: ${addOnSummary}. New total: ${dollars}${diffLine}. Questions? Call ${SUPPORT_PHONE_DISPLAY}.`,
       );
       console.log("[admin-modify-booking] customer SMS sent");
     } catch (e) {
@@ -138,6 +199,7 @@ serve(async (req) => {
             home_size_id: newHomeSize,
             add_ons: newAddOns,
             total_estimate_cents: newTotalCents,
+            priceDifference: priceDiffDollars.toFixed(2),
           },
         },
       });

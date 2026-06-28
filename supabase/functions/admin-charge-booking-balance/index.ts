@@ -130,6 +130,12 @@ serve(async (req) => {
         booking_number: String(booking.booking_number ?? ""),
         chargeType: "balance_auto_charge",
       },
+    }, {
+      // Dedupe concurrent / repeat balance charges for the same booking +
+      // amount so the customer is never double-charged. `force` callers
+      // still re-key off the amount, and a different balance (post
+      // adjustment) gets a fresh key.
+      idempotencyKey: `balance-${bookingId}-${remainingCents}`,
     });
 
     if (charge.status !== "succeeded") {
