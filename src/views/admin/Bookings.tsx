@@ -613,6 +613,10 @@ function BookingSheet({
   const [creditAmount, setCreditAmount] = useState("");
   const [creditSource, setCreditSource] = useState("admin_grant");
   const [creditReason, setCreditReason] = useState("");
+  // Adjust-job-cost state (revenue + optional refund).
+  const [jobCost, setJobCost] = useState("");
+  const [jobCostRefund, setJobCostRefund] = useState("");
+  const [jobCostReason, setJobCostReason] = useState("");
 
   useEffect(() => {
     if (!booking) return;
@@ -620,6 +624,15 @@ function BookingSheet({
     setCreditAmount("");
     setCreditSource("admin_grant");
     setCreditReason("");
+    setJobCost(
+      booking.final_charge_cents != null
+        ? (booking.final_charge_cents / 100).toFixed(2)
+        : booking.total_estimate_cents != null
+          ? (booking.total_estimate_cents / 100).toFixed(2)
+          : "",
+    );
+    setJobCostRefund("");
+    setJobCostReason("");
     setSvcType(booking.service_type || "standard");
     setSvcHomeSize(booking.home_size_id || "");
     setSvcAddOns([]);
@@ -768,6 +781,48 @@ function BookingSheet({
       toast.success("Booking deleted (customer not notified).");
       onMutated();
       onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const adjustJobCost = async () => {
+    const newCents = Math.round(parseFloat(jobCost) * 100);
+    if (!Number.isFinite(newCents) || newCents < 0) {
+      toast.error("Enter a valid job cost");
+      return;
+    }
+    const refundCents = jobCostRefund ? Math.round(parseFloat(jobCostRefund) * 100) : 0;
+    if (jobCostRefund && (!Number.isFinite(refundCents) || refundCents < 0)) {
+      toast.error("Enter a valid refund amount");
+      return;
+    }
+    setWorking("jobcost");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/adjust-job-cost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          bookingId: booking.id,
+          newJobCostCents: newCents,
+          refundCents: refundCents || undefined,
+          reason: jobCostReason || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) throw new Error(json?.error || "Adjust failed");
+      const refundNote = json.refund
+        ? json.refund.ok
+          ? ` · refunded $${(refundCents / 100).toFixed(2)}`
+          : ` · refund failed: ${json.refund.error}`
+        : "";
+      toast.success(`Job cost set to $${(newCents / 100).toFixed(2)} (GHL + Airtable synced)${refundNote}`);
+      setJobCostRefund("");
+      onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1051,6 +1106,67 @@ function BookingSheet({
                 </CardContent>
               </Card>
             )}
+
+            {/* Adjust job cost (revenue) + optional refund */}
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-700" />
+                  Adjust job cost
+                </CardTitle>
+                <CardDescription>
+                  Set the recorded job cost (revenue) — e.g. after a refund. Updates GHL, Airtable, and payroll profit. Optionally issue a partial Stripe refund.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">New job cost (USD)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={jobCost}
+                      onChange={(e) => setJobCost(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Refund now (optional)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={jobCostRefund}
+                      onChange={(e) => setJobCostRefund(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Reason</Label>
+                  <Input
+                    value={jobCostReason}
+                    onChange={(e) => setJobCostReason(e.target.value)}
+                    placeholder="e.g., Refunded $50 for missed bathroom"
+                  />
+                </div>
+                <Button
+                  onClick={adjustJobCost}
+                  disabled={working === "jobcost" || !jobCost}
+                  variant="outline"
+                  className="w-full border-violet-200 text-violet-800 hover:bg-violet-50"
+                >
+                  {working === "jobcost" ? (
+                    <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+                  ) : (
+                    <><RiMoneyDollarCircleLine className="w-4 h-4 mr-2" /> Save job cost{jobCostRefund ? " & refund" : ""}</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
 
             {/* Grant credit (to the booking's customer, by email) */}
             <Card className="border-slate-200">

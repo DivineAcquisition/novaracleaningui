@@ -11,6 +11,7 @@ import {
   findOpportunityForContactInPipeline,
   ghlIsConfigured,
   resolveOwnerUserId,
+  resolveSalesStageForBooking,
   updateOpportunity,
 } from "./ghl-client.ts";
 
@@ -96,8 +97,11 @@ export async function syncBookingSalesPipeline(
   if (statusRaw === "completed") status = "won";
   else if (statusRaw === "cancelled") status = "lost";
 
-  // Optional stage progression — only applied when the stage id is configured
-  // so we never guess GHL stage UUIDs.
+  // Stage progression. Preference order:
+  //   1. Explicit stage-id secrets (won / lost / booked) when configured.
+  //   2. NAME-based resolution against the live Sales pipeline so the card
+  //      advances through the WHOLE fulfillment cycle (booked → scheduled →
+  //      in progress → won/paid) without anyone hand-entering stage UUIDs.
   const stageWon = await resolveSecret(supabase, "GHL_SALES_STAGE_WON");
   const stageLost = await resolveSecret(supabase, "GHL_SALES_STAGE_LOST");
   const stageBooked = await resolveSecret(supabase, "GHL_SALES_STAGE_BOOKED");
@@ -105,6 +109,22 @@ export async function syncBookingSalesPipeline(
   if (status === "won" && stageWon) pipelineStageId = stageWon;
   else if (status === "lost" && stageLost) pipelineStageId = stageLost;
   else if (status === "open" && stageBooked) pipelineStageId = stageBooked;
+
+  // Name-based fulfillment-stage resolution (fills in the intermediate stages
+  // the 3 secrets above can't express, and works with zero secret config).
+  if (pipelineId) {
+    try {
+      const byName = await resolveSalesStageForBooking(pipelineId, {
+        bookingStatus: args.booking.status as string | null,
+        payoutStatus: args.booking.payout_status as string | null,
+        cleanerId: args.booking.cleaner_id as string | null,
+        serviceDate: args.booking.service_date as string | null,
+      });
+      if (byName) pipelineStageId = byName;
+    } catch {
+      /* leave stage unchanged on any resolution failure */
+    }
+  }
 
   const name =
     `Novara Booking — ${args.booking.first_name || ""} ${args.booking.last_name || ""}`

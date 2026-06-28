@@ -148,6 +148,10 @@ export default function SimplePayoutTab() {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [period, setPeriod] = useState<"week" | "month" | "year">("month");
+  // Inline job-cost (revenue) adjust on the selected job.
+  const [editingCost, setEditingCost] = useState(false);
+  const [costDraft, setCostDraft] = useState("");
+  const [savingCost, setSavingCost] = useState(false);
 
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
@@ -197,11 +201,41 @@ export default function SimplePayoutTab() {
 
   const pickJob = (j: JobOption) => {
     setSelected(j);
+    setEditingCost(false);
+    setCostDraft(((j.revenueCents || 0) / 100).toFixed(2));
     const init: Record<string, { selected: boolean; dollars: string }> = {};
     for (const c of j.crew) {
       init[c.id] = { selected: true, dollars: ((c.suggestedPayoutCents || 0) / 100).toFixed(2) };
     }
     setCrewPay(init);
+  };
+
+  const saveJobCost = async () => {
+    if (!selected) return;
+    const newCents = Math.round((parseFloat(costDraft) || 0) * 100);
+    if (!Number.isFinite(newCents) || newCents < 0) {
+      toast.error("Enter a valid job cost");
+      return;
+    }
+    setSavingCost(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/adjust-job-cost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ bookingId: selected.bookingId, newJobCostCents: newCents }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) throw new Error(json?.error || "Adjust failed");
+      toast.success(`Job cost set to ${usd(newCents)} (GHL + Airtable synced)`);
+      setSelected({ ...selected, revenueCents: newCents });
+      setEditingCost(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to adjust job cost");
+    } finally {
+      setSavingCost(false);
+    }
   };
 
   const setMemberPay = (id: string, dollars: string) =>
@@ -370,9 +404,34 @@ export default function SimplePayoutTab() {
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     {selected.bookingNumber} · {fmtDate(selected.serviceDate)} · {selected.serviceType?.replaceAll("_", " ")}
                   </p>
-                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
-                    <span className="text-slate-500">Revenue</span>
-                    <span className="text-right tabular-nums font-semibold">{usd(selected.revenueCents)}</span>
+                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs items-center">
+                    <span className="text-slate-500">Revenue (job cost)</span>
+                    {editingCost ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <div className="relative w-24">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={costDraft}
+                            onChange={(e) => setCostDraft(e.target.value)}
+                            className="pl-5 h-7 text-xs"
+                          />
+                        </div>
+                        <Button size="sm" className="h-7 px-2 text-xs bg-violet-600 hover:bg-violet-700 text-white" disabled={savingCost} onClick={saveJobCost}>
+                          {savingCost ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Save"}
+                        </Button>
+                        <button className="text-[11px] text-slate-400 hover:text-slate-600" onClick={() => setEditingCost(false)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <span className="text-right tabular-nums font-semibold flex items-center justify-end gap-2">
+                        {usd(selected.revenueCents)}
+                        <button className="text-[11px] text-violet-700 hover:underline font-normal" onClick={() => { setCostDraft((selected.revenueCents / 100).toFixed(2)); setEditingCost(true); }}>
+                          Adjust
+                        </button>
+                      </span>
+                    )}
                     <span className="text-slate-500">Cleaners on job</span>
                     <span className="text-right font-semibold">{selected.cleanerCount}</span>
                   </div>
