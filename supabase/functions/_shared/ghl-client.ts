@@ -773,6 +773,97 @@ export async function findOpportunityForContactInPipeline(
   }
 }
 
+// ─── Sales-pipeline fulfillment-stage resolution (by NAME) ─────────────────
+//
+// The opportunity should visibly move through the fulfillment cycle even when
+// there's no dedicated Job Dispatch pipeline configured. Since stage UUIDs vary
+// per account, we resolve the configured Sales pipeline's stages by NAME and
+// pick the one that matches the booking's current state. Returns undefined when
+// nothing sensible matches (caller then leaves the stage unchanged).
+
+const SALES_STAGE_PATTERNS: Record<string, RegExp[]> = {
+  // Order matters for selection, not matching.
+  paid: [/\bpaid\b/i],
+  won: [/\bwon\b/i, /closed[\s-]*won/i, /\bcomplete/i, /\bfinished\b/i],
+  lost: [/\blost\b/i, /closed[\s-]*lost/i, /\bcancel/i, /\bdead\b/i],
+  in_progress: [/in[\s-]*progress/i, /\bcleaning\b/i, /\bservicing\b/i, /\bon[\s-]*site\b/i, /\ben[\s-]*route\b/i, /\bactive\b/i, /\bstarted\b/i],
+  scheduled: [/\bschedul/i, /\bassigned\b/i, /\bconfirmed\b/i, /\bdispatch/i, /\bupcoming\b/i],
+  booked: [/\bbooked\b/i, /\bnew\b/i, /\blead\b/i, /\bdeposit\b/i, /\bopen\b/i, /\bquote/i],
+};
+
+let salesStagesCache: Record<string, Record<string, string>> = {};
+
+async function loadPipelineStagesByName(pipelineId: string): Promise<Record<string, string>> {
+  if (salesStagesCache[pipelineId]) return salesStagesCache[pipelineId];
+  const cfg = readConfig();
+  if (!cfg || !pipelineId) return {};
+  try {
+    const res = await ghlFetch(
+      cfg,
+      `/opportunities/pipelines?locationId=${encodeURIComponent(cfg.locationId)}`,
+    );
+    if (!res.ok) return {};
+    const json = (await res.json()) as {
+      pipelines?: Array<{ id?: string; stages?: Array<{ id?: string; name?: string }> }>;
+    };
+    const pipe = (json.pipelines || []).find((p) => p.id === pipelineId);
+    const map: Record<string, string> = {};
+    for (const stage of pipe?.stages || []) {
+      if (stage.id && stage.name) map[stage.name] = stage.id;
+    }
+    salesStagesCache[pipelineId] = map;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+export interface SalesStageContext {
+  bookingStatus?: string | null;
+  payoutStatus?: string | null;
+  cleanerId?: string | null;
+  serviceDate?: string | null;
+}
+
+/**
+ * Resolve the Sales-pipeline stage id that matches a booking's current
+ * fulfillment state, matching the pipeline's stage NAMES. Returns undefined
+ * when no stage matches (caller leaves the stage as-is).
+ */
+export async function resolveSalesStageForBooking(
+  pipelineId: string,
+  ctx: SalesStageContext,
+): Promise<string | undefined> {
+  const stagesByName = await loadPipelineStagesByName(pipelineId);
+  if (Object.keys(stagesByName).length === 0) return undefined;
+
+  // name → key resolution
+  const idForKey: Partial<Record<string, string>> = {};
+  for (const [name, id] of Object.entries(stagesByName)) {
+    for (const [key, patterns] of Object.entries(SALES_STAGE_PATTERNS)) {
+      if (idForKey[key]) continue;
+      if (patterns.some((re) => re.test(name))) idForKey[key] = id;
+    }
+  }
+
+  const status = String(ctx.bookingStatus || "").toLowerCase();
+  const payout = String(ctx.payoutStatus || "").toLowerCase();
+
+  // Desired key by fulfillment state, with graceful fallbacks.
+  const want: string[] = [];
+  if (status === "cancelled") want.push("lost");
+  else if (payout === "completed" || payout === "paid") want.push("paid", "won");
+  else if (status === "completed" || status === "pending_review") want.push("won", "in_progress", "scheduled");
+  else if (status === "in_progress") want.push("in_progress", "scheduled", "booked");
+  else if (ctx.cleanerId && (status === "assigned" || status === "confirmed")) want.push("scheduled", "booked");
+  else if (status === "confirmed" || status === "pending_details") want.push("booked", "scheduled");
+
+  for (const key of want) {
+    if (idForKey[key]) return idForKey[key];
+  }
+  return undefined;
+}
+
 export async function findLatestOpportunityForContact(
   contactId: string,
 ): Promise<{ id: string; name?: string; status?: string } | null> {
