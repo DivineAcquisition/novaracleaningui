@@ -69,22 +69,68 @@ serve(async (req) => {
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
 
   const action = body?.action;
-  const customerId = body?.customerId;
+  let customerId = body?.customerId as string | undefined;
+  const customerEmail = body?.email ? String(body.email).trim() : "";
   const amountCentsRaw = Number(body?.amountCents);
   if (!["grant", "revoke"].includes(action)) return json({ error: "action must be grant|revoke" }, 400);
-  if (!customerId) return json({ error: "customerId required" }, 400);
+  // Accept a customerId OR an email (booking-tab grants pass the booking email,
+  // which we resolve — or create — into a customers row below).
+  if (!customerId && !customerEmail) return json({ error: "customerId or email required" }, 400);
   if (!Number.isFinite(amountCentsRaw) || amountCentsRaw <= 0) {
     return json({ error: "amountCents must be a positive integer" }, 400);
   }
   if (action === "revoke" && !body?.reason) return json({ error: "reason required for revoke" }, 400);
 
   const amountCents = action === "grant" ? Math.round(amountCentsRaw) : -Math.round(amountCentsRaw);
-  const source = body?.source || (action === "grant" ? "admin_grant" : "adjustment");
+
+  // Normalize source to the set the grant_customer_credit RPC accepts. The admin
+  // UI historically offered friendlier labels (service_recovery / goodwill /
+  // referral_reward) that the RPC's CHECK rejected — silently failing every
+  // grant. Map those to a valid source and fall back to admin_grant.
+  const ALLOWED_SOURCES = ["referral", "admin_grant", "promo", "refund_credit", "perk", "adjustment"];
+  const SOURCE_ALIASES: Record<string, string> = {
+    service_recovery: "adjustment",
+    goodwill: "perk",
+    referral_reward: "referral",
+    refund: "refund_credit",
+    compensation: "adjustment",
+  };
+  let source = String(body?.source || (action === "grant" ? "admin_grant" : "adjustment"));
+  if (!ALLOWED_SOURCES.includes(source)) {
+    source = SOURCE_ALIASES[source] || (action === "grant" ? "admin_grant" : "adjustment");
+  }
 
   try {
-    const { data: cust } = await adminClient
-      .from("customers").select("id, first_name, last_name, email").eq("id", customerId).maybeSingle();
+    // ─── Resolve (or create) the target customer ───────────────────────────
+    let cust: { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null = null;
+    if (customerId) {
+      const { data } = await adminClient
+        .from("customers").select("id, first_name, last_name, email, phone").eq("id", customerId).maybeSingle();
+      cust = data;
+    }
+    if (!cust && customerEmail) {
+      const { data: byEmail } = await adminClient
+        .from("customers").select("id, first_name, last_name, email, phone").ilike("email", customerEmail).limit(1);
+      cust = byEmail?.[0] || null;
+      // Create a minimal customer record if none exists for this email so the
+      // credit has a home (credits are email-keyed, so this links cleanly).
+      if (!cust && action === "grant") {
+        const { data: created, error: createErr } = await adminClient
+          .from("customers")
+          .insert({
+            email: customerEmail.toLowerCase(),
+            first_name: body?.firstName || null,
+            last_name: body?.lastName || null,
+            phone: body?.phone || null,
+          })
+          .select("id, first_name, last_name, email, phone")
+          .single();
+        if (createErr) throw createErr;
+        cust = created;
+      }
+    }
     if (!cust) return json({ error: "customer not found" }, 404);
+    customerId = cust.id;
 
     const { data: inserted, error } = await adminClient.rpc("grant_customer_credit", {
       _customer_id: customerId,
@@ -108,7 +154,53 @@ serve(async (req) => {
       data: { amount_cents: amountCents, source, reason: body?.reason, by: uid, balance },
     });
 
-    return json({ ok: true, credit: inserted, balance });
+    // ─── Notify the customer that credit was applied (grant only) ──────────
+    // Best-effort email + SMS so the customer knows the credit is on their
+    // account and will auto-apply at checkout. Skipped for revokes.
+    let emailSent = false;
+    let smsSent = false;
+    if (action === "grant" && body?.notify !== false) {
+      const first = cust.first_name || "there";
+      const amountStr = `$${(amountCents / 100).toFixed(2)}`;
+      const balanceCents = Number((balance as { balance_cents?: number })?.balance_cents || 0);
+      const balanceStr = `$${(balanceCents / 100).toFixed(2)}`;
+      const reasonLine = body?.reason ? String(body.reason) : "";
+
+      if (cust.email) {
+        try {
+          const html = `
+            <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+              <h2 style="margin:0 0 8px;font-size:20px">You've got Novara credit 🎉</h2>
+              <p style="margin:0 0 16px;color:#475569">Hi ${first}, we've added account credit to your Novara Cleaning wallet.</p>
+              <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
+                <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6d28d9">Credit added</div>
+                <div style="font-size:32px;font-weight:800;color:#5b21b6;margin-top:4px">${amountStr}</div>
+                <div style="font-size:12px;color:#6d28d9;margin-top:4px">Wallet balance: ${balanceStr}</div>
+              </div>
+              ${reasonLine ? `<p style="margin:0 0 12px;color:#475569;font-size:14px">${reasonLine}</p>` : ""}
+              <p style="margin:0 0 16px;color:#475569;font-size:14px">It'll automatically apply at checkout on your next booking — nothing to do.</p>
+              <a href="https://try.novaracleaning.com/book/zip" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px">Book your next clean</a>
+              <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            </div>`;
+          const { error: emailErr } = await adminClient.functions.invoke("admin-send-email", {
+            body: { to: cust.email, subject: `You've got ${amountStr} in Novara credit`, html },
+          });
+          emailSent = !emailErr;
+        } catch (_) { /* best effort */ }
+      }
+
+      if (cust.phone) {
+        try {
+          const msg = `Novara Cleaning: Good news ${first}! We've added ${amountStr} credit to your account (balance ${balanceStr}). It'll auto-apply at checkout on your next booking.${reasonLine ? ` (${reasonLine})` : ""} Reply STOP to opt out.`;
+          const { error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
+            body: { phone: cust.phone, email: cust.email || undefined, firstName: first, message: msg, type: "customer_credit_granted" },
+          });
+          smsSent = !smsErr;
+        } catch (_) { /* best effort */ }
+      }
+    }
+
+    return json({ ok: true, credit: inserted, balance, emailSent, smsSent });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[admin-grant-credit]", message);

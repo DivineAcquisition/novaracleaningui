@@ -609,10 +609,17 @@ function BookingSheet({
   const [addOnPrices, setAddOnPrices] = useState<Record<string, string>>({});
   // Optional manual override of the whole new total (dollars). Blank = auto.
   const [totalOverride, setTotalOverride] = useState<string>("");
+  // Grant-credit state (applies to the booking's customer by email).
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditSource, setCreditSource] = useState("admin_grant");
+  const [creditReason, setCreditReason] = useState("");
 
   useEffect(() => {
     if (!booking) return;
     setAdjustOpen(false);
+    setCreditAmount("");
+    setCreditSource("admin_grant");
+    setCreditReason("");
     setSvcType(booking.service_type || "standard");
     setSvcHomeSize(booking.home_size_id || "");
     setSvcAddOns([]);
@@ -761,6 +768,43 @@ function BookingSheet({
       toast.success("Booking deleted (customer not notified).");
       onMutated();
       onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const grantCredit = async () => {
+    const cents = Math.round(parseFloat(creditAmount) * 100);
+    if (!Number.isFinite(cents) || cents <= 0) {
+      toast.error("Enter a positive dollar amount");
+      return;
+    }
+    if (!booking.email) {
+      toast.error("This booking has no customer email to credit.");
+      return;
+    }
+    setWorking("credit");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-grant-credit", {
+        body: {
+          action: "grant",
+          email: booking.email,
+          firstName: booking.first_name || undefined,
+          lastName: booking.last_name || undefined,
+          phone: booking.phone || undefined,
+          amountCents: cents,
+          source: creditSource,
+          reason: creditReason || `Credit applied from booking #${booking.booking_number || booking.id.slice(0, 6)}`,
+        },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const notified = [(data as { emailSent?: boolean })?.emailSent && "email", (data as { smsSent?: boolean })?.smsSent && "SMS"].filter(Boolean).join(" + ");
+      toast.success(`Credited $${(cents / 100).toFixed(2)} to ${booking.email}${notified ? ` · ${notified} sent` : ""}`);
+      setCreditAmount("");
+      setCreditReason("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1007,6 +1051,69 @@ function BookingSheet({
                 </CardContent>
               </Card>
             )}
+
+            {/* Grant credit (to the booking's customer, by email) */}
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-700" />
+                  Apply account credit
+                </CardTitle>
+                <CardDescription>
+                  Adds wallet credit to {booking.email || "this customer"} (auto-applies at their next checkout). They get an email + SMS.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Amount (USD)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      inputMode="decimal"
+                      value={creditAmount}
+                      onChange={(e) => setCreditAmount(e.target.value)}
+                      placeholder="50"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Source</Label>
+                    <Select value={creditSource} onValueChange={setCreditSource}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin_grant">Admin grant</SelectItem>
+                        <SelectItem value="refund_credit">Refund as credit</SelectItem>
+                        <SelectItem value="promo">Promo</SelectItem>
+                        <SelectItem value="perk">Loyalty perk / goodwill</SelectItem>
+                        <SelectItem value="adjustment">Service recovery / adjustment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Reason (visible to customer)</Label>
+                  <Input
+                    value={creditReason}
+                    onChange={(e) => setCreditReason(e.target.value)}
+                    placeholder="e.g., Sorry about the late arrival"
+                  />
+                </div>
+                <Button
+                  onClick={grantCredit}
+                  disabled={working === "credit" || !creditAmount}
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                >
+                  {working === "credit" ? (
+                    <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
+                  ) : (
+                    <><RiMoneyDollarCircleLine className="w-4 h-4 mr-2" /> Apply ${creditAmount || "0"} credit</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
 
             {/* Mark complete */}
             {booking.status !== "completed" && booking.status !== "cancelled" && (

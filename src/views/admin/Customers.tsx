@@ -978,7 +978,7 @@ function GrantCreditDialog({
     }
     setBusy(true);
     try {
-      const { error } = await supabase.functions.invoke("admin-grant-credit", {
+      const { data, error } = await supabase.functions.invoke("admin-grant-credit", {
         body: {
           action: "grant",
           customerId: customer.id,
@@ -988,7 +988,9 @@ function GrantCreditDialog({
         },
       });
       if (error) throw error;
-      toast.success(`Credited $${(cents / 100).toFixed(2)}`);
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const notified = [(data as { emailSent?: boolean })?.emailSent && "email", (data as { smsSent?: boolean })?.smsSent && "SMS"].filter(Boolean).join(" + ");
+      toast.success(`Credited $${(cents / 100).toFixed(2)}${notified ? ` · ${notified} sent` : ""}`);
       onOpenChange(false);
       onGranted();
     } catch (err: any) {
@@ -1004,7 +1006,7 @@ function GrantCreditDialog({
         <DialogHeader>
           <DialogTitle>Grant credit</DialogTitle>
           <DialogDescription>
-            Credits land in the customer's wallet immediately and auto-apply to their next booking.
+            Credits land in the customer's wallet immediately, auto-apply to their next booking, and the customer is emailed + texted that the credit was applied.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
@@ -1027,9 +1029,10 @@ function GrantCreditDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin_grant">Admin grant</SelectItem>
-                <SelectItem value="service_recovery">Service recovery</SelectItem>
-                <SelectItem value="referral_reward">Referral reward</SelectItem>
-                <SelectItem value="goodwill">Goodwill</SelectItem>
+                <SelectItem value="refund_credit">Refund as credit</SelectItem>
+                <SelectItem value="promo">Promo</SelectItem>
+                <SelectItem value="perk">Loyalty perk / goodwill</SelectItem>
+                <SelectItem value="adjustment">Service recovery / adjustment</SelectItem>
               </SelectContent>
             </Select>
           </div>
