@@ -164,6 +164,11 @@ function ScheduleRow({
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            {(s.membership_plan || s.uses_credit) && (
+              <Badge className="text-[11px] bg-violet-100 text-violet-700">
+                {s.membership_plan ? `${s.membership_plan} member` : "member credit"}
+              </Badge>
+            )}
             <Badge className={cn("text-[11px]", s.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600")}>
               {s.active ? "Active" : "Paused"}
             </Badge>
