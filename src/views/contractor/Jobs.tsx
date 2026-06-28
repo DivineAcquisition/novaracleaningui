@@ -25,7 +25,9 @@ import {
   RiCalendarCheckLine,
   RiSparklingLine,
   RiExternalLinkLine,
+  RiUserSharedLine,
 } from "@remixicon/react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, isFuture, isPast } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -86,6 +88,9 @@ export default function ContractorJobs() {
   const [cleanerName, setCleanerName] = useState("");
   const [cleanerId, setCleanerId] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [crewMembers, setCrewMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  const [handoffJobId, setHandoffJobId] = useState<string | null>(null);
+  const [handoffTarget, setHandoffTarget] = useState<string>("");
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,9 +107,8 @@ export default function ContractorJobs() {
         ? lookupValue.replace(/\D/g, "").replace(/^1/, "")
         : lookupValue.trim().toLowerCase();
 
-      const { data: cleaner, error: cleanerErr } = await supabase
-        .from("cleaners")
-        .select("id, first_name, last_name, email, phone")
+      const { data: cleaner, error: cleanerErr } = await (supabase.from as any)("cleaners")
+        .select("id, first_name, last_name, email, phone, crew_id")
         .ilike(filterColumn, lookupType === "phone" ? `%${cleanValue.slice(-10)}%` : cleanValue)
         .maybeSingle();
 
@@ -118,6 +122,20 @@ export default function ContractorJobs() {
 
       setCleanerName(`${cleaner.first_name} ${cleaner.last_name}`);
       setCleanerId(cleaner.id);
+
+      // Load crewmates (other active cleaners in the same crew) so the
+      // contractor can hand a clean off without calling the office.
+      if ((cleaner as { crew_id?: string | null }).crew_id) {
+        const { data: mates } = await (supabase.from as any)("cleaners")
+          .select("id, first_name, last_name")
+          .eq("crew_id", (cleaner as { crew_id: string }).crew_id)
+          .eq("status", "active")
+          .neq("id", cleaner.id)
+          .order("first_name");
+        setCrewMembers((mates as any[]) || []);
+      } else {
+        setCrewMembers([]);
+      }
 
       const { data: bookingJobs, error: jobErr } = await supabase
         .from("bookings")
@@ -212,6 +230,30 @@ export default function ContractorJobs() {
     }
   };
 
+  const handleHandoff = async (job: Job) => {
+    if (!handoffTarget) {
+      toast.error("Pick a crew member to hand this clean to.");
+      return;
+    }
+    setActionLoading(`handoff-${job.id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("reassign-booking-cleaner", {
+        body: { bookingId: job.booking_id || job.id, fromCleanerId: cleanerId, toCleanerId: handoffTarget },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const mate = crewMembers.find((m) => m.id === handoffTarget);
+      toast.success(`Clean handed off to ${mate ? `${mate.first_name} ${mate.last_name}` : "your crewmate"}.`);
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      setHandoffJobId(null);
+      setHandoffTarget("");
+    } catch (error: any) {
+      toast.error(error.message || "Couldn't hand off the clean");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const getMapsUrl = (job: Job) =>
     `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${job.address}, ${job.city}, ${job.state} ${job.zip_code}`)}`;
 
@@ -229,6 +271,9 @@ export default function ContractorJobs() {
     setCleanerName("");
     setCleanerId("");
     setLookupValue("");
+    setCrewMembers([]);
+    setHandoffJobId(null);
+    setHandoffTarget("");
   };
 
   const upcomingJobs = jobs.filter((j) => isFuture(new Date(j.service_date)) && j.status !== "cancelled" && j.status !== "completed");
@@ -401,7 +446,42 @@ export default function ContractorJobs() {
                               Mark Complete
                             </Button>
                           )}
+
+                          {crewMembers.length > 0 && job.status !== "completed" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-8"
+                              onClick={() => { setHandoffJobId(handoffJobId === job.id ? null : job.id); setHandoffTarget(""); }}
+                            >
+                              <RiUserSharedLine className="w-3.5 h-3.5 mr-1" />
+                              Hand off to crew
+                            </Button>
+                          )}
                         </div>
+
+                        {handoffJobId === job.id && crewMembers.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 p-3">
+                            <span className="text-xs text-muted-foreground">Give this clean to:</span>
+                            <Select value={handoffTarget} onValueChange={setHandoffTarget}>
+                              <SelectTrigger className="h-8 w-[180px] text-xs"><SelectValue placeholder="Pick a crewmate" /></SelectTrigger>
+                              <SelectContent>
+                                {crewMembers.map((m) => (
+                                  <SelectItem key={m.id} value={m.id}>{`${m.first_name} ${m.last_name}`.trim()}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              className="text-xs h-8 bg-blue-600 hover:bg-blue-700"
+                              onClick={() => handleHandoff(job)}
+                              disabled={!handoffTarget || actionLoading === `handoff-${job.id}`}
+                            >
+                              {actionLoading === `handoff-${job.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" /> : <RiUserSharedLine className="w-3.5 h-3.5 mr-1" />}
+                              Confirm hand-off
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );

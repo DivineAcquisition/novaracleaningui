@@ -296,5 +296,14 @@ verify_jwt = false
 [functions.send-appointment-reminders]
 verify_jwt = false
 
+# Day-of (~30 min before) reminder sweep (invoked by pg_cron with no JWT).
+[functions.send-day-of-reminders]
+verify_jwt = false
+
+# Contractor "hand the clean to my crew" re-assignment. Public contractor
+# portal has no JWT — fromCleanerId is verified against bookings.cleaner_id.
+[functions.reassign-booking-cleaner]
+verify_jwt = false
+
 
 
