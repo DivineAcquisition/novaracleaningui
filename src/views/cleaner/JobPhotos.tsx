@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import imageCompression from "browser-image-compression";
 import {
   RiCameraLine,
   RiCheckLine,
@@ -44,6 +45,28 @@ interface BookingInfo {
 }
 
 const BUCKET = "cleaner-job-photos";
+
+// Shrink large phone photos before upload so they actually go through on a
+// flaky cellular connection in the field. Always falls back to the original
+// file if compression fails (e.g. an exotic HEIC the browser can't decode) so
+// it can never block an upload.
+async function prepareForUpload(
+  file: File,
+): Promise<{ blob: Blob; ext: string; contentType: string }> {
+  try {
+    const compressed = await imageCompression(file, {
+      maxSizeMB: 1.5,
+      maxWidthOrHeight: 1600,
+      useWebWorker: true,
+      fileType: "image/jpeg",
+      initialQuality: 0.8,
+    });
+    return { blob: compressed, ext: "jpg", contentType: "image/jpeg" };
+  } catch {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    return { blob: file, ext, contentType: file.type || "image/jpeg" };
+  }
+}
 
 export default function CleanerJobPhotosPage() {
   const params = useParams<{ token: string }>();
@@ -94,13 +117,13 @@ export default function CleanerJobPhotosPage() {
     const added: string[] = [];
     try {
       for (const file of Array.from(files)) {
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const { blob, ext, contentType } = await prepareForUpload(file);
         const key = `bookings/${info.bookingId}/${kind}/${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 8)}.${ext}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(key, file, {
+        const { error } = await supabase.storage.from(BUCKET).upload(key, blob, {
           cacheControl: "3600",
-          contentType: file.type || "image/jpeg",
+          contentType,
           upsert: false,
         });
         if (error) throw error;
@@ -314,8 +337,11 @@ function PhotoGroup({
           type="file"
           accept="image/*"
           multiple
-          capture="environment"
-          onChange={(e) => onAdd(e.target.files)}
+          onChange={(e) => {
+            onAdd(e.target.files);
+            // Reset so picking the same file again still fires onChange.
+            e.target.value = "";
+          }}
           className="hidden"
         />
       </label>
