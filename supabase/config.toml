@@ -305,5 +305,11 @@ verify_jwt = false
 [functions.reassign-booking-cleaner]
 verify_jwt = false
 
+# Cleaner "mark complete" → moves booking to pending_review for admin review.
+# Public contractor portal has no JWT; cleanerId is verified against
+# bookings.cleaner_id inside the function (admin/va via JWT also allowed).
+[functions.cleaner-mark-complete]
+verify_jwt = false
+
 
 

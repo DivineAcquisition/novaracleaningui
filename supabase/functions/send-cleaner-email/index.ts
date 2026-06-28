@@ -92,6 +92,25 @@ serve(async (req) => {
         );
         break;
 
+      case "payout_pending": {
+        const amountStr = `$${((Number(data.amount) || 0) / 100).toFixed(2)}`;
+        const pctStr = data.pctPaid != null ? `${data.pctPaid}%` : null;
+        subject = `Payout pending — ${amountStr}`;
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Your payout is pending 💸</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${data.cleanerFirstName || "there"}, nice work on ${data.bookingLabel || "your recent job"}${data.serviceDate ? ` (${data.serviceDate})` : ""}.</p>
+            <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
+              <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#047857">Payout pending</div>
+              <div style="font-size:32px;font-weight:800;color:#065f46;margin-top:4px">${amountStr}</div>
+              ${pctStr ? `<div style="font-size:12px;color:#047857;margin-top:4px">${pctStr} of job revenue</div>` : ""}
+            </div>
+            <p style="margin:0 0 8px;color:#475569;font-size:14px">We've queued this payout and it's on its way to your account. You'll get a confirmation once it's sent.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       case "credentials":
         subject = "Your Novara Cleaning Account - Login Credentials";
         html = await renderAsync(

@@ -53,6 +53,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SimplePayoutTab from "@/components/admin/payroll/SimplePayoutTab";
 import JobsTab from "@/components/admin/payroll/JobsTab";
 import RunPayrollTab from "@/components/admin/payroll/RunPayrollTab";
 import AutoPayrollTab from "@/components/admin/payroll/AutoPayrollTab";
@@ -123,8 +124,9 @@ export default function AdminPayroll() {
           Enter completed jobs, build weekly runs, and pay 1099 cleaners via Stripe Connect.
         </p>
       </div>
-      <Tabs defaultValue="jobs" className="space-y-4">
+      <Tabs defaultValue="payout" className="space-y-4">
         <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="payout">Custom Payout</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
           <TabsTrigger value="auto">Auto Payroll</TabsTrigger>
           <TabsTrigger value="run">Run Payroll</TabsTrigger>
@@ -132,6 +134,7 @@ export default function AdminPayroll() {
           <TabsTrigger value="cleaner">Cleaner Detail</TabsTrigger>
           <TabsTrigger value="overview">Connect Overview</TabsTrigger>
         </TabsList>
+        <TabsContent value="payout"><SimplePayoutTab /></TabsContent>
         <TabsContent value="jobs"><JobsTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="auto"><AutoPayrollTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="run"><RunPayrollTab cleaners={cleaners} /></TabsContent>
