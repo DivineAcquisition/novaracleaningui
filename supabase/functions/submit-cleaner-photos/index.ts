@@ -91,7 +91,16 @@ serve(async (req) => {
     // ─── Open before/after gallery for the customer ──────────────────────
     // Mint a single-use view token (idempotent) and text/email the customer
     // a login-free link to see the proof-of-work photos. We send exactly
-    // once (photo_view_sent_at gate) even if the cleaner submits again.
+    // once even if the cleaner submits photos again (multiple batches) or the
+    // browser fires the request more than once.
+    //
+    // The "send once" guarantee relies on an ATOMIC claim of photo_view_sent_at
+    // rather than the read-then-write check that used to live here: previously
+    // we read photo_view_sent_at in the initial SELECT and only stamped it after
+    // sending, so two near-simultaneous submissions both saw null and both
+    // texted the customer. Now we stamp the row conditionally (only when it is
+    // still null) and use the returned row count to decide whether *this*
+    // invocation won the race and is therefore responsible for sending.
     let galleryUrl: string | null = null;
     try {
       let viewToken = (booking as { photo_view_token?: string | null }).photo_view_token || null;
@@ -106,8 +115,18 @@ serve(async (req) => {
       }
       galleryUrl = `https://try.novaracleaning.com/photos/${viewToken}`;
 
-      const alreadySent = !!(booking as { photo_view_sent_at?: string | null }).photo_view_sent_at;
-      if (!alreadySent) {
+      // Atomically claim the single send. Only the invocation that flips
+      // photo_view_sent_at from NULL → now() gets a row back here; all other
+      // concurrent or repeat submissions get an empty result and skip sending.
+      const { data: claimed } = await supabase
+        .from("bookings")
+        .update({ photo_view_sent_at: new Date().toISOString() })
+        .eq("id", booking.id)
+        .is("photo_view_sent_at", null)
+        .select("id");
+
+      const wonClaim = Array.isArray(claimed) && claimed.length > 0;
+      if (wonClaim) {
         const first = (booking as { first_name?: string | null }).first_name || "there";
         const phone = (booking as { phone?: string | null }).phone || null;
         const email = (booking as { email?: string | null }).email || null;
@@ -136,11 +155,6 @@ serve(async (req) => {
             },
           }).then(() => undefined).catch(() => undefined);
         }
-
-        await supabase
-          .from("bookings")
-          .update({ photo_view_sent_at: new Date().toISOString() })
-          .eq("id", booking.id);
       }
     } catch (notifyErr) {
       console.warn("[submit-cleaner-photos] gallery notify failed (non-blocking)", (notifyErr as Error).message);
