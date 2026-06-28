@@ -497,7 +497,7 @@ export default function ContractorJobs() {
             {/* Completed Jobs */}
             {completedJobs.length > 0 && (
               <div className="space-y-3">
-                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Completed ({completedJobs.length})</h2>
+                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Completed &amp; submitted ({completedJobs.length})</h2>
                 {completedJobs.slice(0, 10).map((job) => {
                   const photoCount = (job.before_photos?.length || 0) + (job.after_photos?.length || 0);
                   const uploadHref = job.photo_upload_token ? `${PHOTO_UPLOAD_BASE}${job.photo_upload_token}` : null;
