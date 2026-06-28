@@ -78,7 +78,7 @@ serve(async (req) => {
     const { data: bookings, error: fetchError } = await supabase
       .from("bookings")
       .select(
-        "id, booking_number, phone, first_name, last_name, address, city, service_type, service_date, time_slot, arrival_window, status, cleaner_id, day_of_reminder_sent_at",
+        "id, booking_number, phone, first_name, last_name, address, city, service_type, service_date, time_slot, arrival_window, status, cleaner_id, day_of_reminder_sent_at, photo_upload_token, before_photo_link_sent_at",
       )
       .in("status", ELIGIBLE_STATUSES)
       .eq("service_date", targetDate)
@@ -120,7 +120,7 @@ serve(async (req) => {
         results.skipped_no_phone++;
       }
 
-      // ── Contractor text ──
+      // ── Contractor text (+ BEFORE-photos link) ──
       if (booking.cleaner_id) {
         const { data: cleaner } = await supabase
           .from("cleaners")
@@ -128,13 +128,32 @@ serve(async (req) => {
           .eq("id", booking.cleaner_id)
           .maybeSingle();
         if (cleaner?.phone) {
+          // Mint the photo-upload token (idempotent) so the cleaner can submit
+          // BEFORE photos when they arrive. The same token later carries the
+          // AFTER-photos link at completion.
+          let token = booking.photo_upload_token as string | null;
+          if (!token) {
+            const bytes = new Uint8Array(20);
+            crypto.getRandomValues(bytes);
+            token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+            await supabase.from("bookings").update({ photo_upload_token: token }).eq("id", booking.id);
+          }
+          const beforeLink = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}?phase=before`;
           const msg =
             `Novara reminder: your clean for ${customerName} starts in about 30 minutes ` +
             `(${whenLabel}). ${booking.address || ""}${booking.city ? `, ${booking.city}` : ""}. ` +
-            `Please head over and check in on arrival.`;
-          const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg.slice(0, 480), type: "reminder" });
+            `Please head over and check in on arrival. When you get there, upload your BEFORE photos here:\n${beforeLink}`;
+          const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg, type: "reminder" });
           anySent = anySent || ok;
-          if (!ok) logStep("Cleaner SMS failed", { bookingId: booking.id });
+          if (ok) {
+            await supabase
+              .from("bookings")
+              .update({ before_photo_link_sent_at: new Date().toISOString() })
+              .eq("id", booking.id)
+              .is("before_photo_link_sent_at", null);
+          } else {
+            logStep("Cleaner SMS failed", { bookingId: booking.id });
+          }
         }
       }
 

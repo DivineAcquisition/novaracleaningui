@@ -438,6 +438,17 @@ export default function ContractorJobs() {
                             <RiCalendarCheckLine className="w-3.5 h-3.5 mr-1" />Calendar
                           </Button>
 
+                          {job.photo_upload_token && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-8 border-emerald-200 text-emerald-700"
+                              onClick={() => window.open(`${PHOTO_UPLOAD_BASE}${job.photo_upload_token}?phase=before`, "_blank")}
+                            >
+                              <RiSparklingLine className="w-3.5 h-3.5 mr-1" />Before photos
+                            </Button>
+                          )}
+
                           {!isActive && job.status !== "completed" && (
                             <Button size="sm" className="text-xs h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handleCheckIn(job)} disabled={loading}>
                               {loading ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" /> : <RiPlayCircleLine className="w-3.5 h-3.5 mr-1" />}
@@ -500,7 +511,7 @@ export default function ContractorJobs() {
                 <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Completed &amp; submitted ({completedJobs.length})</h2>
                 {completedJobs.slice(0, 10).map((job) => {
                   const photoCount = (job.before_photos?.length || 0) + (job.after_photos?.length || 0);
-                  const uploadHref = job.photo_upload_token ? `${PHOTO_UPLOAD_BASE}${job.photo_upload_token}` : null;
+                  const uploadHref = job.photo_upload_token ? `${PHOTO_UPLOAD_BASE}${job.photo_upload_token}?phase=after` : null;
                   const viewHref = job.photo_view_token ? `${PHOTO_VIEW_BASE}${job.photo_view_token}` : null;
                   return (
                     <Card key={job.id} className="bg-muted/20 border-border/60 shadow-none">

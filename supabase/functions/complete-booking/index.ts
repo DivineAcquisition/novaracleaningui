@@ -517,25 +517,26 @@ serve(async (req) => {
               .eq("id", bookingId);
           }
           photoUploadToken = token;
-          photoUploadUrl = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}`;
+          // AFTER-photos link (before photos are requested before the job via
+          // the day-of reminder).
+          photoUploadUrl = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}?phase=after`;
 
-          // Text the cleaner the upload link (best-effort). The send is gated
-          // by an ATOMIC claim on photo_upload_sent_at so it fires exactly once
-          // per booking even when complete-booking runs more than once (e.g. a
-          // cleaner already triggered the request via cleaner-mark-complete and
-          // an admin later re-runs the full completion here, or the endpoint is
-          // hit twice). Only the call that flips photo_upload_sent_at from NULL
-          // gets a row back and is responsible for texting.
+          // Text the cleaner the AFTER-photo link (best-effort). The send is
+          // gated by an ATOMIC claim on after_photo_link_sent_at so it fires
+          // exactly once per booking even when complete-booking runs more than
+          // once (e.g. a cleaner already triggered it via cleaner-mark-complete
+          // and an admin later re-runs the full completion here, or the endpoint
+          // is hit twice). Only the call that flips it from NULL texts.
           if (cleaner?.phone) {
             const { data: claimedPhoto } = await supabase
               .from("bookings")
-              .update({ photo_upload_sent_at: new Date().toISOString() })
+              .update({ after_photo_link_sent_at: new Date().toISOString() })
               .eq("id", bookingId)
-              .is("photo_upload_sent_at", null)
+              .is("after_photo_link_sent_at", null)
               .select("id");
             const shouldSendPhotoSms = Array.isArray(claimedPhoto) && claimedPhoto.length > 0;
             if (shouldSendPhotoSms) {
-              const msg = `Novara: Job marked completed. Please upload your before & after photos here so we can wrap this up and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
+              const msg = `Novara: Job marked completed. Please upload your AFTER photos here so we can wrap this up and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
               await supabase.functions.invoke("send-ghl-sms", {
                 body: {
                   phone: cleaner.phone,
