@@ -36,6 +36,20 @@ const ADD_ON_LABELS: Record<string, string> = {
   fridge: 'Inside Fridge',
   oven: 'Inside Oven',
   windows: 'Interior Windows',
+  laundry: 'Laundry — wash & fold',
+  changeLinens: 'Change bed linens',
+  dishes: 'Dishes & kitchen cleanup',
+  baseboards: 'Baseboards (hand-wiped)',
+  blinds: 'Blinds & shutters',
+  cabinets: 'Inside cabinets',
+  walls: 'Spot wall washing',
+  ceilingFans: 'Ceiling fans',
+  microwave: 'Inside microwave',
+  dishwasher: 'Inside dishwasher',
+  garage: 'Garage sweep-out',
+  patio: 'Patio / balcony',
+  petHair: 'Heavy pet-hair removal',
+  closets: 'Inside closets / tidy',
 };
 
 export const BookingModification = ({ bookingData }: BookingModificationProps) => {

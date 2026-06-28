@@ -38,6 +38,27 @@ function uuidOrNull(value: unknown): string | null {
   return typeof value === "string" && UUID_RE.test(value) ? value : null;
 }
 
+// Has the customer actually paid the deposit yet? Internal (book-as-va)
+// bookings are created as status="confirmed" the moment a deposit invoice
+// is SENT — long before the customer pays it — so status alone is not a
+// reliable signal. A deposit is considered settled when money has cleared
+// (payment_received_at / balance_charged_at / final_charge_cents), the
+// booking was paid via Stripe Checkout (status="booked"), the job is
+// already completed, or there is simply no deposit to collect.
+// deno-lint-ignore no-explicit-any
+function depositSettled(booking: any): boolean {
+  const depositCents = Number(booking?.deposit_cents || 0);
+  if (depositCents <= 0) return true;
+  if (booking?.payment_received_at) return true;
+  if (booking?.balance_charged_at) return true;
+  if (Number(booking?.final_charge_cents || 0) > 0) return true;
+  if (String(booking?.payment_status || "").toLowerCase() === "paid") return true;
+  if (["booked", "assigned", "completed"].includes(String(booking?.status || "").toLowerCase())) {
+    return true;
+  }
+  return false;
+}
+
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -231,6 +252,19 @@ serve(async (req) => {
     const shouldNotify = body?.notify !== false;
 
     if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–3)" }, 400);
+
+    // Deposit gate: don't dispatch a cleaner to a job the customer hasn't
+    // paid for yet (common on internal/VA bookings whose deposit invoice is
+    // still unpaid). Admins can override with allowUnpaid for cash/comp jobs.
+    const allowUnpaid = body?.allowUnpaid === true;
+    if (!allowUnpaid && !depositSettled(booking)) {
+      return json({
+        error:
+          "Customer hasn't paid the deposit yet. Wait for the deposit to clear " +
+          "before assigning a cleaner, or re-submit with allowUnpaid to override.",
+        code: "deposit_unpaid",
+      }, 402);
+    }
 
     const { data: cleaners } = await admin
       .from("cleaners")

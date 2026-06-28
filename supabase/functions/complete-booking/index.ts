@@ -339,6 +339,8 @@ serve(async (req) => {
                         bookingNumber: String(booking.booking_number ?? ""),
                         chargeType: "completion_overage",
                       },
+                    }, {
+                      idempotencyKey: `overage-${bookingId}-${overageCents}`,
                     });
                     logStep("Supplemental overage charged", {
                       paymentIntentId: supplemental.id,
@@ -405,6 +407,13 @@ serve(async (req) => {
               bookingNumber: String(booking.booking_number ?? ""),
               chargeType: "balance_auto_charge",
             },
+          }, {
+            // Idempotency key keyed on booking + amount so a duplicate /
+            // concurrent invocation (double-click "Mark complete", cron
+            // overlap, retry) returns the SAME PaymentIntent instead of
+            // charging the card again. A legitimately different balance
+            // (after a service adjustment) uses a new key.
+            idempotencyKey: `balance-${bookingId}-${remainingCents}`,
           });
 
           await supabase
