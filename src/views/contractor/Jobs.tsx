@@ -73,6 +73,7 @@ function getStatusConfig(status: string) {
     assigned: { label: "Assigned", class: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
     accepted: { label: "Accepted", class: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
     in_progress: { label: "In Progress", class: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
+    pending_review: { label: "Submitted — under review", class: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
     completed: { label: "Completed", class: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
     cancelled: { label: "Cancelled", class: "bg-red-50 text-red-600 border-red-200", dot: "bg-red-500" },
   };
@@ -206,22 +207,24 @@ export default function ContractorJobs() {
   const handleComplete = async (job: Job) => {
     setActionLoading(job.id);
     try {
-      // The public /contractor/jobs portal has no JWT — `complete-booking`
-      // therefore needs `cleanerId` in the body so it can verify the
-      // caller matches `bookings.cleaner_id`. Without it the function
-      // returns "Unauthorized" (the symptom previously reported as
-      // "Failed to complete job" with no useful error in the toast).
-      const response = await supabase.functions.invoke("complete-booking", {
+      // Cleaners no longer trigger the full completion flow (charge + payout +
+      // customer comms). `cleaner-mark-complete` moves the job into
+      // `pending_review` for the office to finalize and sends the cleaner their
+      // one-time photo-upload link. The public /contractor/jobs portal has no
+      // JWT, so we pass `cleanerId` for the function to verify against
+      // bookings.cleaner_id.
+      const response = await supabase.functions.invoke("cleaner-mark-complete", {
         body: {
           bookingId: job.booking_id || job.id,
           cleanerId,
         },
       });
       if (response.error) throw response.error;
+      if ((response.data as { error?: string })?.error) throw new Error((response.data as { error?: string }).error);
       const uploadToken = (response.data as { photoUploadToken?: string | null })?.photoUploadToken || null;
-      toast.success("Job marked as completed! Now add your before & after photos to release your payout.");
+      toast.success("Marked complete and sent to the office for review. Add your before & after photos to release your payout.");
       setJobs((prev) =>
-        prev.map((j) => j.id === job.id ? { ...j, status: "completed", photo_upload_token: uploadToken ?? j.photo_upload_token } : j)
+        prev.map((j) => j.id === job.id ? { ...j, status: "pending_review", photo_upload_token: uploadToken ?? j.photo_upload_token } : j)
       );
     } catch (error: any) {
       toast.error(error.message || "Failed to complete job");
@@ -276,8 +279,10 @@ export default function ContractorJobs() {
     setHandoffTarget("");
   };
 
-  const upcomingJobs = jobs.filter((j) => isFuture(new Date(j.service_date)) && j.status !== "cancelled" && j.status !== "completed");
-  const completedJobs = jobs.filter((j) => j.status === "completed");
+  const upcomingJobs = jobs.filter((j) => isFuture(new Date(j.service_date)) && j.status !== "cancelled" && j.status !== "completed" && j.status !== "pending_review");
+  // "Submitted" (pending_review) and fully completed jobs both live in the
+  // history section so the cleaner can still attach photos after marking done.
+  const completedJobs = jobs.filter((j) => j.status === "completed" || j.status === "pending_review");
   const cancelledJobs = jobs.filter((j) => j.status === "cancelled");
 
   return (
@@ -512,9 +517,15 @@ export default function ContractorJobs() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                              <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Done
-                            </Badge>
+                            {job.status === "pending_review" ? (
+                              <Badge variant="outline" className="text-[10px] bg-violet-50 text-violet-700 border-violet-200">
+                                <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Under review
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Done
+                              </Badge>
+                            )}
                             <span className="text-sm font-semibold text-emerald-600">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.35)) / 100).toFixed(0)}</span>
                           </div>
                         </div>

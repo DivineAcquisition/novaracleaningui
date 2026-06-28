@@ -229,15 +229,15 @@ export default function MobileDashboard() {
       toast.error("Couldn't find the booking for this job. Pull to refresh and try again.");
       return;
     }
-    if (!confirm("Mark this job complete? This notifies the office and triggers payout.")) return;
+    if (!confirm("Mark this job complete? This notifies the office for review and prompts you to upload photos.")) return;
     setActionLoading(`complete-${job.id}`);
     try {
-      const { data, error } = await supabase.functions.invoke("complete-booking", {
+      const { data, error } = await supabase.functions.invoke("cleaner-mark-complete", {
         body: { bookingId: job.bookingId },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Job marked complete.");
+      toast.success("Marked complete — sent to the office for review.");
       await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Couldn't complete job");

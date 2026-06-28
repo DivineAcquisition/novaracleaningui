@@ -79,14 +79,20 @@ const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-violet-100 text-violet-900 border-violet-200",
   assigned: "bg-indigo-100 text-indigo-900 border-indigo-200",
   in_progress: "bg-blue-100 text-blue-900 border-blue-200",
+  pending_review: "bg-amber-100 text-amber-900 border-amber-300",
   completed: "bg-blue-100 text-blue-900 border-blue-200",
   cancelled: "bg-slate-100 text-slate-700 border-slate-200",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  pending_review: "Cleaner done · review",
 };
 
 const STATUS_OPTIONS = [
   "all",
   "confirmed",
   "assigned",
+  "pending_review",
   "completed",
   "cancelled",
   "pending_payment",
@@ -227,7 +233,7 @@ export default function AdminBookings() {
               <SelectContent>
                 {STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {s === "all" ? "All statuses" : s.replaceAll("_", " ")}
+                    {s === "all" ? "All statuses" : (STATUS_LABELS[s] ?? s.replaceAll("_", " "))}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -313,7 +319,7 @@ export default function AdminBookings() {
                         variant="outline"
                         className={cn("text-[10px] capitalize border", STATUS_COLORS[statusKey] ?? "")}
                       >
-                        {(b.status || "—").replaceAll("_", " ")}
+                        {STATUS_LABELS[b.status || ""] ?? (b.status || "—").replaceAll("_", " ")}
                       </Badge>
                     </div>
                   </button>
@@ -680,7 +686,7 @@ function BookingSheet({
   };
 
   const markCompleted = async () => {
-    if (!confirm("Mark this booking complete? This triggers final charge + payout.")) return;
+    if (!confirm("Finalize this booking? This triggers the final charge + cleaner payout + customer comms.")) return;
     setWorking("complete");
     try {
       const { data, error } = await supabase.functions.invoke("complete-booking", {
@@ -739,7 +745,7 @@ function BookingSheet({
                 <span className="text-right tabular-nums">{fmtMoney(remainingCents)}</span>
                 <span className="text-slate-500">Status</span>
                 <span className="text-right capitalize">
-                  {(booking.status || "—").replaceAll("_", " ")}
+                  {STATUS_LABELS[booking.status || ""] ?? (booking.status || "—").replaceAll("_", " ")}
                 </span>
               </CardContent>
             </Card>
@@ -875,13 +881,22 @@ function BookingSheet({
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-1.5">
                     <RiUserSmileLine className="w-4 h-4 text-violet-700" />
-                    Mark complete
+                    {booking.status === "pending_review" ? "Finalize completion" : "Mark complete"}
                   </CardTitle>
                   <CardDescription>
-                    Triggers final charge + cleaner payout. Use when the cleaner forgot to mark it.
+                    {booking.status === "pending_review"
+                      ? "The cleaner marked this job done and uploaded (or was asked to upload) photos. Finalizing triggers the final charge + cleaner payout + customer comms."
+                      : "Triggers final charge + cleaner payout. Use when the cleaner forgot to mark it."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {booking.status === "pending_review" && (
+                    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      Cleaner marked this complete — awaiting your review. Check the
+                      uploaded photos, then finalize to charge the balance and release
+                      the payout.
+                    </div>
+                  )}
                   <Button
                     onClick={markCompleted}
                     disabled={working === "complete"}
@@ -895,7 +910,7 @@ function BookingSheet({
                     ) : (
                       <>
                         <RiCheckLine className="w-4 h-4 mr-2" />
-                        Mark booking completed
+                        {booking.status === "pending_review" ? "Finalize & complete booking" : "Mark booking completed"}
                       </>
                     )}
                   </Button>

@@ -440,12 +440,14 @@ export default function CleanerDashboard() {
     }
     setActionLoading(`complete-${job.id}`);
     try {
-      const { data, error } = await supabase.functions.invoke("complete-booking", {
+      // Cleaners submit the job for office review (cleaner-mark-complete) —
+      // the full charge + payout flow runs when an admin finalizes it.
+      const { data, error } = await supabase.functions.invoke("cleaner-mark-complete", {
         body: { bookingId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success("Job marked complete!");
+      toast.success("Marked complete — sent to the office. Upload your before & after photos to release your payout.");
       await fetchJobs(profile.id);
     } catch (err: any) {
       toast.error(err?.message || "Failed to mark complete");
