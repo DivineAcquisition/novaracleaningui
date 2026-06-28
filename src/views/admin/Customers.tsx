@@ -323,14 +323,14 @@ function CustomerSheet({
           .limit(50),
         supabase.from("customer_credits" as any)
           .select("id,amount_cents,source,status,reason,created_at")
-          .eq("customer_id", c.id)
+          .ilike("email", c.email || "")
           .order("created_at", { ascending: false })
           .limit(30),
-        supabase.rpc("get_customer_credit_balance" as any, { _customer_id: c.id }),
+        supabase.rpc("get_customer_credit_balance_by_email" as any, { _email: c.email || "" }),
       ]);
       setBookings((bk.data as unknown as BookingRow[]) || []);
       setWallet((wl.data as unknown as WalletRow[]) || []);
-      const b = (bal.data as any[])?.[0];
+      const b = bal.data as any;
       setBalance(
         b
           ? {

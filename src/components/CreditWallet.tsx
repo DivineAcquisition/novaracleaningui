@@ -43,34 +43,32 @@ export function CreditWallet({ email }: Props) {
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<CreditBalance | null>(null);
   const [rows, setRows] = useState<CreditRow[]>([]);
-  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [hasWallet, setHasWallet] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!email) return;
+      const cleanEmail = email?.trim();
+      if (!cleanEmail) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
       try {
-        const { data: cust } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("email", email)
-          .maybeSingle();
-        if (!cust?.id) {
-          if (!cancelled) setLoading(false);
-          return;
-        }
-        setCustomerId(cust.id);
+        // Resolve credits by EMAIL (case-insensitive) so the wallet shows up
+        // regardless of which customer row the credit was granted against.
         const [{ data: bal }, { data: history }] = await Promise.all([
-          (supabase.rpc as any)("get_customer_credit_balance", { _customer_id: cust.id }),
+          (supabase.rpc as any)("get_customer_credit_balance_by_email", { _email: cleanEmail }),
           (supabase.from as any)("customer_credits")
             .select("id, amount_cents, source, status, reason, created_at, applied_at, expires_at")
-            .eq("customer_id", cust.id)
+            .ilike("email", cleanEmail)
             .order("created_at", { ascending: false })
             .limit(20),
         ]);
         if (cancelled) return;
-        setBalance((bal as unknown as CreditBalance) || null);
+        const b = (bal as unknown as CreditBalance) || null;
+        setBalance(b);
         setRows((history as unknown as CreditRow[]) || []);
+        setHasWallet((b?.lifetime_granted_cents ?? 0) > 0);
       } catch (e) {
         console.error("[CreditWallet] load error", e);
       } finally {
@@ -95,7 +93,7 @@ export function CreditWallet({ email }: Props) {
 
   // Don't show the section to customers with no history yet — they'll
   // see their first credit when a referral redeems or admin grants one.
-  if (!customerId || (balance?.lifetime_granted_cents ?? 0) === 0) {
+  if (!hasWallet || (balance?.lifetime_granted_cents ?? 0) === 0) {
     return null;
   }
 

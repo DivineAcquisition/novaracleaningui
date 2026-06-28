@@ -146,18 +146,12 @@ export default function BookingCheckout() {
       }
       setWalletBalanceReady(false);
       try {
-        const { data: cust } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("email", email)
-          .maybeSingle();
-        if (!cust?.id) {
-          setWalletBalanceCents(0);
-          return;
-        }
+        // Look up the wallet balance by EMAIL (case-insensitive) so granted
+        // credit shows in the live booking flow as long as the email matches —
+        // independent of which customer row the credit was attached to.
         const { data: bal } = await (supabase.rpc as any)(
-          "get_customer_credit_balance",
-          { _customer_id: cust.id },
+          "get_customer_credit_balance_by_email",
+          { _email: email },
         );
         if (cancelled) return;
         const cents = Number((bal as { balance_cents?: number } | null)?.balance_cents || 0);

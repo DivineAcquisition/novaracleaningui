@@ -202,18 +202,22 @@ serve(async (req) => {
     try {
       const requestedWallet = Math.max(0, Math.round(Number(bookingData.applyWalletCents || 0)));
       if (requestedWallet > 0 && bookingData.email) {
-        const { data: walletCustomer } = await supabaseClient
-          .from("customers")
-          .select("id")
-          .eq("email", String(bookingData.email).toLowerCase())
-          .maybeSingle();
-        if (walletCustomer?.id) {
-          walletCustomerId = walletCustomer.id;
-          const { data: balanceData } = await supabaseClient.rpc(
-            "get_customer_credit_balance",
-            { _customer_id: walletCustomer.id },
-          );
-          const available = Number((balanceData as { balance_cents?: number })?.balance_cents || 0);
+        // Reserve wallet credit by EMAIL (case-insensitive) so the credit is
+        // honored whenever the booking email matches the credited customer —
+        // even if no exact customer row is resolved here. The capture-time
+        // deduction (auto_apply_wallet_credit_on_confirm) is also email-based.
+        const { data: balanceData } = await supabaseClient.rpc(
+          "get_customer_credit_balance_by_email",
+          { _email: String(bookingData.email) },
+        );
+        const available = Number((balanceData as { balance_cents?: number })?.balance_cents || 0);
+        if (available > 0) {
+          const { data: walletCustomers } = await supabaseClient
+            .from("customers")
+            .select("id")
+            .ilike("email", String(bookingData.email).trim())
+            .limit(1);
+          walletCustomerId = walletCustomers?.[0]?.id || null;
           const pricedSoFar = Math.max(0, subtotal - membershipDiscount - newCustomerDiscount - creditCoverage - referralDiscountCents - promoDiscountCents);
           walletCreditCents = Math.min(requestedWallet, available, pricedSoFar);
           logStep("Wallet credit reserved", { requested: requestedWallet, available, applied: walletCreditCents });

@@ -364,18 +364,11 @@ export default function VaBooking() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: cust } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("email", trimmed)
-          .maybeSingle();
-        if (cancelled || !cust?.id) {
-          if (!cancelled) setWalletCreditCents(0);
-          return;
-        }
+        // Email-based balance so admin-granted credit shows during VA booking
+        // as long as the email matches the credited customer.
         const { data: bal } = await (supabase.rpc as any)(
-          "get_customer_credit_balance",
-          { _customer_id: cust.id },
+          "get_customer_credit_balance_by_email",
+          { _email: trimmed },
         );
         if (cancelled) return;
         const cents = Number(

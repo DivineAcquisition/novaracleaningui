@@ -136,8 +136,8 @@ serve(async (req) => {
         // 'applied' the RPC is a no-op on the spent rows.
         try {
           const reserved = Number((booking as any).applied_credit_cents || 0);
-          const custId = (booking as any).customer_id;
-          if (reserved > 0 && custId) {
+          const bookingEmail = (booking as any).email as string | null;
+          if (reserved > 0 && bookingEmail) {
             // Only spend the credit if no consumed row already exists
             // for this booking (cheap idempotency check).
             const { data: alreadyApplied } = await supabase
@@ -146,9 +146,11 @@ serve(async (req) => {
               .eq('applied_to_booking_id', booking.id)
               .eq('status', 'applied');
             if (!alreadyApplied || alreadyApplied.length === 0) {
+              // Deduct by EMAIL so the spend works even when bookings.customer_id
+              // is a Stripe `cus_…` id (not the credited customer uuid).
               const { data: applyResult } = await supabase.rpc(
-                'apply_customer_credit_to_booking',
-                { _customer_id: custId, _booking_id: booking.id, _max_cents: reserved },
+                'apply_customer_credit_to_booking_by_email',
+                { _email: bookingEmail, _booking_id: booking.id, _max_cents: reserved },
               );
               logStep('Wallet credit applied to booking', { bookingId: booking.id, applyResult });
             }
