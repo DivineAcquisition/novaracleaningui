@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line, RiRefreshLine, RiAlertLine, RiCheckboxCircleFill,
   RiSecurePaymentLine, RiHammerLine, RiCloseCircleLine, RiTimeLine,
-  RiArrowGoBackLine, RiCloseLine,
+  RiArrowGoBackLine, RiCloseLine, RiBankCardLine,
 } from "@remixicon/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { usd, thisWeekMonday, formatPeriod, payPeriodMonday } from "@/lib/payrol
 import {
   type PayrollCleaner, type PreviewLine, type PreviewResult, type ExecuteResult,
   loadPeriodPreview, executePayrollPeriod, buildDraftRuns, updateRunAdjustments, clawbackPayroll,
+  syncStripeStatuses,
 } from "./shared";
 
 const toCents = (dollars: string): number => Math.max(0, Math.round(parseFloat(dollars || "0") * 100) || 0);
@@ -48,6 +49,8 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
   const [savingId, setSavingId] = useState<string | null>(null);
   const [results, setResults] = useState<ExecuteResult | null>(null);
   const [clawbackFor, setClawbackFor] = useState<PreviewLine | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<{ at: Date; ready: number; total: number; notReady: string[] } | null>(null);
 
   const periodOptions = useMemo(() => {
     const opts: string[] = [];
@@ -76,6 +79,32 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
     }
   }, [period]);
   useEffect(() => { void load(); }, [load]);
+
+  // True sync: refresh every active cleaner's LIVE Stripe Connect status into
+  // the DB so the payable/blocked decision reflects Stripe, not stale flags.
+  const runSync = useCallback(async (opts: { silent?: boolean; reload?: boolean } = {}) => {
+    setSyncing(true);
+    try {
+      const res = await syncStripeStatuses();
+      const notReady = res.results.filter((r) => !r.ready).map((r) => r.name);
+      setLastSync({ at: new Date(), ready: res.readyCount, total: res.synced, notReady });
+      if (!opts.silent) {
+        toast.success(
+          `Synced ${res.synced} cleaner(s) from Stripe — ${res.readyCount} payout-ready` +
+          (res.changedCount ? ` · ${res.changedCount} updated` : ""),
+        );
+      }
+      if (opts.reload !== false) await load();
+    } catch (err) {
+      if (!opts.silent) toast.error(err instanceof Error ? err.message : "Stripe sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }, [load]);
+
+  // Auto-sync once on mount so the very first preview is already truthful.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void runSync({ silent: true }); }, []);
 
   const rebuild = async () => {
     setBuilding(true);
@@ -180,6 +209,10 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
             {building ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiHammerLine className="w-4 h-4 mr-1.5" />}
             Rebuild draft
           </Button>
+          <Button variant="outline" onClick={() => void runSync()} disabled={syncing || executing} title="Pull each cleaner's live Stripe Connect status (payouts enabled?) into payroll">
+            {syncing ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiBankCardLine className="w-4 h-4 mr-1.5" />}
+            Sync from Stripe
+          </Button>
           {payableLines.length > 0 && (
             <Button onClick={approveAndPay} disabled={executing || loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {executing ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiSecurePaymentLine className="w-4 h-4 mr-1.5" />}
@@ -191,6 +224,33 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
           </Button>
         </CardContent>
       </Card>
+
+      {/* Stripe Connect sync status */}
+      {(syncing || lastSync) && (
+        <div className={cn(
+          "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-xs",
+          lastSync && lastSync.notReady.length > 0 ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+        )}>
+          <RiBankCardLine className="w-3.5 h-3.5 flex-shrink-0" />
+          {syncing ? (
+            <span>Syncing Stripe Connect status…</span>
+          ) : lastSync ? (
+            <>
+              <span className="font-medium">
+                Stripe synced · {lastSync.ready}/{lastSync.total} payout-ready
+              </span>
+              <span className="text-[11px] opacity-70">
+                {lastSync.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </span>
+              {lastSync.notReady.length > 0 && (
+                <span className="text-[11px]">
+                  Not ready (must finish/re-onboard Stripe): {lastSync.notReady.join(", ")}
+                </span>
+              )}
+            </>
+          ) : null}
+        </div>
+      )}
 
       {/* Totals bar */}
       {totals && (

@@ -240,6 +240,36 @@ export async function buildDraftRuns(period: string): Promise<{ runs: number }> 
   return payrollAction<{ runs: number }>("build_runs", { payPeriod: period });
 }
 
+export interface StripeSyncLine {
+  cleanerId: string;
+  name: string;
+  accessible: boolean;
+  ready: boolean;
+  payouts_enabled: boolean;
+  onboarding_complete: boolean;
+  reason?: string;
+  requirementsDue?: string[];
+}
+export interface StripeSyncResult {
+  success: boolean;
+  synced: number;
+  readyCount: number;
+  changedCount: number;
+  results: StripeSyncLine[];
+}
+
+/** True sync: pull each cleaner's LIVE Stripe Connect status into the DB so
+ *  payroll's payable/blocked decision reflects Stripe reality, not stale flags. */
+export async function syncStripeStatuses(cleanerIds?: string[]): Promise<StripeSyncResult> {
+  const { data, error } = await supabase.functions.invoke("sync-cleaner-stripe-accounts", {
+    body: cleanerIds && cleanerIds.length ? { cleanerIds } : {},
+  });
+  if (error) throw new Error(error.message || "Stripe sync failed");
+  // deno-lint-ignore no-explicit-any
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as StripeSyncResult;
+}
+
 /** Claw back (reverse) part/all of a paid transfer from a contractor's account. */
 export async function clawbackPayroll(
   runId: string,
