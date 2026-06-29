@@ -42,6 +42,14 @@ function json(p: unknown, status = 200) {
 type DB = any;
 
 async function authorize(admin: DB, req: Request): Promise<void> {
+  // Internal callers (cron / other edge functions) may present the shared
+  // CRON_SECRET instead of a user JWT.
+  const cronHeader = req.headers.get("x-cron-secret") || "";
+  if (cronHeader) {
+    const cronSecret = await resolveSecret(admin, "CRON_SECRET");
+    if (cronSecret && cronHeader === cronSecret) return;
+  }
+
   const auth = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!auth) throw new Error("Not signed in.");
   // Internal service-role caller (other edge functions) — allow.
