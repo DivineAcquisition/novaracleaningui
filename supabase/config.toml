@@ -286,6 +286,11 @@ verify_jwt = false
 [functions.customer-recurring-generate]
 verify_jwt = false
 
+# Stripe Connect → payroll "true sync". Admin/VA-gated inside the function;
+# also callable internally with the service-role key. JWT verified in-fn.
+[functions.sync-cleaner-stripe-accounts]
+verify_jwt = false
+
 [functions.customer-manage-recurring]
 verify_jwt = false
 
