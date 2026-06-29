@@ -291,6 +291,11 @@ verify_jwt = false
 [functions.sync-cleaner-stripe-accounts]
 verify_jwt = false
 
+# Exact-amount Stripe Connect transfer for custom payouts. Admin/VA-gated
+# inside the function (or internal CRON_SECRET / service-role). JWT in-fn.
+[functions.pay-cleaner-transfer]
+verify_jwt = false
+
 [functions.customer-manage-recurring]
 verify_jwt = false
 
