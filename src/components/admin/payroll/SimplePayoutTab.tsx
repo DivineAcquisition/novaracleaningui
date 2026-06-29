@@ -20,6 +20,7 @@ import {
   RiSendPlaneLine,
   RiLoader4Line,
   RiCheckboxCircleLine,
+  RiBankCardLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -147,6 +148,7 @@ export default function SimplePayoutTab() {
   const [crewPay, setCrewPay] = useState<Record<string, { selected: boolean; dollars: string }>>({});
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [period, setPeriod] = useState<"week" | "month" | "year">("month");
   // Inline job-cost (revenue) adjust on the selected job.
   const [editingCost, setEditingCost] = useState(false);
@@ -281,13 +283,24 @@ export default function SimplePayoutTab() {
     }
   };
 
-  const markPaid = async (id: string) => {
+  const payViaStripe = async (p: RecentRow) => {
+    if (
+      !confirm(
+        `Send ${usd(p.amountCents)} to ${p.cleanerName || "this cleaner"} via Stripe now?\n\nThis transfers the exact amount to their Connect account.`,
+      )
+    ) {
+      return;
+    }
+    setPayingId(p.id);
     try {
-      await callApi("mark_paid", { id });
-      toast.success("Marked paid.");
+      const res = await callApi<{ ok?: boolean; sentCount?: number }>("mark_paid", { id: p.id });
+      toast.success(`Paid ${usd(p.amountCents)} to ${p.cleanerName || "cleaner"} via Stripe.`);
+      void res;
       await load({ silent: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Payout failed");
+    } finally {
+      setPayingId(null);
     }
   };
 
@@ -627,8 +640,17 @@ export default function SimplePayoutTab() {
                       </TableCell>
                       <TableCell className="text-right">
                         {p.status === "pending" && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => markPaid(p.id)}>
-                            Mark paid
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs bg-violet-600 hover:bg-violet-700 text-white"
+                            disabled={payingId === p.id}
+                            onClick={() => payViaStripe(p)}
+                          >
+                            {payingId === p.id ? (
+                              <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <><RiBankCardLine className="w-3.5 h-3.5 mr-1" /> Pay via Stripe</>
+                            )}
                           </Button>
                         )}
                       </TableCell>

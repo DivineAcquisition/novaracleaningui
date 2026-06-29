@@ -510,25 +510,99 @@ async function submitPayout(
   };
 }
 
-// ─── mark_paid: flip a pending payout to paid ──────────────────────────────
+// ─── mark_paid: actually PAY the recorded amount(s) via Stripe Connect ──────
+//
+// This is the real money-mover for custom payouts. For each cleaner on the
+// payout it fires an exact-amount Stripe transfer (the amount the admin typed),
+// records the transfer ids, marks the booking paid so the auto/Run-Payroll
+// paths won't double-pay, and only flips the row to "paid" when every transfer
+// succeeds. Idempotent: re-running won't double-send (Stripe idempotency key).
 async function markPaid(supabase: ReturnType<typeof getAdminSupabase>, body: Record<string, unknown>) {
   const id = String(body.id || "");
   if (!id) return { error: "id required" };
+
   const { data: row, error } = await supabase
     .from("manual_payouts")
-    .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .select("id, booking_id, amount_cents, status, cleaner_id, cleaner_name, cleaner_breakdown, transfer_ids")
     .eq("id", id)
-    .select("id, booking_id, amount_cents, cleaner_breakdown")
     .single();
   if (error) throw error;
+  if (!row) return { error: "Payout not found" };
+  if (row.status === "paid") return { ok: true, alreadyPaid: true };
 
-  if (row.booking_id) {
+  // Resolve the per-cleaner amounts to send.
+  const breakdown: Array<{ cleanerId: string; cleanerName: string; amountCents: number }> =
+    Array.isArray(row.cleaner_breakdown) && row.cleaner_breakdown.length > 0
+      ? (row.cleaner_breakdown as Array<{ cleanerId: string; cleanerName: string; amountCents: number }>)
+      : row.cleaner_id
+        ? [{ cleanerId: String(row.cleaner_id), cleanerName: String(row.cleaner_name || "Cleaner"), amountCents: Number(row.amount_cents) || 0 }]
+        : [];
+
+  const payable = breakdown.filter((b) => b.cleanerId && Number(b.amountCents) > 0);
+  if (payable.length === 0) return { error: "No cleaner with a Stripe-payable amount on this payout." };
+
+  const bookingLabel = row.booking_id ? `booking ${String(row.booking_id).slice(0, 8)}` : "custom payout";
+  const transferIds: string[] = Array.isArray(row.transfer_ids) ? [...(row.transfer_ids as string[])] : [];
+  const failures: string[] = [];
+  let sentCount = 0;
+
+  for (const member of payable) {
+    try {
+      const { data, error: invErr } = await supabase.functions.invoke("pay-cleaner-transfer", {
+        body: {
+          cleanerId: member.cleanerId,
+          amountCents: member.amountCents,
+          bookingId: row.booking_id || undefined,
+          label: `Novara payout — ${member.cleanerName} — ${bookingLabel}`,
+          idempotencyKey: `manualpay_${row.id}_${member.cleanerId}_${member.amountCents}`,
+        },
+      });
+      const errMsg = invErr?.message || (data as { error?: string })?.error;
+      if (errMsg) {
+        failures.push(`${member.cleanerName}: ${errMsg}`);
+      } else if ((data as { transferId?: string })?.transferId) {
+        transferIds.push((data as { transferId: string }).transferId);
+        sentCount++;
+      } else {
+        failures.push(`${member.cleanerName}: no transfer returned`);
+      }
+    } catch (e) {
+      failures.push(`${member.cleanerName}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  const allPaid = failures.length === 0 && sentCount === payable.length;
+
+  await supabase
+    .from("manual_payouts")
+    .update({
+      transfer_ids: transferIds,
+      status: allPaid ? "paid" : "pending",
+      paid_at: allPaid ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .then(() => undefined, () => undefined);
+
+  if (allPaid && row.booking_id) {
+    // Stop the completion-trigger / Run Payroll path from paying this booking again.
+    await supabase
+      .from("bookings")
+      .update({ payout_status: "completed" })
+      .eq("id", row.booking_id)
+      .then(() => undefined, () => undefined);
     try {
       const crewCount = Array.isArray(row.cleaner_breakdown) ? row.cleaner_breakdown.length : undefined;
       await syncManualPayoutJob(String(row.booking_id), Number(row.amount_cents) || 0, "paid", crewCount);
-    } catch {
-      /* non-blocking */
-    }
+    } catch { /* non-blocking */ }
   }
-  return { ok: true };
+
+  if (!allPaid) {
+    return {
+      error: `Paid ${sentCount}/${payable.length}. ${failures.join("; ")}`,
+      partial: sentCount > 0,
+      transferIds,
+    };
+  }
+  return { ok: true, transferIds, sentCount };
 }
