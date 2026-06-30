@@ -7,7 +7,7 @@
 // when there's no saved card. Emails the customer either way. Writes an audit
 // row to booking_addon_charges.
 //
-// Body: { bookingId: string, addOns: string[] (the NEW complete set), charge?: boolean }
+// Body: { bookingId: string, addOns: string[] (the NEW complete set), charge?: boolean, addOnPrices?: Record<string, number> (dollars) }
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -39,8 +39,15 @@ const ADD_ONS: Record<string, { price: number; label: string }> = {
   patio: { price: 35, label: "Patio / balcony" },
   petHair: { price: 35, label: "Heavy pet-hair removal" },
   closets: { price: 30, label: "Inside closets" },
+  trashHaul: { price: 75, label: "Trash haul" },
+  deepBathroomDetail: { price: 45, label: "Deep bathroom detail" },
 };
 const labelOf = (id: string) => ADD_ONS[id]?.label || id;
+const priceOf = (id: string, overrides?: Record<string, number>) => {
+  const raw = overrides?.[id];
+  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) return raw;
+  return ADD_ONS[id]?.price || 0;
+};
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status });
@@ -79,6 +86,13 @@ serve(async (req) => {
     const bookingId = String(body.bookingId || "");
     const charge = body.charge !== false;
     const newAddOns: string[] = Array.from(new Set((Array.isArray(body.addOns) ? body.addOns : []).map(String)));
+    const addOnPrices: Record<string, number> = {};
+    if (body.addOnPrices && typeof body.addOnPrices === "object") {
+      for (const [k, v] of Object.entries(body.addOnPrices as Record<string, unknown>)) {
+        const n = Number(v);
+        if (Number.isFinite(n) && n >= 0) addOnPrices[String(k)] = n;
+      }
+    }
     if (!bookingId) return json({ error: "bookingId required" }, 400);
 
     const { data: booking } = await admin.from("bookings").select("*").eq("id", bookingId).maybeSingle();
@@ -95,14 +109,23 @@ serve(async (req) => {
     // fridge + oven, so those two are free there; everything else is billable.
     const st = String(booking.service_type || "standard");
     const chargeable = (a: string) => st === "moveInOut" ? (a !== "fridge" && a !== "oven") : true;
-    const sumC = (ids: string[]) => ids.filter(chargeable).reduce((s, a) => s + Math.round((ADD_ONS[a]?.price || 0) * 100), 0);
-    const deltaCents = sumC(added) - sumC(removed);
+    const sumC = (ids: string[], useOverrides: boolean) =>
+      ids.filter(chargeable).reduce((s, a) => {
+        const dollars = useOverrides ? priceOf(a, addOnPrices) : priceOf(a);
+        return s + Math.round(dollars * 100);
+      }, 0);
+    const deltaCents = sumC(added, true) - sumC(removed, false);
+    const pricedAdded = added.map((id) => ({
+      id,
+      label: labelOf(id),
+      price: chargeable(id) ? priceOf(id, addOnPrices) : 0,
+    }));
 
     const oldTotalCents = Number(booking.total_estimate_cents || 0);
     const newTotalCents = Math.max(0, oldTotalCents + deltaCents);
 
     // Persist the new add-on set + total across the board.
-    const noteLine = `Add-ons updated by admin ${new Date().toISOString().slice(0, 10)}: +[${added.map(labelOf).join(", ") || "none"}]${removed.length ? ` -[${removed.map(labelOf).join(", ")}]` : ""} (delta $${(deltaCents / 100).toFixed(2)}).`;
+    const noteLine = `Add-ons updated by admin ${new Date().toISOString().slice(0, 10)}: +[${pricedAdded.map((p) => `${p.label}${p.price ? ` $${p.price.toFixed(2)}` : ""}`).join(", ") || "none"}]${removed.length ? ` -[${removed.map(labelOf).join(", ")}]` : ""} (delta $${(deltaCents / 100).toFixed(2)}).`;
     const patch: Record<string, unknown> = {
       add_ons: newAddOns,
       total_estimate_cents: newTotalCents,
@@ -129,7 +152,7 @@ serve(async (req) => {
       : `BK-${bookingId.slice(0, 8)}`;
     const emailData = {
       name: booking.first_name || "",
-      addOns: added.map(labelOf),
+      addOns: pricedAdded.map((p) => (p.price ? `${p.label} ($${p.price.toFixed(2)})` : p.label)),
       amount: `$${(Math.max(0, deltaCents) / 100).toFixed(2)}`,
       serviceDate: booking.service_date || "",
       bookingRef,
@@ -162,7 +185,7 @@ serve(async (req) => {
     }
     if (!customerId) throw new Error("No customer email on booking to charge.");
 
-    const description = `${bookingRef} - Add-on services: ${added.map(labelOf).join(", ")}`;
+    const description = `${bookingRef} - Add-on services: ${pricedAdded.map((p) => p.label).join(", ")}`;
 
     // Try off-session charge first.
     const pmId = await resolveOffSessionPaymentMethod(stripe, customerId).catch(() => null);

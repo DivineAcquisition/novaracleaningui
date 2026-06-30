@@ -84,6 +84,8 @@ export const ADD_ONS = {
   patio:        { label: "Patio / balcony",        price: 35, note: "Sweep & tidy" },
   petHair:      { label: "Heavy pet-hair removal", price: 35, note: "Extra vacuum pass" },
   closets:      { label: "Inside closets / tidy",  price: 30, note: "Organize & wipe" },
+  trashHaul:    { label: "Trash haul",             price: 75, note: "Haul away trash / junk" },
+  deepBathroomDetail: { label: "Deep bathroom detail", price: 45, note: "Per bathroom" },
 } as const;
 
 export type AddOnId = keyof typeof ADD_ONS;

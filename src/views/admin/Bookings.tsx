@@ -1543,23 +1543,50 @@ function AddonDialog({
 }) {
   const current = (booking.add_ons || []) as string[];
   const [selected, setSelected] = useState<string[]>(current);
+  const [addOnPrices, setAddOnPrices] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   // Re-sync when opening a different booking.
   useEffect(() => {
-    if (open) setSelected((booking.add_ons || []) as string[]);
+    if (!open) return;
+    setSelected((booking.add_ons || []) as string[]);
+    setAddOnPrices({});
   }, [open, booking.id, booking.add_ons]);
 
   const isMoveInOut = booking.service_type === "moveInOut";
   const chargeable = (id: string) => (isMoveInOut ? id !== "fridge" && id !== "oven" : true);
+  const catalogPrice = (id: string) => (ADD_ONS as Record<string, { price: number }>)[id]?.price ?? 0;
+  const priceDollars = (id: string) => {
+    const raw = addOnPrices[id];
+    const dollars = raw != null && raw !== "" ? Number(raw) : catalogPrice(id);
+    return Number.isFinite(dollars) ? dollars : 0;
+  };
+
   const added = selected.filter((a) => !current.includes(a));
   const removed = current.filter((a) => !selected.includes(a));
   const deltaCents =
-    added.filter(chargeable).reduce((s, a) => s + (ADD_ONS[a as AddOnId]?.price || 0) * 100, 0) -
-    removed.filter(chargeable).reduce((s, a) => s + (ADD_ONS[a as AddOnId]?.price || 0) * 100, 0);
+    added.filter(chargeable).reduce((s, a) => s + Math.round(priceDollars(a) * 100), 0) -
+    removed.filter(chargeable).reduce((s, a) => s + Math.round(catalogPrice(a) * 100), 0);
 
   const toggle = (id: string) =>
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+    setSelected((s) => {
+      if (s.includes(id)) return s.filter((x) => x !== id);
+      setAddOnPrices((p) =>
+        p[id] != null ? p : { ...p, [id]: String(catalogPrice(id)) },
+      );
+      return [...s, id];
+    });
+
+  const setAddOnPrice = (id: string, value: string) =>
+    setAddOnPrices((p) => ({ ...p, [id]: value }));
+
+  const buildPricedAddOns = () => {
+    const priced: Record<string, number> = {};
+    for (const id of added.filter(chargeable)) {
+      priced[id] = priceDollars(id);
+    }
+    return priced;
+  };
 
   const submit = async (charge: boolean) => {
     if (added.length === 0 && removed.length === 0) {
@@ -1569,7 +1596,7 @@ function AddonDialog({
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-add-booking-addons", {
-        body: { bookingId: booking.id, addOns: selected, charge },
+        body: { bookingId: booking.id, addOns: selected, charge, addOnPrices: buildPricedAddOns() },
       });
       if (error) throw error;
       const d = data as { error?: string; status?: string; hostedInvoiceUrl?: string; deltaCents?: number };
@@ -1599,14 +1626,35 @@ function AddonDialog({
         <div className="max-h-[50vh] overflow-y-auto space-y-1.5 py-1">
           {Object.entries(ADD_ONS).map(([id, def]) => {
             const free = isMoveInOut && !chargeable(id);
+            const on = selected.includes(id);
+            const isNew = on && !current.includes(id);
             return (
-              <label key={id} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
-                <span className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)} />
-                  {def.label}
-                </span>
-                <span className="text-xs text-slate-500 tabular-nums">{free ? "Included" : `$${def.price}`}</span>
-              </label>
+              <div key={id} className="rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50">
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={on} onChange={() => toggle(id)} />
+                    {def.label}
+                  </span>
+                  {!on || free ? (
+                    <span className="text-xs text-slate-500 tabular-nums">{free ? "Included" : `$${def.price}`}</span>
+                  ) : (
+                    <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+                      <span className="text-slate-400 text-xs">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={addOnPrices[id] ?? String(def.price)}
+                        onChange={(e) => setAddOnPrice(id, e.target.value)}
+                        className="h-7 w-20 text-right tabular-nums text-xs"
+                      />
+                    </div>
+                  )}
+                </label>
+                {isNew && chargeable(id) && (
+                  <p className="mt-1 pl-6 text-[11px] text-slate-400">New add-on — adjust price before charging</p>
+                )}
+              </div>
             );
           })}
         </div>
