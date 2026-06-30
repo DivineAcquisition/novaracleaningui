@@ -69,6 +69,8 @@ export const ADD_ONS: Record<string, { price: number }> = {
   patio:        { price: 35 },
   petHair:      { price: 35 },
   closets:      { price: 30 },
+  trashHaul:    { price: 75 },
+  deepBathroomDetail: { price: 45 },
 };
 
 export const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
