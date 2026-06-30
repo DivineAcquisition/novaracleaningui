@@ -672,6 +672,10 @@ function BookingSheet({
   const [jobCost, setJobCost] = useState("");
   const [jobCostRefund, setJobCostRefund] = useState("");
   const [jobCostReason, setJobCostReason] = useState("");
+  const [unpaidAddonCharge, setUnpaidAddonCharge] = useState<{
+    id: string;
+    added_addons: string[];
+  } | null>(null);
 
   useEffect(() => {
     if (!booking) return;
@@ -709,11 +713,59 @@ function BookingSheet({
       }
       setAddOnPrices(seeded);
     })();
+    void (async () => {
+      const { data } = await (supabase.from as any)("booking_addon_charges")
+        .select("id, added_addons, amount_cents, status")
+        .eq("booking_id", booking.id)
+        .eq("status", "no_charge")
+        .eq("amount_cents", 0)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data?.id && Array.isArray(data.added_addons) && data.added_addons.length) {
+        setUnpaidAddonCharge({ id: data.id, added_addons: data.added_addons as string[] });
+      } else {
+        setUnpaidAddonCharge(null);
+      }
+    })();
   }, [booking?.id]);
 
   if (!booking) return null;
 
   const currentAddOns = (booking.add_ons || []) as string[];
+
+  const retryUnpaidAddonCharge = async () => {
+    if (!unpaidAddonCharge) return;
+    setWorking("addon-retry");
+    try {
+      const priced: Record<string, number> = {};
+      for (const id of unpaidAddonCharge.added_addons) {
+        const def = (ADD_ONS as Record<string, { price: number }>)[id]?.price;
+        if (def != null) priced[id] = def;
+      }
+      const { data, error } = await supabase.functions.invoke("admin-add-booking-addons", {
+        body: {
+          bookingId: booking.id,
+          addOns: currentAddOns,
+          charge: true,
+          addOnPrices: priced,
+          retryChargeAuditId: unpaidAddonCharge.id,
+        },
+      });
+      if (error) throw error;
+      const d = data as { error?: string; status?: string; deltaCents?: number; hostedInvoiceUrl?: string };
+      if (d?.error) throw new Error(d.error);
+      if (d?.status === "paid") toast.success(`Charged ${fmtMoney(d.deltaCents)} for unpaid add-ons.`);
+      else if (d?.status === "invoiced") toast.success("Unpaid add-ons invoiced — customer emailed.");
+      else toast.success("Add-on charge retried.");
+      if (d?.hostedInvoiceUrl) window.open(d.hostedInvoiceUrl, "_blank", "noopener");
+      onMutated();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not retry add-on charge");
+    } finally {
+      setWorking(null);
+    }
+  };
 
   const requestPhotos = async () => {
     if (!booking.cleaner_id) {
@@ -1031,6 +1083,30 @@ function BookingSheet({
                   <Button variant="outline" className="w-full" onClick={() => setAddonOpen(true)}>
                     Add / edit add-on services <RiArrowRightLine className="w-4 h-4 ml-2" />
                   </Button>
+                  {unpaidAddonCharge && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                      <p className="text-amber-900 font-medium">Add-ons saved but not charged</p>
+                      <p className="text-amber-800 text-xs mt-1">
+                        {unpaidAddonCharge.added_addons.map((id) => ADD_ONS[id as AddOnId]?.label || id).join(", ")} were added with a $0 charge (server catalog was out of date).
+                      </p>
+                      <Button
+                        size="sm"
+                        className="mt-2 w-full bg-violet-600 hover:bg-violet-700 text-white"
+                        onClick={retryUnpaidAddonCharge}
+                        disabled={working === "addon-retry"}
+                      >
+                        {working === "addon-retry" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        Retry charge (
+                        {fmtMoney(
+                          unpaidAddonCharge.added_addons.reduce(
+                            (s, id) => s + Math.round(((ADD_ONS as Record<string, { price: number }>)[id]?.price || 0) * 100),
+                            0,
+                          ),
+                        )}
+                        )
+                      </Button>
+                    </div>
+                  )}
                   {booking.hosted_invoice_url && (
                     <a href={booking.hosted_invoice_url} target="_blank" rel="noreferrer" className="block mt-2 text-xs text-violet-700 underline">
                       View latest hosted invoice
@@ -1603,7 +1679,9 @@ function AddonDialog({
       if (d?.error) throw new Error(d.error);
       if (d?.status === "paid") toast.success(`Added & charged ${fmtMoney(d.deltaCents)} to card on file.`);
       else if (d?.status === "invoiced") toast.success("Added — secure invoice emailed to the customer.");
-      else toast.success("Add-ons updated.");
+      else if (charge && d?.status === "no_charge") {
+        throw new Error("Charge was $0.00 — the server may not recognize these add-ons yet. Use Retry charge after deploy.");
+      } else toast.success("Add-ons updated.");
       if (d?.hostedInvoiceUrl) window.open(d.hostedInvoiceUrl, "_blank", "noopener");
       onSuccess();
     } catch (e) {

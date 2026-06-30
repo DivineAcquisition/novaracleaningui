@@ -93,16 +93,39 @@ serve(async (req) => {
         if (Number.isFinite(n) && n >= 0) addOnPrices[String(k)] = n;
       }
     }
+    const retryChargeAuditId = body.retryChargeAuditId ? String(body.retryChargeAuditId) : null;
     if (!bookingId) return json({ error: "bookingId required" }, 400);
 
     const { data: booking } = await admin.from("bookings").select("*").eq("id", bookingId).maybeSingle();
     if (!booking) return json({ error: "Booking not found" }, 404);
 
     const oldAddOns: string[] = Array.isArray(booking.add_ons) ? booking.add_ons.map(String) : [];
-    const added = newAddOns.filter((a) => !oldAddOns.includes(a));
-    const removed = oldAddOns.filter((a) => !newAddOns.includes(a));
-    if (added.length === 0 && removed.length === 0) {
+    let added = newAddOns.filter((a) => !oldAddOns.includes(a));
+    let removed = oldAddOns.filter((a) => !newAddOns.includes(a));
+    let retryMode = false;
+
+    // Retry a prior no_charge audit (e.g. deploy lag left new add-on ids at $0).
+    if (retryChargeAuditId) {
+      const { data: prior } = await admin.from("booking_addon_charges")
+        .select("*")
+        .eq("id", retryChargeAuditId)
+        .eq("booking_id", bookingId)
+        .maybeSingle();
+      if (!prior) return json({ error: "Retry audit row not found." }, 404);
+      if (prior.status !== "no_charge" || Number(prior.amount_cents) !== 0) {
+        return json({ error: "That add-on charge was already collected or is not retryable." }, 400);
+      }
+      added = Array.isArray(prior.added_addons) ? prior.added_addons.map(String) : [];
+      removed = [];
+      retryMode = true;
+      if (added.length === 0) return json({ error: "Nothing to retry on that audit row." }, 400);
+    } else if (added.length === 0 && removed.length === 0) {
       return json({ error: "No add-on changes." }, 400);
+    }
+
+    const unknown = [...new Set([...added, ...removed, ...newAddOns])].filter((id) => !ADD_ONS[id]);
+    if (unknown.length) {
+      return json({ error: `Unknown add-on id(s): ${unknown.join(", ")}. Deploy the latest admin-add-booking-addons function.` }, 400);
     }
 
     // Add-on price delta (server-authoritative). Move-In/Out already includes
@@ -127,25 +150,39 @@ serve(async (req) => {
     // Persist the new add-on set + total across the board.
     const noteLine = `Add-ons updated by admin ${new Date().toISOString().slice(0, 10)}: +[${pricedAdded.map((p) => `${p.label}${p.price ? ` $${p.price.toFixed(2)}` : ""}`).join(", ") || "none"}]${removed.length ? ` -[${removed.map(labelOf).join(", ")}]` : ""} (delta $${(deltaCents / 100).toFixed(2)}).`;
     const patch: Record<string, unknown> = {
-      add_ons: newAddOns,
       total_estimate_cents: newTotalCents,
       team_notes: [(booking.team_notes as string | null) || "", noteLine].filter(Boolean).join("\n"),
     };
+    if (!retryMode) patch.add_ons = newAddOns;
     if (booking.final_charge_cents != null) {
       patch.final_charge_cents = Math.max(0, Number(booking.final_charge_cents) + deltaCents);
     }
-    await admin.from("bookings").update(patch).eq("id", bookingId);
+    if (!retryMode) {
+      await admin.from("bookings").update(patch).eq("id", bookingId);
+    } else if (patch.total_estimate_cents !== oldTotalCents || patch.final_charge_cents != null) {
+      await admin.from("bookings").update(patch).eq("id", bookingId);
+    }
 
-    const { data: auditRow } = await admin.from("booking_addon_charges").insert({
-      booking_id: bookingId,
-      added_addons: added,
-      removed_addons: removed,
-      amount_cents: Math.max(0, deltaCents),
-      status: "pending",
-      created_by: callerId,
-      note: noteLine,
-    }).select("id").single();
-    const auditId = auditRow?.id;
+    let auditId: string | undefined;
+    if (retryMode && retryChargeAuditId) {
+      auditId = retryChargeAuditId;
+      await admin.from("booking_addon_charges").update({
+        amount_cents: Math.max(0, deltaCents),
+        status: "pending",
+        note: noteLine,
+      }).eq("id", auditId);
+    } else {
+      const { data: auditRow } = await admin.from("booking_addon_charges").insert({
+        booking_id: bookingId,
+        added_addons: added,
+        removed_addons: removed,
+        amount_cents: Math.max(0, deltaCents),
+        status: "pending",
+        created_by: callerId,
+        note: noteLine,
+      }).select("id").single();
+      auditId = auditRow?.id;
+    }
 
     const bookingRef = booking.booking_number
       ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
@@ -160,6 +197,13 @@ serve(async (req) => {
 
     // Nothing to collect (only removals / zero delta).
     if (!charge || deltaCents <= 0) {
+      if (charge && added.length > 0 && deltaCents <= 0) {
+        return json({
+          error: "Add-on charge would be $0.00 - the server may be missing this add-on in its catalog. Retry after deploy or contact support.",
+          deltaCents,
+          addedAddOns: added,
+        }, 400);
+      }
       if (auditId) await admin.from("booking_addon_charges").update({ status: "no_charge" }).eq("id", auditId);
       return json({ ok: true, charged: false, status: "no_charge", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed });
     }
