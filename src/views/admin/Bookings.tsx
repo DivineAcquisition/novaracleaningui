@@ -40,6 +40,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { ADD_ONS, type AddOnId } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import { calculatePrice, SERVICE_TIER_PRICING, HOME_SIZE_RANGES, ADD_ONS } from "@/lib/pricing";
 
@@ -71,6 +73,9 @@ interface BookingRow {
   uses_credit: boolean | null;
   cancel_reason: string | null;
   service_duration?: number | null;
+  add_ons?: string[] | null;
+  membership_plan?: string | null;
+  hosted_invoice_url?: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -642,6 +647,7 @@ function BookingSheet({
 }) {
   const [working, setWorking] = useState<string | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [addonOpen, setAddonOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   // Adjust-service state (prefilled from the booking when the sheet opens).
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -701,6 +707,28 @@ function BookingSheet({
   }, [booking?.id]);
 
   if (!booking) return null;
+
+  const currentAddOns = (booking.add_ons || []) as string[];
+
+  const requestPhotos = async () => {
+    if (!booking.cleaner_id) {
+      toast.error("Assign a cleaner first.");
+      return;
+    }
+    setWorking("photos");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-sms", {
+        body: { cleanerId: booking.cleaner_id, template: "photo_request", bookingId: booking.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Photo-submission link texted to the cleaner.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
 
   const totalCents = booking.total_estimate_cents ?? 0;
   const depositCents = booking.deposit_cents ?? 0;
@@ -973,8 +1001,58 @@ function BookingSheet({
                 <span className="text-right capitalize">
                   {STATUS_LABELS[booking.status || ""] ?? (booking.status || "—").replaceAll("_", " ")}
                 </span>
+                <span className="text-slate-500">Add-ons</span>
+                <span className="text-right">
+                  {currentAddOns.length
+                    ? currentAddOns.map((a) => ADD_ONS[a as AddOnId]?.label || a).join(", ")
+                    : "—"}
+                </span>
               </CardContent>
             </Card>
+
+            {/* Add-on services — works even after completion */}
+            {booking.status !== "cancelled" && (
+              <Card className="border-slate-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-700" />
+                    Add-on services
+                  </CardTitle>
+                  <CardDescription>
+                    Add services and charge the customer{booking.status === "completed" ? " — even after this job is completed" : ""}. Charges the card on file (or emails a secure invoice), updates the total, and emails the customer.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" className="w-full" onClick={() => setAddonOpen(true)}>
+                    Add / edit add-on services <RiArrowRightLine className="w-4 h-4 ml-2" />
+                  </Button>
+                  {booking.hosted_invoice_url && (
+                    <a href={booking.hosted_invoice_url} target="_blank" rel="noreferrer" className="block mt-2 text-xs text-violet-700 underline">
+                      View latest hosted invoice
+                    </a>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Request photo submission from the assigned cleaner */}
+            {booking.cleaner_id && (
+              <Card className="border-slate-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <RiInformationLine className="w-4 h-4 text-violet-700" />
+                    Cleaner photos
+                  </CardTitle>
+                  <CardDescription>Text the assigned cleaner a secure link to upload before &amp; after photos.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" className="w-full" onClick={requestPhotos} disabled={working === "photos"}>
+                    {working === "photos" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Request photo submission
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             <BookingAssignBlock
               booking={booking}
@@ -1430,6 +1508,119 @@ function BookingSheet({
           }}
         />
       )}
+
+      {booking && (
+        <AddonDialog
+          open={addonOpen}
+          onOpenChange={setAddonOpen}
+          booking={booking}
+          onSuccess={() => {
+            setAddonOpen(false);
+            onMutated();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Add-on services dialog (post-completion capable) ─────────────────────
+function AddonDialog({
+  open,
+  onOpenChange,
+  booking,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  booking: BookingRow;
+  onSuccess: () => void;
+}) {
+  const current = (booking.add_ons || []) as string[];
+  const [selected, setSelected] = useState<string[]>(current);
+  const [busy, setBusy] = useState(false);
+
+  // Re-sync when opening a different booking.
+  useEffect(() => {
+    if (open) setSelected((booking.add_ons || []) as string[]);
+  }, [open, booking.id, booking.add_ons]);
+
+  const isMoveInOut = booking.service_type === "moveInOut";
+  const chargeable = (id: string) => (isMoveInOut ? id !== "fridge" && id !== "oven" : true);
+  const added = selected.filter((a) => !current.includes(a));
+  const removed = current.filter((a) => !selected.includes(a));
+  const deltaCents =
+    added.filter(chargeable).reduce((s, a) => s + (ADD_ONS[a as AddOnId]?.price || 0) * 100, 0) -
+    removed.filter(chargeable).reduce((s, a) => s + (ADD_ONS[a as AddOnId]?.price || 0) * 100, 0);
+
+  const toggle = (id: string) =>
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const submit = async (charge: boolean) => {
+    if (added.length === 0 && removed.length === 0) {
+      toast.error("No add-on changes selected.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-add-booking-addons", {
+        body: { bookingId: booking.id, addOns: selected, charge },
+      });
+      if (error) throw error;
+      const d = data as { error?: string; status?: string; hostedInvoiceUrl?: string; deltaCents?: number };
+      if (d?.error) throw new Error(d.error);
+      if (d?.status === "paid") toast.success(`Added & charged ${fmtMoney(d.deltaCents)} to card on file.`);
+      else if (d?.status === "invoiced") toast.success("Added — secure invoice emailed to the customer.");
+      else toast.success("Add-ons updated.");
+      if (d?.hostedInvoiceUrl) window.open(d.hostedInvoiceUrl, "_blank", "noopener");
+      onSuccess();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update add-ons");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add-on services</DialogTitle>
+          <DialogDescription>
+            Select add-ons for booking #{booking.booking_number || booking.id.slice(0, 6)}. The price difference is charged to the card on file (or a secure invoice is emailed).
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[50vh] overflow-y-auto space-y-1.5 py-1">
+          {Object.entries(ADD_ONS).map(([id, def]) => {
+            const free = isMoveInOut && !chargeable(id);
+            return (
+              <label key={id} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                <span className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)} />
+                  {def.label}
+                </span>
+                <span className="text-xs text-slate-500 tabular-nums">{free ? "Included" : `$${def.price}`}</span>
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between text-sm border-t pt-3">
+          <span className="text-slate-500">Amount to charge</span>
+          <span className="font-semibold tabular-nums">{fmtMoney(Math.max(0, deltaCents))}</span>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => submit(false)} disabled={busy}>
+            Save without charging
+          </Button>
+          <Button onClick={() => submit(true)} disabled={busy || deltaCents <= 0} className="bg-violet-600 hover:bg-violet-700 text-white">
+            {busy ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+            Add &amp; charge {fmtMoney(Math.max(0, deltaCents))}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,0 +1,214 @@
+// admin-add-booking-addons
+//
+// Admin/VA: add (or change) add-on services on a booking - works EVEN after
+// the booking is completed. Recomputes the price delta server-side from the
+// canonical pricing, persists the new add-ons + total, charges the delta to
+// the card on file (off-session), and falls back to a hosted Stripe invoice
+// when there's no saved card. Emails the customer either way. Writes an audit
+// row to booking_addon_charges.
+//
+// Body: { bookingId: string, addOns: string[] (the NEW complete set), charge?: boolean }
+
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
+import { resolveSecret } from "../_shared/app-secrets.ts";
+import { resolveOffSessionPaymentMethod } from "../_shared/resolve-off-session-payment-method.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// Add-on catalog (mirrors src/lib/pricing.ts ADD_ONS - price in dollars + label).
+const ADD_ONS: Record<string, { price: number; label: string }> = {
+  fridge: { price: 30, label: "Inside Fridge" },
+  oven: { price: 30, label: "Inside Oven" },
+  windows: { price: 40, label: "Interior Windows" },
+  laundry: { price: 35, label: "Laundry - wash & fold" },
+  changeLinens: { price: 15, label: "Change bed linens" },
+  dishes: { price: 20, label: "Dishes & kitchen cleanup" },
+  baseboards: { price: 35, label: "Baseboards" },
+  blinds: { price: 30, label: "Blinds & shutters" },
+  cabinets: { price: 35, label: "Inside cabinets" },
+  walls: { price: 40, label: "Spot wall washing" },
+  ceilingFans: { price: 15, label: "Ceiling fans" },
+  microwave: { price: 10, label: "Inside microwave" },
+  dishwasher: { price: 15, label: "Inside dishwasher" },
+  garage: { price: 50, label: "Garage sweep-out" },
+  patio: { price: 35, label: "Patio / balcony" },
+  petHair: { price: 35, label: "Heavy pet-hair removal" },
+  closets: { price: 30, label: "Inside closets" },
+};
+const labelOf = (id: string) => ADD_ONS[id]?.label || id;
+
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status });
+}
+
+// deno-lint-ignore no-explicit-any
+async function ensureAdminOrVa(admin: any, jwt: string): Promise<string> {
+  const userClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+  );
+  const { data: u } = await userClient.auth.getUser();
+  if (!u?.user?.id) throw new Error("Not signed in.");
+  const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", u.user.id);
+  const allowed = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
+  if (!allowed) throw new Error("Admins or VAs only.");
+  return u.user.id;
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // deno-lint-ignore no-explicit-any
+  const admin: any = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+
+  try {
+    const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!jwt) return json({ error: "Not signed in." }, 401);
+    const callerId = await ensureAdminOrVa(admin, jwt);
+
+    const body = await req.json();
+    const bookingId = String(body.bookingId || "");
+    const charge = body.charge !== false;
+    const newAddOns: string[] = Array.from(new Set((Array.isArray(body.addOns) ? body.addOns : []).map(String)));
+    if (!bookingId) return json({ error: "bookingId required" }, 400);
+
+    const { data: booking } = await admin.from("bookings").select("*").eq("id", bookingId).maybeSingle();
+    if (!booking) return json({ error: "Booking not found" }, 404);
+
+    const oldAddOns: string[] = Array.isArray(booking.add_ons) ? booking.add_ons.map(String) : [];
+    const added = newAddOns.filter((a) => !oldAddOns.includes(a));
+    const removed = oldAddOns.filter((a) => !newAddOns.includes(a));
+    if (added.length === 0 && removed.length === 0) {
+      return json({ error: "No add-on changes." }, 400);
+    }
+
+    // Add-on price delta (server-authoritative). Move-In/Out already includes
+    // fridge + oven, so those two are free there; everything else is billable.
+    const st = String(booking.service_type || "standard");
+    const chargeable = (a: string) => st === "moveInOut" ? (a !== "fridge" && a !== "oven") : true;
+    const sumC = (ids: string[]) => ids.filter(chargeable).reduce((s, a) => s + Math.round((ADD_ONS[a]?.price || 0) * 100), 0);
+    const deltaCents = sumC(added) - sumC(removed);
+
+    const oldTotalCents = Number(booking.total_estimate_cents || 0);
+    const newTotalCents = Math.max(0, oldTotalCents + deltaCents);
+
+    // Persist the new add-on set + total across the board.
+    const noteLine = `Add-ons updated by admin ${new Date().toISOString().slice(0, 10)}: +[${added.map(labelOf).join(", ") || "none"}]${removed.length ? ` -[${removed.map(labelOf).join(", ")}]` : ""} (delta $${(deltaCents / 100).toFixed(2)}).`;
+    const patch: Record<string, unknown> = {
+      add_ons: newAddOns,
+      total_estimate_cents: newTotalCents,
+      team_notes: [(booking.team_notes as string | null) || "", noteLine].filter(Boolean).join("\n"),
+    };
+    if (booking.final_charge_cents != null) {
+      patch.final_charge_cents = Math.max(0, Number(booking.final_charge_cents) + deltaCents);
+    }
+    await admin.from("bookings").update(patch).eq("id", bookingId);
+
+    const { data: auditRow } = await admin.from("booking_addon_charges").insert({
+      booking_id: bookingId,
+      added_addons: added,
+      removed_addons: removed,
+      amount_cents: Math.max(0, deltaCents),
+      status: "pending",
+      created_by: callerId,
+      note: noteLine,
+    }).select("id").single();
+    const auditId = auditRow?.id;
+
+    const bookingRef = booking.booking_number
+      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      : `BK-${bookingId.slice(0, 8)}`;
+    const emailData = {
+      name: booking.first_name || "",
+      addOns: added.map(labelOf),
+      amount: `$${(Math.max(0, deltaCents) / 100).toFixed(2)}`,
+      serviceDate: booking.service_date || "",
+      bookingRef,
+    };
+
+    // Nothing to collect (only removals / zero delta).
+    if (!charge || deltaCents <= 0) {
+      if (auditId) await admin.from("booking_addon_charges").update({ status: "no_charge" }).eq("id", auditId);
+      return json({ ok: true, charged: false, status: "no_charge", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed });
+    }
+
+    const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    // Resolve / create the Stripe customer.
+    let customerId: string | null = null;
+    if (booking.customer_id && String(booking.customer_id).startsWith("cus_")) customerId = booking.customer_id;
+    if (!customerId && booking.email) {
+      const { data: custRow } = await admin.from("customers").select("stripe_customer_id").eq("email", booking.email).maybeSingle();
+      if (custRow?.stripe_customer_id?.startsWith("cus_")) customerId = custRow.stripe_customer_id;
+    }
+    if (!customerId && booking.email) {
+      const found = await stripe.customers.list({ email: booking.email, limit: 1 });
+      customerId = found.data[0]?.id ?? null;
+      if (!customerId) {
+        const created = await stripe.customers.create({ email: booking.email, name: `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || undefined });
+        customerId = created.id;
+      }
+    }
+    if (!customerId) throw new Error("No customer email on booking to charge.");
+
+    const description = `${bookingRef} - Add-on services: ${added.map(labelOf).join(", ")}`;
+
+    // Try off-session charge first.
+    const pmId = await resolveOffSessionPaymentMethod(stripe, customerId).catch(() => null);
+    if (pmId) {
+      try {
+        const pi = await stripe.paymentIntents.create({
+          amount: deltaCents, currency: "usd", customer: customerId, payment_method: pmId,
+          off_session: true, confirm: true, description,
+          metadata: { booking_id: bookingId, chargeType: "addon_charge", added: added.join(",") },
+        });
+        if (pi.status === "succeeded") {
+          if (auditId) await admin.from("booking_addon_charges").update({ status: "paid", stripe_payment_intent_id: pi.id }).eq("id", auditId);
+          await admin.from("bookings").update({ customer_id: customerId }).eq("id", bookingId);
+          if (booking.email) {
+            await admin.functions.invoke("send-addon-email", { body: { type: "addon_charged", email: booking.email, data: emailData } }).catch(() => {});
+          }
+          await admin.from("events").insert({ event_type: "booking.addon_charged", booking_id: bookingId, source: "admin", summary: `Add-ons charged $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, pi: pi.id, by: callerId } }).catch(() => {});
+          return json({ ok: true, charged: true, status: "paid", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, paymentIntentId: pi.id });
+        }
+      } catch (e) {
+        // Off-session may require authentication (3DS) or be declined -> invoice.
+        console.warn("[admin-add-booking-addons] off-session failed, invoicing", e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    // Hosted invoice fallback (no saved card or off-session declined).
+    await stripe.invoiceItems.create({ customer: customerId, amount: deltaCents, currency: "usd", description });
+    const invoice = await stripe.invoices.create({
+      customer: customerId, collection_method: "send_invoice", days_until_due: 7, auto_advance: true,
+      description, metadata: { booking_id: bookingId, chargeType: "addon_charge" },
+    });
+    const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+    const hostedInvoiceUrl = finalized.hosted_invoice_url || undefined;
+    try { await stripe.invoices.sendInvoice(invoice.id); } catch { /* finalize already emails via Stripe; non-fatal */ }
+
+    if (auditId) await admin.from("booking_addon_charges").update({ status: "invoiced", stripe_invoice_id: invoice.id, hosted_invoice_url: hostedInvoiceUrl }).eq("id", auditId);
+    await admin.from("bookings").update({ customer_id: customerId, hosted_invoice_url: hostedInvoiceUrl }).eq("id", bookingId);
+    if (booking.email) {
+      await admin.functions.invoke("send-addon-email", { body: { type: "addon_invoiced", email: booking.email, data: { ...emailData, hostedInvoiceUrl } } }).catch(() => {});
+    }
+    await admin.from("events").insert({ event_type: "booking.addon_invoiced", booking_id: bookingId, source: "admin", summary: `Add-ons invoiced $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, invoice: invoice.id, by: callerId } }).catch(() => {});
+
+    return json({ ok: true, charged: false, status: "invoiced", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, hostedInvoiceUrl });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[admin-add-booking-addons]", msg);
+    return json({ error: msg }, 500);
+  }
+});
