@@ -32,6 +32,9 @@ import {
   RiUserAddLine,
   RiArrowGoBackLine,
   RiCloseLine,
+  RiSendPlaneLine,
+  RiLoginBoxLine,
+  RiSmartphoneLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,6 +44,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -555,6 +559,10 @@ function CleanerSheet({
 
               <Separator />
 
+              <CleanerToolsBlock cleaner={cleaner} />
+
+              <Separator />
+
               <ActionsBlock
                 cleaner={cleaner}
                 onAction={onAction}
@@ -566,6 +574,93 @@ function CleanerSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// SMS workflows + admin "log in as cleaner" impersonation.
+function CleanerToolsBlock({ cleaner }: { cleaner: CleanerRow }) {
+  const [smsMsg, setSmsMsg] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const sendSms = async (template: "custom" | "mobile_dashboard") => {
+    if (template === "custom" && !smsMsg.trim()) {
+      toast.error("Type a message first.");
+      return;
+    }
+    if (!cleaner.phone) {
+      toast.error("This cleaner has no phone on file.");
+      return;
+    }
+    setBusy(template);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-sms", {
+        body: { cleanerId: cleaner.id, template, message: template === "custom" ? smsMsg.trim() : undefined },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
+      toast.success("SMS sent.");
+      if (template === "custom") setSmsMsg("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not send SMS");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const loginAs = async () => {
+    if (!confirm(`Open ${fullName(cleaner)}'s contractor portal as them? You'll be able to view and submit actions in their account. This is logged.`)) return;
+    setBusy("impersonate");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-impersonate-cleaner", {
+        body: { cleanerId: cleaner.id },
+      });
+      if (error) throw error;
+      const d = data as { url?: string; error?: string };
+      if (d?.error) throw new Error(d.error);
+      if (!d?.url) throw new Error("No session link returned");
+      window.open(d.url, "_blank", "noopener");
+      toast.success("Opening cleaner portal in a new tab…");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start session");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
+        <RiSmartphoneLine className="w-4 h-4 text-violet-700" /> Contractor tools
+      </h3>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-slate-500">Send SMS {cleaner.phone ? `to ${cleaner.phone}` : "(no phone on file)"}</Label>
+        <Textarea
+          value={smsMsg}
+          onChange={(e) => setSmsMsg(e.target.value)}
+          placeholder="Type a message to this contractor…"
+          rows={3}
+          disabled={!cleaner.phone}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => sendSms("custom")} disabled={busy !== null || !cleaner.phone} className="bg-violet-600 hover:bg-violet-700 text-white">
+            {busy === "custom" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiSendPlaneLine className="w-4 h-4 mr-1.5" /> Send SMS</>}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => sendSms("mobile_dashboard")} disabled={busy !== null || !cleaner.phone}>
+            {busy === "mobile_dashboard" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Nudge: open dashboard"}
+          </Button>
+        </div>
+        <p className="text-[11px] text-slate-400">Photo-submission requests are sent from a booking (Bookings → Request photos).</p>
+      </div>
+
+      <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">
+        <p className="text-xs text-violet-900 font-medium">Log in as this contractor</p>
+        <p className="text-[11px] text-violet-800/70">Opens their contractor portal in a new tab with a one-time, short-lived secure link. You can view and submit actions as them. Every use is logged.</p>
+        <Button size="sm" variant="outline" onClick={loginAs} disabled={busy !== null || !cleaner.email} className="border-violet-300 text-violet-800">
+          {busy === "impersonate" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiLoginBoxLine className="w-4 h-4 mr-1.5" /> Log in as {cleaner.first_name || "cleaner"}</>}
+        </Button>
+      </div>
+    </div>
   );
 }
 
