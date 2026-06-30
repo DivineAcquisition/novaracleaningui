@@ -41,9 +41,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ADD_ONS, type AddOnId } from "@/lib/pricing";
+import {
+  ADD_ONS,
+  type AddOnId,
+  calculatePrice,
+  SERVICE_TIER_PRICING,
+  HOME_SIZE_RANGES,
+} from "@/lib/pricing";
 import { cn } from "@/lib/utils";
-import { calculatePrice, SERVICE_TIER_PRICING, HOME_SIZE_RANGES, ADD_ONS } from "@/lib/pricing";
 
 interface BookingRow {
   id: string;
