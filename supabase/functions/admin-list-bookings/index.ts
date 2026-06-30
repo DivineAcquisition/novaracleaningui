@@ -69,7 +69,7 @@ async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: stri
 
 // Only columns that exist on public.bookings (service_duration is not a DB column).
 const SELECT_COLS =
-  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason";
+  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, add_ons, membership_plan, hosted_invoice_url";
 
 function matchesSearch(row: Record<string, unknown>, term: string): boolean {
   const q = term.toLowerCase();
