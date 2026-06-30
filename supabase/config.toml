@@ -296,6 +296,11 @@ verify_jwt = false
 [functions.pay-cleaner-transfer]
 verify_jwt = false
 
+# Contractor termination workflow (status + rehire label + letter email w/ HR
+# cc). Admin/VA role re-checked inside the function.
+[functions.terminate-cleaner]
+verify_jwt = true
+
 [functions.customer-manage-recurring]
 verify_jwt = false
 

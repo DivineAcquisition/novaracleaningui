@@ -52,6 +52,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+
+const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
+  rehireable: { label: "Rehireable", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  no_rehire: { label: "No-hire", cls: "bg-amber-50 text-amber-800 border-amber-200" },
+  under_review: { label: "Rehire: under review", cls: "bg-sky-50 text-sky-700 border-sky-200" },
+  blacklist: { label: "Blacklisted", cls: "bg-rose-100 text-rose-800 border-rose-300" },
+};
 
 const CLEANER_STATUSES = [
   { value: "pending", label: "Pending" },
@@ -97,6 +105,9 @@ interface CleanerRow {
   ghl_sync_error: string | null;
   created_at: string;
   activated_at: string | null;
+  rehire_status: string | null;
+  termination_reason: string | null;
+  terminated_at: string | null;
 }
 
 const STATUS_FILTERS = [
@@ -160,7 +171,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -468,6 +479,7 @@ export default function AdminCleaners() {
         onAction={runAction}
         onDelete={deleteCleaner}
         onResyncGhl={resyncToGhl}
+        onRefresh={() => load({ silent: true })}
         actioning={actioning}
       />
     </div>
@@ -491,6 +503,7 @@ function CleanerSheet({
   onAction,
   onDelete,
   onResyncGhl,
+  onRefresh,
   actioning,
 }: {
   cleaner: CleanerRow | null;
@@ -507,6 +520,7 @@ function CleanerSheet({
   ) => void;
   onDelete: () => void;
   onResyncGhl: () => void;
+  onRefresh: () => void;
   actioning: boolean;
 }) {
   return (
@@ -559,6 +573,7 @@ function CleanerSheet({
                 cleaner={cleaner}
                 onAction={onAction}
                 onDelete={onDelete}
+                onRefresh={onRefresh}
                 actioning={actioning}
               />
             </div>
@@ -733,6 +748,7 @@ function ActionsBlock({
   cleaner,
   onAction,
   onDelete,
+  onRefresh,
   actioning,
 }: {
   cleaner: CleanerRow;
@@ -747,9 +763,11 @@ function ActionsBlock({
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
+  onRefresh: () => void;
   actioning: boolean;
 }) {
   const s = (cleaner.status || "pending").toLowerCase();
+  const [termOpen, setTermOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState(s);
   const [statusReason, setStatusReason] = useState("");
   const [availableForBookings, setAvailableForBookings] = useState(
@@ -898,22 +916,7 @@ function ActionsBlock({
           <Button
             variant="outline"
             disabled={actioning}
-            onClick={() => {
-              const choice = window.prompt(
-                "Termination reason — pick one:\n" +
-                  "  misconduct | compliance_failure | persistent_no_show | contract_violation | abandoned_role | other",
-                "misconduct",
-              );
-              if (!choice) return;
-              if (
-                !confirm(
-                  "Terminate this cleaner? They will lose portal + payout access.",
-                )
-              ) {
-                return;
-              }
-              onAction("terminate", { reason: choice.trim() });
-            }}
+            onClick={() => setTermOpen(true)}
             className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
           >
             <RiCloseCircleLine className="w-4 h-4 mr-1.5" />
@@ -983,11 +986,32 @@ function ActionsBlock({
           Delete from directory
         </Button>
       </div>
+      {cleaner.rehire_status && REHIRE_BADGE[cleaner.rehire_status] ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-xs text-slate-600 flex items-center gap-2">
+          <span className="font-semibold text-slate-700">Rehire status:</span>
+          <Badge variant="outline" className={REHIRE_BADGE[cleaner.rehire_status].cls}>
+            {REHIRE_BADGE[cleaner.rehire_status].label}
+          </Badge>
+          {cleaner.termination_reason ? (
+            <span className="text-slate-400">· {cleaner.termination_reason.replaceAll("_", " ")}</span>
+          ) : null}
+        </div>
+      ) : null}
+
       {actioning ? (
         <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
           <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> Applying…
         </p>
       ) : null}
+
+      <TerminateCleanerDialog
+        open={termOpen}
+        onOpenChange={setTermOpen}
+        cleanerId={cleaner.id}
+        cleanerName={`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "this contractor"}
+        cleanerEmail={cleaner.email}
+        onDone={onRefresh}
+      />
     </div>
   );
 }
