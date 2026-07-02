@@ -56,7 +56,6 @@ import {
   isBefore,
   isSameDay,
   isSameMonth,
-  isWeekend,
   startOfDay,
   startOfMonth,
 } from "date-fns";
@@ -1496,7 +1495,7 @@ export default function VaBooking() {
           <FormSection
             number={3}
             title="Schedule"
-            description="Pick a date and time slot — same availability customers see."
+            description="Pick any date and time — weekends and short notice are allowed."
             icon={<RiCalendarLine className="w-4 h-4" />}
           >
             <InlineSchedulePicker
@@ -1909,8 +1908,8 @@ function InlineSchedulePicker({
   onDateSelect: (d: Date) => void;
   onTimeSelect: (slot: string) => void;
 }) {
-  const minDate = addDays(new Date(), 3);
-  const endDate = addDays(new Date(), 60);
+  const minDate = startOfDay(new Date());
+  const endDate = addDays(new Date(), 365);
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(minDate));
   const { availability, loading } = useAvailability(minDate, endDate);
 
@@ -1931,7 +1930,7 @@ function InlineSchedulePicker({
   const slotsForDate = selectedDateStr ? availabilityByDate[selectedDateStr] || {} : {};
 
   const isDateDisabled = (d: Date) =>
-    isWeekend(d) || isBefore(startOfDay(d), startOfDay(minDate));
+    isBefore(startOfDay(d), startOfDay(minDate));
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth);
@@ -2024,7 +2023,7 @@ function InlineSchedulePicker({
             })}
           </div>
           <p className="text-[10px] text-slate-400 mt-2 pl-1">
-            Weekends greyed out · 3-day lead required
+            Any date from today — weekends and short notice allowed
           </p>
         </div>
 
@@ -2065,9 +2064,7 @@ function InlineSchedulePicker({
                     </div>
                     <div className="grid grid-cols-4 gap-1.5">
                       {slots.map((slot) => {
-                        const av = slotsForDate[slot.id];
-                        const available =
-                          av === undefined ? true : av.available;
+                        const available = true;
                         const isSel = selectedTime === slot.id;
                         return (
                           <button
