@@ -81,7 +81,7 @@ serve(async (req) => {
       // offers out now instead of returning early.
       if (sendOffers === true) {
         const { data: approvedDispatch, error: approvedErr } = await supabase.functions.invoke("dispatch-job", {
-          body: { jobId: booking.job_id },
+          body: { jobId: booking.job_id, approved: true },
         });
         if (approvedErr) throw new Error(`Dispatch failed: ${approvedErr.message}`);
         const approvedPayload = (approvedDispatch || {}) as Record<string, unknown>;
@@ -238,7 +238,7 @@ serve(async (req) => {
     if (autoOffers) {
       logStep("Dispatching cleaners (approved / auto-offers on)");
       const { data: dispatchResult, error: dispatchError } = await supabase.functions.invoke('dispatch-job', {
-        body: { jobId: job.id }
+        body: { jobId: job.id, approved: true }
       });
 
       if (dispatchError) {

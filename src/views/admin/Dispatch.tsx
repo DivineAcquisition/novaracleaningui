@@ -314,7 +314,7 @@ export default function AdminDispatch() {
     setBusyId(jobId);
     try {
       const { data, error } = await supabase.functions.invoke("dispatch-job", {
-        body: { jobId },
+        body: { jobId, approved: true },
       });
       if (error) throw error;
       const payload = (data as any) || {};

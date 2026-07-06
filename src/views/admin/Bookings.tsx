@@ -484,6 +484,31 @@ function BookingAssignBlock({
     }
   };
 
+  // Admin-approved offer blast: scores nearby cleaners and texts them the
+  // tokenized offer (the ONLY way offers go out besides the Dispatch page).
+  const sendOffers = async () => {
+    if (!confirm("Send SMS job offers to the best-matched nearby cleaners now? First to accept wins their slot.")) return;
+    setWorking("send_offers");
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-dispatch-booking", {
+        body: { bookingId: booking.id, sendOffers: true },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const payload = data as { offersSent?: number; noCleanersAvailable?: boolean };
+      if (payload?.noCleanersAvailable) {
+        toast.warning("No eligible cleaners found right now — assign manually above or retry later.");
+      } else {
+        toast.success(`Offers sent to ${payload?.offersSent ?? 0} cleaner(s).`);
+      }
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const unassign = async () => {
     if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment.")) return;
     setWorking("unassign");
@@ -614,6 +639,25 @@ function BookingAssignBlock({
             "Save, notify cleaners & sync GHL"
           )}
         </Button>
+        <Button
+          onClick={sendOffers}
+          disabled={working === "send_offers"}
+          variant="outline"
+          className="w-full border-indigo-300 text-indigo-800 hover:bg-indigo-50"
+        >
+          {working === "send_offers" ? (
+            <>
+              <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+              Sending offers…
+            </>
+          ) : (
+            "Send SMS offers to best-matched cleaners"
+          )}
+        </Button>
+        <p className="text-[11px] text-slate-500 -mt-1">
+          Offers only ever go out from this button or the Dispatch page — nothing is texted to
+          contractors automatically.
+        </p>
         {hasAssignment && (
           <Button
             onClick={unassign}

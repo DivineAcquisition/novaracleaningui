@@ -6,6 +6,7 @@ import {
   sendJobOfferSms,
 } from "../_shared/job-offer-sms.ts";
 import { scoreCleanerForJob } from "../_shared/dispatch-scoring.ts";
+import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-approval.ts";
 import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 
 // Pull the human-readable date + arrival window for a job from its linked
@@ -224,12 +225,40 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const jobId = body?.jobId as string;
     const backfill = body?.backfill === true;
-    logStep("Starting dispatch", { jobId, backfill });
+    // Explicit admin sign-off carried by the caller (Dispatch console /
+    // Bookings "send offers", or auto-dispatch-booking after its own gate).
+    const approved = body?.approved === true || body?.sendOffers === true;
+    logStep("Starting dispatch", { jobId, backfill, approved });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    // ─── HARD GATE (defense-in-depth) ────────────────────────────────────
+    // Offer SMS may ONLY leave this function when the call carries the
+    // admin-approval flag, or the operator explicitly re-enabled
+    // auto-offers in app_settings. Any legacy/stale caller that invokes
+    // dispatch-job without the flag parks the job in the Dispatch console
+    // approval queue instead of texting contractors.
+    if (!approved && !(await autoOffersEnabled(supabase))) {
+      logStep("Blocked un-approved offer send — parking job for admin approval", { jobId });
+      await requestDispatchApproval(
+        supabase,
+        jobId,
+        "Offer send attempted without admin approval — approve to text cleaners",
+      );
+      return new Response(
+        JSON.stringify({
+          success: false,
+          pendingApproval: true,
+          offersSent: 0,
+          noCleanersAvailable: false,
+          reason: "approval_required",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
 
     // Get job details
     const { data: job, error: jobError } = await supabase
