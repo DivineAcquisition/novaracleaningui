@@ -20,7 +20,6 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { sendSms, parseTimeSlotToClock } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +27,52 @@ const corsHeaders = {
 };
 
 const CONTRACTOR = "https://contractor.novaracleaning.com";
+
+// Best-effort SMS: GoHighLevel primary (send-ghl-sms), Telnyx fallback
+// (send-sms-notification). Mirrors _shared/sms.ts but kept inline so this
+// cron function has no cross-file dependency to bundle. Never throws.
+// deno-lint-ignore no-explicit-any
+async function sendSms(supabase: any, toPhone: string | null | undefined, message: string): Promise<boolean> {
+  const phone = (toPhone || "").toString().trim();
+  if (!phone || !message.trim()) return false;
+  try {
+    const { data, error } = await supabase.functions.invoke("send-ghl-sms", {
+      body: { phone, message, type: "reminder" },
+    });
+    const ghlError = error || (data && (data as { error?: string }).error);
+    if (!ghlError) return true;
+  } catch (_e) { /* fall through to Telnyx */ }
+  try {
+    const { error } = await supabase.functions.invoke("send-sms-notification", {
+      body: { toPhone: phone, message, type: "reminder" },
+    });
+    return !error;
+  } catch (_e) {
+    return false;
+  }
+}
+
+// Parse a stored arrival-window / time-slot into a 24h "HH:MM:SS" start clock.
+// Handles the canonical ids ("8-12"), named windows, and freeform ranges.
+// Inlined from _shared/sms.ts (start only — that's all this sweep needs).
+function parseSlotStartClock(slot?: string | null): string | null {
+  if (!slot) return null;
+  const raw = String(slot).trim();
+  const canonical: Record<string, string> = { "8-12": "08:00:00", "12-16": "12:00:00", "16-20": "16:00:00" };
+  if (canonical[raw]) return canonical[raw];
+  const named: Record<string, string> = {
+    morning: "08:00:00", midday: "12:00:00", afternoon: "12:00:00", evening: "16:00:00",
+  };
+  if (named[raw.toLowerCase()]) return named[raw.toLowerCase()];
+  const m = raw.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)?\s*-/i);
+  if (!m) return null;
+  let hour = parseInt(m[1], 10);
+  if (Number.isNaN(hour)) return null;
+  const mer = m[3]?.toUpperCase();
+  if (mer === "PM" && hour < 12) hour += 12;
+  if (mer === "AM" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${(m[2] || "00").padStart(2, "0")}:00`;
+}
 
 // Fire a link at most this many minutes BEFORE the target moment, and keep
 // firing (as a catch-up) up to this many minutes AFTER it. With a 5-minute cron
@@ -150,7 +195,7 @@ serve(async (req) => {
       results.attempted++;
 
       const slot = booking.time_slot || booking.arrival_window;
-      const startMin = clockToMinutes(parseTimeSlotToClock(slot).start);
+      const startMin = clockToMinutes(parseSlotStartClock(slot));
       if (startMin == null) { results.skipped_window++; continue; }
 
       const durationHours = Number(booking.estimated_duration_hours) > 0
@@ -200,7 +245,7 @@ serve(async (req) => {
             const msg =
               `Novara: your clean for ${cleanerName} starts soon. ` +
               `Before you begin, upload your BEFORE photos here:\n${link}`;
-            const ok = await sendSms(supabase, { toPhone: c.phone, message: msg, type: "reminder" });
+            const ok = await sendSms(supabase, c.phone, msg);
             if (ok) { results.before_sent++; logStep("BEFORE link sent", { bookingId: booking.id }); }
             else { results.failed++; logStep("BEFORE link SMS failed", { bookingId: booking.id }); }
           }
@@ -229,7 +274,7 @@ serve(async (req) => {
             const msg =
               `Novara: your clean for ${cleanerName} should be wrapping up. ` +
               `Please upload your AFTER photos here so we can finalize and release your payout:\n${link}`;
-            const ok = await sendSms(supabase, { toPhone: c.phone, message: msg, type: "reminder" });
+            const ok = await sendSms(supabase, c.phone, msg);
             if (ok) { results.after_sent++; logStep("AFTER link sent", { bookingId: booking.id }); }
             else { results.failed++; logStep("AFTER link SMS failed", { bookingId: booking.id }); }
           }
