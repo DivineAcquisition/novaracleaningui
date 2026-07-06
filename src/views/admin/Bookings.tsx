@@ -298,14 +298,14 @@ export default function AdminBookings() {
                       highlightId === b.id && "bg-violet-50/50",
                     )}
                   >
-                    <div className="col-span-12 md:col-span-3">
-                      <p className="font-semibold text-slate-900 text-sm">
+                    <div className="col-span-12 md:col-span-3 min-w-0">
+                      <p className="font-semibold text-slate-900 text-sm truncate">
                         {b.first_name || ""} {b.last_name || ""}
                         {!b.first_name && !b.last_name && (
                           <span className="text-slate-400">(no name)</span>
                         )}
                       </p>
-                      <p className="text-xs text-slate-500 tabular-nums">
+                      <p className="text-xs text-slate-500 tabular-nums truncate">
                         #{b.booking_number || b.id.slice(0, 6)} · {b.email || "—"}
                       </p>
                     </div>

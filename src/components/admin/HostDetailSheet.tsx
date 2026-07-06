@@ -193,7 +193,7 @@ function RevenueSnapshot({ host }: { host: HostDetail }) {
       <p className="text-xs font-semibold text-slate-500 flex items-center gap-1 mb-2">
         <RiMoneyDollarCircleLine className="w-4 h-4" /> Revenue snapshot
       </p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {cells.map((c) => (
           <div key={c.label}>
             <p className="text-[11px] text-muted-foreground">{c.label}</p>
@@ -374,7 +374,7 @@ function PropertyCard({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Field label="Standard $"><Input inputMode="decimal" value={std} onChange={(e) => setStd(e.target.value)} placeholder="per turnover" /></Field>
         <Field label="Intro $"><Input inputMode="decimal" value={intro} onChange={(e) => setIntro(e.target.value)} placeholder="optional" /></Field>
         <Field label={property.introExpiring ? "Intro ends ⚠︎" : "Intro ends"}><Input type="date" value={introEnd} onChange={(e) => setIntroEnd(e.target.value)} /></Field>

@@ -374,7 +374,7 @@ export default function PartnerAdmin() {
                 <p className="font-medium truncate">{p.nickname || "Property"} · ${Number(p.turnover_price).toFixed(0)}/turnover</p>
                 <p className="text-xs text-muted-foreground truncate">{hostName(p.host_id)}{p.address ? ` · ${p.address}` : ""}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Input
                   type="date"
                   className="w-40 h-9"
@@ -522,8 +522,8 @@ export default function PartnerAdmin() {
               <div className="space-y-1">
                 {batches.slice(0, 8).map((b) => (
                   <div key={b.id} className="flex items-center justify-between gap-2 text-xs rounded-md border px-2.5 py-1.5">
-                    <span>{hostName(b.host_id)} · week of {format(new Date(`${b.week_start}T12:00:00`), "MMM d")} · {b.turnover_count} clean{b.turnover_count === 1 ? "" : "s"} · {b.source}</span>
-                    <span className="flex items-center gap-2">
+                    <span className="min-w-0 truncate">{hostName(b.host_id)} · week of {format(new Date(`${b.week_start}T12:00:00`), "MMM d")} · {b.turnover_count} clean{b.turnover_count === 1 ? "" : "s"} · {b.source}</span>
+                    <span className="flex items-center gap-2 shrink-0">
                       <span className="tabular-nums">${Number(b.total_amount).toFixed(0)}</span>
                       <Badge className={cn("text-[10px]", STATUS_TONE[b.status] || "bg-slate-100")}>{b.status.replace(/_/g, " ")}</Badge>
                     </span>
@@ -615,7 +615,7 @@ function AssignControl({ cleaners, onAssign, label = "Assign" }: { cleaners: Cle
   return (
     <div className="flex items-center gap-1.5">
       <Select value={val} onValueChange={(v) => { setVal(v); onAssign(v); }}>
-        <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder={label} /></SelectTrigger>
+        <SelectTrigger className="h-8 w-full sm:w-40 text-xs"><SelectValue placeholder={label} /></SelectTrigger>
         <SelectContent>
           {cleaners.map((c) => (
             <SelectItem key={c.id} value={c.id}>{`${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner"}</SelectItem>

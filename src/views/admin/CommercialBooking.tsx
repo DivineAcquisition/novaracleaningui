@@ -436,7 +436,7 @@ export default function CommercialBooking() {
             <Field label="Phone *"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" /></Field>
           </div>
           <Field label="Service address *"><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Commerce Blvd, Suite 200" /></Field>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Field label="City *"><Input value={city} onChange={(e) => setCity(e.target.value)} /></Field>
             <Field label="State *"><Input value={stateVal} onChange={(e) => setStateVal(e.target.value.toUpperCase())} maxLength={2} placeholder="MD" /></Field>
             <Field label="ZIP *"><Input value={zipCode} onChange={(e) => setZipCode(e.target.value)} maxLength={5} placeholder="21044" /></Field>
@@ -508,13 +508,13 @@ export default function CommercialBooking() {
       {/* Submit */}
       <Card className="border-primary/20">
         <CardContent className="py-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <p className="text-sm text-muted-foreground">{isRecurring ? `Recurring · ${frequency}` : "One-time"}</p>
               <p className="text-2xl font-bold text-primary">{quoteCents > 0 ? usd(quoteCents) : "—"}{isRecurring ? " / visit" : ""}</p>
             </div>
             {requirements.length > 0 && (
-              <div className="text-right text-xs text-amber-600 max-w-[55%]">
+              <div className="text-left sm:text-right text-xs text-amber-600 sm:max-w-[55%]">
                 Still needed: {requirements.join(" · ")}
               </div>
             )}

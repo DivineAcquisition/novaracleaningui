@@ -549,7 +549,7 @@ function CleanerSheet({
               <ContactSection cleaner={cleaner} />
 
               <Tabs defaultValue="onboarding">
-                <TabsList className="grid grid-cols-3 bg-slate-100">
+                <TabsList className="grid grid-cols-1 sm:grid-cols-3 h-auto bg-slate-100">
                   <TabsTrigger value="onboarding" className="data-[state=active]:bg-white">
                     Onboarding
                   </TabsTrigger>

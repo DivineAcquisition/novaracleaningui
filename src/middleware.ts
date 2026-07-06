@@ -64,6 +64,9 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/account", "app"],
   ["/portal", "app"],
   ["/manage-booking", "app"],
+  // Tokenized recurring-plan self-service (link texted to the customer —
+  // no login; the token in the URL is the credential).
+  ["/manage-recurring", "app"],
   ["/update-password", "app"],
   ["/reset-password", "app"],
   ["/sms-consent", "app"],

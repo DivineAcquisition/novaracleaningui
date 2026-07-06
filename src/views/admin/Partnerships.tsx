@@ -64,14 +64,14 @@ export default function Partnerships() {
 
   return (
     <div className="max-w-6xl mx-auto px-1 sm:px-4 py-2 space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Partnerships</h1>
           <p className="text-sm text-muted-foreground mt-1">
             STR host accounts, pricing, revenue, turnovers, crew, and recurring schedules — in one place.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleSyncContractors} disabled={syncingContractors}>
             {syncingContractors ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiToolsLine className="w-4 h-4 mr-1.5" />}
             Sync contractors

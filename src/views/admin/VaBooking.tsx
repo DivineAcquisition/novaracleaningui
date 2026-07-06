@@ -825,8 +825,8 @@ export default function VaBooking() {
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 pt-1">
                 Subscription payment link
               </p>
-              <div className="flex items-center gap-2">
-                <Input value={subUrl} readOnly className="font-mono text-xs bg-white" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Input value={subUrl} readOnly className="font-mono text-xs bg-white min-w-0 flex-1" />
                 <Button
                   type="button"
                   variant="outline"
@@ -1006,7 +1006,7 @@ export default function VaBooking() {
             </Badge>
           )}
         </div>
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <h1 className="font-jakarta text-[28px] leading-tight font-bold tracking-tight text-slate-900">
               Novara Internal Booking
@@ -1016,7 +1016,7 @@ export default function VaBooking() {
               and bill in a single flow.
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
             <PartnerOnboardingLinkDialog
               name={`${firstName} ${lastName}`.trim()}
               email={email}
@@ -1226,7 +1226,7 @@ export default function VaBooking() {
               <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                 Service type
               </Label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                 {SERVICE_TYPE_OPTIONS.map((opt) => {
                   const active = serviceType === opt.id;
                   const previewCents =
@@ -1318,7 +1318,7 @@ export default function VaBooking() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label="Bedrooms">
                 <Input
                   value={bedrooms}

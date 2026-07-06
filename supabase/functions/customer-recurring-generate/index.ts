@@ -183,6 +183,14 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
   try { await admin.functions.invoke("create-google-calendar-event", { body: { bookingId: booking.id } }); } catch (e) { console.error("gcal:", e); }
   try { await admin.functions.invoke("book-ghl-appointment", { body: { bookingId: booking.id } }); } catch (e) { console.error("ghl-appt:", e); }
 
+  // Text the customer their next-clean confirmation + self-service manage
+  // link (move date/time, skip, pause — no login). Best-effort.
+  try {
+    await admin.functions.invoke("send-recurring-manage-link", {
+      body: { scheduleId: sched.id, context: "generated", bookingDate: serviceDate },
+    });
+  } catch (e) { console.error("manage-link sms:", e); }
+
   console.log("[customer-recurring-generate] generated", { scheduleId: sched.id, bookingId: booking.id, serviceDate, cleanerId });
   return { status: "created", bookingId: booking.id, date: serviceDate };
 }

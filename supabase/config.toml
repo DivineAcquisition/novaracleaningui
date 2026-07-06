@@ -344,5 +344,15 @@ verify_jwt = true
 [functions.send-job-completion-sms]
 verify_jwt = false
 
+# Customer recurring-plan self-service (token-protected — the manage_token
+# in the SMS'd URL is the only credential).
+[functions.manage-recurring-schedule]
+verify_jwt = false
+
+# Texts a recurring customer their manage link. Admin/VA JWT or internal
+# service-role invoke (from customer-recurring-generate) — enforced inside.
+[functions.send-recurring-manage-link]
+verify_jwt = false
+
 
 

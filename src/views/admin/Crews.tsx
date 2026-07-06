@@ -172,7 +172,7 @@ export default function AdminCrews() {
               <div className="flex items-center gap-2 border-t pt-3">
                 <RiUserAddLine className="w-4 h-4 text-slate-400" />
                 <Select value="" onValueChange={(v) => v && assignCleaner(v, crew.id)}>
-                  <SelectTrigger className="h-8 w-[220px] text-xs"><SelectValue placeholder="Add a cleaner…" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs"><SelectValue placeholder="Add a cleaner…" /></SelectTrigger>
                   <SelectContent>
                     {unassigned.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No unassigned cleaners</div>}
                     {unassigned.map((c) => <SelectItem key={c.id} value={c.id}>{name(c)}</SelectItem>)}

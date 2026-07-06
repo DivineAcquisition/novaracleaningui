@@ -240,7 +240,21 @@ export default function AdminDispatch() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      setJobs(((data as any)?.jobs as DispatchJob[]) || []);
+
+      // Normalize defensively: an older deployed admin-list-jobs won't
+      // include checklist/addon_requests/settings yet, and a missing array
+      // here previously crashed the whole page ("client-side exception").
+      const rawJobs = (((data as any)?.jobs as any[]) || []);
+      const normalized: DispatchJob[] = rawJobs
+        .filter((j) => String(j?.status || "").toLowerCase() !== "cancelled")
+        .map((j) => ({
+          ...j,
+          booking: j?.booking ?? null,
+          assignments: Array.isArray(j?.assignments) ? j.assignments : [],
+          checklist: j?.checklist ?? null,
+          addon_requests: Array.isArray(j?.addon_requests) ? j.addon_requests : [],
+        }));
+      setJobs(normalized);
       setUnassigned(((data as any)?.unassignedBookings as UnassignedBooking[]) || []);
       const s = (data as any)?.settings;
       if (s) {
@@ -403,8 +417,8 @@ export default function AdminDispatch() {
               texted when <span className="font-semibold text-slate-700">you</span> approve.
             </p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col items-start sm:items-end gap-3 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2">
               <Tabs
                 aria-label="Date range"
                 size="sm"
@@ -494,11 +508,11 @@ export default function AdminDispatch() {
                           {b.status}
                         </Chip>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           color="primary"
-                          className="flex-1 font-semibold"
+                          className="flex-1 min-w-[160px] font-semibold"
                           startContent={<RiRocket2Line className="w-4 h-4" />}
                           isLoading={busyId === b.id}
                           onPress={() => void dispatchBooking(b.id, true)}
@@ -884,7 +898,7 @@ function JobCard({
         )}
 
         <Divider />
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-slate-400">
             {money(job.booking?.total_estimate_cents)} job
           </span>

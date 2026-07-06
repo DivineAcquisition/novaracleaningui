@@ -9,6 +9,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
+import { parseTimeSlotToClock } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,12 +68,18 @@ serve(async (req) => {
       .from("jobs")
       .select(
         "id, status, service_type, sq_ft, bedrooms, bathrooms, address, city, state, zip, start_datetime, duration_est_hours, min_cleaners_required, manual_intervention_required, dispatch_alert_reason, created_at",
-      );
+      )
+      // Cancelled jobs never belong on the dispatch board.
+      .not("status", "ilike", "cancelled");
 
     const today = localYmd();
     if (dateRange === "active") {
-      // Upcoming or undated jobs that aren't finished/cancelled.
-      jq = jq.or(`start_datetime.gte.${today}T00:00:00,start_datetime.is.null`);
+      // Upcoming or undated jobs — PLUS anything still waiting on dispatch
+      // approval regardless of date (a stale pending job must never
+      // silently fall off the board).
+      jq = jq.or(
+        `start_datetime.gte.${today}T00:00:00,start_datetime.is.null,status.eq."Pending Approval"`,
+      );
     } else if (dateRange === "next_14") {
       const end = new Date();
       end.setDate(end.getDate() + 14);
@@ -140,6 +147,51 @@ serve(async (req) => {
       }
     }
 
+    // ─── Reconcile: bookings are the source of truth ──────────────────────
+    // 1. A cancelled booking must never leave a live job on the board —
+    //    cancel the job + withdraw open assignments and drop it.
+    // 2. A rescheduled booking must drag its job's start_datetime along —
+    //    conflict checks, offers, and the board all key off that timestamp.
+    const cancelledJobIds = new Set<string>();
+    for (const j of jobs) {
+      const jid = String(j.id);
+      const booking = bookingByJob.get(jid);
+      if (!booking) continue;
+
+      if (String(booking.status || "").toLowerCase() === "cancelled") {
+        cancelledJobIds.add(jid);
+        try {
+          await admin.from("jobs")
+            .update({ status: "cancelled", dispatch_alert_reason: "Linked booking was cancelled" })
+            .eq("id", jid);
+          await admin.from("job_assignments")
+            .update({ status: "Withdrawn" })
+            .eq("job_id", jid)
+            .not("status", "ilike", "completed")
+            .not("status", "ilike", "cancelled")
+            .not("status", "ilike", "declined");
+        } catch (_) { /* reconciliation is best-effort */ }
+        continue;
+      }
+
+      const bookingDate = String(booking.service_date || "");
+      const jobStart = String(j.start_datetime || "");
+      if (bookingDate && jobStart && jobStart.slice(0, 10) !== bookingDate) {
+        const clock = parseTimeSlotToClock(
+          String(booking.time_slot || booking.arrival_window || ""),
+        ).start || jobStart.slice(11, 19) || "09:00:00";
+        const fixedStart = `${bookingDate}T${clock}`;
+        const { error: fixErr } = await admin.from("jobs")
+          .update({ start_datetime: fixedStart })
+          .eq("id", jid);
+        if (!fixErr) {
+          j.start_datetime = fixedStart;
+          j.date_synced = true;
+        }
+      }
+    }
+    const liveJobs = jobs.filter((j) => !cancelledJobIds.has(String(j.id)));
+
     // ─── Contractor checklist progress per job ────────────────────────────
     const checklistByJob = new Map<string, Record<string, unknown>>();
     if (jobIds.length > 0) {
@@ -168,7 +220,7 @@ serve(async (req) => {
       }
     }
 
-    const enriched = jobs.map((j) => ({
+    const enriched = liveJobs.map((j) => ({
       ...j,
       booking: bookingByJob.get(String(j.id)) || null,
       assignments: assignmentsByJob.get(String(j.id)) || [],
@@ -176,14 +228,16 @@ serve(async (req) => {
       addon_requests: addonRequestsByJob.get(String(j.id)) || [],
     }));
 
-    // ─── Confirmed bookings with no job yet (need dispatch) ──────────────
+    // ─── Paid/confirmed bookings with no job yet (need dispatch) ─────────
+    // 'booked' = paid via Stripe Checkout — those were invisible here
+    // before, so paid jobs could sit unstaffed with no board presence.
     const { data: needsDispatch } = await admin
       .from("bookings")
       .select(
         "id, booking_number, status, service_date, time_slot, arrival_window, first_name, last_name, city, state, zip_code, total_estimate_cents",
       )
       .is("job_id", null)
-      .in("status", ["confirmed", "pending_details"])
+      .in("status", ["confirmed", "pending_details", "booked"])
       .gte("service_date", today)
       .order("service_date", { ascending: true })
       .limit(100);
