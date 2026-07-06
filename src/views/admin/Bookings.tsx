@@ -25,7 +25,11 @@ import {
   RiInformationLine,
   RiEdit2Line,
   RiDeleteBin6Line,
+  RiCameraLine,
+  RiImageAddLine,
+  RiUploadCloud2Line,
 } from "@remixicon/react";
+import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -1160,24 +1164,27 @@ function BookingSheet({
               </Card>
             )}
 
-            {/* Request photo submission from the assigned cleaner */}
-            {booking.cleaner_id && (
-              <Card className="border-slate-200">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-1.5">
-                    <RiInformationLine className="w-4 h-4 text-violet-700" />
-                    Cleaner photos
-                  </CardTitle>
-                  <CardDescription>Text the assigned cleaner a secure link to upload before &amp; after photos.</CardDescription>
-                </CardHeader>
-                <CardContent>
+            {/* Before/after photos: request from the cleaner OR upload here */}
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <RiInformationLine className="w-4 h-4 text-violet-700" />
+                  Before &amp; after photos
+                </CardTitle>
+                <CardDescription>
+                  Text the assigned cleaner a secure upload link, or upload the before/after photos yourself.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {booking.cleaner_id && (
                   <Button variant="outline" className="w-full" onClick={requestPhotos} disabled={working === "photos"}>
                     {working === "photos" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Request photo submission
+                    Request photo submission from cleaner
                   </Button>
-                </CardContent>
-              </Card>
-            )}
+                )}
+                <AdminPhotoSubmit booking={booking} onSubmitted={onMutated} />
+              </CardContent>
+            </Card>
 
             <BookingAssignBlock
               booking={booking}
@@ -1646,6 +1653,198 @@ function BookingSheet({
         />
       )}
     </>
+  );
+}
+
+// ─── Admin before/after photo upload ──────────────────────────────────────
+// Lets an admin/VA upload before & after photos directly from the portal
+// instead of waiting on the contractor. Files are compressed and pushed to the
+// public `cleaner-job-photos` bucket (authenticated RLS allows it), then the
+// public URLs are handed to admin-submit-photos, which reuses the same
+// append + customer-gallery flow as a cleaner submission.
+const PHOTO_BUCKET = "cleaner-job-photos";
+
+async function prepareAdminPhoto(
+  file: File,
+): Promise<{ blob: Blob; ext: string; contentType: string }> {
+  try {
+    const compressed = await imageCompression(file, {
+      maxSizeMB: 1.5,
+      maxWidthOrHeight: 1600,
+      useWebWorker: true,
+      fileType: "image/jpeg",
+      initialQuality: 0.8,
+    });
+    return { blob: compressed, ext: "jpg", contentType: "image/jpeg" };
+  } catch {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    return { blob: file, ext, contentType: file.type || "image/jpeg" };
+  }
+}
+
+function AdminPhotoSubmit({ booking, onSubmitted }: { booking: BookingRow; onSubmitted: () => void }) {
+  const [beforeUrls, setBeforeUrls] = useState<string[]>([]);
+  const [afterUrls, setAfterUrls] = useState<string[]>([]);
+  const [uploadingKind, setUploadingKind] = useState<"before" | "after" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleFiles = async (kind: "before" | "after", files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadingKind(kind);
+    const added: string[] = [];
+    try {
+      for (const file of Array.from(files)) {
+        const { blob, ext, contentType } = await prepareAdminPhoto(file);
+        const key = `bookings/${booking.id}/${kind}/${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(key, blob, {
+          cacheControl: "3600",
+          contentType,
+          upsert: false,
+        });
+        if (error) throw error;
+        const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(key);
+        added.push(pub.publicUrl);
+      }
+      if (kind === "before") setBeforeUrls((prev) => [...prev, ...added]);
+      else setAfterUrls((prev) => [...prev, ...added]);
+      toast.success(`Added ${added.length} ${kind} photo${added.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      toast.error("Upload failed: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setUploadingKind(null);
+    }
+  };
+
+  const removeUrl = (kind: "before" | "after", url: string) => {
+    if (kind === "before") setBeforeUrls((u) => u.filter((x) => x !== url));
+    else setAfterUrls((u) => u.filter((x) => x !== url));
+  };
+
+  const submit = async () => {
+    if (beforeUrls.length === 0 && afterUrls.length === 0) {
+      toast.error("Add at least one photo first.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-submit-photos", {
+        body: { bookingId: booking.id, beforeUrls, afterUrls },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; error?: string };
+      if (!d?.ok) throw new Error(d?.error || "Submit failed");
+      toast.success("Photos saved to this booking.");
+      setBeforeUrls([]);
+      setAfterUrls([]);
+      onSubmitted();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not submit photos");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+      <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+        <RiUploadCloud2Line className="w-4 h-4 text-violet-700" /> Upload photos yourself
+      </p>
+      <AdminPhotoGroup
+        title="Before photos"
+        urls={beforeUrls}
+        uploading={uploadingKind === "before"}
+        onAdd={(files) => handleFiles("before", files)}
+        onRemove={(u) => removeUrl("before", u)}
+      />
+      <AdminPhotoGroup
+        title="After photos"
+        urls={afterUrls}
+        uploading={uploadingKind === "after"}
+        onAdd={(files) => handleFiles("after", files)}
+        onRemove={(u) => removeUrl("after", u)}
+      />
+      <Button
+        className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+        onClick={submit}
+        disabled={submitting || uploadingKind !== null || (beforeUrls.length === 0 && afterUrls.length === 0)}
+      >
+        {submitting ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-2" />}
+        Submit photos
+      </Button>
+      <p className="text-[11px] text-slate-400">
+        After photos trigger the customer&apos;s before/after gallery link, exactly like a cleaner upload.
+      </p>
+    </div>
+  );
+}
+
+function AdminPhotoGroup({
+  title,
+  urls,
+  uploading,
+  onAdd,
+  onRemove,
+}: {
+  title: string;
+  urls: string[];
+  uploading: boolean;
+  onAdd: (files: FileList | null) => void;
+  onRemove: (u: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium text-slate-600">{title}</p>
+        <span className="text-[11px] text-slate-400">{urls.length} attached</span>
+      </div>
+      {urls.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {urls.map((u) => (
+            <div key={u} className="relative aspect-square rounded-md overflow-hidden border border-slate-200">
+              <img src={u} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => onRemove(u)}
+                className="absolute top-0.5 right-0.5 bg-black/50 text-white rounded-full p-0.5 hover:bg-black/70"
+              >
+                <RiCloseCircleLine className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <label
+        className={cn(
+          "flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-3 cursor-pointer hover:border-violet-400 hover:bg-violet-50/40 transition",
+          uploading && "opacity-60 pointer-events-none",
+        )}
+      >
+        {uploading ? (
+          <>
+            <RiLoader4Line className="w-4 h-4 animate-spin text-slate-500" />
+            <span className="text-xs text-slate-500">Uploading…</span>
+          </>
+        ) : (
+          <>
+            <RiCameraLine className="w-4 h-4 text-violet-600" />
+            <span className="text-xs font-medium text-slate-700">Tap to take or pick photos</span>
+            <RiImageAddLine className="w-4 h-4 text-slate-400" />
+          </>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => {
+            onAdd(e.target.files);
+            e.target.value = "";
+          }}
+          className="hidden"
+        />
+      </label>
+    </div>
   );
 }
 

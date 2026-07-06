@@ -103,7 +103,7 @@ serve(async (req) => {
       source: "admin",
       summary: `Admin signed in as cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
       data: { by: callerId, cleaner_email: cleaner.email },
-    }).catch(() => {});
+    }).then(() => undefined, () => undefined);
 
     return json({ ok: true, url, cleanerName: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() });
   } catch (e) {

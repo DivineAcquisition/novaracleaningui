@@ -101,7 +101,7 @@ serve(async (req) => {
       source: "admin",
       summary: `Admin SMS (${template}) to ${cleaner.first_name || "cleaner"}`,
       data: { template, by: callerId, preview: message.slice(0, 180) },
-    }).catch(() => {});
+    }).then(() => undefined, () => undefined);
 
     return json({ ok: true, sent: true, template, message });
   } catch (e) {

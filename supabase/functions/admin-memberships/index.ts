@@ -99,7 +99,7 @@ serve(async (req) => {
         source: "admin-memberships",
         summary,
         data: { action, subscription_id: subscriptionId, by: callerId },
-      }).catch(() => {});
+      }).then(() => undefined, () => undefined);
 
       return json({ ok: true, action, subscriptionId });
     }
