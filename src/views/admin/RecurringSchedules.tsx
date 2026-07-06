@@ -1,18 +1,24 @@
 "use client";
 
-// ─── /admin/recurring — Customer recurring cleaning schedules ─────────────
+// ─── /admin/recurring — Memberships & recurring cleaning hub ──────────────
 //
-// Manage member recurring cleans: cadence (weekly/biweekly/monthly), preferred
-// time + cleaner ("always the previous cleaner unless they ask for a new one"),
-// pause/resume, edit, "generate now", and create. Each cycle the
-// customer-recurring-generate cron creates a confirmed booking, assigns the
-// preferred cleaner, and syncs GHL + Airtable + Google Calendar.
+// The admin management hub for memberships:
+//   • Members — every Glow membership (from Stripe subscription credits):
+//     plan, credits used/remaining, billing period, contact info, linked
+//     recurring schedule. Pause / resume / cancel billing right here, or
+//     spin up their recurring schedule pre-filled.
+//   • Schedules — the recurring cleaning engine: cadence (weekly / biweekly
+//     / monthly), preferred time + cleaner, pause/resume, edit, "generate
+//     now", and create. Each cycle the customer-recurring-generate cron
+//     creates a confirmed booking, assigns the preferred/previous cleaner,
+//     and syncs GHL + Airtable + Google Calendar.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   RiLoader4Line, RiRepeatLine, RiAddLine, RiPlayLine, RiPauseLine, RiFlashlightLine, RiCloseLine,
+  RiVipCrownLine, RiUserHeartLine, RiStopCircleLine, RiCalendarScheduleLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calculatePrice, SERVICE_TIER_PRICING, HOME_SIZE_RANGES } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +40,22 @@ interface Schedule {
   next_service_date: string | null; last_generated_date: string | null; active: boolean; notes: string | null;
 }
 interface Cleaner { id: string; first_name: string | null; last_name: string | null; }
+interface Member {
+  id: string;
+  email: string;
+  customer_id: string;
+  subscription_id: string;
+  membership_plan: string;
+  credits_per_month: number;
+  credits_remaining: number;
+  credits_used: number | null;
+  current_period_start: string;
+  current_period_end: string;
+  period_active: boolean;
+  customer: { first_name?: string | null; last_name?: string | null; phone?: string | null; city?: string | null; state?: string | null } | null;
+  schedules: { id: string; cadence: string; active: boolean; next_service_date: string | null }[];
+  last_booking: { service_date?: string | null; status?: string | null } | null;
+}
 
 const TIME_SLOTS = [
   "8:00 AM - 9:00 AM", "9:00 AM - 10:00 AM", "10:00 AM - 11:00 AM", "11:00 AM - 12:00 PM",
@@ -40,22 +63,40 @@ const TIME_SLOTS = [
   "4:00 PM - 5:00 PM", "5:00 PM - 6:00 PM",
 ];
 const fmtMoney = (c: number | null | undefined) => (c == null ? "—" : `$${(c / 100).toFixed(0)}`);
+const PLAN_LABELS: Record<string, string> = {
+  weekly: "Glow Weekly",
+  biweekly: "Glow Bi-Weekly",
+  monthly: "Glow Monthly",
+};
+const PLAN_CADENCE: Record<string, string> = { weekly: "weekly", biweekly: "biweekly", monthly: "monthly" };
 
 export default function AdminRecurringSchedules() {
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [membersError, setMembersError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [prefill, setPrefill] = useState<Partial<Schedule> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: s }, { data: c }] = await Promise.all([
+    setMembersError(null);
+    const [{ data: s }, { data: c }, membersRes] = await Promise.all([
       (supabase.from as any)("customer_recurring_schedules").select("*").order("created_at", { ascending: false }),
       (supabase.from as any)("cleaners").select("id, first_name, last_name").eq("status", "active").order("first_name"),
+      supabase.functions.invoke("admin-memberships", { body: {} }).catch((e) => ({ data: null, error: e })),
     ]);
     setSchedules((s as Schedule[]) || []);
     setCleaners((c as Cleaner[]) || []);
+    const mData = (membersRes as any)?.data;
+    if ((membersRes as any)?.error || mData?.error) {
+      setMembersError(String(mData?.error || (membersRes as any)?.error?.message || "Couldn't load members"));
+      setMembers([]);
+    } else {
+      setMembers((mData?.members as Member[]) || []);
+    }
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -91,52 +132,191 @@ export default function AdminRecurringSchedules() {
     }
   };
 
+  const memberAction = async (m: Member, action: "pause" | "resume" | "cancel") => {
+    const verb = action === "cancel" ? "cancel at period end" : action;
+    if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} the ${PLAN_LABELS[m.membership_plan] || m.membership_plan} membership for ${m.email}?`)) return;
+    setWorking(m.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: { action, subscriptionId: m.subscription_id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(
+        action === "pause" ? "Membership billing paused." :
+        action === "resume" ? "Membership billing resumed." :
+        "Membership will cancel at the end of the current period.",
+      );
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const startScheduleForMember = (m: Member) => {
+    setPrefill({
+      email: m.email,
+      first_name: m.customer?.first_name || "",
+      last_name: m.customer?.last_name || "",
+      phone: m.customer?.phone || "",
+      cadence: PLAN_CADENCE[m.membership_plan] || "biweekly",
+      uses_credit: true,
+      membership_plan: m.membership_plan,
+    } as Partial<Schedule>);
+    setShowCreate(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const active = schedules.filter((s) => s.active);
   const paused = schedules.filter((s) => !s.active);
+  const membersNeedingSchedule = useMemo(
+    () => members.filter((m) => m.period_active && !m.schedules.some((s) => s.active)),
+    [members],
+  );
 
   if (loading) return <div className="flex justify-center py-20"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <RiRepeatLine className="w-6 h-6 text-violet-700" /> Recurring cleans
+            <RiVipCrownLine className="w-6 h-6 text-violet-700" /> Memberships &amp; recurring
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Member recurring schedules. Each cycle auto-creates a confirmed booking, assigns the previous/preferred cleaner, and syncs GHL · Airtable · Calendar.
+            Manage every Glow membership and its recurring clean schedule in one place. Each cycle auto-creates a
+            confirmed booking, assigns the previous/preferred cleaner, and syncs GHL · Airtable · Calendar.
           </p>
         </div>
-        <Button onClick={() => setShowCreate((v) => !v)}>
+        <Button onClick={() => { setPrefill(null); setShowCreate((v) => !v); }}>
           {showCreate ? <><RiCloseLine className="w-4 h-4 mr-1.5" /> Close</> : <><RiAddLine className="w-4 h-4 mr-1.5" /> New schedule</>}
         </Button>
       </div>
 
-      {showCreate && <CreateForm cleaners={cleaners} onCreated={() => { setShowCreate(false); load(); }} />}
-
-      {schedules.length === 0 && (
-        <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No recurring schedules yet.</CardContent></Card>
+      {showCreate && (
+        <CreateForm
+          cleaners={cleaners}
+          prefill={prefill}
+          onCreated={() => { setShowCreate(false); setPrefill(null); load(); }}
+        />
       )}
 
-      {active.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active ({active.length})</p>
-          {active.map((s) => (
-            <ScheduleRow key={s.id} s={s} cleaners={cleaners} cleanerName={cleanerName} working={working}
-              onPatch={patch} onGenerate={generateNow} timeSlots={TIME_SLOTS} />
-          ))}
-        </div>
+      {membersNeedingSchedule.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/50">
+          <CardContent className="py-3 flex flex-wrap items-center gap-2 text-sm text-amber-900">
+            <RiCalendarScheduleLine className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">{membersNeedingSchedule.length} active member{membersNeedingSchedule.length > 1 ? "s" : ""} without a recurring schedule</span>
+            <span className="text-amber-800/70">— their cleans won't auto-book until a schedule is set up.</span>
+          </CardContent>
+        </Card>
       )}
 
-      {paused.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Paused ({paused.length})</p>
-          {paused.map((s) => (
-            <ScheduleRow key={s.id} s={s} cleaners={cleaners} cleanerName={cleanerName} working={working}
-              onPatch={patch} onGenerate={generateNow} timeSlots={TIME_SLOTS} />
-          ))}
-        </div>
-      )}
+      <Tabs defaultValue="members" className="w-full">
+        <TabsList>
+          <TabsTrigger value="members" className="gap-1.5">
+            <RiUserHeartLine className="w-4 h-4" /> Members ({members.length})
+          </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-1.5">
+            <RiRepeatLine className="w-4 h-4" /> Recurring schedules ({schedules.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ─── Members ─────────────────────────────────────────────────── */}
+        <TabsContent value="members" className="mt-4 space-y-2">
+          {membersError && (
+            <Card className="border-rose-200 bg-rose-50/50">
+              <CardContent className="py-3 text-sm text-rose-800">
+                Couldn't load members: {membersError}
+              </CardContent>
+            </Card>
+          )}
+          {!membersError && members.length === 0 && (
+            <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No memberships yet.</CardContent></Card>
+          )}
+          {members.map((m) => {
+            const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim() || m.email;
+            const hasActiveSchedule = m.schedules.some((s) => s.active);
+            return (
+              <Card key={m.id} className={cn("border", m.period_active ? "border-slate-200" : "border-slate-200 bg-slate-50/60")}>
+                <CardContent className="py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm text-slate-900">
+                        {name}
+                        <span className="text-slate-400 font-normal"> · {m.email}</span>
+                        {m.customer?.phone ? <span className="text-slate-400 font-normal"> · {m.customer.phone}</span> : null}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {PLAN_LABELS[m.membership_plan] || m.membership_plan}
+                        {" · "}{m.credits_remaining}/{m.credits_per_month} credit{m.credits_per_month === 1 ? "" : "s"} left this period
+                        {" · "}renews {m.current_period_end ? format(new Date(m.current_period_end), "MMM d") : "—"}
+                        {m.last_booking?.service_date ? ` · last clean ${format(new Date(`${m.last_booking.service_date}T12:00:00`), "MMM d")}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge className={cn("text-[11px]", m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-600")}>
+                        {m.period_active ? "Active member" : "Period ended"}
+                      </Badge>
+                      {hasActiveSchedule ? (
+                        <Badge className="text-[11px] bg-emerald-100 text-emerald-700">Schedule set</Badge>
+                      ) : (
+                        <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800"
+                          onClick={() => startScheduleForMember(m)}>
+                          <RiCalendarScheduleLine className="w-3.5 h-3.5 mr-1" /> Set up schedule
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === m.id}
+                        title="Pause Stripe billing"
+                        onClick={() => memberAction(m, "pause")}>
+                        <RiPauseLine className="w-3.5 h-3.5 mr-1" /> Pause
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === m.id}
+                        title="Resume Stripe billing"
+                        onClick={() => memberAction(m, "resume")}>
+                        <RiPlayLine className="w-3.5 h-3.5 mr-1" /> Resume
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs border-rose-200 text-rose-700" disabled={working === m.id}
+                        title="Cancel at period end"
+                        onClick={() => memberAction(m, "cancel")}>
+                        {working === m.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiStopCircleLine className="w-3.5 h-3.5 mr-1" /> Cancel</>}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </TabsContent>
+
+        {/* ─── Schedules ───────────────────────────────────────────────── */}
+        <TabsContent value="schedules" className="mt-4 space-y-6">
+          {schedules.length === 0 && (
+            <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No recurring schedules yet.</CardContent></Card>
+          )}
+
+          {active.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active ({active.length})</p>
+              {active.map((s) => (
+                <ScheduleRow key={s.id} s={s} cleaners={cleaners} cleanerName={cleanerName} working={working}
+                  onPatch={patch} onGenerate={generateNow} timeSlots={TIME_SLOTS} />
+              ))}
+            </div>
+          )}
+
+          {paused.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Paused ({paused.length})</p>
+              {paused.map((s) => (
+                <ScheduleRow key={s.id} s={s} cleaners={cleaners} cleanerName={cleanerName} working={working}
+                  onPatch={patch} onGenerate={generateNow} timeSlots={TIME_SLOTS} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -228,12 +408,13 @@ function ScheduleRow({
   );
 }
 
-function CreateForm({ cleaners, onCreated }: { cleaners: Cleaner[]; onCreated: () => void }) {
+function CreateForm({ cleaners, prefill, onCreated }: { cleaners: Cleaner[]; prefill: Partial<Schedule> | null; onCreated: () => void }) {
   const [f, setF] = useState({
-    email: "", first_name: "", last_name: "", phone: "",
-    address: "", city: "", state: "", zip_code: "",
+    email: prefill?.email || "", first_name: prefill?.first_name || "", last_name: prefill?.last_name || "", phone: prefill?.phone || "",
+    address: prefill?.address || "", city: prefill?.city || "", state: prefill?.state || "", zip_code: prefill?.zip_code || "",
     home_size_id: "1000_1500", service_type: "standard", preferred_time_slot: "9:00 AM - 10:00 AM",
-    cadence: "biweekly", preferred_cleaner_id: "auto", next_service_date: "", uses_credit: false,
+    cadence: prefill?.cadence || "biweekly", preferred_cleaner_id: "auto", next_service_date: "",
+    uses_credit: prefill?.uses_credit ?? false,
   });
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: unknown) => setF((p) => ({ ...p, [k]: v }));
@@ -253,6 +434,7 @@ function CreateForm({ cleaners, onCreated }: { cleaners: Cleaner[]; onCreated: (
         home_size_id: f.home_size_id, service_type: f.service_type, preferred_time_slot: f.preferred_time_slot,
         cadence: f.cadence, preferred_cleaner_id: f.preferred_cleaner_id === "auto" ? null : f.preferred_cleaner_id,
         price_cents: priceCents, uses_credit: f.uses_credit, next_service_date: f.next_service_date, active: true,
+        membership_plan: prefill?.membership_plan || null,
       });
       if (error) throw error;
       toast.success("Recurring schedule created.");
@@ -266,7 +448,11 @@ function CreateForm({ cleaners, onCreated }: { cleaners: Cleaner[]; onCreated: (
 
   return (
     <Card className="border-violet-200">
-      <CardHeader className="pb-2"><CardTitle className="text-base">New recurring schedule</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">
+          New recurring schedule{prefill?.email ? ` — ${prefill.email}` : ""}
+        </CardTitle>
+      </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
           <Input placeholder="Email" value={f.email} onChange={(e) => set("email", e.target.value)} />

@@ -1,11 +1,10 @@
 import { Suspense } from "react";
-
-import CleanerAuthCallbackPage from "@/views/cleaner/AuthCallback";
+import CleanerJobChecklistPage from "@/views/cleaner/JobChecklist";
 
 export default function Page() {
   return (
     <Suspense>
-      <CleanerAuthCallbackPage />
+      <CleanerJobChecklistPage />
     </Suspense>
   );
 }

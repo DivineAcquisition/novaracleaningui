@@ -139,6 +139,7 @@ export default function MobileDashboard() {
               role: assignment.role,
               status: assignment.status,
               estimated_pay_cents: assignment.estimated_pay_cents,
+              checklistToken: assignment.response_token || null,
               bookingId: bk?.id,
               booking_service_date: bk?.service_date ?? null,
               booking_time_slot: bk?.time_slot ?? null,

@@ -53,6 +53,7 @@ interface UpcomingJob {
   assignmentId?: string;
   bookingId?: string;
   jobId?: string;
+  checklistToken?: string | null;
   source: JobSource;
   service_type: string;
   address: string;
@@ -162,7 +163,10 @@ export default function CleanerDashboard() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchJobs = useCallback(
-    async (cleanerId: string) => {
+    // payPercentage is passed explicitly because this callback is created
+    // before `profile` state settles — reading profile from the closure
+    // always saw null on first load (stale-closure gap).
+    async (cleanerId: string, payPercentage?: number | null) => {
       setJobsLoading(true);
       try {
         const upcomingStatuses = [
@@ -181,6 +185,7 @@ export default function CleanerDashboard() {
             id,
             status,
             estimated_pay_cents,
+            response_token,
             jobs (
               id,
               address,
@@ -208,6 +213,7 @@ export default function CleanerDashboard() {
                 id: a.id,
                 assignmentId: a.id,
                 jobId: job?.id,
+                checklistToken: a.response_token || null,
                 source: "assignments" as JobSource,
                 service_type: job?.service_type || "Cleaning",
                 address: job?.address || "",
@@ -245,8 +251,8 @@ export default function CleanerDashboard() {
               service_date: b.service_date,
               time_slot: b.time_slot,
               duration_est_hours: b.estimated_duration_hours,
-              estimated_pay_cents: b.cleaner_payout_cents ?? (b.total_estimate_cents && profile?.pay_percentage
-                ? Math.floor((b.total_estimate_cents || 0) * profile.pay_percentage / 100)
+              estimated_pay_cents: b.cleaner_payout_cents ?? (b.total_estimate_cents && payPercentage
+                ? Math.floor((b.total_estimate_cents || 0) * payPercentage / 100)
                 : null),
               cleaner_payout_cents: b.cleaner_payout_cents,
               total_estimate_cents: b.total_estimate_cents,
@@ -380,7 +386,7 @@ export default function CleanerDashboard() {
       }
 
       setProfile(full as CleanerProfile);
-      await fetchJobs(full.id);
+      await fetchJobs(full.id, (full as CleanerProfile).pay_percentage);
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("Failed to load profile");
@@ -415,7 +421,7 @@ export default function CleanerDashboard() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Checked in successfully!");
-      await fetchJobs(profile.id);
+      await fetchJobs(profile.id, profile.pay_percentage);
     } catch (err: any) {
       toast.error(err?.message || "Failed to check in");
     } finally {
@@ -448,7 +454,7 @@ export default function CleanerDashboard() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Marked complete — sent to the office. Upload your before & after photos to release your payout.");
-      await fetchJobs(profile.id);
+      await fetchJobs(profile.id, profile.pay_percentage);
     } catch (err: any) {
       toast.error(err?.message || "Failed to mark complete");
     } finally {
@@ -718,6 +724,16 @@ export default function CleanerDashboard() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        {job.checklistToken && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => router.push(`/cleaner/job-checklist/${job.checklistToken}`)}
+                          >
+                            <RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1.5" />
+                            Job Checklist
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"

@@ -257,8 +257,8 @@ export default function CleanerJobOfferPage() {
             tone="emerald"
             icon={RiCheckLine}
             title="Job accepted"
-            body="You're locked in. Check your dashboard for the customer's address and arrival window."
-            cta={{ label: "Open dashboard", onClick: () => router.push("/cleaner/dashboard") }}
+            body="You're locked in. Your job checklist has everything to complete on-site — work through it as you clean, and report any add-ons you did. Address and arrival window are on your dashboard too."
+            cta={{ label: "Open your job checklist", onClick: () => router.push(`/cleaner/job-checklist/${token}`) }}
           />
         )}
         {outcome === "declined" && (

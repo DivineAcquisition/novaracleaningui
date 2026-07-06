@@ -4,7 +4,7 @@ import {
   RiLoader4Line
 } from "@remixicon/react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 
 import { toast } from "sonner";
@@ -14,9 +14,15 @@ import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 /**
  * Handles OAuth callback specifically for cleaner/contractor authentication.
  * After Google sign-in, this checks for cleaner profile and routes appropriately.
+ *
+ * Also handles admin impersonation deep links:
+ * `?token_hash=<hashed_token>&impersonated=1` — the admin-impersonate-cleaner
+ * function mints a magic-link token_hash and we verify it here directly, so
+ * the flow never depends on the Supabase redirect allow-list.
  */
 export default function CleanerAuthCallback() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState("Verifying authentication...");
 
   useEffect(() => {
@@ -25,6 +31,28 @@ export default function CleanerAuthCallback() {
 
   const handleCallback = async () => {
     try {
+      // Admin impersonation / emailed magic-link token_hash: verify it
+      // FIRST so it becomes the active session on this device.
+      const tokenHash = searchParams?.get("token_hash");
+      if (tokenHash) {
+        setStatus("Opening contractor account...");
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          type: "email",
+          token_hash: tokenHash,
+        });
+        if (otpError) {
+          console.error("token_hash verify error:", otpError);
+          toast.error(`Sign-in link invalid or expired: ${otpError.message}`);
+          router.replace("/cleaner/auth");
+          return;
+        }
+        if (searchParams?.get("impersonated") === "1") {
+          toast.success("Signed in as this contractor (admin session — actions are logged).");
+        }
+        await processUser();
+        return;
+      }
+
       // Get the session from the URL hash (OAuth redirect)
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 

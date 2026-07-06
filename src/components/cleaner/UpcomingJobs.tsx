@@ -97,6 +97,18 @@ export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading }: Upc
             </div>
 
             <div className="flex flex-wrap gap-2">
+              {job.checklistToken && (
+                <Button
+                  size="sm"
+                  className="flex-1 min-w-[120px]"
+                  onClick={() =>
+                    window.location.assign(`/cleaner/job-checklist/${job.checklistToken}`)
+                  }
+                >
+                  <RiCheckboxCircleLine className="mr-2 w-3.5 h-3.5" />
+                  Checklist
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
