@@ -1,9 +1,11 @@
 // admin-list-jobs
 //
 // Read API powering the admin Dispatch console. Returns dispatch jobs with
-// their linked booking summary + cleaner assignments, plus the set of
-// confirmed bookings that don't have a job yet (so the operator can kick
-// off dispatch for them). Admin/VA gated; runs with the service role.
+// their linked booking summary + cleaner assignments + live contractor
+// checklist progress + add-on approval requests, plus the set of confirmed
+// bookings that don't have a job yet (so the operator can kick off
+// dispatch for them) and the dispatch feature settings (contractor
+// add-ons on/off, auto-offers on/off). Admin/VA gated; service role.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
@@ -130,7 +132,7 @@ serve(async (req) => {
       const { data: bks } = await admin
         .from("bookings")
         .select(
-          "id, booking_number, status, service_date, time_slot, arrival_window, first_name, last_name, phone, total_estimate_cents, job_id",
+          "id, booking_number, status, service_date, time_slot, arrival_window, first_name, last_name, phone, total_estimate_cents, add_ons, job_id",
         )
         .in("job_id", jobIds);
       for (const b of bks || []) {
@@ -138,10 +140,40 @@ serve(async (req) => {
       }
     }
 
+    // ─── Contractor checklist progress per job ────────────────────────────
+    const checklistByJob = new Map<string, Record<string, unknown>>();
+    if (jobIds.length > 0) {
+      const { data: cls } = await admin
+        .from("job_checklists")
+        .select("job_id, token, service_type, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_at, last_activity_by")
+        .in("job_id", jobIds);
+      for (const c of cls || []) {
+        checklistByJob.set(String(c.job_id), c);
+      }
+    }
+
+    // ─── Add-on approval requests per job (pending first) ────────────────
+    const addonRequestsByJob = new Map<string, Record<string, unknown>[]>();
+    if (jobIds.length > 0) {
+      const { data: reqs } = await admin
+        .from("job_addon_requests")
+        .select("id, job_id, booking_id, cleaner_id, cleaner_name, addon_id, addon_label, amount_cents, cleaner_share_cents, note, status, charge_status, created_at, reviewed_at")
+        .in("job_id", jobIds)
+        .order("created_at", { ascending: false });
+      for (const r of reqs || []) {
+        const jid = String(r.job_id);
+        const list = addonRequestsByJob.get(jid) || [];
+        list.push(r);
+        addonRequestsByJob.set(jid, list);
+      }
+    }
+
     const enriched = jobs.map((j) => ({
       ...j,
       booking: bookingByJob.get(String(j.id)) || null,
       assignments: assignmentsByJob.get(String(j.id)) || [],
+      checklist: checklistByJob.get(String(j.id)) || null,
+      addon_requests: addonRequestsByJob.get(String(j.id)) || [],
     }));
 
     // ─── Confirmed bookings with no job yet (need dispatch) ──────────────
@@ -156,10 +188,26 @@ serve(async (req) => {
       .order("service_date", { ascending: true })
       .limit(100);
 
+    // ─── Dispatch feature settings ────────────────────────────────────────
+    const settings: Record<string, unknown> = {
+      contractor_addons_enabled: true,
+      dispatch_auto_offers_enabled: false,
+    };
+    try {
+      const { data: settingRows } = await admin
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["contractor_addons_enabled", "dispatch_auto_offers_enabled"]);
+      for (const row of settingRows || []) {
+        settings[String(row.key)] = row.value === true || row.value === "true";
+      }
+    } catch (_) { /* defaults stand */ }
+
     return json({
       success: true,
       jobs: enriched,
       unassignedBookings: needsDispatch || [],
+      settings,
       filters: { dateRange, limit },
     });
   } catch (e) {

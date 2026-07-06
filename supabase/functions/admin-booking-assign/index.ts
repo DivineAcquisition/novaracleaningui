@@ -20,6 +20,7 @@ import { scoreCleanerForJob, type RankedCleaner } from "../_shared/dispatch-scor
 import { createContactTask } from "../_shared/ghl-tasks.ts";
 import { buildGhlTaskChecklistBody } from "../_shared/ghl-checklist-text.ts";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
+import { ensureAssignmentChecklistAccess } from "../_shared/job-checklist.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
 
 const corsHeaders = {
@@ -337,6 +338,23 @@ serve(async (req) => {
         { onConflict: "job_id,cleaner_id" },
       );
       if (upsertErr) throw upsertErr;
+    }
+
+    // Guarantee each assignment has a response_token + the job has its
+    // contractor checklist row — manual assignments historically skipped
+    // both, which broke every tokenized contractor link (checklist,
+    // offer page, photo upload).
+    for (const cid of cleanerIds) {
+      try {
+        await ensureAssignmentChecklistAccess(admin, {
+          jobId: String(jobId),
+          cleanerId: cid,
+          bookingId,
+          serviceType: (booking.service_type as string | null) || null,
+        });
+      } catch (tokenErr) {
+        console.error("[admin-booking-assign] checklist access ensure failed (non-blocking)", cid, tokenErr instanceof Error ? tokenErr.message : String(tokenErr));
+      }
     }
 
     const leadId = cleanerIds[0];

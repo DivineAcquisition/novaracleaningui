@@ -1,4 +1,13 @@
-// Auto-backfill open cleaner slots after expired/declined offers; alert staff when exhausted.
+// Backfill open cleaner slots after expired/declined offers.
+//
+// 2026-07-06: backfill no longer auto-offers the next cleaner. Per the
+// dispatch-approval directive, open slots park the job as "Pending
+// Approval", ping the dispatch Discord channel that a cleaner needs to
+// be assigned, and wait for an admin to approve/re-send offers from the
+// Dispatch console. Staff still get the escalation email when the
+// eligible pool is exhausted.
+
+import { requestDispatchApproval } from "./dispatch-approval.ts";
 
 const log = (s: string, d?: unknown) =>
   console.log(`[dispatch-backfill] ${s}${d ? ` ${JSON.stringify(d)}` : ""}`);
@@ -250,7 +259,10 @@ export interface BackfillResult {
 }
 
 /**
- * Re-run proximity dispatch for unfilled slots; email staff if nobody left to offer.
+ * Handle unfilled slots after a decline/expiry. No auto re-offer: parks
+ * the job for admin approval and pings the dispatch Discord channel.
+ * When the eligible pool is fully exhausted, staff also get the
+ * escalation email.
  */
 export async function runJobDispatchBackfill(
   // deno-lint-ignore no-explicit-any
@@ -266,6 +278,7 @@ export async function runJobDispatchBackfill(
   const eligible = await hasEligibleCleanersRemaining(supabase, team.blockedCleanerIds);
   if (!eligible) {
     const { sent } = await notifyStaffNoCleanersAvailable(supabase, jobId, { reason });
+    await requestDispatchApproval(supabase, jobId, `${reason} — eligible pool exhausted`);
     return {
       ok: false,
       openSlots: team.openSlots,
@@ -275,41 +288,13 @@ export async function runJobDispatchBackfill(
     };
   }
 
-  const { data: dispatchData, error: dispatchErr } = await supabase.functions.invoke("dispatch-job", {
-    body: { jobId, backfill: true },
-  });
-
-  if (dispatchErr) {
-    log("dispatch-job invoke error", { jobId, err: dispatchErr.message });
-  }
-
-  const payload = (dispatchData as Record<string, unknown>) || {};
-  const offersSent = Number(payload.offersSent ?? payload.assignedCleaners ?? 0);
-  const noCleaners = payload.noCleanersAvailable === true;
-
-  if (noCleaners || (offersSent === 0 && team.openSlots > 0)) {
-    const still = await getJobTeamStatus(supabase, jobId);
-    if (still && still.openSlots > 0) {
-      const stillEligible = await hasEligibleCleanersRemaining(supabase, still.blockedCleanerIds);
-      if (!stillEligible || noCleaners) {
-        const { sent } = await notifyStaffNoCleanersAvailable(supabase, jobId, {
-          reason: `${reason} — no additional cleaners could be auto-offered`,
-        });
-        return {
-          ok: false,
-          openSlots: still.openSlots,
-          offersSent: 0,
-          noCleanersAvailable: true,
-          staffNotified: sent,
-        };
-      }
-    }
-  }
+  await requestDispatchApproval(supabase, jobId, reason);
+  log("open slots parked for admin approval", { jobId, openSlots: team.openSlots, reason });
 
   return {
     ok: true,
     openSlots: team.openSlots,
-    offersSent,
+    offersSent: 0,
     noCleanersAvailable: false,
     staffNotified: false,
   };

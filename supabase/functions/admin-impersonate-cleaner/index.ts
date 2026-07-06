@@ -18,7 +18,8 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-const REDIRECT = "https://contractor.novaracleaning.com/cleaner/dashboard";
+const CONTRACTOR_BASE = "https://contractor.novaracleaning.com";
+const REDIRECT = `${CONTRACTOR_BASE}/cleaner/dashboard`;
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status });
@@ -54,17 +55,47 @@ serve(async (req) => {
     const cleanerId = String(body.cleanerId || "");
     if (!cleanerId) return json({ error: "cleanerId required" }, 400);
 
-    const { data: cleaner } = await admin.from("cleaners").select("id, email, first_name, last_name").eq("id", cleanerId).maybeSingle();
+    const { data: cleaner } = await admin.from("cleaners").select("id, user_id, email, first_name, last_name").eq("id", cleanerId).maybeSingle();
     if (!cleaner?.email) return json({ error: "Cleaner not found or has no email" }, 404);
+    const email = String(cleaner.email).toLowerCase();
 
-    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    // deno-lint-ignore no-explicit-any
+    const mintLink = () => admin.auth.admin.generateLink({
       type: "magiclink",
-      email: String(cleaner.email).toLowerCase(),
+      email,
       options: { redirectTo: REDIRECT },
-    });
+    }) as Promise<{ data: any; error: any }>;
+
+    let { data: linkData, error: linkErr } = await mintLink();
+
+    // Cleaners invited by admin (or migrated in) may have no auth user yet
+    // — magic links can't be minted for a non-existent user. Create the
+    // account (pre-confirmed, no email sent) and retry once.
+    if (linkErr && /not.*found|does not exist/i.test(String(linkErr.message || ""))) {
+      const { error: createErr } = await admin.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: { created_via: "admin_impersonation" },
+      });
+      if (createErr && !/already/i.test(String(createErr.message || ""))) {
+        return json({ error: `Cleaner has no login yet and one could not be created: ${createErr.message}` }, 500);
+      }
+      ({ data: linkData, error: linkErr } = await mintLink());
+    }
     if (linkErr) return json({ error: `Could not create session link: ${linkErr.message}` }, 500);
-    const url = linkData?.properties?.action_link as string | undefined;
-    if (!url) return json({ error: "No action link returned" }, 500);
+
+    // Prefer a token_hash deep link straight into the contractor portal's
+    // own auth callback (verified client-side via verifyOtp). The hosted
+    // action_link depends on the Supabase redirect allow-list — when the
+    // contractor URL isn't allow-listed, it bounces the admin to the
+    // default site URL and the sign-in silently "does nothing". The
+    // token_hash route has no such dependency.
+    const hashedToken = linkData?.properties?.hashed_token as string | undefined;
+    const actionLink = linkData?.properties?.action_link as string | undefined;
+    const url = hashedToken
+      ? `${CONTRACTOR_BASE}/cleaner/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&impersonated=1`
+      : actionLink;
+    if (!url) return json({ error: "No session link returned" }, 500);
 
     await admin.from("events").insert({
       event_type: "admin.impersonate_cleaner",

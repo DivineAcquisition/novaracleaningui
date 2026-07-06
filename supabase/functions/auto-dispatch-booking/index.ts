@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { notifyStaffNoCleanersAvailable } from "../_shared/dispatch-backfill.ts";
+import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-approval.ts";
+import { ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { getServiceDurationHours } from "../_shared/payout-utils.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
 
@@ -37,8 +39,13 @@ serve(async (req) => {
   }
 
   try {
-    const { bookingId } = await req.json();
-    logStep("Starting auto-dispatch", { bookingId });
+    // sendOffers=true is the admin-approval path (Dispatch console button):
+    // it skips the approval gate and pushes SMS offers to cleaners right
+    // away. Every automatic caller (post-confirm fanout, Stripe webhook,
+    // booking-confirm-comms) omits it, so those jobs park as
+    // "Pending Approval" and ping the dispatch Discord channel instead.
+    const { bookingId, sendOffers } = await req.json();
+    logStep("Starting auto-dispatch", { bookingId, sendOffers: sendOffers === true });
 
     if (!bookingId) {
       throw new Error("Missing bookingId");
@@ -69,6 +76,31 @@ serve(async (req) => {
     // 2. Check if job already exists
     if (booking.job_id) {
       logStep("Job already exists for booking", { jobId: booking.job_id });
+      // Admin-approval path: the job may be parked as Pending Approval —
+      // approving re-invokes this function with sendOffers, so push the
+      // offers out now instead of returning early.
+      if (sendOffers === true) {
+        const { data: approvedDispatch, error: approvedErr } = await supabase.functions.invoke("dispatch-job", {
+          body: { jobId: booking.job_id },
+        });
+        if (approvedErr) throw new Error(`Dispatch failed: ${approvedErr.message}`);
+        const approvedPayload = (approvedDispatch || {}) as Record<string, unknown>;
+        if (approvedPayload.noCleanersAvailable === true) {
+          await notifyStaffNoCleanersAvailable(supabase, booking.job_id, {
+            reason: "Admin-approved dispatch found no eligible cleaners",
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Offers sent to cleaners",
+            jobId: booking.job_id,
+            offersSent: approvedPayload.offersSent ?? approvedPayload.assignedCleaners ?? 0,
+            noCleanersAvailable: approvedPayload.noCleanersAvailable === true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -184,35 +216,61 @@ serve(async (req) => {
       }
     }
 
-    // 7. Dispatch cleaners
-    logStep("Dispatching cleaners");
-    const { data: dispatchResult, error: dispatchError } = await supabase.functions.invoke('dispatch-job', {
-      body: { jobId: job.id }
-    });
-
-    if (dispatchError) {
-      logStep("Dispatch failed", { error: dispatchError });
-      await supabase.from("dispatch_alerts").insert({
-        job_id: job.id,
-        reason: `Auto-dispatch failed: ${dispatchError.message}`,
-        severity: "warning",
+    // 7. Provision the contractor checklist for this job (link is shared
+    // with each cleaner once they're assigned; progress relays to the
+    // admin Dispatch console).
+    try {
+      await ensureJobChecklist(supabase, {
+        jobId: job.id,
+        bookingId,
+        serviceType: booking.service_type,
       });
-      throw new Error(`Dispatch failed: ${dispatchError.message}`);
+    } catch (checklistErr) {
+      logStep("Warning: checklist provisioning failed (non-critical)", { error: String(checklistErr) });
     }
 
-    const dispatchPayload = (dispatchResult || {}) as Record<string, unknown>;
-    if (dispatchPayload.noCleanersAvailable === true) {
-      logStep("No cleaners available on initial dispatch");
-      await notifyStaffNoCleanersAvailable(supabase, job.id, {
-        reason: "Initial auto-dispatch found no eligible cleaners",
+    // 8. Dispatch gate — offers only go out with admin approval (or when
+    // the operator explicitly re-enabled auto-offers in app_settings).
+    const autoOffers = sendOffers === true || (await autoOffersEnabled(supabase));
+    let offersSent = 0;
+    let pendingApproval = false;
+
+    if (autoOffers) {
+      logStep("Dispatching cleaners (approved / auto-offers on)");
+      const { data: dispatchResult, error: dispatchError } = await supabase.functions.invoke('dispatch-job', {
+        body: { jobId: job.id }
       });
+
+      if (dispatchError) {
+        logStep("Dispatch failed", { error: dispatchError });
+        await supabase.from("dispatch_alerts").insert({
+          job_id: job.id,
+          reason: `Auto-dispatch failed: ${dispatchError.message}`,
+          severity: "warning",
+        });
+        throw new Error(`Dispatch failed: ${dispatchError.message}`);
+      }
+
+      const dispatchPayload = (dispatchResult || {}) as Record<string, unknown>;
+      if (dispatchPayload.noCleanersAvailable === true) {
+        logStep("No cleaners available on initial dispatch");
+        await notifyStaffNoCleanersAvailable(supabase, job.id, {
+          reason: "Initial auto-dispatch found no eligible cleaners",
+        });
+      }
+      offersSent = Number(dispatchPayload.offersSent ?? dispatchPayload.assignedCleaners ?? 0);
+      logStep("Cleaners dispatched successfully", { offersSent });
+    } else {
+      pendingApproval = true;
+      logStep("Parking job for admin dispatch approval");
+      await requestDispatchApproval(
+        supabase,
+        job.id,
+        "New confirmed booking — a cleaner needs to be assigned",
+      );
     }
 
-    logStep("Cleaners dispatched successfully", {
-      offersSent: dispatchPayload.offersSent ?? dispatchPayload.assignedCleaners ?? 0,
-    });
-
-    // 8. Send Zapier webhook with cleaner data
+    // 9. Send Zapier webhook with job data
     logStep("Sending Zapier webhook");
     try {
       await supabase.functions.invoke('send-zapier-webhook', {
@@ -226,9 +284,12 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: "Booking auto-dispatched successfully",
+        message: pendingApproval
+          ? "Job created — waiting for admin dispatch approval"
+          : "Booking auto-dispatched successfully",
         jobId: job.id,
-        offersSent: dispatchPayload.offersSent ?? dispatchPayload.assignedCleaners ?? 0,
+        pendingApproval,
+        offersSent,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

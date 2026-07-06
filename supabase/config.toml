@@ -326,5 +326,18 @@ verify_jwt = false
 [functions.cleaner-mark-complete]
 verify_jwt = false
 
+# Contractor per-job checklist page (token-protected like job-offer /
+# job-photos — the assignment response_token is the only credential).
+[functions.cleaner-job-checklist]
+verify_jwt = false
+
+# Admin/VA approve-or-reject contractor-reported add-ons (Dispatch console).
+[functions.admin-review-addon-request]
+verify_jwt = true
+
+# Admin/VA membership management hub (list members, pause/resume/cancel).
+[functions.admin-memberships]
+verify_jwt = true
+
 
 

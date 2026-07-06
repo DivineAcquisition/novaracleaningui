@@ -1,6 +1,13 @@
 // Notify assigned cleaners: Resend assignment email + optional SMS.
+//
+// Cleaners now get their DEDICATED per-job checklist link (tokenized,
+// contractor.novaracleaning.com/cleaner/job-checklist/<token>) instead of
+// the public marketing checklist. Progress on that page relays live to
+// the admin Dispatch console. The public URL remains the fallback for
+// legacy bookings that have no job/assignment row.
 
 import { formatServiceDate, formatTimeSlot } from "./sms.ts";
+import { ensureAssignmentChecklistAccess } from "./job-checklist.ts";
 
 const CHECKLIST_BY_SERVICE: Record<string, string> = {
   standard: "https://try.novaracleaning.com/checklist/standard-clean",
@@ -9,7 +16,7 @@ const CHECKLIST_BY_SERVICE: Record<string, string> = {
   recurring: "https://try.novaracleaning.com/checklist/recurring",
 };
 
-function checklistUrl(serviceType: string | null): string {
+function publicChecklistUrl(serviceType: string | null): string {
   const key = String(serviceType || "standard").toLowerCase().replace(/-/g, "_");
   return CHECKLIST_BY_SERVICE[key] || CHECKLIST_BY_SERVICE.standard;
 }
@@ -34,6 +41,21 @@ export async function notifyCleanerOfAssignment(
   const estimatedEarnings = opts?.estimatedPayCents ??
     Math.floor((revenue * pct) / 100 / Math.max(1, Number(booking.num_cleaners_assigned) || 1));
 
+  // Dedicated contractor checklist link (falls back to the public
+  // checklist when the booking has no job/assignment for this cleaner).
+  let checklistLink = publicChecklistUrl(booking.service_type);
+  if (booking.job_id) {
+    try {
+      const access = await ensureAssignmentChecklistAccess(supabase, {
+        jobId: String(booking.job_id),
+        cleanerId: cleaner.id,
+        bookingId: booking.id ? String(booking.id) : null,
+        serviceType: booking.service_type || null,
+      });
+      if (access?.url) checklistLink = access.url;
+    } catch (_) { /* keep public fallback */ }
+  }
+
   if (cleaner.email) {
     try {
       const { error } = await supabase.functions.invoke("send-cleaner-email", {
@@ -53,7 +75,7 @@ export async function notifyCleanerOfAssignment(
             zipCode: booking.zip_code || "",
             estimatedEarnings: estimatedEarnings / 100,
             dashboardUrl: `https://contractor.novaracleaning.com/cleaner/mobile-dashboard`,
-            checklistUrl: checklistUrl(booking.service_type),
+            checklistUrl: checklistLink,
             role: opts?.role || "Lead",
           },
         },
@@ -77,7 +99,7 @@ export async function notifyCleanerOfAssignment(
         `Novara job assigned${opts?.role === "Support" ? " (support)" : ""}: ` +
         `${customerName} · ${whenLabel}.${payLabel} ` +
         `${booking.address || ""}, ${booking.city || ""}. ` +
-        `Checklist: ${checklistUrl(booking.service_type)} ` +
+        `Your job checklist: ${checklistLink} ` +
         `Portal: https://contractor.novaracleaning.com/cleaner/mobile-dashboard`;
       const { error } = await supabase.functions.invoke("send-ghl-sms", {
         body: {

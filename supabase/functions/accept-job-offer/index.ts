@@ -17,6 +17,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { runJobDispatchBackfill } from "../_shared/dispatch-backfill.ts";
+import { checklistUrlForToken, ensureJobChecklist } from "../_shared/job-checklist.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -318,7 +319,16 @@ serve(async (req) => {
       });
     } catch { /* non-blocking */ }
 
-    return new Response(JSON.stringify({ ok: true, status: "Confirmed" }), {
+    // The cleaner's offer token doubles as their checklist access token —
+    // make sure the job's shared checklist row exists and hand the link
+    // back so the offer page can route them straight into it.
+    let checklistUrl: string | null = null;
+    try {
+      await ensureJobChecklist(supabase, { jobId: job.id, bookingId: (bookingRow as any)?.id || null });
+      checklistUrl = checklistUrlForToken(token);
+    } catch { /* non-blocking */ }
+
+    return new Response(JSON.stringify({ ok: true, status: "Confirmed", checklistUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
