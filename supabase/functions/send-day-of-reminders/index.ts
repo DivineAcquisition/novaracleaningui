@@ -120,7 +120,12 @@ serve(async (req) => {
         results.skipped_no_phone++;
       }
 
-      // ── Contractor text (+ BEFORE-photos link) ──
+      // ── Contractor text: check-in prompt ──
+      //
+      // Cadence (operator directive 2026-07-06): this pre-arrival text tells
+      // the cleaner to head over and CHECK IN from the portal. The
+      // BEFORE-photos link is sent by job-check-in the moment they actually
+      // check in — not before — so each SMS has one clear purpose.
       if (booking.cleaner_id) {
         const { data: cleaner } = await supabase
           .from("cleaners")
@@ -128,32 +133,14 @@ serve(async (req) => {
           .eq("id", booking.cleaner_id)
           .maybeSingle();
         if (cleaner?.phone) {
-          // Mint the photo-upload token (idempotent) so the cleaner can submit
-          // BEFORE photos when they arrive. The same token later carries the
-          // AFTER-photos link at completion.
-          let token = booking.photo_upload_token as string | null;
-          if (!token) {
-            const bytes = new Uint8Array(20);
-            crypto.getRandomValues(bytes);
-            token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-            await supabase.from("bookings").update({ photo_upload_token: token }).eq("id", booking.id);
-          }
-          const beforeLink = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}?phase=before`;
+          const portalLink = "https://contractor.novaracleaning.com/cleaner/mobile-dashboard";
           const msg =
             `Novara reminder: your clean for ${customerName} starts in about 30 minutes ` +
             `(${whenLabel}). ${booking.address || ""}${booking.city ? `, ${booking.city}` : ""}. ` +
-            `Please head over and check in on arrival. When you get there, upload your BEFORE photos here:\n${beforeLink}`;
+            `Head over and CHECK IN from your portal when you arrive — your before-photos link will text you right after:\n${portalLink}`;
           const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg, type: "reminder" });
           anySent = anySent || ok;
-          if (ok) {
-            await supabase
-              .from("bookings")
-              .update({ before_photo_link_sent_at: new Date().toISOString() })
-              .eq("id", booking.id)
-              .is("before_photo_link_sent_at", null);
-          } else {
-            logStep("Cleaner SMS failed", { bookingId: booking.id });
-          }
+          if (!ok) logStep("Cleaner SMS failed", { bookingId: booking.id });
         }
       }
 

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendSms } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +10,57 @@ const corsHeaders = {
 const logStep = (step: string, details?: any) => {
   console.log(`[JOB-CHECK-IN] ${step}`, details ? JSON.stringify(details) : '');
 };
+
+// After the first successful check-in, text the cleaner their BEFORE-photos
+// upload link (operator directive 2026-07-06: the SMS cadence is check in /
+// start job first, THEN the photos link lands right after). Idempotent per
+// booking via bookings.before_photo_link_sent_at.
+// deno-lint-ignore no-explicit-any
+async function sendBeforePhotosLink(supabase: any, jobId: string, cleanerId: string): Promise<void> {
+  try {
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("id, first_name, photo_upload_token, before_photo_link_sent_at")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!booking || booking.before_photo_link_sent_at) return;
+
+    let token = booking.photo_upload_token as string | null;
+    if (!token) {
+      const bytes = new Uint8Array(20);
+      crypto.getRandomValues(bytes);
+      token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+      await supabase.from("bookings").update({ photo_upload_token: token }).eq("id", booking.id);
+    }
+
+    const { data: cleaner } = await supabase
+      .from("cleaners")
+      .select("first_name, phone, sms_notifications_enabled")
+      .eq("id", cleanerId)
+      .maybeSingle();
+    if (!cleaner?.phone || cleaner.sms_notifications_enabled === false) return;
+
+    const link = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}?phase=before`;
+    const msg =
+      `Novara: you're checked in${booking.first_name ? ` at ${booking.first_name}'s` : ""} — nice. ` +
+      `First step before you start: upload your BEFORE photos here:\n${link}`;
+    const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg, type: "reminder" });
+    if (ok) {
+      await supabase
+        .from("bookings")
+        .update({ before_photo_link_sent_at: new Date().toISOString() })
+        .eq("id", booking.id)
+        .is("before_photo_link_sent_at", null);
+      logStep("BEFORE-photos link sent after check-in", { bookingId: booking.id });
+    }
+  } catch (err) {
+    logStep("Warning: before-photos SMS failed (non-blocking)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 // On-time window: ±15 minutes
 const ON_TIME_WINDOW_MINUTES = 15;
@@ -142,6 +194,10 @@ serve(async (req) => {
           }
         }
       }
+
+      // Text the BEFORE-photos link right after check-in (idempotent —
+      // skipped if the day-of reminder already delivered it).
+      await sendBeforePhotosLink(supabase, job.id, cleanerId);
 
       return new Response(
         JSON.stringify({ 
