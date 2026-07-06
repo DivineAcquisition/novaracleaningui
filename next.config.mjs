@@ -18,7 +18,9 @@ const nextConfig = {
       { source: '/book/summary', destination: '/book/checkout', permanent: true },
       { source: '/book/success', destination: '/book/confirmation', permanent: true },
       { source: '/book/additional-details', destination: '/book/details', permanent: true },
-      { source: '/cleaner/profile', destination: '/cleaner/dashboard', permanent: true },
+      // NOTE: /cleaner/profile is a real page again (bottom-nav Profile tab)
+      // — the old redirect to /cleaner/dashboard shadowed it and made the
+      // tab appear broken.
       { source: '/cleaner/onboarding-landing', destination: '/cleaner/onboarding', permanent: true },
       { source: '/cleaner/onboard', destination: '/cleaner/onboarding', permanent: true },
       { source: '/pricing', destination: '/pricing-sheet', permanent: true },
