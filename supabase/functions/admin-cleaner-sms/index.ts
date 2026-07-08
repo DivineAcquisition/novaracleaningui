@@ -64,17 +64,36 @@ serve(async (req) => {
 
     if (template === "photo_request") {
       if (!bookingId) return json({ error: "bookingId required for photo_request" }, 400);
+      // phase: "before" | "after" | "both" (default). "before"/"after" send a
+      // single-section link (?phase=…); "both" sends the centralized page with
+      // before AND after submission on one page (no phase param).
+      const phaseRaw = String(body.phase || "both").toLowerCase();
+      const phase = ["before", "after", "both"].includes(phaseRaw) ? phaseRaw : "both";
+
       const { data: booking } = await admin.from("bookings").select("id, photo_upload_token, service_date").eq("id", bookingId).maybeSingle();
       if (!booking) return json({ error: "Booking not found" }, 404);
       let token = booking.photo_upload_token as string | null;
+      const nowIso = new Date().toISOString();
+      // Stamp the phase-specific idempotency column(s) so this composes with the
+      // automated check-in / completion / cadence senders (whichever fires
+      // first wins) — plus the general photo_upload_sent_at for audit.
+      const stamp: Record<string, unknown> = { photo_upload_sent_at: nowIso };
+      if (phase === "before" || phase === "both") stamp.before_photo_link_sent_at = nowIso;
+      if (phase === "after" || phase === "both") stamp.after_photo_link_sent_at = nowIso;
       if (!token) {
         token = crypto.randomUUID().replace(/-/g, "");
-        await admin.from("bookings").update({ photo_upload_token: token, photo_upload_sent_at: new Date().toISOString() }).eq("id", bookingId);
-      } else {
-        await admin.from("bookings").update({ photo_upload_sent_at: new Date().toISOString() }).eq("id", bookingId);
+        stamp.photo_upload_token = token;
       }
-      const url = `${CONTRACTOR}/cleaner/job-photos/${token}`;
-      message = `Novara: Please upload your before & after photos for this job so we can wrap it up and release your payout:\n${url}\n\nReply STOP to opt out.`;
+      await admin.from("bookings").update(stamp).eq("id", bookingId);
+
+      const url = phase === "both"
+        ? `${CONTRACTOR}/cleaner/job-photos/${token}`
+        : `${CONTRACTOR}/cleaner/job-photos/${token}?phase=${phase}`;
+      message = phase === "before"
+        ? `Novara: Please upload your BEFORE photos for this job before you start:\n${url}\n\nReply STOP to opt out.`
+        : phase === "after"
+          ? `Novara: Please upload your AFTER photos so we can wrap up this job and release your payout:\n${url}\n\nReply STOP to opt out.`
+          : `Novara: Please upload your before & after photos for this job so we can wrap it up and release your payout:\n${url}\n\nReply STOP to opt out.`;
     } else if (template === "mobile_dashboard") {
       message = message || `Novara: Please open your cleaner dashboard for job details and updates:\n${CONTRACTOR}/cleaner/mobile-dashboard`;
     } else {
@@ -99,8 +118,8 @@ serve(async (req) => {
       cleaner_id: cleanerId,
       booking_id: bookingId || null,
       source: "admin",
-      summary: `Admin SMS (${template}) to ${cleaner.first_name || "cleaner"}`,
-      data: { template, by: callerId, preview: message.slice(0, 180) },
+      summary: `Admin SMS (${template}${template === "photo_request" ? `:${String(body.phase || "both")}` : ""}) to ${cleaner.first_name || "cleaner"}`,
+      data: { template, phase: template === "photo_request" ? String(body.phase || "both") : undefined, by: callerId, preview: message.slice(0, 180) },
     }).then(() => undefined, () => undefined);
 
     return json({ ok: true, sent: true, template, message });

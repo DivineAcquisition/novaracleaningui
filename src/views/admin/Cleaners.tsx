@@ -35,6 +35,9 @@ import {
   RiSendPlaneLine,
   RiLoginBoxLine,
   RiSmartphoneLine,
+  RiBriefcaseLine,
+  RiCameraLine,
+  RiCalendarCheckLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -548,8 +551,11 @@ function CleanerSheet({
             <div className="py-4 space-y-5">
               <ContactSection cleaner={cleaner} />
 
-              <Tabs defaultValue="onboarding">
-                <TabsList className="grid grid-cols-1 sm:grid-cols-3 h-auto bg-slate-100">
+              <Tabs defaultValue="jobs">
+                <TabsList className="grid grid-cols-2 sm:grid-cols-4 h-auto bg-slate-100">
+                  <TabsTrigger value="jobs" className="data-[state=active]:bg-white">
+                    Jobs
+                  </TabsTrigger>
                   <TabsTrigger value="onboarding" className="data-[state=active]:bg-white">
                     Onboarding
                   </TabsTrigger>
@@ -560,6 +566,9 @@ function CleanerSheet({
                     GHL
                   </TabsTrigger>
                 </TabsList>
+                <TabsContent value="jobs" className="pt-3">
+                  <CleanerJobsBlock cleaner={cleaner} onChanged={onRefresh} />
+                </TabsContent>
                 <TabsContent value="onboarding" className="pt-3">
                   <OnboardingChecklist cleaner={cleaner} />
                 </TabsContent>
@@ -589,6 +598,215 @@ function CleanerSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── Jobs & offers: view + accept/decline on the cleaner's behalf ─────────
+interface CleanerJobItem {
+  assignmentId: string;
+  jobId: string | null;
+  bookingId: string | null;
+  status: string | null;
+  role: string | null;
+  distance_miles: number | null;
+  estimated_pay_cents: number | null;
+  expires_at: string | null;
+  expired: boolean;
+  service_type: string | null;
+  start_datetime: string | null;
+  city: string | null;
+  state: string | null;
+  booking: {
+    booking_number: number | null;
+    status: string | null;
+    service_date: string | null;
+    time_slot: string | null;
+    customer: string;
+    total_estimate_cents: number | null;
+    before_sent: boolean;
+    after_sent: boolean;
+  } | null;
+}
+
+const jobMoney = (c?: number | null) =>
+  c == null ? "—" : (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const jobDate = (d?: string | null) => {
+  if (!d) return "Unscheduled";
+  const dt = new Date(`${d}T12:00:00`);
+  return Number.isNaN(dt.getTime()) ? d : dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+};
+const slotLabel = (s?: string | null) => {
+  if (!s) return "";
+  const map: Record<string, string> = { "8-12": "8:00 AM – 12:00 PM", "12-16": "12:00 PM – 4:00 PM", "16-20": "4:00 PM – 8:00 PM" };
+  return map[s] || s;
+};
+
+function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChanged: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [offers, setOffers] = useState<CleanerJobItem[]>([]);
+  const [jobs, setJobs] = useState<CleanerJobItem[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-jobs", {
+        body: { action: "list", cleanerId: cleaner.id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
+      setOffers(((data as { offers?: CleanerJobItem[] }).offers) || []);
+      setJobs(((data as { jobs?: CleanerJobItem[] }).jobs) || []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load jobs");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleaner.id]);
+
+  const respond = async (item: CleanerJobItem, action: "accept" | "decline") => {
+    if (action === "accept" && !confirm(`Accept this ${item.service_type || "clean"} for ${cleaner.first_name || "this cleaner"} on their behalf? They'll be assigned and the booking + contractor records update immediately.`)) return;
+    if (action === "decline" && !confirm("Decline this offer on the cleaner's behalf? It'll be re-routed for reassignment.")) return;
+    setBusy(item.assignmentId);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-jobs", {
+        body: { action, assignmentId: item.assignmentId },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; error?: string; reason?: string };
+      if (d?.ok === false || d?.error) {
+        throw new Error(d.error || "Could not complete that action.");
+      }
+      toast.success(action === "accept" ? "Accepted on their behalf — booking & contractor synced." : "Declined on their behalf.");
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendPhotoLink = async (item: CleanerJobItem, phase: "before" | "after" | "both") => {
+    if (!item.bookingId) { toast.error("No booking linked to this job."); return; }
+    setBusy(`${item.assignmentId}-${phase}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-sms", {
+        body: { cleanerId: cleaner.id, template: "photo_request", bookingId: item.bookingId, phase },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
+      toast.success(
+        phase === "before" ? "Before-photos link texted." : phase === "after" ? "After-photos link texted." : "Combined photo link texted.",
+      );
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not send link");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="py-6 flex justify-center"><RiLoader4Line className="w-5 h-5 animate-spin text-slate-400" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Pending offers */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
+          <RiBriefcaseLine className="w-4 h-4 text-violet-700" /> Pending offers
+          <Badge className="bg-amber-100 text-amber-800 text-[11px]">{offers.length}</Badge>
+        </h3>
+        {offers.length === 0 ? (
+          <p className="text-xs text-slate-400">No open offers for this contractor.</p>
+        ) : (
+          offers.map((o) => (
+            <div key={o.assignmentId} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate capitalize">
+                    {(o.service_type || "Clean").replace(/_/g, " ")}
+                    {o.booking?.customer ? ` · ${o.booking.customer}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {jobDate(o.booking?.service_date || (o.start_datetime ? o.start_datetime.slice(0, 10) : null))}
+                    {o.booking?.time_slot ? ` · ${slotLabel(o.booking.time_slot)}` : ""}
+                    {o.city ? ` · ${o.city}${o.state ? `, ${o.state}` : ""}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {o.role || "Support"} · est. {jobMoney(o.estimated_pay_cents)} pay
+                    {o.expired ? " · offer expired (admin can still accept)" : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy !== null} onClick={() => respond(o, "accept")}>
+                  {busy === o.assignmentId ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiCheckLine className="w-4 h-4 mr-1.5" /> Accept for them</>}
+                </Button>
+                <Button size="sm" variant="outline" className="border-rose-200 text-rose-700" disabled={busy !== null} onClick={() => respond(o, "decline")}>
+                  <RiCloseLine className="w-4 h-4 mr-1.5" /> Decline
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <Separator />
+
+      {/* Upcoming / active jobs */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
+          <RiCalendarCheckLine className="w-4 h-4 text-violet-700" /> Assigned jobs
+          <Badge className="bg-emerald-100 text-emerald-700 text-[11px]">{jobs.length}</Badge>
+        </h3>
+        {jobs.length === 0 ? (
+          <p className="text-xs text-slate-400">No assigned jobs for this contractor.</p>
+        ) : (
+          jobs.map((j) => (
+            <div key={j.assignmentId} className="rounded-lg border border-slate-200 p-3 space-y-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900 truncate capitalize">
+                  {(j.service_type || "Clean").replace(/_/g, " ")}
+                  {j.booking?.customer ? ` · ${j.booking.customer}` : ""}
+                  <span className="ml-1.5 text-[11px] font-normal text-slate-400">{j.status}</span>
+                </p>
+                <p className="text-xs text-slate-500">
+                  {jobDate(j.booking?.service_date || (j.start_datetime ? j.start_datetime.slice(0, 10) : null))}
+                  {j.booking?.time_slot ? ` · ${slotLabel(j.booking.time_slot)}` : ""}
+                  {j.city ? ` · ${j.city}${j.state ? `, ${j.state}` : ""}` : ""}
+                </p>
+              </div>
+              {j.bookingId && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1">
+                    <RiCameraLine className="w-3.5 h-3.5" /> Text a photo link
+                    {j.booking?.before_sent ? " · before sent" : ""}{j.booking?.after_sent ? " · after sent" : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => sendPhotoLink(j, "before")}>
+                      {busy === `${j.assignmentId}-before` ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Before"}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => sendPhotoLink(j, "after")}>
+                      {busy === `${j.assignmentId}-after` ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "After"}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => sendPhotoLink(j, "both")}>
+                      {busy === `${j.assignmentId}-both` ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Combined"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -665,7 +883,7 @@ function CleanerToolsBlock({ cleaner }: { cleaner: CleanerRow }) {
             {busy === "mobile_dashboard" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Nudge: open dashboard"}
           </Button>
         </div>
-        <p className="text-[11px] text-slate-400">Photo-submission requests are sent from a booking (Bookings → Request photos).</p>
+        <p className="text-[11px] text-slate-400">Photo-submission links (before / after / combined) are sent from the Jobs tab above or from a booking (Bookings → Before &amp; after photos).</p>
       </div>
 
       <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">

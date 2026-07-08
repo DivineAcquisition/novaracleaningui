@@ -815,19 +815,25 @@ function BookingSheet({
     }
   };
 
-  const requestPhotos = async () => {
+  const requestPhotos = async (phase: "before" | "after" | "both" = "both") => {
     if (!booking.cleaner_id) {
       toast.error("Assign a cleaner first.");
       return;
     }
-    setWorking("photos");
+    setWorking(`photos-${phase}`);
     try {
       const { data, error } = await supabase.functions.invoke("admin-cleaner-sms", {
-        body: { cleanerId: booking.cleaner_id, template: "photo_request", bookingId: booking.id },
+        body: { cleanerId: booking.cleaner_id, template: "photo_request", bookingId: booking.id, phase },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success("Photo-submission link texted to the cleaner.");
+      toast.success(
+        phase === "before"
+          ? "Before-photos link texted to the cleaner."
+          : phase === "after"
+            ? "After-photos link texted to the cleaner."
+            : "Combined before & after photo link texted to the cleaner.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1177,10 +1183,25 @@ function BookingSheet({
               </CardHeader>
               <CardContent className="space-y-4">
                 {booking.cleaner_id && (
-                  <Button variant="outline" className="w-full" onClick={requestPhotos} disabled={working === "photos"}>
-                    {working === "photos" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Request photo submission from cleaner
-                  </Button>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Text the cleaner a photo link
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Button variant="outline" size="sm" onClick={() => requestPhotos("before")} disabled={working?.startsWith("photos-")}>
+                        {working === "photos-before" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        Before link
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => requestPhotos("after")} disabled={working?.startsWith("photos-")}>
+                        {working === "photos-after" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        After link
+                      </Button>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => requestPhotos("both")} disabled={working?.startsWith("photos-")}>
+                      {working === "photos-both" ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Combined link (before &amp; after on one page)
+                    </Button>
+                  </div>
                 )}
                 <AdminPhotoSubmit booking={booking} onSubmitted={onMutated} />
               </CardContent>

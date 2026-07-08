@@ -271,6 +271,11 @@ verify_jwt = true
 [functions.admin-booking-assign]
 verify_jwt = true
 
+# Admin/VA: list a cleaner's offers/jobs + accept/decline an offer on their
+# behalf (from the Cleaners workspace). Admin/VA role re-checked in-function.
+[functions.admin-cleaner-jobs]
+verify_jwt = true
+
 [functions.admin-customer-action]
 verify_jwt = true
 
