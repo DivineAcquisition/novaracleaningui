@@ -10,8 +10,18 @@
 // the customer an open before/after gallery link (/photos/[token]) so they can
 // see the proof of work without logging in. Sent exactly once per booking.
 //
-// Body: { token, beforeUrls?: string[], afterUrls?: string[], notes? }
+// Body: { token, beforeUrls?: string[], afterUrls?: string[], notes?, mode? }
 // Response: { ok: true, beforeCount, afterCount, galleryUrl }
+//
+// mode: "save" — auto-save of in-progress uploads. The provided arrays are
+// treated as the page's full current set and REPLACE the stored ones (so
+// removing a photo sticks), photo_upload_submitted_at is NOT stamped, and no
+// customer notification fires. This is the save system that lets a cleaner
+// leave the page and come back later to add more photos without losing
+// anything.
+// mode omitted / "submit" — final submission: merge-union with stored photos
+// (never destructive), stamp submitted_at, and fire the customer gallery
+// exactly once when after photos are in.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -42,7 +52,8 @@ serve(async (req) => {
       ? (body as any).afterUrls.filter((u: unknown) => typeof u === "string")
       : [];
     const notes = String((body as any)?.notes || "").trim();
-    if (beforeUrls.length === 0 && afterUrls.length === 0) {
+    const isSave = String((body as any)?.mode || "") === "save";
+    if (!isSave && beforeUrls.length === 0 && afterUrls.length === 0) {
       return json({ ok: false, reason: "no_photos" }, 400);
     }
 
@@ -59,6 +70,19 @@ serve(async (req) => {
       .eq("photo_upload_token", token)
       .maybeSingle();
     if (!booking) return json({ ok: false, reason: "not_found" }, 404);
+
+    // ─── SAVE MODE: persist progress, notify nobody ──────────────────────
+    // The page auto-saves after every upload/removal. Arrays replace the
+    // stored set (the page seeded itself from the stored set on load, so
+    // its state IS the full picture — this is what makes photo removal
+    // stick). No submitted stamp, no customer gallery.
+    if (isSave) {
+      await supabase
+        .from("bookings")
+        .update({ before_photos: beforeUrls, after_photos: afterUrls })
+        .eq("id", booking.id);
+      return json({ ok: true, saved: true, beforeCount: beforeUrls.length, afterCount: afterUrls.length });
+    }
 
     const mergedBefore = Array.from(
       new Set([...(booking.before_photos || []), ...beforeUrls]),

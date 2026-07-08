@@ -41,6 +41,9 @@ interface BookingInfo {
   status: string | null;
   beforeCount: number;
   afterCount: number;
+  /** Full saved photo URLs (older deployed fn versions may omit these). */
+  beforePhotos?: string[];
+  afterPhotos?: string[];
   alreadySubmitted: boolean;
 }
 
@@ -98,6 +101,10 @@ export default function CleanerJobPhotosPage() {
   // photos. Prevents the "already submitted" screen from ever locking someone
   // out (the historical bug where a stray/before submission blocked the rest).
   const [forceForm, setForceForm] = useState(false);
+  // Auto-save status for the "Saved ✓ / Saving…" pill. Every upload and
+  // removal is persisted to the booking immediately, so closing the page
+  // never loses photos — reopening the link restores everything.
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,6 +120,10 @@ export default function CleanerJobPhotosPage() {
         return;
       }
       setInfo(d);
+      // Restore previously saved/submitted photos so the cleaner picks up
+      // exactly where they left off (and removals can be managed).
+      if (Array.isArray(d.beforePhotos)) setBeforeUrls(d.beforePhotos);
+      if (Array.isArray(d.afterPhotos)) setAfterUrls(d.afterPhotos);
     } catch (err) {
       setLoadErr((err as Error).message || "Couldn't load this job");
     } finally {
@@ -123,6 +134,28 @@ export default function CleanerJobPhotosPage() {
   useEffect(() => {
     if (token) void load();
   }, [token, load]);
+
+  // Persist the current photo set to the booking WITHOUT submitting —
+  // no customer notification, no "submitted" stamp. Fired after every
+  // successful upload batch and every removal.
+  const saveProgress = useCallback(
+    async (before: string[], after: string[]) => {
+      setSaveState("saving");
+      try {
+        const { data, error } = await supabase.functions.invoke("submit-cleaner-photos", {
+          body: { token, mode: "save", beforeUrls: before, afterUrls: after },
+        });
+        const d = data as { ok?: boolean } | null;
+        if (error || !d?.ok) throw error || new Error("save failed");
+        setSaveState("saved");
+      } catch {
+        // Non-blocking: photos are still in Storage and in local state; the
+        // final Submit merges everything anyway.
+        setSaveState("error");
+      }
+    },
+    [token],
+  );
 
   const handleFiles = async (
     kind: "before" | "after",
@@ -146,9 +179,12 @@ export default function CleanerJobPhotosPage() {
         const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(key);
         added.push(pub.publicUrl);
       }
-      if (kind === "before") setBeforeUrls((prev) => [...prev, ...added]);
-      else setAfterUrls((prev) => [...prev, ...added]);
+      const nextBefore = kind === "before" ? [...beforeUrls, ...added] : beforeUrls;
+      const nextAfter = kind === "after" ? [...afterUrls, ...added] : afterUrls;
+      setBeforeUrls(nextBefore);
+      setAfterUrls(nextAfter);
       toast.success(`Added ${added.length} ${kind} photo${added.length === 1 ? "" : "s"}`);
+      void saveProgress(nextBefore, nextAfter);
     } catch (err) {
       toast.error("Upload failed: " + (err as Error).message);
     } finally {
@@ -157,8 +193,11 @@ export default function CleanerJobPhotosPage() {
   };
 
   const removeUrl = (kind: "before" | "after", url: string) => {
-    if (kind === "before") setBeforeUrls((u) => u.filter((x) => x !== url));
-    else setAfterUrls((u) => u.filter((x) => x !== url));
+    const nextBefore = kind === "before" ? beforeUrls.filter((x) => x !== url) : beforeUrls;
+    const nextAfter = kind === "after" ? afterUrls.filter((x) => x !== url) : afterUrls;
+    setBeforeUrls(nextBefore);
+    setAfterUrls(nextAfter);
+    void saveProgress(nextBefore, nextAfter);
   };
 
   const submit = async () => {
@@ -265,6 +304,16 @@ export default function CleanerJobPhotosPage() {
               ? "You're all set to start the clean. You'll get a link for after photos once the job is marked complete."
               : "Thanks! Your payout should appear in your Stripe payouts within 1–2 business days."}
           </p>
+          <Button
+            variant="outline"
+            className="mt-4 border-emerald-300 text-emerald-800"
+            onClick={() => {
+              setSubmitted(false);
+              setForceForm(true);
+            }}
+          >
+            <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos
+          </Button>
         </div>
       </div>
     );
@@ -298,6 +347,25 @@ export default function CleanerJobPhotosPage() {
             {info.timeSlot && `· ${info.timeSlot}`}
             {info.addressLine && <span className="block">{info.addressLine}</span>}
           </p>
+          <div className="mt-2 flex items-center gap-1.5">
+            {saveState === "saving" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-medium">
+                <RiLoader4Line className="w-3 h-3 animate-spin" /> Saving…
+              </span>
+            ) : saveState === "saved" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-medium">
+                <RiCheckLine className="w-3 h-3" /> Progress saved
+              </span>
+            ) : saveState === "error" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/30 px-2 py-0.5 text-[10px] font-medium">
+                Save pending — photos kept, will save on submit
+              </span>
+            ) : (
+              <span className="text-[10px] text-emerald-50/80">
+                Photos auto-save — you can close this page and come back to add more.
+              </span>
+            )}
+          </div>
         </header>
 
         {showBefore && (

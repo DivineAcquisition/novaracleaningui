@@ -83,6 +83,11 @@ serve(async (req) => {
       status: b.status,
       beforeCount: Array.isArray(b.before_photos) ? b.before_photos.length : 0,
       afterCount: Array.isArray(b.after_photos) ? b.after_photos.length : 0,
+      // Full saved URLs so the upload page can restore progress — photos are
+      // auto-saved to the booking as they upload, and a cleaner returning to
+      // the link picks up right where they left off.
+      beforePhotos: Array.isArray(b.before_photos) ? b.before_photos : [],
+      afterPhotos: Array.isArray(b.after_photos) ? b.after_photos : [],
       alreadySubmitted: !!b.photo_upload_submitted_at,
     });
   } catch (err) {
