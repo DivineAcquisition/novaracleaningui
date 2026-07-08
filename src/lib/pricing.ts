@@ -81,6 +81,7 @@ export const ADD_ONS = {
   microwave:    { label: "Inside microwave",       price: 10, note: "" },
   dishwasher:   { label: "Inside dishwasher",      price: 15, note: "Descale / wipe" },
   garage:       { label: "Garage sweep-out",       price: 50, note: "Single / double" },
+  basement:     { label: "Basement clean",         price: 75, note: "Sweep, vacuum & tidy" },
   patio:        { label: "Patio / balcony",        price: 35, note: "Sweep & tidy" },
   petHair:      { label: "Heavy pet-hair removal", price: 35, note: "Extra vacuum pass" },
   closets:      { label: "Inside closets / tidy",  price: 30, note: "Organize & wipe" },

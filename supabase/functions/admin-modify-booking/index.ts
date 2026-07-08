@@ -41,6 +41,7 @@ const ADD_ON_LABELS: Record<string, string> = {
   microwave: "Inside microwave",
   dishwasher: "Inside dishwasher",
   garage: "Garage sweep-out",
+  basement: "Basement clean",
   patio: "Patio / balcony",
   petHair: "Heavy pet-hair removal",
   closets: "Inside closets / tidy",

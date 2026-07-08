@@ -36,6 +36,7 @@ const ADD_ONS: Record<string, { price: number; label: string }> = {
   microwave: { price: 10, label: "Inside microwave" },
   dishwasher: { price: 15, label: "Inside dishwasher" },
   garage: { price: 50, label: "Garage sweep-out" },
+  basement: { price: 75, label: "Basement clean" },
   patio: { price: 35, label: "Patio / balcony" },
   petHair: { price: 35, label: "Heavy pet-hair removal" },
   closets: { price: 30, label: "Inside closets" },

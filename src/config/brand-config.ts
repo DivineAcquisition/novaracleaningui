@@ -202,6 +202,7 @@ export const ADD_ONS: AddOnConfig[] = [
   { id: "interior_windows", name: "Interior Windows",     price: 40, description: "Clean all interior windows" },
   { id: "laundry",          name: "Laundry",              price: 25, description: "Wash, dry, fold one load" },
   { id: "garage",           name: "Garage Sweep",         price: 40, description: "Sweep and tidy garage" },
+  { id: "basement",         name: "Basement Clean",       price: 75, description: "Sweep, vacuum and tidy basement" },
   { id: "organization",     name: "Light Organization",   price: 50, description: "Organize closets/pantry" },
 ];
 

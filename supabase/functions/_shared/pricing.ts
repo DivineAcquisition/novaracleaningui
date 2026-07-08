@@ -66,6 +66,7 @@ export const ADD_ONS: Record<string, { price: number }> = {
   microwave:    { price: 10 },
   dishwasher:   { price: 15 },
   garage:       { price: 50 },
+  basement:     { price: 75 },
   patio:        { price: 35 },
   petHair:      { price: 35 },
   closets:      { price: 30 },
