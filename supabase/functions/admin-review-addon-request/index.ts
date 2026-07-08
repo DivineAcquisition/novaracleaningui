@@ -94,7 +94,8 @@ serve(async (req) => {
         source: "admin-review-addon-request",
         summary: `Add-on REJECTED: ${request.addon_label || request.addon_id} ($${(Number(request.amount_cents) / 100).toFixed(2)}) reported by ${request.cleaner_name || "cleaner"}${reviewNote ? ` — "${reviewNote}"` : ""}. No charge made.`,
         data: { request_id: requestId, action: "reject", by: callerId },
-      }).catch(() => {});
+        // PostgrestBuilder has no .catch(); .then(ok, err) swallows safely.
+      }).then(() => undefined, () => undefined);
 
       return json({ ok: true, status: "rejected" });
     }
@@ -225,7 +226,7 @@ serve(async (req) => {
       source: "admin-review-addon-request",
       summary: `${ref} — add-on APPROVED: ${request.addon_label || request.addon_id} ($${priceDollars.toFixed(2)}). Customer charge: ${chargeStatus}. Crew pay +$${(perCleanerBumpCents / 100).toFixed(2)} per cleaner.`,
       data: { request_id: requestId, action: "approve", by: callerId, charge_status: chargeStatus, amount_cents: amountCents },
-    }).catch(() => {});
+    }).then(() => undefined, () => undefined);
 
     return json({
       ok: true,

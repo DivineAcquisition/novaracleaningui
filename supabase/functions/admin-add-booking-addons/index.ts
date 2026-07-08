@@ -247,7 +247,10 @@ serve(async (req) => {
           if (booking.email) {
             await admin.functions.invoke("send-addon-email", { body: { type: "addon_charged", email: booking.email, data: emailData } }).catch(() => {});
           }
-          await admin.from("events").insert({ event_type: "booking.addon_charged", booking_id: bookingId, source: "admin", summary: `Add-ons charged $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, pi: pi.id, by: callerId } }).catch(() => {});
+          // NOTE: PostgrestBuilder is a thenable without .catch() — calling
+          // .catch() on it throws a TypeError AFTER the charge succeeds.
+          // Use .then(onOk, onErr) for fire-and-forget error swallowing.
+          await admin.from("events").insert({ event_type: "booking.addon_charged", booking_id: bookingId, source: "admin", summary: `Add-ons charged $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, pi: pi.id, by: callerId } }).then(() => undefined, () => undefined);
           return json({ ok: true, charged: true, status: "paid", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, paymentIntentId: pi.id });
         }
       } catch (e) {
@@ -271,7 +274,7 @@ serve(async (req) => {
     if (booking.email) {
       await admin.functions.invoke("send-addon-email", { body: { type: "addon_invoiced", email: booking.email, data: { ...emailData, hostedInvoiceUrl } } }).catch(() => {});
     }
-    await admin.from("events").insert({ event_type: "booking.addon_invoiced", booking_id: bookingId, source: "admin", summary: `Add-ons invoiced $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, invoice: invoice.id, by: callerId } }).catch(() => {});
+    await admin.from("events").insert({ event_type: "booking.addon_invoiced", booking_id: bookingId, source: "admin", summary: `Add-ons invoiced $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, invoice: invoice.id, by: callerId } }).then(() => undefined, () => undefined);
 
     return json({ ok: true, charged: false, status: "invoiced", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, hostedInvoiceUrl });
   } catch (e) {
