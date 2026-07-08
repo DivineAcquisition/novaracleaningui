@@ -94,6 +94,10 @@ export default function CleanerJobPhotosPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [uploadingKind, setUploadingKind] = useState<"before" | "after" | null>(null);
+  // Escape hatch: even when a phase looks "done", let the cleaner add more
+  // photos. Prevents the "already submitted" screen from ever locking someone
+  // out (the historical bug where a stray/before submission blocked the rest).
+  const [forceForm, setForceForm] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -204,16 +208,49 @@ export default function CleanerJobPhotosPage() {
     );
   }
 
-  // Whether this phase is already done — so submitting BEFORE photos doesn't
-  // lock the cleaner out of later submitting AFTER photos (and vice-versa).
+  // Whether this phase is already done — driven by ACTUAL stored photo counts,
+  // never by a single "submitted" flag. A before-photos submission (or a stray
+  // legacy submission) must never lock the cleaner out of the other phase:
+  //   • before link → done only when before photos exist
+  //   • after link  → done only when after photos exist
+  //   • combined link (no phase) → done only when BOTH exist
+  // ...and even then, "Add more photos" re-opens the form so nobody is ever
+  // hard-blocked.
   const alreadyDoneForPhase =
     phase === "before"
       ? info.beforeCount > 0
       : phase === "after"
         ? info.afterCount > 0
-        : info.alreadySubmitted;
+        : info.beforeCount > 0 && info.afterCount > 0;
 
-  if (submitted || alreadyDoneForPhase) {
+  if (!submitted && alreadyDoneForPhase && !forceForm) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-600 text-white mb-3">
+            <RiCheckLine className="w-6 h-6" />
+          </div>
+          <p className="font-semibold text-emerald-900">
+            {phase === "before" ? "Before photos are in." : phase === "after" ? "After photos are in." : "Photos are in."}
+          </p>
+          <p className="text-xs text-emerald-800 mt-1">
+            {phase === "before"
+              ? "You're all set to start the clean. You'll get a link for after photos once the job is marked complete."
+              : "Your payout should appear in your Stripe payouts within 1–2 business days."}
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4 border-emerald-300 text-emerald-800"
+            onClick={() => setForceForm(true)}
+          >
+            <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (submitted) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
@@ -226,7 +263,7 @@ export default function CleanerJobPhotosPage() {
           <p className="text-xs text-emerald-800 mt-1">
             {phase === "before"
               ? "You're all set to start the clean. You'll get a link for after photos once the job is marked complete."
-              : "Your payout should appear in your Stripe payouts within 1–2 business days."}
+              : "Thanks! Your payout should appear in your Stripe payouts within 1–2 business days."}
           </p>
         </div>
       </div>
