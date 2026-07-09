@@ -188,6 +188,20 @@ serve(async (req) => {
     const bookingRef = booking.booking_number
       ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
       : `BK-${bookingId.slice(0, 8)}`;
+
+    // Best-effort customer SMS (GHL primary). Never blocks the charge flow.
+    const smsCustomer = async (message: string) => {
+      const phone = String(booking.phone || "").trim();
+      if (!phone) return;
+      try {
+        await admin.functions.invoke("send-ghl-sms", {
+          body: { phone, email: booking.email || undefined, firstName: booking.first_name || undefined, message, type: "addon_update" },
+        });
+      } catch (smsErr) {
+        console.warn("[admin-add-booking-addons] customer SMS failed (non-blocking)", smsErr instanceof Error ? smsErr.message : String(smsErr));
+      }
+    };
+    const addOnListForSms = pricedAdded.map((p) => p.label).join(", ");
     const emailData = {
       name: booking.first_name || "",
       addOns: pricedAdded.map((p) => (p.price ? `${p.label} ($${p.price.toFixed(2)})` : p.label)),
@@ -247,6 +261,9 @@ serve(async (req) => {
           if (booking.email) {
             await admin.functions.invoke("send-addon-email", { body: { type: "addon_charged", email: booking.email, data: emailData } }).catch(() => {});
           }
+          await smsCustomer(
+            `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""} and charged your card on file $${(deltaCents / 100).toFixed(2)}. A receipt was emailed to you. Questions? Call (844) 735-2070.`,
+          );
           // NOTE: PostgrestBuilder is a thenable without .catch() — calling
           // .catch() on it throws a TypeError AFTER the charge succeeds.
           // Use .then(onOk, onErr) for fire-and-forget error swallowing.
@@ -274,6 +291,9 @@ serve(async (req) => {
     if (booking.email) {
       await admin.functions.invoke("send-addon-email", { body: { type: "addon_invoiced", email: booking.email, data: { ...emailData, hostedInvoiceUrl } } }).catch(() => {});
     }
+    await smsCustomer(
+      `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""} ($${(deltaCents / 100).toFixed(2)}).${hostedInvoiceUrl ? ` Pay securely here: ${hostedInvoiceUrl}` : " An invoice was emailed to you."} Questions? Call (844) 735-2070.`,
+    );
     await admin.from("events").insert({ event_type: "booking.addon_invoiced", booking_id: bookingId, source: "admin", summary: `Add-ons invoiced $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, invoice: invoice.id, by: callerId } }).then(() => undefined, () => undefined);
 
     return json({ ok: true, charged: false, status: "invoiced", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, hostedInvoiceUrl });

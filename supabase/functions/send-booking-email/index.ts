@@ -315,9 +315,15 @@ serve(async (req: Request) => {
       throw new Error(`Unknown email type: ${type}`);
     }
 
+    // Billing gets a copy of every financial email (purchases, receipts,
+    // price-changing modifications, cancellations with potential fees).
+    const FINANCIAL_TYPES = ['confirmation', 'payment_receipt', 'modification', 'cancellation'];
+    const billingCc = FINANCIAL_TYPES.includes(type) ? ['billing@novaracleaning.com'] : undefined;
+
     const emailResponse = await resend.emails.send({
       from: "Novara Cleaning <hello@novaracleaning.com>",
       to: [email],
+      cc: billingCc,
       subject,
       html,
       attachments: attachments.length > 0 ? attachments : undefined,

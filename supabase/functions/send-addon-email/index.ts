@@ -31,6 +31,9 @@ const BRAND = {
   supportPhone: "+1 (844) 735-2070",
 };
 const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+// Finance mailbox is CC'd on every add-on charge / invoice email so
+// billing always has a copy of financial updates and purchases.
+const BILLING_CC = "billing@novaracleaning.com";
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -144,7 +147,7 @@ serve(async (req) => {
 
   try {
     const result = await resend.emails.send({
-      from: FROM_ADDRESS, to: [email], subject: built.subject, html: built.html, replyTo: BRAND.supportEmail,
+      from: FROM_ADDRESS, to: [email], cc: [BILLING_CC], subject: built.subject, html: built.html, replyTo: BRAND.supportEmail,
     });
     if ((result as { error?: unknown })?.error) console.error("[send-addon-email] resend error", type, (result as { error?: unknown }).error);
     else console.log("[send-addon-email] sent", type, email);
