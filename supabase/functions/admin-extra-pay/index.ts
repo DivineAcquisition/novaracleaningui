@@ -1,19 +1,23 @@
 // admin-extra-pay
 //
 // Per-job EXTRA pay for contractors — supply reimbursement, mileage, surge
-// pay, and overtime — paid out immediately via an exact-amount Stripe
-// transfer (the same Custom Payout rail as pay-cleaner-transfer). Each
+// pay, overtime, and job value increases. Works like Custom Payout:
+// bookkeeping + notification only (payouts are released through the
+// company's alternative payout method for now, NOT Stripe Connect). Each
 // payment is recorded per (booking, cleaner) in public.job_extra_pay so the
-// money always ties back to a specific job.
+// money always ties back to a specific job, the cleaner is texted that the
+// money is on its way, and the admin flips it to "paid" once sent.
 //
 // Body:
-//   { action: "list", cleanerId? , bookingId?, limit? }
+//   { action: "list", cleanerId?, bookingId?, limit? }
 //       → recent extra-pay rows (newest first), enriched with booking ref
 //   { action: "pay", cleanerId, bookingId?, jobId?,
 //     supplyCents?, mileageMiles?, mileageRateCents?,   // default 70¢/mi
 //     surgeCents?, overtimeHours?, overtimeRateCents?,
 //     jobValueCents?, note? }
-//       → records the row and fires the transfer. Total must be > 0.
+//       → records the row (status "pending") and texts the cleaner.
+//   { action: "mark_paid", id }
+//       → flips a pending row to paid once the money was actually sent.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -149,7 +153,16 @@ serve(async (req) => {
         bookingRef = b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : `BK-${bookingId.slice(0, 8)}`;
       }
 
-      // Record first (stable idempotency key), then transfer.
+      const { data: cleaner } = await admin
+        .from("cleaners")
+        .select("id, first_name, last_name, phone, email, total_earnings_cents")
+        .eq("id", cleanerId)
+        .maybeSingle();
+      if (!cleaner) return json({ error: "Cleaner not found" }, 404);
+      const cleanerName = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Cleaner";
+
+      // Record the extra pay (bookkeeping only — money moves via the
+      // company's alternative payout method, not Stripe Connect).
       const { data: row, error: insErr } = await admin.from("job_extra_pay").insert({
         booking_id: bookingId,
         job_id: jobId,
@@ -176,48 +189,29 @@ serve(async (req) => {
       if (surgeCents > 0) parts.push(`surge ${usd(surgeCents)}`);
       if (overtimeCents > 0) parts.push(`overtime ${overtimeHours}h ${usd(overtimeCents)}`);
       if (jobValueCents > 0) parts.push(`job value increase ${usd(jobValueCents)}`);
-      const label = `Novara extra pay (${parts.join(", ")}) — ${bookingRef}`;
 
-      // Exact-amount transfer via the proven Custom Payout rail. Called with
-      // plain fetch (not functions.invoke) so a non-2xx response still lets
-      // us read the REAL error message from the body instead of the generic
-      // "Edge Function returned a non-2xx status code". Idempotency is keyed
-      // on OUR row id so a retry never double-pays.
-      let payload: Record<string, unknown> = {};
-      let payFailed = "";
-      try {
-        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/pay-cleaner-transfer`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""}`,
-          },
-          body: JSON.stringify({
-            cleanerId,
-            amountCents: totalCents,
-            bookingId,
-            label,
-            idempotencyKey: `extra_pay_${row.id}`,
-          }),
-        });
-        payload = await res.json().catch(() => ({}));
-        if (!res.ok || payload.error) {
-          payFailed = String(payload.error || `Transfer failed (HTTP ${res.status})`);
-        }
-      } catch (e) {
-        payFailed = e instanceof Error ? e.message : String(e);
-      }
-      if (payFailed) {
-        await admin.from("job_extra_pay").update({ status: "failed", failure_reason: payFailed }).eq("id", row.id);
-        return json({ error: payFailed, extraPayId: row.id, status: "failed" }, 502);
-      }
+      // Roll the extra pay into lifetime earnings (best-effort).
+      await admin.from("cleaners")
+        .update({ total_earnings_cents: (Number(cleaner.total_earnings_cents) || 0) + totalCents, updated_at: new Date().toISOString() })
+        .eq("id", cleanerId)
+        .then(() => undefined, () => undefined);
 
-      await admin.from("job_extra_pay").update({
-        status: "paid",
-        stripe_transfer_id: (payload.transferId as string) || null,
-        paid_at: new Date().toISOString(),
-        failure_reason: null,
-      }).eq("id", row.id);
+      // Text the cleaner their extra pay is on its way (best-effort).
+      let smsSent = false;
+      if (cleaner.phone) {
+        try {
+          const { error: smsErr } = await admin.functions.invoke("send-ghl-sms", {
+            body: {
+              phone: cleaner.phone,
+              email: cleaner.email || undefined,
+              firstName: cleaner.first_name,
+              message: `💸 Novara extra pay: $${(totalCents / 100).toFixed(2)} (${parts.join(", ")}) for ${bookingRef} is pending and on its way. Thanks for the great work! Reply STOP to opt out.`,
+              type: "cleaner_extra_pay",
+            },
+          });
+          smsSent = !smsErr;
+        } catch (_) { /* non-blocking */ }
+      }
 
       await admin.from("events").insert({
         event_type: "cleaner.extra_pay",
@@ -225,18 +219,40 @@ serve(async (req) => {
         job_id: jobId,
         cleaner_id: cleanerId,
         source: "admin-extra-pay",
-        summary: `${bookingRef} — extra pay ${usd(totalCents)} (${parts.join(", ")}) sent to ${payload.cleanerName || "cleaner"}${note ? ` — "${note}"` : ""}`,
-        data: { extra_pay_id: row.id, transfer_id: payload.transferId, by: actor, supply_cents: supplyCents, mileage_cents: mileageCents, surge_cents: surgeCents, overtime_cents: overtimeCents, job_value_cents: jobValueCents },
+        summary: `${bookingRef} — extra pay ${usd(totalCents)} (${parts.join(", ")}) recorded for ${cleanerName}${note ? ` — "${note}"` : ""}. Pay via the usual payout method, then mark paid.`,
+        data: { extra_pay_id: row.id, by: actor, sms_sent: smsSent, supply_cents: supplyCents, mileage_cents: mileageCents, surge_cents: surgeCents, overtime_cents: overtimeCents, job_value_cents: jobValueCents },
       }).then(() => undefined, () => undefined);
 
       return json({
         ok: true,
         extraPayId: row.id,
-        status: "paid",
+        status: "pending",
         totalCents,
-        transferId: payload.transferId ?? null,
+        smsSent,
+        cleanerName,
         breakdown: { supplyCents, mileageCents, surgeCents, overtimeCents, jobValueCents },
       });
+    }
+
+    // ─── MARK PAID ───────────────────────────────────────────────────────
+    if (action === "mark_paid") {
+      const id = String(body?.id || "");
+      if (!id) return json({ error: "id required" }, 400);
+      const { data: row } = await admin.from("job_extra_pay").select("id, status, total_cents, cleaner_id").eq("id", id).maybeSingle();
+      if (!row) return json({ error: "Extra-pay record not found" }, 404);
+      if (row.status === "paid") return json({ ok: true, status: "paid", alreadyPaid: true });
+      const { error: updErr } = await admin.from("job_extra_pay")
+        .update({ status: "paid", paid_at: new Date().toISOString(), failure_reason: null })
+        .eq("id", id);
+      if (updErr) throw updErr;
+      await admin.from("events").insert({
+        event_type: "cleaner.extra_pay_paid",
+        cleaner_id: row.cleaner_id,
+        source: "admin-extra-pay",
+        summary: `Extra pay ${usd(Number(row.total_cents) || 0)} marked paid (sent via alternative payout method)`,
+        data: { extra_pay_id: id, by: actor },
+      }).then(() => undefined, () => undefined);
+      return json({ ok: true, status: "paid" });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

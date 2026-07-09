@@ -9,9 +9,10 @@
 //   • surge pay ($)
 //   • overtime (hours × $/hr)
 //   • job value increase ($ — job turned out bigger than booked)
-// and one click fires an exact-amount Stripe transfer (pay-cleaner-transfer
-// rail) + records the payment against that job in job_extra_pay. History of
-// every extra payment (per job) shows below.
+// and one click records the payment against that job in job_extra_pay and
+// texts the cleaner it's on the way. Money moves through the company's
+// alternative payout method for now (NOT Stripe Connect) — once sent, the
+// admin flips the row to "paid" from the history table below.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -79,6 +80,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
   const [jobValue, setJobValue] = useState("");
   const [note, setNote] = useState("");
   const [paying, setPaying] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState<string | null>(null);
 
   const [history, setHistory] = useState<ExtraPayment[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -147,7 +149,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
       ? `${selectedJob.bookingNumber || "job"} (${selectedJob.customer || "customer"})`
       : "no specific job";
     if (!confirm(
-      `Send ${usd(totalCents)} to ${cleanerName(cleaner)} now via Stripe for ${jobLabel}?\n\n` +
+      `Record ${usd(totalCents)} extra pay for ${cleanerName(cleaner)} — ${jobLabel} — and text them it's on the way?\n\n` +
       [
         supplyCents > 0 ? `• Supplies ${usd(supplyCents)}` : "",
         mileageCents > 0 ? `• Mileage ${mileageMiles} mi × ${usd(mileageRateCents)}/mi = ${usd(mileageCents)}` : "",
@@ -175,15 +177,34 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
         },
       });
       if (error) throw error;
-      const d = data as { ok?: boolean; error?: string; transferId?: string };
-      if (d?.error || d?.ok === false) throw new Error(d?.error || "Payment failed");
-      toast.success(`Sent ${usd(totalCents)} to ${cleanerName(cleaner)} — transfer ${d.transferId ? `${String(d.transferId).slice(0, 14)}…` : "created"}. They've been texted.`);
+      const d = data as { ok?: boolean; error?: string; smsSent?: boolean };
+      if (d?.error || d?.ok === false) throw new Error(d?.error || "Failed to record extra pay");
+      toast.success(
+        `Recorded ${usd(totalCents)} extra pay for ${cleanerName(cleaner)}${d.smsSent ? " — they've been texted" : ""}. Send the money via your usual payout method, then mark it paid below.`,
+      );
       resetForm();
       await loadHistory(cleanerId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Payment failed");
+      toast.error(err instanceof Error ? err.message : "Failed to record extra pay");
     } finally {
       setPaying(false);
+    }
+  };
+
+  const markPaid = async (id: string) => {
+    setMarkingPaid(id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-extra-pay", {
+        body: { action: "mark_paid", id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
+      toast.success("Marked paid.");
+      await loadHistory(cleanerId || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to mark paid");
+    } finally {
+      setMarkingPaid(null);
     }
   };
 
@@ -195,7 +216,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
             <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-600" /> Extra pay — per job
           </CardTitle>
           <CardDescription className="text-xs">
-            Supply reimbursement, mileage, surge pay, overtime &amp; job value increases. Paid instantly via Stripe (like Custom Payout) and recorded against the job.
+            Supply reimbursement, mileage, surge pay, overtime &amp; job value increases — recorded per job and the cleaner is texted, just like Custom Payout. Send the money via your usual payout method, then mark it paid.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -280,7 +301,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-violet-50 border border-violet-200 p-3">
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-violet-700/70 font-semibold">Total to send now</p>
+              <p className="text-[10px] uppercase tracking-wide text-violet-700/70 font-semibold">Total extra pay</p>
               <p className="text-2xl font-bold text-violet-700">{usd(totalCents)}</p>
             </div>
             <Button
@@ -289,12 +310,12 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
               className="bg-violet-600 hover:bg-violet-700 text-white"
             >
               {paying
-                ? <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Sending…</>
-                : <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Pay {cleaner ? cleanerName(cleaner) : "cleaner"} now</>}
+                ? <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Recording…</>
+                : <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Record &amp; notify {cleaner ? cleanerName(cleaner) : "cleaner"}</>}
             </Button>
           </div>
           <p className="text-[11px] text-slate-400">
-            Fires an exact-amount Stripe transfer immediately (same rail as Custom Payout), texts the cleaner, and records the payment against the selected job.
+            Records the extra pay against the selected job and texts the cleaner it&apos;s on the way. Send the money via your usual payout method, then hit &quot;Mark paid&quot; in the history below.
           </p>
         </CardContent>
       </Card>
@@ -355,14 +376,27 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
                       <TableCell className="text-right text-xs tabular-nums">{p.job_value_cents ? usd(p.job_value_cents) : "—"}</TableCell>
                       <TableCell className="text-right text-sm font-semibold text-violet-700 tabular-nums">{usd(p.total_cents)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={cn(
-                          "text-[10px] capitalize",
-                          p.status === "paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : p.status === "failed" ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : "bg-slate-100 text-slate-700 border-slate-200",
-                        )}>
-                          {p.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] capitalize",
+                            p.status === "paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : p.status === "failed" ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200",
+                          )}>
+                            {p.status}
+                          </Badge>
+                          {p.status !== "paid" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[10px] border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                              disabled={markingPaid === p.id}
+                              onClick={() => void markPaid(p.id)}
+                            >
+                              {markingPaid === p.id ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Mark paid"}
+                            </Button>
+                          )}
+                        </div>
                         {p.status === "failed" && p.failure_reason ? (
                           <p className="text-[10px] text-rose-600 max-w-[180px] mt-0.5" title={p.failure_reason}>{p.failure_reason}</p>
                         ) : null}
