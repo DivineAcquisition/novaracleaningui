@@ -136,8 +136,16 @@ async function airtableRequest<T = unknown>(path: string, opts: RequestOptions =
     }
 
     if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
+      const body = await res.text().catch(() => "");
+      // Monthly billing cap is NOT retryable — fail fast with a clear message.
+      if (body.includes("PUBLIC_API_BILLING_LIMIT_EXCEEDED")) {
+        throw new AirtableError(
+          "Airtable monthly API limit exceeded for this workspace — upgrade the Airtable plan (or wait for the monthly reset) to resume syncing.",
+          429,
+          body.slice(0, 300),
+        );
+      }
       if (attempt >= maxRetries) {
-        const body = await res.text().catch(() => "");
         throw new AirtableError(`Airtable ${res.status} after ${attempt} retries`, res.status, body);
       }
       const retryAfter = Number(res.headers.get("Retry-After"));
