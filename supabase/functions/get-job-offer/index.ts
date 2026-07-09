@@ -14,13 +14,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function maskPhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const digits = String(phone).replace(/\D/g, "");
-  if (digits.length < 4) return null;
-  return digits.slice(-4);
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -68,17 +61,15 @@ serve(async (req) => {
         .maybeSingle(),
     ]);
 
-    let customer: { first_name: string | null; phone_last4: string | null } = {
-      first_name: null,
-      phone_last4: null,
-    };
+    // Contractors must never see customer contact info — only the first name.
+    let customer: { first_name: string | null } = { first_name: null };
     if (job?.customer_id) {
       const { data: c } = await supabase
         .from("customers")
-        .select("first_name, phone")
+        .select("first_name")
         .eq("id", job.customer_id)
         .maybeSingle();
-      if (c) customer = { first_name: c.first_name, phone_last4: maskPhone(c.phone) };
+      if (c) customer = { first_name: c.first_name };
     }
 
     // Pull the linked booking's canonical service date + arrival window.

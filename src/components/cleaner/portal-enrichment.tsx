@@ -49,7 +49,6 @@ export interface PortalJob {
   customerName: string;
   serviceType: string;
   homeSizeId: string | null;
-  phone: string;
   pay: EnrichedPay;
   customerDetails: EnrichedCustomerDetails | null;
   internalDetails: EnrichedInternalDetails | null;
@@ -176,9 +175,6 @@ export function JobDetails({ job }: { job: PortalJob }) {
               <DetailRow label="Frequency" value={cd.frequency ? titleCase(cd.frequency) : null} />
               <DetailRow label="Add-ons" value={cd.addOns.length ? cd.addOns.map(addonLabel).join(", ") : null} />
               <DetailRow label="Access notes" value={cd.accessNotes} />
-              {job.phone && (
-                <DetailRow label="Contact" value={<a href={`tel:${job.phone}`} className="text-primary hover:underline">{job.phone}</a>} />
-              )}
             </div>
           )}
           {id && (

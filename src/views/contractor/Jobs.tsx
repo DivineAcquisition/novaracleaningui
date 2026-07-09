@@ -79,7 +79,6 @@ interface Job {
   serviceType: string;
   homeSizeId: string | null;
   customerName: string;
-  phone: string;
   address: string;
   city: string;
   state: string;
@@ -211,12 +210,6 @@ function JobDetails({ job }: { job: Job }) {
                 value={cd.addOns.length ? cd.addOns.map(addonLabel).join(", ") : null}
               />
               <DetailRow label="Access notes" value={cd.accessNotes} />
-              {job.phone && (
-                <DetailRow
-                  label="Contact"
-                  value={<a href={`tel:${job.phone}`} className="text-primary hover:underline">{job.phone}</a>}
-                />
-              )}
             </div>
           )}
           {id && (

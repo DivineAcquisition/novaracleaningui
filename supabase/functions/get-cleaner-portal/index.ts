@@ -109,9 +109,11 @@ serve(async (req) => {
     // ── This cleaner's bookings ──────────────────────────────────────────
     const { data: bookings } = await admin
       .from("bookings")
+      // NB: customer phone/email are intentionally NOT selected — contractors
+      // must never see customer contact info.
       .select(
         "id, booking_number, status, service_type, home_size_id, service_date, time_slot, arrival_window, " +
-        "first_name, last_name, email, phone, address, city, state, zip_code, " +
+        "first_name, last_name, address, city, state, zip_code, " +
         "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
         "dispatch_notes, team_notes, issues_flag, issues_notes, " +
         "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
@@ -237,7 +239,6 @@ serve(async (req) => {
           serviceType: b.service_type || "Cleaning",
           homeSizeId: b.home_size_id || null,
           customerName,
-          phone: cancelled ? "" : (b.phone || ""),
           address: cancelled ? "" : (b.address || ""),
           city: cancelled ? "" : (b.city || ""),
           state: cancelled ? "" : (b.state || ""),

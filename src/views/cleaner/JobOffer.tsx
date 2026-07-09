@@ -71,7 +71,6 @@ interface OfferDetail {
   } | null;
   customer: {
     first_name: string | null;
-    phone_last4: string | null;
   };
   cleaner: { first_name: string | null };
 }
@@ -341,8 +340,8 @@ export default function CleanerJobOfferPage() {
             <InfoRow
               icon={RiHomeLine}
               label="Customer"
-              value={`${offer.customer.first_name || "Customer"}${offer.customer.phone_last4 ? ` · ends in ${offer.customer.phone_last4}` : ""}`}
-              hint="Full contact info appears in your dashboard after you accept."
+              value={offer.customer.first_name || "Customer"}
+              hint="The job address & details appear in your dashboard after you accept."
             />
             <InfoRow
               icon={RiMoneyDollarCircleLine}
