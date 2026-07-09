@@ -124,28 +124,14 @@ serve(async (req) => {
       .limit(60);
 
     const bookingRows: Row[] = bookings || [];
-    const bookingIds = bookingRows.map((b) => b.id);
+    const primaryIds = new Set(bookingRows.map((b) => b.id));
 
-    // ── Actual pay for these bookings (manual_payouts, any cleaner_id, so we
-    //    can attribute crew splits from cleaner_breakdown) ──
-    const payoutByBooking = new Map<string, Row>();
-    if (bookingIds.length > 0) {
-      const { data: payouts } = await admin
-        .from("manual_payouts")
-        .select("booking_id, cleaner_id, amount_cents, status, paid_at, pct_paid, revenue_cents, cleaner_breakdown, note")
-        .in("booking_id", bookingIds)
-        .neq("status", "cancelled");
-      for (const p of payouts || []) {
-        // Prefer the newest / non-cancelled active payout per booking.
-        if (p.booking_id && !payoutByBooking.has(p.booking_id)) payoutByBooking.set(p.booking_id, p);
-      }
-    }
-
-    // ── Lifetime actual totals (across ALL of this cleaner's payouts, incl.
-    //    crew splits), independent of the 60-booking window above ──
+    // ── Lifetime actual totals from the two pay ledgers (custom pay +
+    //    extra pay), including crew splits via cleaner_breakdown ──
     let lifetimePaidCents = 0;
     let pendingCents = 0;
     let paidJobs = 0;
+    const attributedBookingIds = new Set<string>();
     const seenPayoutIds = new Set<string>();
     const tallyPayout = (p: Row) => {
       const id = String(p.id ?? `${p.booking_id}-${p.cleaner_id}`);
@@ -153,6 +139,7 @@ serve(async (req) => {
       seenPayoutIds.add(id);
       const cents = attributeCents(p, cleanerId);
       if (cents == null) return;
+      if (p.booking_id) attributedBookingIds.add(String(p.booking_id));
       if (p.status === "paid") { lifetimePaidCents += cents; paidJobs += 1; }
       else if (p.status === "pending") { pendingCents += cents; }
     };
@@ -187,6 +174,7 @@ serve(async (req) => {
         if (e.status === "paid") lifetimePaidCents += cents;
         else pendingCents += cents;
         if (e.booking_id) {
+          attributedBookingIds.add(String(e.booking_id));
           const g = extrasByBooking.get(e.booking_id) || { total: 0, paid: 0, pending: 0 };
           g.total += cents;
           if (e.status === "paid") g.paid += cents; else g.pending += cents;
@@ -194,6 +182,42 @@ serve(async (req) => {
         }
       }
     } catch (_) { /* job_extra_pay may not exist in some envs */ }
+
+    // ── CREW jobs: bookings this cleaner was PAID on (via the custom-pay
+    //    crew breakdown or extra pay) but where bookings.cleaner_id points at
+    //    the crew lead. Without this, a second cleaner's job list was missing
+    //    those jobs entirely while the lifetime totals included them — the
+    //    "pay disconnect". Fetch and merge them so every paid job is visible. ──
+    const crewIds = [...attributedBookingIds].filter((id) => !primaryIds.has(id));
+    if (crewIds.length > 0) {
+      const { data: crewBookings } = await admin
+        .from("bookings")
+        .select(
+          "id, booking_number, status, service_type, home_size_id, service_date, time_slot, arrival_window, " +
+          "first_name, last_name, address, city, state, zip_code, " +
+          "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
+          "dispatch_notes, team_notes, issues_flag, issues_notes, " +
+          "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
+          "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id",
+        )
+        .in("id", crewIds);
+      for (const cb of crewBookings || []) bookingRows.push(cb);
+      bookingRows.sort((a, b) => String(b.service_date || "").localeCompare(String(a.service_date || "")));
+    }
+
+    // ── Active payout row per booking (full fields for display) ──
+    const bookingIds = bookingRows.map((b) => b.id);
+    const payoutByBooking = new Map<string, Row>();
+    if (bookingIds.length > 0) {
+      const { data: payouts } = await admin
+        .from("manual_payouts")
+        .select("booking_id, cleaner_id, amount_cents, status, paid_at, pct_paid, revenue_cents, cleaner_breakdown, note")
+        .in("booking_id", bookingIds)
+        .neq("status", "cancelled");
+      for (const p of payouts || []) {
+        if (p.booking_id && !payoutByBooking.has(p.booking_id)) payoutByBooking.set(p.booking_id, p);
+      }
+    }
 
     // ── Shape each job ───────────────────────────────────────────────────
     const now = Date.now();
@@ -218,10 +242,21 @@ serve(async (req) => {
         const actualCents = baseCents != null || extrasCents > 0 ? (baseCents ?? 0) + extrasCents : null;
         const baseForDisplay = baseCents != null ? baseCents : estimateCents;
         const displayCents = baseForDisplay != null ? baseForDisplay + extrasCents : (extrasCents > 0 ? extrasCents : null);
-        // Fully paid only when the base payout is paid AND no extra is pending.
-        let payStatus: string | null = payout ? payout.status : null;
-        if (extra && extra.pending > 0) payStatus = "pending";
-        else if (!payout && extra && extra.paid > 0) payStatus = "paid";
+        // Split the actual money into paid vs pending portions (a job can have
+        // a PAID base payout and a PENDING extra at the same time — one status
+        // for the whole chip misstated both sides).
+        const basePaid = payout && payout.status === "paid" ? (baseCents ?? 0) : 0;
+        const basePending = payout && payout.status === "pending" ? (baseCents ?? 0) : 0;
+        const paidCents = basePaid + (extra ? extra.paid : 0);
+        const pendingPartCents = basePending + (extra ? extra.pending : 0);
+        const payStatus: string | null =
+          paidCents > 0 && pendingPartCents > 0
+            ? "partial"
+            : paidCents > 0
+              ? "paid"
+              : pendingPartCents > 0
+                ? "pending"
+                : null;
 
         // Cancelled jobs expose NO client PII (mirrors the old client-side strip).
         const customerName = cancelled
@@ -253,10 +288,12 @@ serve(async (req) => {
             actualCents,
             baseCents,
             extrasCents,
+            paidCents,
+            pendingCents: pendingPartCents,
             estimateCents,
             displayCents,
             isActual: actualCents != null,
-            status: payStatus, // 'paid' | 'pending' | null
+            status: payStatus, // 'paid' | 'partial' | 'pending' | null
             pctPaid: payout && payout.pct_paid != null ? Number(payout.pct_paid) : null,
           },
           customerDetails: cancelled ? null : {

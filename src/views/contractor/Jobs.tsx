@@ -1,5 +1,13 @@
 "use client";
 
+// ─── /contractor/jobs — public contractor portal ────────────────────────────
+//
+// Premium, mobile-first job portal for 1099 contractors. Loads enriched jobs
+// from get-cleaner-portal: every dollar shown derives from the two REAL pay
+// ledgers (custom pay / manual_payouts + extra pay / job_extra_pay), including
+// crew-split jobs — never a guessed percentage. Customer phone/email are never
+// present in the payload.
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +35,9 @@ import {
   RiInformationLine,
   RiToolsLine,
   RiArrowDownSLine,
+  RiWallet3Line,
+  RiHourglassLine,
+  RiVipCrownLine,
 } from "@remixicon/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, isFuture } from "date-fns";
@@ -41,10 +52,12 @@ interface JobPay {
   actualCents: number | null;
   baseCents?: number | null;
   extrasCents?: number;
+  paidCents?: number;
+  pendingCents?: number;
   estimateCents: number | null;
   displayCents: number | null;
   isActual: boolean;
-  status: "paid" | "pending" | null;
+  status: "paid" | "partial" | "pending" | null;
   pctPaid: number | null;
 }
 interface CustomerDetails {
@@ -59,8 +72,9 @@ interface CustomerDetails {
   accessNotes: string | null;
 }
 interface InternalDetails {
-  jobValueCents: number | null;
   estimateCents: number | null;
+  baseCents?: number | null;
+  extrasCents?: number;
   payoutStatus: string | null;
   payoutNote: string | null;
   dispatchNotes: string | null;
@@ -122,46 +136,57 @@ function getStatusConfig(status: string) {
     assigned: { label: "Assigned", class: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
     accepted: { label: "Accepted", class: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
     in_progress: { label: "In Progress", class: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-    pending_review: { label: "Submitted — under review", class: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
+    pending_review: { label: "Under review", class: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
     completed: { label: "Completed", class: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
     cancelled: { label: "Cancelled", class: "bg-red-50 text-red-600 border-red-200", dot: "bg-red-500" },
   };
   return configs[status] || { label: status, class: "bg-muted text-muted-foreground", dot: "bg-muted-foreground" };
 }
 
-// Pay chip: shows the ACTUAL payout (green when paid, amber when pending) and
-// only falls back to a labelled estimate when no payout has been recorded yet.
+// Pay chip: real money from the pay ledgers. Green = fully paid, amber =
+// pending release, split = partially paid; grey "Est." only when the office
+// hasn't recorded pay yet.
 function PayChip({ pay }: { pay: JobPay }) {
   const amt = money(pay.displayCents);
   if (pay.isActual && pay.status === "paid") {
     return (
-      <span className="inline-flex flex-col items-end">
-        <span className="font-bold text-emerald-600 text-sm">{amt}</span>
-        <span className="text-[10px] font-medium text-emerald-600">Paid</span>
+      <span className="inline-flex flex-col items-end leading-tight">
+        <span className="font-bold text-emerald-600 text-base tabular-nums">{amt}</span>
+        <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide">Paid</span>
+      </span>
+    );
+  }
+  if (pay.isActual && pay.status === "partial") {
+    return (
+      <span className="inline-flex flex-col items-end leading-tight">
+        <span className="font-bold text-emerald-600 text-base tabular-nums">{amt}</span>
+        <span className="text-[10px] font-semibold text-amber-600">
+          {money(pay.paidCents)} paid · {money(pay.pendingCents)} pending
+        </span>
       </span>
     );
   }
   if (pay.isActual && pay.status === "pending") {
     return (
-      <span className="inline-flex flex-col items-end">
-        <span className="font-bold text-amber-600 text-sm">{amt}</span>
-        <span className="text-[10px] font-medium text-amber-600">Payout pending</span>
+      <span className="inline-flex flex-col items-end leading-tight">
+        <span className="font-bold text-amber-600 text-base tabular-nums">{amt}</span>
+        <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">Payout pending</span>
       </span>
     );
   }
   return (
-    <span className="inline-flex flex-col items-end">
-      <span className="font-bold text-primary text-sm">{amt}</span>
-      <span className="text-[10px] font-medium text-muted-foreground">Estimate</span>
+    <span className="inline-flex flex-col items-end leading-tight">
+      <span className="font-bold text-slate-700 text-base tabular-nums">{amt}</span>
+      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Est.</span>
     </span>
   );
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  if (value == null || value === "" ) return null;
+  if (value == null || value === "") return null;
   return (
-    <div className="flex items-start justify-between gap-3 py-0.5">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+    <div className="flex items-start justify-between gap-3 py-1 border-b border-border/30 last:border-0">
+      <span className="text-[11px] text-muted-foreground shrink-0">{label}</span>
       <span className="text-[11px] font-medium text-right">{value}</span>
     </div>
   );
@@ -181,23 +206,26 @@ function JobDetails({ job }: { job: Job }) {
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/20">
+    <div className="rounded-xl border border-border/50 overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium"
+        className={cn(
+          "w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-medium transition-colors",
+          open ? "bg-violet-50/60 text-violet-900" : "bg-muted/20 hover:bg-muted/40",
+        )}
       >
         <span className="flex items-center gap-1.5">
-          <RiInformationLine className="w-3.5 h-3.5 text-primary" /> View job details
+          <RiInformationLine className="w-3.5 h-3.5 text-violet-600" /> Job details
         </span>
         <RiArrowDownSLine className={cn("w-4 h-4 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <div className="px-3 pb-3 space-y-3">
+        <div className="p-3 space-y-3 bg-background">
           {cd && (
-            <div className="rounded-lg bg-background border border-border/50 p-2.5">
-              <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
-                <RiUser3Line className="w-3.5 h-3.5 text-primary" /> Customer details
+            <div>
+              <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest flex items-center gap-1 mb-1.5">
+                <RiUser3Line className="w-3 h-3" /> Customer
               </p>
               <DetailRow label="Service" value={titleCase(job.serviceType)} />
               <DetailRow label="Home" value={homeBits || (job.homeSizeId ? titleCase(job.homeSizeId) : null)} />
@@ -205,27 +233,24 @@ function JobDetails({ job }: { job: Job }) {
               <DetailRow label="Flooring" value={cd.flooringType ? titleCase(cd.flooringType) : null} />
               <DetailRow label="Pets" value={cd.pets ? titleCase(cd.pets) : null} />
               <DetailRow label="Frequency" value={cd.frequency ? titleCase(cd.frequency) : null} />
-              <DetailRow
-                label="Add-ons"
-                value={cd.addOns.length ? cd.addOns.map(addonLabel).join(", ") : null}
-              />
+              <DetailRow label="Add-ons" value={cd.addOns.length ? cd.addOns.map(addonLabel).join(", ") : null} />
               <DetailRow label="Access notes" value={cd.accessNotes} />
             </div>
           )}
           {id && (
-            <div className="rounded-lg bg-background border border-border/50 p-2.5">
-              <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
-                <RiToolsLine className="w-3.5 h-3.5 text-primary" /> Internal / office
+            <div>
+              <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest flex items-center gap-1 mb-1.5">
+                <RiToolsLine className="w-3 h-3" /> Your pay & office notes
               </p>
               <DetailRow
                 label="Your pay"
                 value={
                   <span className={cn(
-                    job.pay.status === "paid" ? "text-emerald-600" : job.pay.status === "pending" ? "text-amber-600" : "",
+                    job.pay.status === "paid" ? "text-emerald-600" : job.pay.status ? "text-amber-600" : "",
                   )}>
                     {money(job.pay.displayCents)}
                     {job.pay.isActual
-                      ? job.pay.status === "paid" ? " · paid" : " · pending"
+                      ? job.pay.status === "paid" ? " · paid" : job.pay.status === "partial" ? " · partially paid" : " · pending"
                       : " · estimate"}
                     {job.pay.pctPaid != null ? ` (${job.pay.pctPaid}%)` : ""}
                   </span>
@@ -235,6 +260,12 @@ function JobDetails({ job }: { job: Job }) {
                 <>
                   <DetailRow label="— Base cut" value={money(job.pay.baseCents ?? job.pay.estimateCents)} />
                   <DetailRow label="— Extras (supplies/mileage/etc.)" value={money(job.pay.extrasCents)} />
+                </>
+              )}
+              {job.pay.status === "partial" && (
+                <>
+                  <DetailRow label="— Paid so far" value={money(job.pay.paidCents)} />
+                  <DetailRow label="— Awaiting release" value={money(job.pay.pendingCents)} />
                 </>
               )}
               <DetailRow label="Dispatch notes" value={id.dispatchNotes} />
@@ -272,9 +303,6 @@ export default function ContractorJobs() {
     setIsSearching(true);
     setSearched(false);
     try {
-      // Resolve the cleaner (also gives us crew_id for hand-off) — the enriched
-      // jobs + actual pay come from the get-cleaner-portal edge function since
-      // manual_payouts is not client-readable.
       const filterColumn = lookupType === "email" ? "email" : "phone";
       const cleanValue = lookupType === "phone"
         ? lookupValue.replace(/\D/g, "").replace(/^1/, "")
@@ -329,8 +357,6 @@ export default function ContractorJobs() {
   const handleCheckIn = async (job: Job) => {
     setActionLoading(job.id);
     try {
-      // Prefer the real jobs.id for the assignment lookup; fall back to
-      // flipping the booking status directly for admin-assigned bookings.
       const { data: assignment } = job.jobId
         ? await supabase
             .from("job_assignments")
@@ -438,17 +464,25 @@ export default function ContractorJobs() {
   const completedJobs = jobs.filter((j) => j.status === "completed" || j.status === "pending_review");
   const cancelledJobs = jobs.filter((j) => j.status === "cancelled");
 
+  const initials = cleanerName
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
       <SEO title="Contractor Job Portal" description="Look up and manage your assigned cleaning jobs. Check in, complete jobs, and view your history." />
 
-      <header className="border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="container max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <header className="border-b border-border/40 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
+        <div className="container max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5">
             <img src={logo} alt="Novara" className="w-8 h-8 rounded-xl shadow-sm" />
             <div>
-              <span className="font-bold text-sm block leading-tight">Novara</span>
-              <span className="text-[9px] text-muted-foreground uppercase tracking-widest">Contractor Portal</span>
+              <span className="font-bold text-sm block leading-tight tracking-tight">Novara</span>
+              <span className="text-[9px] text-muted-foreground uppercase tracking-[0.18em]">Contractor Portal</span>
             </div>
           </a>
           {searched && (
@@ -459,18 +493,18 @@ export default function ContractorJobs() {
         </div>
       </header>
 
-      <div className="container max-w-4xl mx-auto px-4 py-8 md:py-12">
+      <div className="container max-w-3xl mx-auto px-4 py-8 md:py-12">
         {!searched ? (
           <div className="max-w-md mx-auto space-y-8 animate-fade-in">
             <div className="text-center space-y-2">
-              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-4" style={{ background: "var(--gradient-primary)" }}>
+              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-4 bg-gradient-to-br from-violet-600 to-purple-500">
                 <RiSearchLine className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Contractor Job Portal</h1>
               <p className="text-muted-foreground text-sm">Look up your jobs to check in, mark complete, or view history</p>
             </div>
 
-            <Card className="shadow-lg border-0">
+            <Card className="shadow-xl shadow-violet-100/60 border-0 rounded-2xl">
               <CardContent className="p-6">
                 <form onSubmit={handleSearch} className="space-y-5">
                   <Tabs value={lookupType} onValueChange={(v) => setLookupType(v as "email" | "phone")}>
@@ -501,7 +535,7 @@ export default function ContractorJobs() {
                       </div>
                     </TabsContent>
                   </Tabs>
-                  <Button type="submit" className="w-full h-11 bg-gradient-primary" disabled={isSearching}>
+                  <Button type="submit" className="w-full h-11 bg-gradient-to-r from-violet-600 to-purple-500 hover:from-violet-700 hover:to-purple-600 text-white font-semibold shadow-md" disabled={isSearching}>
                     {isSearching ? (<><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Searching...</>) : (<><RiSearchLine className="mr-2 w-4 h-4" />Find My Jobs</>)}
                   </Button>
                 </form>
@@ -523,58 +557,79 @@ export default function ContractorJobs() {
           </div>
         ) : (
           <div className="space-y-6 animate-fade-in">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                {cleanerName ? `${cleanerName}'s Jobs` : "Your Jobs"}
-              </h1>
-              <p className="text-sm text-muted-foreground">{jobs.length} job{jobs.length !== 1 ? "s" : ""} found</p>
+            {/* ── Hero: identity + real earnings from the pay ledgers ── */}
+            <div className="rounded-3xl bg-gradient-to-br from-violet-700 via-violet-600 to-purple-500 p-5 md:p-6 text-white shadow-xl shadow-violet-200/60">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center font-bold text-lg">
+                  {initials || <RiVipCrownLine className="w-6 h-6" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-lg leading-tight truncate">{cleanerName || "Your jobs"}</p>
+                  <p className="text-[11px] text-violet-100/90">
+                    {jobs.length} job{jobs.length !== 1 ? "s" : ""} · Novara Pro
+                  </p>
+                </div>
+              </div>
+
+              {summary && (
+                <div className="mt-4 grid grid-cols-3 gap-2.5">
+                  <div className="rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-wider text-violet-100/90 flex items-center gap-1">
+                      <RiWallet3Line className="w-3 h-3" /> Paid to you
+                    </p>
+                    <p className="text-lg font-bold tabular-nums leading-tight">{money(summary.lifetimePaidCents)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-wider text-violet-100/90 flex items-center gap-1">
+                      <RiHourglassLine className="w-3 h-3" /> Pending
+                    </p>
+                    <p className="text-lg font-bold tabular-nums leading-tight">{money(summary.pendingCents)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-wider text-violet-100/90 flex items-center gap-1">
+                      <RiCheckboxCircleLine className="w-3 h-3" /> Jobs paid
+                    </p>
+                    <p className="text-lg font-bold tabular-nums leading-tight">{summary.paidJobs}</p>
+                  </div>
+                </div>
+              )}
+              <p className="mt-2.5 text-[10px] text-violet-100/70">
+                Amounts reflect your actual payouts (base pay + extras like supplies & mileage).
+              </p>
             </div>
 
-            {summary && (summary.lifetimePaidCents > 0 || summary.pendingCents > 0) && (
-              <div className="grid grid-cols-2 gap-3">
-                <Card className="border-0 shadow-sm bg-emerald-50/60">
-                  <CardContent className="p-3">
-                    <p className="text-[11px] font-medium text-emerald-700/80">Paid to you (lifetime)</p>
-                    <p className="text-lg font-bold text-emerald-700">{money(summary.lifetimePaidCents)}</p>
-                    <p className="text-[10px] text-emerald-700/70">{summary.paidJobs} job{summary.paidJobs === 1 ? "" : "s"} paid</p>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-sm bg-amber-50/60">
-                  <CardContent className="p-3">
-                    <p className="text-[11px] font-medium text-amber-700/80">Payout pending</p>
-                    <p className="text-lg font-bold text-amber-700">{money(summary.pendingCents)}</p>
-                    <p className="text-[10px] text-amber-700/70">Awaiting the office to release</p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Upcoming / Active Jobs */}
+            {/* ── Upcoming / Active ── */}
             {upcomingJobs.length > 0 && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Upcoming & Active ({upcomingJobs.length})</h2>
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 px-1">
+                  <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.16em]">Upcoming & Active</h2>
+                  <span className="text-[11px] font-semibold text-violet-700 bg-violet-100 rounded-full px-2 py-0.5">{upcomingJobs.length}</span>
+                </div>
                 {upcomingJobs.map((job) => {
                   const sc = getStatusConfig(job.status);
                   const isActive = job.status === "in_progress" || !!job.checkInTime;
                   const loading = actionLoading === job.id;
                   return (
-                    <Card key={job.id} className={cn("shadow-sm hover:shadow-md transition-shadow", isActive && "border-amber-300 bg-amber-50/30")}>
-                      <CardContent className="p-4 md:p-5 space-y-4">
+                    <Card key={job.id} className={cn(
+                      "rounded-2xl border-border/50 shadow-sm hover:shadow-lg hover:shadow-violet-100/50 transition-all",
+                      isActive && "ring-2 ring-amber-300/70 bg-amber-50/20",
+                    )}>
+                      <CardContent className="p-4 md:p-5 space-y-3.5">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="text-center min-w-[48px] py-2 px-3 rounded-xl bg-primary/5">
-                              <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">{format(new Date(job.serviceDate), "MMM")}</p>
-                              <p className="text-xl font-bold leading-tight">{format(new Date(job.serviceDate), "d")}</p>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="text-center min-w-[52px] py-2 px-2.5 rounded-2xl bg-gradient-to-b from-violet-50 to-purple-50 border border-violet-100">
+                              <p className="text-[10px] uppercase tracking-wider font-bold text-violet-600">{format(new Date(job.serviceDate), "MMM")}</p>
+                              <p className="text-xl font-extrabold leading-tight text-slate-900">{format(new Date(job.serviceDate), "d")}</p>
                             </div>
-                            <div>
-                              <p className="font-semibold text-sm leading-tight">{job.customerName || "Customer"}</p>
+                            <div className="min-w-0">
+                              <p className="font-bold text-[15px] leading-tight truncate">{job.customerName || "Customer"}</p>
                               <p className="text-xs text-muted-foreground">{titleCase(job.serviceType)}</p>
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                 <RiTimeLine className="w-3 h-3" />{format(new Date(job.serviceDate), "EEE")}{job.timeSlot ? ` · ${job.timeSlot}` : ""}
                               </p>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1.5">
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
                             <Badge variant="outline" className={cn("text-[10px]", sc.class)}>
                               <span className={cn("w-1.5 h-1.5 rounded-full mr-1", sc.dot)} />{sc.label}
                             </Badge>
@@ -582,41 +637,47 @@ export default function ContractorJobs() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/30 text-xs">
-                          <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                        <a
+                          href={getMapsUrl(job)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-xs group"
+                        >
+                          <RiMapPinLine className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />
                           <span className="truncate">{[job.address, job.city, job.state].filter(Boolean).join(", ")}</span>
-                        </div>
+                          <RiExternalLinkLine className="w-3 h-3 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </a>
 
                         <JobDetails job={job} />
 
-                        {/* Primary action — one clear, full-width CTA */}
+                        {/* Primary action */}
                         {job.status !== "completed" && (
                           isActive ? (
-                            <Button className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => handleComplete(job)} disabled={loading}>
+                            <Button className="w-full h-11 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white font-semibold shadow-md" onClick={() => handleComplete(job)} disabled={loading}>
                               {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiCheckboxCircleLine className="w-4 h-4 mr-1.5" />}
                               Mark job complete
                             </Button>
                           ) : (
-                            <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold" onClick={() => handleCheckIn(job)} disabled={loading}>
+                            <Button className="w-full h-11 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold shadow-md" onClick={() => handleCheckIn(job)} disabled={loading}>
                               {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiPlayCircleLine className="w-4 h-4 mr-1.5" />}
                               Check in
                             </Button>
                           )
                         )}
 
-                        {/* Secondary utilities — evenly sized, quiet */}
+                        {/* Utilities */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => window.open(getMapsUrl(job), "_blank")}>
+                          <Button variant="outline" size="sm" className="h-9 text-xs rounded-xl" onClick={() => window.open(getMapsUrl(job), "_blank")}>
                             <RiNavigationLine className="w-3.5 h-3.5 mr-1" />Directions
                           </Button>
-                          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => window.open(getCalendarUrl(job), "_blank")}>
+                          <Button variant="outline" size="sm" className="h-9 text-xs rounded-xl" onClick={() => window.open(getCalendarUrl(job), "_blank")}>
                             <RiCalendarCheckLine className="w-3.5 h-3.5 mr-1" />Calendar
                           </Button>
                           {job.photoUploadToken && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-9 text-xs border-emerald-200 text-emerald-700"
+                              className="h-9 text-xs rounded-xl border-emerald-200 text-emerald-700"
                               onClick={() => window.open(`${PHOTO_UPLOAD_BASE}${job.photoUploadToken}?phase=before`, "_blank")}
                             >
                               <RiSparklingLine className="w-3.5 h-3.5 mr-1" />Before photos
@@ -624,7 +685,6 @@ export default function ContractorJobs() {
                           )}
                         </div>
 
-                        {/* Hand-off — subtle, out of the main flow */}
                         {crewMembers.length > 0 && job.status !== "completed" && (
                           <button
                             type="button"
@@ -662,35 +722,38 @@ export default function ContractorJobs() {
                     </Card>
                   );
                 })}
-              </div>
+              </section>
             )}
 
-            {/* Completed Jobs */}
+            {/* ── Completed & submitted ── */}
             {completedJobs.length > 0 && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Completed &amp; submitted ({completedJobs.length})</h2>
-                {completedJobs.slice(0, 12).map((job) => {
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 px-1">
+                  <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.16em]">Completed &amp; Submitted</h2>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 rounded-full px-2 py-0.5">{completedJobs.length}</span>
+                </div>
+                {completedJobs.slice(0, 15).map((job) => {
                   const photoCount = (job.beforePhotos?.length || 0) + (job.afterPhotos?.length || 0);
                   const uploadHref = job.photoUploadToken ? `${PHOTO_UPLOAD_BASE}${job.photoUploadToken}?phase=after` : null;
                   const viewHref = job.photoViewToken ? `${PHOTO_VIEW_BASE}${job.photoViewToken}` : null;
                   return (
-                    <Card key={job.id} className="bg-muted/20 border-border/60 shadow-none">
-                      <CardContent className="p-3.5 space-y-3">
+                    <Card key={job.id} className="rounded-2xl bg-white border-border/50 shadow-sm">
+                      <CardContent className="p-4 space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="text-center min-w-[40px]">
-                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.serviceDate), "MMM")}</p>
+                            <div className="text-center min-w-[44px] py-1.5 px-2 rounded-xl bg-muted/40">
+                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{format(new Date(job.serviceDate), "MMM")}</p>
                               <p className="text-base font-bold leading-tight">{format(new Date(job.serviceDate), "d")}</p>
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-sm truncate">{job.customerName || "Customer"}</p>
+                              <p className="font-semibold text-sm truncate">{job.customerName || "Customer"}</p>
                               <p className="text-xs text-muted-foreground truncate">{titleCase(job.serviceType)} · {[job.city, job.state].filter(Boolean).join(", ")}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-2.5 flex-shrink-0">
                             {job.status === "pending_review" ? (
                               <Badge variant="outline" className="text-[10px] bg-violet-50 text-violet-700 border-violet-200">
-                                <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Under review
+                                Under review
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -709,7 +772,7 @@ export default function ContractorJobs() {
                               <Button
                                 variant={photoCount > 0 ? "outline" : "default"}
                                 size="sm"
-                                className={cn("text-xs h-7", photoCount === 0 && "bg-emerald-600 hover:bg-emerald-700")}
+                                className={cn("text-xs h-8 rounded-xl", photoCount === 0 && "bg-emerald-600 hover:bg-emerald-700")}
                                 onClick={() => window.open(uploadHref, "_blank")}
                               >
                                 <RiSparklingLine className="w-3.5 h-3.5 mr-1" />
@@ -717,7 +780,7 @@ export default function ContractorJobs() {
                               </Button>
                             )}
                             {viewHref && (
-                              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => window.open(viewHref, "_blank")}>
+                              <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => window.open(viewHref, "_blank")}>
                                 <RiExternalLinkLine className="w-3.5 h-3.5 mr-1" />
                                 Customer gallery
                               </Button>
@@ -731,15 +794,15 @@ export default function ContractorJobs() {
                     </Card>
                   );
                 })}
-              </div>
+              </section>
             )}
 
-            {/* Cancelled — greyed out, no client info, auto-removed after 24h */}
+            {/* ── Cancelled — greyed out, no client info, auto-removed after 24h ── */}
             {cancelledJobs.length > 0 && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Cancelled ({cancelledJobs.length})</h2>
+              <section className="space-y-3">
+                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.16em] px-1">Cancelled ({cancelledJobs.length})</h2>
                 {cancelledJobs.map((job) => (
-                  <Card key={job.id} className="bg-muted/30 border-border/50 shadow-none opacity-70">
+                  <Card key={job.id} className="rounded-2xl bg-muted/30 border-border/40 shadow-none opacity-70">
                     <CardContent className="p-3.5">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
@@ -760,11 +823,11 @@ export default function ContractorJobs() {
                   </Card>
                 ))}
                 <p className="text-[11px] text-muted-foreground/70 px-1">Cancelled jobs disappear automatically 24 hours after cancellation.</p>
-              </div>
+              </section>
             )}
 
             {upcomingJobs.length === 0 && completedJobs.length === 0 && cancelledJobs.length === 0 && (
-              <Card className="border-dashed">
+              <Card className="border-dashed rounded-2xl">
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground">No active or past jobs found.</p>
                 </CardContent>

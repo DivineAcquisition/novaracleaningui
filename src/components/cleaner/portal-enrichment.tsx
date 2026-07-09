@@ -15,10 +15,12 @@ export interface EnrichedPay {
   actualCents: number | null;
   baseCents?: number | null;
   extrasCents?: number;
+  paidCents?: number;
+  pendingCents?: number;
   estimateCents: number | null;
   displayCents: number | null;
   isActual: boolean;
-  status: "paid" | "pending" | null;
+  status: "paid" | "partial" | "pending" | null;
   pctPaid: number | null;
 }
 export interface EnrichedCustomerDetails {
@@ -104,23 +106,28 @@ const ADDON_LABELS: Record<string, string> = {
 };
 export const addonLabel = (id: string) => ADDON_LABELS[id] || titleCase(id);
 
-// Compact "Paid / Payout pending / Estimate" pay chip.
+// Compact "Paid / Partial / Payout pending / Estimate" pay chip.
 export function PayChip({ pay, align = "end" }: { pay: EnrichedPay; align?: "end" | "start" }) {
   const amt = money(pay.displayCents);
-  const tone = pay.isActual && pay.status === "paid"
+  const tone = pay.isActual && (pay.status === "paid" || pay.status === "partial")
     ? "text-emerald-600"
     : pay.isActual && pay.status === "pending"
       ? "text-amber-600"
       : "text-primary";
-  const label = pay.isActual && pay.status === "paid"
-    ? "Paid"
-    : pay.isActual && pay.status === "pending"
-      ? "Payout pending"
-      : "Estimate";
+  const label = !pay.isActual
+    ? "Estimate"
+    : pay.status === "paid"
+      ? "Paid"
+      : pay.status === "partial"
+        ? `${money(pay.paidCents)} paid · ${money(pay.pendingCents)} pending`
+        : "Payout pending";
   return (
     <span className={cn("inline-flex flex-col", align === "end" ? "items-end" : "items-start")}>
       <span className={cn("font-bold text-base", tone)}>{amt}</span>
-      <span className={cn("text-[10px] font-medium", tone === "text-primary" ? "text-muted-foreground" : tone)}>{label}</span>
+      <span className={cn(
+        "text-[10px] font-medium",
+        tone === "text-primary" ? "text-muted-foreground" : pay.status === "partial" ? "text-amber-600" : tone,
+      )}>{label}</span>
     </span>
   );
 }
