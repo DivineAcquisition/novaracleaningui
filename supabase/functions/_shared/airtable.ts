@@ -31,8 +31,12 @@ const log = (s: string, d?: unknown) =>
   console.log(`[AIRTABLE] ${s}${d === undefined ? "" : " " + JSON.stringify(d)}`);
 
 async function getConfig(supabase: SupabaseLike): Promise<AirtableConfig | null> {
-  const apiKey = await resolveSecret(supabase, "AIRTABLE_API_KEY");
-  const baseId = await resolveSecret(supabase, "AIRTABLE_BASE_ID");
+  // Accept either key name so the PAT can live under AIRTABLE_API_KEY or
+  // AIRTABLE_PAT (the name the Next.js side uses) — single token, one place.
+  const apiKey = (await resolveSecret(supabase, "AIRTABLE_API_KEY")) ||
+    (await resolveSecret(supabase, "AIRTABLE_PAT"));
+  const baseId = (await resolveSecret(supabase, "AIRTABLE_BASE_ID")) ||
+    (await resolveSecret(supabase, "AIRTABLE_REVENUE_OPS_BASE_ID"));
   if (!apiKey || !baseId) return null;
   return { apiKey, baseId };
 }
@@ -55,7 +59,7 @@ export async function airtablePing(
     return {
       ok: false,
       configured: false,
-      message: "AIRTABLE_API_KEY and/or AIRTABLE_BASE_ID are not set.",
+      message: "Airtable token (AIRTABLE_API_KEY / AIRTABLE_PAT) and/or base id (AIRTABLE_BASE_ID) are not set.",
       jobsTable,
       payrollTable,
     };

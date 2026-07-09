@@ -89,7 +89,8 @@ export async function syncPayrollRunToOps(
   cleanerName: string,
 ): Promise<boolean> {
   try {
-    const apiKey = await resolveSecret(supabase, "AIRTABLE_API_KEY");
+    const apiKey = (await resolveSecret(supabase, "AIRTABLE_API_KEY")) ||
+      (await resolveSecret(supabase, "AIRTABLE_PAT"));
     if (!apiKey || !run?.id) return false;
     const baseId = (await resolveSecret(supabase, "PAYROLL_OPS_AIRTABLE_BASE_ID")) || "appoUuFQZQfCyKGlw";
     const table = (await resolveSecret(supabase, "PAYROLL_OPS_AIRTABLE_RUNS_TABLE")) || "tblGr8Cu8avwvV3xy";

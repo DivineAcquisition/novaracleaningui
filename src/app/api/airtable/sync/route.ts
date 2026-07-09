@@ -27,6 +27,7 @@ import {
   syncClientById,
   syncJobByBookingId,
 } from "@/lib/airtable/sync";
+import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +74,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const { entity, id, email } = normalize(body);
+
+  // Make app_secrets a single source of truth for the PAT (env still wins).
+  await primeAirtablePat();
 
   try {
     switch (entity) {

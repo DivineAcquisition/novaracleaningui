@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { syncContractors } from "@/lib/airtable/contractors";
+import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   try {
+    await primeAirtablePat();
     const result = await syncContractors();
     return NextResponse.json(result);
   } catch (err) {
