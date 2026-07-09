@@ -50,6 +50,9 @@ const ADD_ON_LABELS: Record<string, string> = {
   patio: 'Patio / balcony',
   petHair: 'Heavy pet-hair removal',
   closets: 'Inside closets / tidy',
+  trashHaul: 'Trash haul',
+  deepBathroomDetail: 'Deep bathroom detail',
+  basement: 'Basement clean',
 };
 
 export const BookingModification = ({ bookingData }: BookingModificationProps) => {
