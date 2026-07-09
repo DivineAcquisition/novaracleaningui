@@ -701,51 +701,23 @@ serve(async (req) => {
             },
           );
         } else if (invoiceMode === "deposit_plus_preauth" && depositCents > 0) {
-          // Hosted Checkout Session: collects the deposit AND saves the
-          // card off-session, so prepare-completion-hold can place the
-          // pre-auth a few days before service.
-          const siteBase = (Deno.env.get("PUBLIC_SITE_URL") ||
-            "https://novaracleaning.com").replace(/\/+$/, "");
-          const session = await stripe.checkout.sessions.create({
-            mode: "payment",
-            customer: stripeCustomerId,
-            payment_method_types: ["card"],
-            line_items: [
-              {
-                quantity: 1,
-                price_data: {
-                  currency: "usd",
-                  unit_amount: depositCents,
-                  product_data: {
-                    name: `${bookingRef} — Deposit (Novara Cleaning)`,
-                    description:
-                      `Deposit for ${body.serviceType} clean on ${body.serviceDate}. Remaining $${(remainingCents / 100).toFixed(2)} will be authorized a few days before service and captured after we complete the job.`,
-                  },
-                },
-              },
-            ],
-            payment_intent_data: {
-              setup_future_usage: "off_session",
-              metadata: {
-                booking_id: bookingId,
-                booking_number: String(booking.booking_number || ""),
-                purpose: "deposit_preauth",
-              },
-            },
-            success_url: `${siteBase}/book/success?booking_id=${bookingId}&deposit=ok`,
-            cancel_url: `${siteBase}/book/success?booking_id=${bookingId}&deposit=cancelled`,
-            metadata: {
-              booking_id: bookingId,
-              booking_number: String(booking.booking_number || ""),
-              purpose: "deposit_preauth",
-            },
-          });
-          preauthSession = { id: session.id, url: session.url };
+          // Custom pay page (try.novaracleaning.com/pay/<token>) instead of a
+          // raw Stripe Checkout link. The page enforces the legal step
+          // (One-Time Service Agreement + ToS + Disclaimer + signature)
+          // BEFORE the deposit form unlocks — enforcement lives server-side
+          // in booking-pay-page — then collects the deposit AND saves the
+          // card off-session, so prepare-completion-hold still places the
+          // pre-auth a few days before service exactly as before.
+          const bytes = new Uint8Array(20);
+          crypto.getRandomValues(bytes);
+          const payToken = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+          const payUrl = `https://try.novaracleaning.com/pay/${payToken}`;
+          preauthSession = { id: payToken, url: payUrl };
           await supabase
             .from("bookings")
             .update({
-              checkout_session_id: session.id,
-              hosted_invoice_url: session.url, // re-use the URL slot so SMS/email pick it up
+              pay_page_token: payToken,
+              hosted_invoice_url: payUrl, // re-use the URL slot so SMS/email pick it up
             })
             .eq("id", bookingId);
         } else if (invoiceMode === "full_now") {
@@ -914,7 +886,7 @@ serve(async (req) => {
         }
         if (preauthSession?.url) {
           msgParts.push(
-            ` Please pay your $${(depositCents / 100).toFixed(2)} deposit and save your card here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
+            ` Please review & sign your service agreement, then pay your $${(depositCents / 100).toFixed(2)} deposit here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
           );
         }
         if (fullInvoice) {

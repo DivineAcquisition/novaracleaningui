@@ -249,6 +249,12 @@ verify_jwt = false
 [functions.get-cleaner-portal]
 verify_jwt = false
 
+# Custom deposit checkout page (try.novaracleaning.com/pay/<token>) for
+# internal bookings. Token in the URL is the credential; the legal gate is
+# enforced server-side inside the function.
+[functions.booking-pay-page]
+verify_jwt = false
+
 # Weekly payroll auto-draft (pg_cron, service-role). No admin JWT.
 [functions.payroll-draft]
 verify_jwt = false

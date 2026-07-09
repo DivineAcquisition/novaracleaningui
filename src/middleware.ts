@@ -90,6 +90,11 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // customers + partner hosts). Lives on the marketing host so a single
   // shareable URL works for everyone without a portal login.
   ["/photos", "try"],
+
+  // Custom deposit checkout for internal bookings (tokenized link sent to
+  // the customer). Sign the service agreement → pay the deposit + save the
+  // card. Lives on try.* so the link works without any login.
+  ["/pay", "try"],
 ];
 
 const DEFAULT_LANDING: Record<SubdomainKey, string> = {

@@ -24,9 +24,11 @@ interface StripePaymentFormProps {
   onRetry?: () => void;
   customerEmail?: string;
   bookingId?: string | null;
+  /** Where redirect-based methods (3DS) land afterwards. Defaults to the booking-funnel confirmation page. */
+  returnUrl?: string;
 }
 
-export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, bookingId }: StripePaymentFormProps) {
+export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, bookingId, returnUrl: returnUrlProp }: StripePaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
@@ -125,7 +127,9 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
 
     try {
       // Build the return URL with booking_id for redirect-based payment methods (e.g. 3DS)
-      const returnUrl = new URL(`${window.location.origin}/book/confirmation`);
+      const returnUrl = returnUrlProp
+        ? new URL(returnUrlProp, window.location.origin)
+        : new URL(`${window.location.origin}/book/confirmation`);
       if (bookingId) {
         returnUrl.searchParams.set('booking_id', bookingId);
       }
