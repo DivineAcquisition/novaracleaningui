@@ -8,6 +8,7 @@
 //   • mileage (miles × rate, default $0.70/mi)
 //   • surge pay ($)
 //   • overtime (hours × $/hr)
+//   • job value increase ($ — job turned out bigger than booked)
 // and one click fires an exact-amount Stripe transfer (pay-cleaner-transfer
 // rail) + records the payment against that job in job_extra_pay. History of
 // every extra payment (per job) shows below.
@@ -45,9 +46,11 @@ interface ExtraPayment {
   overtime_hours: number;
   overtime_rate_cents: number;
   overtime_cents: number;
+  job_value_cents: number;
   total_cents: number;
   note: string | null;
   status: string;
+  failure_reason: string | null;
   stripe_transfer_id: string | null;
   paid_at: string | null;
   created_at: string;
@@ -73,6 +76,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
   const [surge, setSurge] = useState("");
   const [otHours, setOtHours] = useState("");
   const [otRate, setOtRate] = useState("");
+  const [jobValue, setJobValue] = useState("");
   const [note, setNote] = useState("");
   const [paying, setPaying] = useState(false);
 
@@ -96,7 +100,8 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
   const overtimeHours = Math.max(0, parseFloat(otHours) || 0);
   const overtimeRateCents = toCents(otRate);
   const overtimeCents = Math.round(overtimeHours * overtimeRateCents);
-  const totalCents = supplyCents + mileageCents + surgeCents + overtimeCents;
+  const jobValueCents = toCents(jobValue);
+  const totalCents = supplyCents + mileageCents + surgeCents + overtimeCents + jobValueCents;
 
   const loadJobs = useCallback(async () => {
     setJobsLoading(true);
@@ -132,7 +137,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
   }, [cleanerId, loadHistory]);
 
   const resetForm = () => {
-    setSupplies(""); setMiles(""); setSurge(""); setOtHours(""); setOtRate(""); setNote("");
+    setSupplies(""); setMiles(""); setSurge(""); setOtHours(""); setOtRate(""); setJobValue(""); setNote("");
   };
 
   const pay = async () => {
@@ -148,6 +153,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
         mileageCents > 0 ? `• Mileage ${mileageMiles} mi × ${usd(mileageRateCents)}/mi = ${usd(mileageCents)}` : "",
         surgeCents > 0 ? `• Surge ${usd(surgeCents)}` : "",
         overtimeCents > 0 ? `• Overtime ${overtimeHours} h × ${usd(overtimeRateCents)}/h = ${usd(overtimeCents)}` : "",
+        jobValueCents > 0 ? `• Job value increase ${usd(jobValueCents)}` : "",
       ].filter(Boolean).join("\n"),
     )) return;
 
@@ -164,6 +170,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
           surgeCents,
           overtimeHours,
           overtimeRateCents,
+          jobValueCents,
           note: note.trim() || undefined,
         },
       });
@@ -188,7 +195,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
             <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-600" /> Extra pay — per job
           </CardTitle>
           <CardDescription className="text-xs">
-            Supply reimbursement, mileage, surge pay &amp; overtime. Paid instantly via Stripe (like Custom Payout) and recorded against the job.
+            Supply reimbursement, mileage, surge pay, overtime &amp; job value increases. Paid instantly via Stripe (like Custom Payout) and recorded against the job.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -221,7 +228,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
           </div>
 
           {/* Amounts */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
             <div className="rounded-lg border border-slate-200 p-3 space-y-1.5">
               <Label className="text-xs font-semibold">Supply reimbursement</Label>
               <div className="relative">
@@ -259,6 +266,14 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
               </div>
               <p className="text-[10px] text-slate-400">= {usd(overtimeCents)} ({usd(overtimeRateCents)}/h)</p>
             </div>
+            <div className="rounded-lg border border-slate-200 p-3 space-y-1.5">
+              <Label className="text-xs font-semibold">Job value increase</Label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                <Input type="number" inputMode="decimal" min="0" step="0.01" value={jobValue} onChange={(e) => setJobValue(e.target.value)} className="pl-6" placeholder="0.00" />
+              </div>
+              <p className="text-[10px] text-slate-400">Job was bigger than booked — pay bump</p>
+            </div>
           </div>
 
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (what was this for?) — optional" />
@@ -290,7 +305,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">Extra-pay history{cleaner ? ` — ${cleanerName(cleaner)}` : ""}</CardTitle>
-              <CardDescription className="text-xs">Every supplies / mileage / surge / overtime payment, per job.</CardDescription>
+              <CardDescription className="text-xs">Every supplies / mileage / surge / overtime / job-value payment, per job.</CardDescription>
             </div>
             <Button variant="ghost" size="sm" onClick={() => void loadHistory(cleanerId || undefined)} disabled={historyLoading}>
               <RiRefreshLine className={cn("w-4 h-4", historyLoading && "animate-spin")} />
@@ -314,6 +329,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
                     <TableHead className="text-right">Mileage</TableHead>
                     <TableHead className="text-right">Surge</TableHead>
                     <TableHead className="text-right">Overtime</TableHead>
+                    <TableHead className="text-right">Job value</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -336,6 +352,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
                       <TableCell className="text-right text-xs tabular-nums">
                         {p.overtime_cents ? <>{usd(p.overtime_cents)}<span className="text-slate-400"> ({p.overtime_hours}h)</span></> : "—"}
                       </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">{p.job_value_cents ? usd(p.job_value_cents) : "—"}</TableCell>
                       <TableCell className="text-right text-sm font-semibold text-violet-700 tabular-nums">{usd(p.total_cents)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn(
@@ -346,6 +363,9 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
                         )}>
                           {p.status}
                         </Badge>
+                        {p.status === "failed" && p.failure_reason ? (
+                          <p className="text-[10px] text-rose-600 max-w-[180px] mt-0.5" title={p.failure_reason}>{p.failure_reason}</p>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   ))}

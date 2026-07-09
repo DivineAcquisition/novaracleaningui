@@ -12,7 +12,7 @@
 //   { action: "pay", cleanerId, bookingId?, jobId?,
 //     supplyCents?, mileageMiles?, mileageRateCents?,   // default 70¢/mi
 //     surgeCents?, overtimeHours?, overtimeRateCents?,
-//     note? }
+//     jobValueCents?, note? }
 //       → records the row and fires the transfer. Total must be > 0.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -127,7 +127,8 @@ serve(async (req) => {
       const overtimeHours = Math.max(0, Number(body?.overtimeHours) || 0);
       const overtimeRateCents = Math.max(0, Math.round(Number(body?.overtimeRateCents) || 0));
       const overtimeCents = Math.round(overtimeHours * overtimeRateCents);
-      const totalCents = supplyCents + mileageCents + surgeCents + overtimeCents;
+      const jobValueCents = Math.max(0, Math.round(Number(body?.jobValueCents) || 0));
+      const totalCents = supplyCents + mileageCents + surgeCents + overtimeCents + jobValueCents;
       const note = String(body?.note || "").slice(0, 500) || null;
 
       if (totalCents <= 0) return json({ error: "Enter at least one amount — total must be greater than $0." }, 400);
@@ -161,6 +162,7 @@ serve(async (req) => {
         overtime_hours: overtimeHours,
         overtime_rate_cents: overtimeRateCents,
         overtime_cents: overtimeCents,
+        job_value_cents: jobValueCents,
         total_cents: totalCents,
         note,
         status: "pending",
@@ -173,24 +175,41 @@ serve(async (req) => {
       if (mileageCents > 0) parts.push(`mileage ${mileageMiles}mi ${usd(mileageCents)}`);
       if (surgeCents > 0) parts.push(`surge ${usd(surgeCents)}`);
       if (overtimeCents > 0) parts.push(`overtime ${overtimeHours}h ${usd(overtimeCents)}`);
+      if (jobValueCents > 0) parts.push(`job value increase ${usd(jobValueCents)}`);
       const label = `Novara extra pay (${parts.join(", ")}) — ${bookingRef}`;
 
-      // Exact-amount transfer via the proven Custom Payout rail. Idempotency
-      // is keyed on OUR row id so a retry never double-pays.
-      const { data: payRes, error: payErr } = await admin.functions.invoke("pay-cleaner-transfer", {
-        body: {
-          cleanerId,
-          amountCents: totalCents,
-          bookingId,
-          label,
-          idempotencyKey: `extra_pay_${row.id}`,
-        },
-      });
-      const payload = (payRes || {}) as Record<string, unknown>;
-      if (payErr || payload.error) {
-        const reason = String(payload.error || payErr?.message || "Transfer failed");
-        await admin.from("job_extra_pay").update({ status: "failed", failure_reason: reason }).eq("id", row.id);
-        return json({ error: reason, extraPayId: row.id, status: "failed" }, 502);
+      // Exact-amount transfer via the proven Custom Payout rail. Called with
+      // plain fetch (not functions.invoke) so a non-2xx response still lets
+      // us read the REAL error message from the body instead of the generic
+      // "Edge Function returned a non-2xx status code". Idempotency is keyed
+      // on OUR row id so a retry never double-pays.
+      let payload: Record<string, unknown> = {};
+      let payFailed = "";
+      try {
+        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/pay-cleaner-transfer`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""}`,
+          },
+          body: JSON.stringify({
+            cleanerId,
+            amountCents: totalCents,
+            bookingId,
+            label,
+            idempotencyKey: `extra_pay_${row.id}`,
+          }),
+        });
+        payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload.error) {
+          payFailed = String(payload.error || `Transfer failed (HTTP ${res.status})`);
+        }
+      } catch (e) {
+        payFailed = e instanceof Error ? e.message : String(e);
+      }
+      if (payFailed) {
+        await admin.from("job_extra_pay").update({ status: "failed", failure_reason: payFailed }).eq("id", row.id);
+        return json({ error: payFailed, extraPayId: row.id, status: "failed" }, 502);
       }
 
       await admin.from("job_extra_pay").update({
@@ -207,7 +226,7 @@ serve(async (req) => {
         cleaner_id: cleanerId,
         source: "admin-extra-pay",
         summary: `${bookingRef} — extra pay ${usd(totalCents)} (${parts.join(", ")}) sent to ${payload.cleanerName || "cleaner"}${note ? ` — "${note}"` : ""}`,
-        data: { extra_pay_id: row.id, transfer_id: payload.transferId, by: actor, supply_cents: supplyCents, mileage_cents: mileageCents, surge_cents: surgeCents, overtime_cents: overtimeCents },
+        data: { extra_pay_id: row.id, transfer_id: payload.transferId, by: actor, supply_cents: supplyCents, mileage_cents: mileageCents, surge_cents: surgeCents, overtime_cents: overtimeCents, job_value_cents: jobValueCents },
       }).then(() => undefined, () => undefined);
 
       return json({
@@ -216,7 +235,7 @@ serve(async (req) => {
         status: "paid",
         totalCents,
         transferId: payload.transferId ?? null,
-        breakdown: { supplyCents, mileageCents, surgeCents, overtimeCents },
+        breakdown: { supplyCents, mileageCents, surgeCents, overtimeCents, jobValueCents },
       });
     }
 
