@@ -58,7 +58,7 @@ import JobsTab from "@/components/admin/payroll/JobsTab";
 import RunPayrollTab from "@/components/admin/payroll/RunPayrollTab";
 import AutoPayrollTab from "@/components/admin/payroll/AutoPayrollTab";
 import RunsTab from "@/components/admin/payroll/RunsTab";
-import CleanerDetailTab from "@/components/admin/payroll/CleanerDetailTab";
+import ExtraPayTab from "@/components/admin/payroll/ExtraPayTab";
 import { loadActiveCleaners, type PayrollCleaner } from "@/components/admin/payroll/shared";
 
 interface PayrollRow {
@@ -131,7 +131,7 @@ export default function AdminPayroll() {
           <TabsTrigger value="auto">Auto Payroll</TabsTrigger>
           <TabsTrigger value="run">Run Payroll</TabsTrigger>
           <TabsTrigger value="runs">Payroll Runs</TabsTrigger>
-          <TabsTrigger value="cleaner">Cleaner Detail</TabsTrigger>
+          <TabsTrigger value="cleaner">Extra Pay</TabsTrigger>
           <TabsTrigger value="overview">Connect Overview</TabsTrigger>
         </TabsList>
         <TabsContent value="payout"><SimplePayoutTab /></TabsContent>
@@ -139,7 +139,7 @@ export default function AdminPayroll() {
         <TabsContent value="auto"><AutoPayrollTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="run"><RunPayrollTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="runs"><RunsTab cleaners={cleaners} /></TabsContent>
-        <TabsContent value="cleaner"><CleanerDetailTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="cleaner"><ExtraPayTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="overview"><PayrollOverview /></TabsContent>
       </Tabs>
     </div>
