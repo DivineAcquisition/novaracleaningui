@@ -299,6 +299,23 @@ export async function updateRecords(
   return out;
 }
 
+/** Delete records by id (batched ≤10). Used to purge stale rows on rebuilds. */
+export async function deleteRecords(tableId: string, ids: string[]): Promise<number> {
+  const baseId = getBaseId();
+  let deleted = 0;
+  for (let i = 0; i < ids.length; i += MAX_RECORDS_PER_REQUEST) {
+    const batch = ids.slice(i, i + MAX_RECORDS_PER_REQUEST);
+    const qs = batch.map((id) => `records[]=${encodeURIComponent(id)}`).join("&");
+    const res = await airtableRequest<{ records: { id: string; deleted: boolean }[] }>(
+      `/${baseId}/${tableId}?${qs}`,
+      { method: "DELETE" },
+    );
+    deleted += (res.records || []).filter((r) => r.deleted).length;
+  }
+  if (deleted > 0) log("delete ok", { tableId, deleted });
+  return deleted;
+}
+
 /** Convenience: upsert a single record and return its Airtable record id. */
 export async function upsertOne(
   tableId: string,
