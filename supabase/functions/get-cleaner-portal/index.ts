@@ -170,6 +170,29 @@ serve(async (req) => {
       .neq("status", "cancelled");
     for (const p of byBreakdown || []) tallyPayout(p);
 
+    // ── Per-job EXTRA pay (supplies, mileage, surge, OT, job-value increase),
+    //    paid immediately on top of the base payout. Folded into actual pay so
+    //    the portal reflects the FULL amount the cleaner was paid per job. ──
+    const extrasByBooking = new Map<string, { total: number; paid: number; pending: number }>();
+    try {
+      const { data: extras } = await admin
+        .from("job_extra_pay")
+        .select("booking_id, cleaner_id, total_cents, status")
+        .eq("cleaner_id", cleanerId)
+        .neq("status", "failed");
+      for (const e of extras || []) {
+        const cents = Number(e.total_cents) || 0;
+        if (e.status === "paid") lifetimePaidCents += cents;
+        else pendingCents += cents;
+        if (e.booking_id) {
+          const g = extrasByBooking.get(e.booking_id) || { total: 0, paid: 0, pending: 0 };
+          g.total += cents;
+          if (e.status === "paid") g.paid += cents; else g.pending += cents;
+          extrasByBooking.set(e.booking_id, g);
+        }
+      }
+    } catch (_) { /* job_extra_pay may not exist in some envs */ }
+
     // ── Shape each job ───────────────────────────────────────────────────
     const now = Date.now();
     const jobs = bookingRows
@@ -181,13 +204,22 @@ serve(async (req) => {
       .map((b) => {
         const cancelled = b.status === "cancelled";
         const payout = payoutByBooking.get(b.id) || null;
-        const actualCents = payout ? attributeCents(payout, cleanerId) : null;
+        const baseCents = payout ? attributeCents(payout, cleanerId) : null;
         const estimateCents = b.cleaner_payout_cents != null
           ? Number(b.cleaner_payout_cents)
           : b.total_estimate_cents != null
             ? Math.floor(Number(b.total_estimate_cents) * payPct / 100)
             : null;
-        const displayCents = actualCents != null ? actualCents : estimateCents;
+        const extra = extrasByBooking.get(b.id) || null;
+        const extrasCents = extra ? extra.total : 0;
+        // Actual pay = base payout (when recorded) + any extras — all real money.
+        const actualCents = baseCents != null || extrasCents > 0 ? (baseCents ?? 0) + extrasCents : null;
+        const baseForDisplay = baseCents != null ? baseCents : estimateCents;
+        const displayCents = baseForDisplay != null ? baseForDisplay + extrasCents : (extrasCents > 0 ? extrasCents : null);
+        // Fully paid only when the base payout is paid AND no extra is pending.
+        let payStatus: string | null = payout ? payout.status : null;
+        if (extra && extra.pending > 0) payStatus = "pending";
+        else if (!payout && extra && extra.paid > 0) payStatus = "paid";
 
         // Cancelled jobs expose NO client PII (mirrors the old client-side strip).
         const customerName = cancelled
@@ -218,10 +250,12 @@ serve(async (req) => {
           afterPhotos: b.after_photos || null,
           pay: {
             actualCents,
+            baseCents,
+            extrasCents,
             estimateCents,
             displayCents,
             isActual: actualCents != null,
-            status: payout ? payout.status : null, // 'paid' | 'pending' | null
+            status: payStatus, // 'paid' | 'pending' | null
             pctPaid: payout && payout.pct_paid != null ? Number(payout.pct_paid) : null,
           },
           customerDetails: cancelled ? null : {
@@ -238,7 +272,9 @@ serve(async (req) => {
           internalDetails: cancelled ? null : {
             jobValueCents: b.total_estimate_cents ?? null,
             estimateCents,
-            payoutStatus: payout ? payout.status : (b.payout_status || null),
+            baseCents,
+            extrasCents,
+            payoutStatus: payStatus || (b.payout_status || null),
             payoutNote: payout ? (payout.note || null) : null,
             dispatchNotes: b.dispatch_notes || null,
             teamNotes: b.team_notes || null,
