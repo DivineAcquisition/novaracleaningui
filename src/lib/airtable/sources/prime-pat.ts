@@ -8,16 +8,14 @@
 // absent. Env still wins when present (Vercel override).
 //
 // Safe + idempotent: no-ops once a token is in process.env; never logs it.
+// NOTE: deliberately NOT memoized on failure — a warm lambda that booted
+// before the PAT was stored in app_secrets must re-check on the next request.
 
 import { getAdminSupabase } from "./admin-client";
-
-let primed = false;
 
 /** Ensure process.env.AIRTABLE_PAT is populated, pulling from app_secrets if needed. */
 export async function primeAirtablePat(): Promise<boolean> {
   if (process.env.AIRTABLE_PAT || process.env.AIRTABLE_API_KEY) return true;
-  if (primed) return !!process.env.AIRTABLE_PAT;
-  primed = true;
   try {
     const supabase = getAdminSupabase();
     const { data } = await supabase
