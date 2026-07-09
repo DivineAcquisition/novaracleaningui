@@ -12,9 +12,12 @@
 // expires_at) since the admin is acting deliberately.
 //
 // Body:
-//   { action: "list",    cleanerId }
-//   { action: "accept",  assignmentId }
-//   { action: "decline", assignmentId }
+//   { action: "list",     cleanerId }
+//   { action: "accept",   assignmentId }
+//   { action: "decline",  assignmentId }
+//   { action: "check_in", assignmentId }   — start the job on the cleaner's
+//     behalf (same job-check-in flow the portal uses: stamps check-in time,
+//     flips statuses, fires the BEFORE-photos SMS to the cleaner)
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -95,7 +98,7 @@ serve(async (req) => {
       if (jobIds.length > 0) {
         const { data: jobs } = await admin
           .from("jobs")
-          .select("id, status, service_type, address, city, state, zip, start_datetime, duration_est_hours, min_cleaners_required")
+          .select("id, status, service_type, address, city, state, zip, start_datetime, duration_est_hours, min_cleaners_required, check_in_time")
           .in("id", jobIds);
         for (const j of jobs || []) jobsById.set(String(j.id), j);
 
@@ -123,6 +126,7 @@ serve(async (req) => {
           expired: expiresAt != null && expiresAt < now,
           service_type: (job as Record<string, unknown>).service_type ?? null,
           job_status: (job as Record<string, unknown>).status ?? null,
+          check_in_time: (job as Record<string, unknown>).check_in_time ?? null,
           start_datetime: (job as Record<string, unknown>).start_datetime ?? null,
           address: (job as Record<string, unknown>).address ?? null,
           city: (job as Record<string, unknown>).city ?? null,
@@ -150,6 +154,46 @@ serve(async (req) => {
         .map(shape);
 
       return json({ ok: true, offers, jobs });
+    }
+
+    // ─── CHECK IN ON BEHALF ──────────────────────────────────────────────
+    if (action === "check_in") {
+      const assignmentId = String(body?.assignmentId || "");
+      if (!assignmentId) return json({ error: "assignmentId required" }, 400);
+
+      const { data: assignment } = await admin
+        .from("job_assignments")
+        .select("id, job_id, cleaner_id, status")
+        .eq("id", assignmentId)
+        .maybeSingle();
+      if (!assignment) return json({ error: "Assignment not found" }, 404);
+      const st = String(assignment.status || "").toLowerCase();
+      if (!ACTIVE_JOB_STATUSES.includes(st)) {
+        return json({ error: `Can't check in — the assignment is ${assignment.status}. Accept the offer first.` }, 409);
+      }
+
+      const { data: result, error: invErr } = await admin.functions.invoke("job-check-in", {
+        body: { jobAssignmentId: assignmentId, action: "check_in", cleanerId: assignment.cleaner_id },
+      });
+      if (invErr) return json({ error: `Check-in failed: ${invErr.message}` }, 502);
+      const payload = (result || {}) as Record<string, unknown>;
+      if (payload.error) return json({ error: String(payload.error) }, 409);
+
+      await admin.from("events").insert({
+        event_type: "job.admin_check_in",
+        cleaner_id: assignment.cleaner_id,
+        job_id: assignment.job_id,
+        source: "admin-cleaner-jobs",
+        summary: "Admin checked the cleaner in / started the job on their behalf",
+        data: { assignment_id: assignmentId, by: callerId },
+      }).then(() => undefined, () => undefined);
+
+      return json({
+        ok: true,
+        action: "check_in",
+        alreadyCheckedIn: payload.alreadyCheckedIn === true,
+        checkInTime: payload.checkInTime ?? null,
+      });
     }
 
     // ─── ACCEPT / DECLINE ON BEHALF ───────────────────────────────────────

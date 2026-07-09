@@ -50,6 +50,7 @@ interface PreviewLine {
   grossCents: number;
   bonusCents: number;
   deductionCents: number;
+  reimbursementCents: number;
   netCents: number;
   status: string;
   paymentMethod: string;
@@ -107,6 +108,7 @@ async function preview(admin: DB, period: string) {
       grossCents: Number(r.gross_cents) || 0,
       bonusCents: Number(r.bonus_cents) || 0,
       deductionCents: Number(r.deduction_cents) || 0,
+      reimbursementCents: Number(r.reimbursement_cents) || 0,
       netCents: net, status, paymentMethod: method, connectReady, flag, flagReason,
       stripeTransferId: (r.stripe_transfer_id as string) || null,
       sentCents: r.sent_amount_cents != null ? Number(r.sent_amount_cents) : null,

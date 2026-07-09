@@ -37,6 +37,7 @@ import {
   RiSmartphoneLine,
   RiBriefcaseLine,
   RiCameraLine,
+  RiLoginCircleLine,
   RiCalendarCheckLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
@@ -613,6 +614,7 @@ interface CleanerJobItem {
   expires_at: string | null;
   expired: boolean;
   service_type: string | null;
+  check_in_time?: string | null;
   start_datetime: string | null;
   city: string | null;
   state: string | null;
@@ -686,6 +688,26 @@ function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChang
       onChanged();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const checkIn = async (item: CleanerJobItem) => {
+    if (!confirm(`Start this job for ${cleaner.first_name || "the cleaner"}? This checks them in (same as tapping Check in on their portal) and texts them the BEFORE-photos link.`)) return;
+    setBusy(`${item.assignmentId}-checkin`);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-jobs", {
+        body: { action: "check_in", assignmentId: item.assignmentId },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; error?: string; alreadyCheckedIn?: boolean };
+      if (d?.ok === false || d?.error) throw new Error(d?.error || "Check-in failed");
+      toast.success(d?.alreadyCheckedIn ? "Job was already checked in." : "Checked in — job started and before-photos link texted.");
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Check-in failed");
     } finally {
       setBusy(null);
     }
@@ -781,8 +803,19 @@ function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChang
                   {jobDate(j.booking?.service_date || (j.start_datetime ? j.start_datetime.slice(0, 10) : null))}
                   {j.booking?.time_slot ? ` · ${slotLabel(j.booking.time_slot)}` : ""}
                   {j.city ? ` · ${j.city}${j.state ? `, ${j.state}` : ""}` : ""}
+                  {j.check_in_time ? " · checked in ✓" : ""}
                 </p>
               </div>
+              {!j.check_in_time && (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={busy !== null}
+                  onClick={() => checkIn(j)}
+                >
+                  {busy === `${j.assignmentId}-checkin` ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiLoginCircleLine className="w-4 h-4 mr-1.5" /> Start job / check in</>}
+                </Button>
+              )}
               {j.bookingId && (
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1">

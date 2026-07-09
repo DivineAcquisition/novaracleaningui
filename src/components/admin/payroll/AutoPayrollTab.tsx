@@ -136,7 +136,7 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
   const liveNet = (line: PreviewLine): number => {
     const e = edits[line.runId];
     if (!e) return line.netCents;
-    return line.grossCents + toCents(e.bonus) - toCents(e.deduction);
+    return line.grossCents + (line.reimbursementCents || 0) + toCents(e.bonus) - toCents(e.deduction);
   };
 
   const isDirty = (line: PreviewLine): boolean => {
@@ -289,6 +289,7 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
                     <TableHead>Cleaner</TableHead>
                     <TableHead className="text-right">Jobs</TableHead>
                     <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Reimb.</TableHead>
                     <TableHead className="text-right">Bonus</TableHead>
                     <TableHead className="text-right">Deduction</TableHead>
                     <TableHead className="text-right">Net</TableHead>
@@ -310,6 +311,9 @@ export default function AutoPayrollTab({ cleaners: _cleaners }: { cleaners: Payr
                         </TableCell>
                         <TableCell className="text-right text-sm">{l.totalJobs}</TableCell>
                         <TableCell className="text-right text-sm">{usd(l.grossCents)}</TableCell>
+                        <TableCell className="text-right text-sm text-teal-700" title="Supplies + mileage reimbursements from this period's jobs">
+                          {usd(l.reimbursementCents || 0)}
+                        </TableCell>
                         <TableCell className="text-right">
                           {editable ? (
                             <Input

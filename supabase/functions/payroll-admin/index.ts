@@ -126,16 +126,34 @@ async function writeJobSplit(
     updated_at: new Date().toISOString(),
   }).eq("id", jobId);
 
-  // Replace the per-cleaner rows.
+  // Replace the per-cleaner rows — but carry over any reimbursements already
+  // recorded for a cleaner staying on the job (the delete/reinsert must never
+  // wipe supplies/mileage the admin entered).
+  const { data: priorLines } = await admin
+    .from("payroll_job_cleaners")
+    .select("cleaner_id, supply_reimbursement_cents, mileage_miles, mileage_rate_cents, mileage_reimbursement_cents, reimbursement_note")
+    .eq("job_id", jobId);
+  const priorByCleaner = new Map(
+    (priorLines || []).map((l: Record<string, unknown>) => [String(l.cleaner_id), l]),
+  );
+
   await admin.from("payroll_job_cleaners").delete().eq("job_id", jobId);
   if (cleanerIds.length > 0) {
     await admin.from("payroll_job_cleaners").insert(
-      cleanerIds.map((cid) => ({
-        job_id: jobId,
-        cleaner_id: cid,
-        pay_cents: perCleanerCents,
-        payment_status: status,
-      })),
+      cleanerIds.map((cid) => {
+        const prior = (priorByCleaner.get(cid) || {}) as Record<string, unknown>;
+        return {
+          job_id: jobId,
+          cleaner_id: cid,
+          pay_cents: perCleanerCents,
+          payment_status: status,
+          supply_reimbursement_cents: Number(prior.supply_reimbursement_cents) || 0,
+          mileage_miles: Number(prior.mileage_miles) || 0,
+          mileage_rate_cents: Number(prior.mileage_rate_cents) || 70,
+          mileage_reimbursement_cents: Number(prior.mileage_reimbursement_cents) || 0,
+          reimbursement_note: (prior.reimbursement_note as string) || null,
+        };
+      }),
     );
   }
   return { tierPct, poolCents, perCleanerCents };
@@ -251,16 +269,17 @@ serve(async (req) => {
 
         const { data: lines } = await admin
           .from("payroll_job_cleaners")
-          .select("id, cleaner_id, pay_cents, job_id")
+          .select("id, cleaner_id, pay_cents, job_id, supply_reimbursement_cents, mileage_reimbursement_cents")
           .in("job_id", jobIds)
           .eq("payment_status", "approved");
 
         // Group by cleaner.
-        const byCleaner = new Map<string, { ids: string[]; gross: number; jobs: number }>();
+        const byCleaner = new Map<string, { ids: string[]; gross: number; jobs: number; reimb: number }>();
         for (const l of lines || []) {
-          const g = byCleaner.get(l.cleaner_id) || { ids: [], gross: 0, jobs: 0 };
+          const g = byCleaner.get(l.cleaner_id) || { ids: [], gross: 0, jobs: 0, reimb: 0 };
           g.ids.push(l.id);
           g.gross += Number(l.pay_cents) || 0;
+          g.reimb += (Number(l.supply_reimbursement_cents) || 0) + (Number(l.mileage_reimbursement_cents) || 0);
           g.jobs += 1;
           byCleaner.set(l.cleaner_id, g);
         }
@@ -294,7 +313,7 @@ serve(async (req) => {
 
           const bonus = Number(prior?.bonus_cents) || 0;
           const deduction = Number(prior?.deduction_cents) || 0;
-          const net = g.gross + bonus - deduction;
+          const net = g.gross + bonus + g.reimb - deduction;
 
           const { data: run, error: runErr } = await admin
             .from("payroll_runs")
@@ -307,6 +326,7 @@ serve(async (req) => {
               gross_cents: g.gross,
               bonus_cents: bonus,
               deduction_cents: deduction,
+              reimbursement_cents: g.reimb,
               net_cents: net,
               payment_method: method,
               stripe_connect_id: stripeId,
@@ -334,7 +354,8 @@ serve(async (req) => {
         }
         const bonus = Math.max(0, Math.round(Number(body.bonusCents ?? run.bonus_cents) || 0));
         const deduction = Math.max(0, Math.round(Number(body.deductionCents ?? run.deduction_cents) || 0));
-        const net = (Number(run.gross_cents) || 0) + bonus - deduction;
+        const reimb = Number(run.reimbursement_cents) || 0;
+        const net = (Number(run.gross_cents) || 0) + bonus + reimb - deduction;
         await admin.from("payroll_runs").update({
           bonus_cents: bonus,
           deduction_cents: deduction,
@@ -343,6 +364,86 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("id", runId);
         return json({ success: true, netCents: net });
+      }
+
+      // ─── Per-job supply + mileage reimbursements ───────────────────────
+      // { action: "set_line_reimbursement", jobId, cleanerId,
+      //   supplyCents?, mileageMiles?, mileageRateCents?, note? }
+      // Updates the cleaner's line on the job and, when the line is attached
+      // to a still-editable run, re-rolls the run's reimbursement + net.
+      case "set_line_reimbursement": {
+        const jobId = String(body.jobId || "");
+        const cleanerId = String(body.cleanerId || "");
+        if (!jobId || !cleanerId) return json({ error: "jobId and cleanerId required" }, 400);
+
+        const { data: line } = await admin
+          .from("payroll_job_cleaners")
+          .select("id, payroll_run_id, payment_status, supply_reimbursement_cents, mileage_miles, mileage_rate_cents, reimbursement_note")
+          .eq("job_id", jobId)
+          .eq("cleaner_id", cleanerId)
+          .maybeSingle();
+        if (!line) return json({ error: "No payroll line for that job + cleaner." }, 404);
+        if (String(line.payment_status) === "paid") {
+          return json({ error: "This line was already paid — reimbursements can't be edited. Add a bonus on a future run instead." }, 409);
+        }
+
+        const supplyCents = Math.max(0, Math.round(Number(body.supplyCents ?? line.supply_reimbursement_cents) || 0));
+        const mileageMiles = Math.max(0, Number(body.mileageMiles ?? line.mileage_miles) || 0);
+        const mileageRateCents = Math.max(0, Math.round(Number(body.mileageRateCents ?? line.mileage_rate_cents) || 70));
+        const mileageCents = Math.round(mileageMiles * mileageRateCents);
+        const note = body.note !== undefined ? (String(body.note || "").slice(0, 500) || null) : line.reimbursement_note;
+
+        await admin.from("payroll_job_cleaners").update({
+          supply_reimbursement_cents: supplyCents,
+          mileage_miles: mileageMiles,
+          mileage_rate_cents: mileageRateCents,
+          mileage_reimbursement_cents: mileageCents,
+          reimbursement_note: note,
+        }).eq("id", line.id);
+
+        // Re-roll the linked run (if editable).
+        let runNetCents: number | null = null;
+        if (line.payroll_run_id) {
+          const { data: run } = await admin
+            .from("payroll_runs")
+            .select("id, status, gross_cents, bonus_cents, deduction_cents")
+            .eq("id", line.payroll_run_id)
+            .maybeSingle();
+          if (run && !["processing", "sent", "paid", "cleared"].includes(String(run.status))) {
+            const { data: runLines } = await admin
+              .from("payroll_job_cleaners")
+              .select("supply_reimbursement_cents, mileage_reimbursement_cents")
+              .eq("payroll_run_id", run.id);
+            const reimbTotal = (runLines || []).reduce(
+              (a: number, l: Record<string, unknown>) =>
+                a + (Number(l.supply_reimbursement_cents) || 0) + (Number(l.mileage_reimbursement_cents) || 0),
+              0,
+            );
+            runNetCents = (Number(run.gross_cents) || 0) + (Number(run.bonus_cents) || 0) + reimbTotal - (Number(run.deduction_cents) || 0);
+            await admin.from("payroll_runs").update({
+              reimbursement_cents: reimbTotal,
+              net_cents: runNetCents,
+              updated_at: new Date().toISOString(),
+            }).eq("id", run.id);
+          }
+        }
+
+        await admin.from("payroll_job_audit").insert({
+          job_id: jobId,
+          action: "set_reimbursement",
+          detail: `cleaner ${cleanerId.slice(0, 8)}: supplies $${(supplyCents / 100).toFixed(2)}, ${mileageMiles} mi @ $${(mileageRateCents / 100).toFixed(2)}/mi = $${(mileageCents / 100).toFixed(2)}${note ? ` — ${note}` : ""}`,
+          actor,
+        }).then(() => undefined, () => undefined);
+
+        return json({
+          success: true,
+          supplyCents,
+          mileageMiles,
+          mileageRateCents,
+          mileageCents,
+          totalReimbursementCents: supplyCents + mileageCents,
+          runNetCents,
+        });
       }
 
       case "approve_run": {

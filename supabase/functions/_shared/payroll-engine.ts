@@ -94,15 +94,16 @@ export async function buildDraftRuns(admin: DB, periodInput: string): Promise<Bu
 
   const { data: lines } = await admin
     .from("payroll_job_cleaners")
-    .select("id, cleaner_id, pay_cents, job_id")
+    .select("id, cleaner_id, pay_cents, job_id, supply_reimbursement_cents, mileage_reimbursement_cents")
     .in("job_id", jobIds)
     .eq("payment_status", "approved");
 
-  const byCleaner = new Map<string, { ids: string[]; gross: number; jobs: number }>();
+  const byCleaner = new Map<string, { ids: string[]; gross: number; jobs: number; reimb: number }>();
   for (const l of lines || []) {
-    const g = byCleaner.get(l.cleaner_id) || { ids: [], gross: 0, jobs: 0 };
+    const g = byCleaner.get(l.cleaner_id) || { ids: [], gross: 0, jobs: 0, reimb: 0 };
     g.ids.push(l.id);
     g.gross += Number(l.pay_cents) || 0;
+    g.reimb += (Number(l.supply_reimbursement_cents) || 0) + (Number(l.mileage_reimbursement_cents) || 0);
     g.jobs += 1;
     byCleaner.set(l.cleaner_id, g);
   }
@@ -137,7 +138,8 @@ export async function buildDraftRuns(admin: DB, periodInput: string): Promise<Bu
 
     const bonus = Number(prior?.bonus_cents) || 0;
     const deduction = Number(prior?.deduction_cents) || 0;
-    const net = g.gross + bonus - deduction;
+    // Per-job supply + mileage reimbursements ride the same payout rail.
+    const net = g.gross + bonus + g.reimb - deduction;
     netTotal += net;
 
     const { data: run, error: runErr } = await admin
@@ -151,6 +153,7 @@ export async function buildDraftRuns(admin: DB, periodInput: string): Promise<Bu
         gross_cents: g.gross,
         bonus_cents: bonus,
         deduction_cents: deduction,
+        reimbursement_cents: g.reimb,
         net_cents: net,
         payment_method: method,
         stripe_connect_id: stripeId,

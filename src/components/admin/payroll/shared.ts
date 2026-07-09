@@ -171,6 +171,7 @@ export interface PreviewLine {
   grossCents: number;
   bonusCents: number;
   deductionCents: number;
+  reimbursementCents?: number;
   netCents: number;
   status: string;
   paymentMethod: string;

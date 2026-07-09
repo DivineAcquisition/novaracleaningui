@@ -169,6 +169,9 @@ function ManualEntry({ cleaners, onSaved }: { cleaners: PayrollCleaner[]; onSave
   const [amount, setAmount] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  // Per-job reimbursements (applied to EACH selected cleaner's line).
+  const [supplies, setSupplies] = useState("");
+  const [miles, setMiles] = useState("");
 
   const cleanerById = useMemo(() => new Map(cleaners.map((c) => [c.id, c])), [cleaners]);
   const amountCents = Math.round((parseFloat(amount) || 0) * 100);
@@ -182,7 +185,7 @@ function ManualEntry({ cleaners, onSaved }: { cleaners: PayrollCleaner[]; onSave
     if (selected.length === 0) { toast.error("Select at least one cleaner."); return; }
     setBusy(true);
     try {
-      await payrollAction("create_job", {
+      const { jobId } = await payrollAction<{ jobId: string }>("create_job", {
         dateCompleted: new Date(`${dateCompleted}T12:00:00`).toISOString(),
         customerName: customerName.trim() || null,
         serviceType,
@@ -191,8 +194,18 @@ function ManualEntry({ cleaners, onSaved }: { cleaners: PayrollCleaner[]; onSave
         notes: notes.trim() || null,
         entrySource: "manual",
       });
+      // Record supplies/mileage per cleaner line (same values for each).
+      const supplyCents = Math.round((parseFloat(supplies) || 0) * 100);
+      const mileageMiles = parseFloat(miles) || 0;
+      if (jobId && (supplyCents > 0 || mileageMiles > 0)) {
+        await Promise.all(selected.map((cid) =>
+          payrollAction("set_line_reimbursement", {
+            jobId, cleanerId: cid, supplyCents, mileageMiles,
+          }).catch(() => undefined),
+        ));
+      }
       toast.success("Manual job added");
-      setCustomerName(""); setAmount(""); setSelected([]); setNotes("");
+      setCustomerName(""); setAmount(""); setSelected([]); setNotes(""); setSupplies(""); setMiles("");
       onSaved();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -260,6 +273,16 @@ function ManualEntry({ cleaners, onSaved }: { cleaners: PayrollCleaner[]; onSave
                     </button>
                   );
                 })}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Supply reimbursement ($ per cleaner)</Label>
+                <Input type="number" inputMode="decimal" min="0" step="0.01" value={supplies} onChange={(e) => setSupplies(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Mileage (miles per cleaner · reimbursed at $0.70/mi)</Label>
+                <Input type="number" inputMode="decimal" min="0" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="0" />
               </div>
             </div>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Notes (optional)" />

@@ -253,7 +253,7 @@ export async function syncPayoutToAirtable(
     const { data: p } = await supabase
       .from("payouts")
       .select(
-        "id, booking_id, cleaner_id, total_booking_amount_cents, platform_fee_cents, cleaner_payout_cents, stripe_transfer_id, stripe_account_id, status, processed_at, created_at",
+        "id, booking_id, cleaner_id, total_booking_amount_cents, platform_fee_cents, cleaner_payout_cents, stripe_transfer_id, stripe_account_id, status, processed_at, created_at, notes",
       )
       .eq("id", payoutId)
       .maybeSingle();

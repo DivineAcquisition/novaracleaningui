@@ -65,6 +65,7 @@ export interface PayrollRunForOps {
   gross_cents: number;
   bonus_cents: number;
   deduction_cents: number;
+  reimbursement_cents?: number | null;
   net_cents: number;
   payment_method: string | null;
   status: string;
@@ -107,7 +108,14 @@ export async function syncPayrollRunToOps(
       [F.status]: STATUS_LABEL[run.status] || "Draft",
       [F.stripeTransferId]: run.stripe_transfer_id || "",
       [F.sentAt]: run.sent_at || "",
-      [F.notes]: run.notes || "",
+      // Reimbursements (supplies + mileage) are already inside net pay; the
+      // Ops table has no dedicated column, so break them out in Notes.
+      [F.notes]: [
+        run.notes || "",
+        Number(run.reimbursement_cents) > 0
+          ? `Reimbursements (supplies + mileage): $${cents(run.reimbursement_cents).toFixed(2)} included in net`
+          : "",
+      ].filter(Boolean).join(" · "),
     };
     // Drop empties so we never clobber a populated Airtable cell with blank.
     for (const k of Object.keys(fields)) {
