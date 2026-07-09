@@ -399,6 +399,31 @@ export default function CleanerDashboard() {
     checkAuthAndLoadProfile();
   }, [checkAuthAndLoadProfile]);
 
+  // ─── Live updates ──────────────────────────────────────────────────────
+  // The portal reflects dispatch as it happens: any change to this cleaner's
+  // assignments or bookings (new offers, admin assignment, reschedules,
+  // cancellations, checklist provisioning) triggers a refetch. A 60s poll
+  // backstops environments where the realtime socket can't connect.
+  useEffect(() => {
+    if (!profile?.id) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => fetchJobs(profile.id, profile.pay_percentage), 400);
+    };
+    const channel = supabase
+      .channel(`cleaner-portal-live-${profile.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_assignments", filter: `cleaner_id=eq.${profile.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `cleaner_id=eq.${profile.id}` }, refresh)
+      .subscribe();
+    const poll = setInterval(() => fetchJobs(profile.id, profile.pay_percentage), 60_000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+      if (debounce) clearTimeout(debounce);
+    };
+  }, [profile?.id, profile?.pay_percentage, fetchJobs]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.replace("/cleaner/auth");

@@ -246,7 +246,9 @@ serve(async (req) => {
 
     const description = `${bookingRef} - Add-on services: ${pricedAdded.map((p) => p.label).join(", ")}`;
 
-    // Try off-session charge first.
+    // AUTO-CHARGE ONLY (operator directive 2026-07-09): add-ons are charged
+    // to the card on file off-session and the customer is simply NOTIFIED —
+    // we never text/email a pay-me invoice link for add-ons.
     const pmId = await resolveOffSessionPaymentMethod(stripe, customerId).catch(() => null);
     if (pmId) {
       try {
@@ -271,32 +273,22 @@ serve(async (req) => {
           return json({ ok: true, charged: true, status: "paid", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, paymentIntentId: pi.id });
         }
       } catch (e) {
-        // Off-session may require authentication (3DS) or be declined -> invoice.
-        console.warn("[admin-add-booking-addons] off-session failed, invoicing", e instanceof Error ? e.message : String(e));
+        console.warn("[admin-add-booking-addons] off-session charge failed", e instanceof Error ? e.message : String(e));
       }
     }
 
-    // Hosted invoice fallback (no saved card or off-session declined).
-    await stripe.invoiceItems.create({ customer: customerId, amount: deltaCents, currency: "usd", description });
-    const invoice = await stripe.invoices.create({
-      customer: customerId, collection_method: "send_invoice", days_until_due: 7, auto_advance: true,
-      description, metadata: { booking_id: bookingId, chargeType: "addon_charge" },
-    });
-    const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
-    const hostedInvoiceUrl = finalized.hosted_invoice_url || undefined;
-    try { await stripe.invoices.sendInvoice(invoice.id); } catch { /* finalize already emails via Stripe; non-fatal */ }
-
-    if (auditId) await admin.from("booking_addon_charges").update({ status: "invoiced", stripe_invoice_id: invoice.id, hosted_invoice_url: hostedInvoiceUrl }).eq("id", auditId);
-    await admin.from("bookings").update({ customer_id: customerId, hosted_invoice_url: hostedInvoiceUrl }).eq("id", bookingId);
-    if (booking.email) {
-      await admin.functions.invoke("send-addon-email", { body: { type: "addon_invoiced", email: booking.email, data: { ...emailData, hostedInvoiceUrl } } }).catch(() => {});
-    }
+    // Auto-charge unavailable (no saved card or declined). The add-ons stay
+    // on the booking and the delta is already rolled into the booking total,
+    // so the normal balance-collection flow picks it up. Customer gets an
+    // informational note only; the ADMIN is told the auto-charge failed.
+    if (auditId) await admin.from("booking_addon_charges").update({ status: "charge_failed" }).eq("id", auditId);
+    await admin.from("bookings").update({ customer_id: customerId }).eq("id", bookingId);
     await smsCustomer(
-      `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""} ($${(deltaCents / 100).toFixed(2)}).${hostedInvoiceUrl ? ` Pay securely here: ${hostedInvoiceUrl}` : " An invoice was emailed to you."} Questions? Call (844) 735-2070.`,
+      `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""}. Your updated total is $${(newTotalCents / 100).toFixed(2)} — no action needed. Questions? Call (844) 735-2070.`,
     );
-    await admin.from("events").insert({ event_type: "booking.addon_invoiced", booking_id: bookingId, source: "admin", summary: `Add-ons invoiced $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, invoice: invoice.id, by: callerId } }).then(() => undefined, () => undefined);
+    await admin.from("events").insert({ event_type: "booking.addon_charge_failed", booking_id: bookingId, source: "admin", summary: `Add-ons added ($${(deltaCents / 100).toFixed(2)}) but auto-charge failed — will collect with booking balance.`, data: { added, removed, by: callerId } }).then(() => undefined, () => undefined);
 
-    return json({ ok: true, charged: false, status: "invoiced", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, hostedInvoiceUrl });
+    return json({ ok: true, charged: false, status: "charge_failed", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[admin-add-booking-addons]", msg);

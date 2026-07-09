@@ -32,22 +32,52 @@ export default function CleanerAuthCallback() {
   const handleCallback = async () => {
     try {
       // Admin impersonation / emailed magic-link token_hash: verify it
-      // FIRST so it becomes the active session on this device.
+      // FIRST so it becomes the active session on this device. GoTrue
+      // accepts "magiclink" tokens under type "email" on current versions
+      // but older stacks require the literal "magiclink" type — try both
+      // so the admin log-in-as-contractor link never dead-ends.
       const tokenHash = searchParams?.get("token_hash");
       if (tokenHash) {
         setStatus("Opening contractor account...");
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          type: "email",
-          token_hash: tokenHash,
-        });
+        let otpError: { message: string } | null = null;
+        for (const type of ["email", "magiclink"] as const) {
+          const { error } = await supabase.auth.verifyOtp({
+            // deno-lint-ignore no-explicit-any
+            type: type as any,
+            token_hash: tokenHash,
+          });
+          otpError = error;
+          if (!error) break;
+        }
         if (otpError) {
-          console.error("token_hash verify error:", otpError);
-          toast.error(`Sign-in link invalid or expired: ${otpError.message}`);
-          router.replace("/cleaner/auth");
-          return;
+          // The token may have already been consumed (e.g. link prefetch or
+          // a double navigation) — if a session exists anyway, keep going.
+          const { data: { session: existing } } = await supabase.auth.getSession();
+          if (!existing?.user) {
+            console.error("token_hash verify error:", otpError);
+            toast.error(`Sign-in link invalid or expired: ${otpError.message}`);
+            router.replace("/cleaner/auth");
+            return;
+          }
         }
         if (searchParams?.get("impersonated") === "1") {
           toast.success("Signed in as this contractor (admin session — actions are logged).");
+        }
+        await processUser();
+        return;
+      }
+
+      // Hosted magic-link fallback (?code=) — exchange the PKCE code for a
+      // session when Supabase redirected here instead of a token_hash link.
+      const code = searchParams?.get("code");
+      if (code) {
+        setStatus("Opening contractor account...");
+        const { error: codeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (codeError) {
+          console.error("code exchange error:", codeError);
+          toast.error(`Sign-in link invalid or expired: ${codeError.message}`);
+          router.replace("/cleaner/auth");
+          return;
         }
         await processUser();
         return;

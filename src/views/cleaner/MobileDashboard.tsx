@@ -172,6 +172,30 @@ export default function MobileDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ─── Live updates ──────────────────────────────────────────────────────
+  // Refetch the dashboard the moment dispatch touches this cleaner's rows
+  // (new offer, assignment, reschedule, cancellation). 60s poll as backstop.
+  useEffect(() => {
+    if (!cleaner?.id) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => fetchData(), 400);
+    };
+    const channel = supabase
+      .channel(`cleaner-mobile-live-${cleaner.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_assignments", filter: `cleaner_id=eq.${cleaner.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `cleaner_id=eq.${cleaner.id}` }, refresh)
+      .subscribe();
+    const poll = setInterval(() => fetchData(), 60_000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+      if (debounce) clearTimeout(debounce);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleaner?.id]);
+
   // ─── Offline cache ──────────────────────────────────────────────────
   // Seed the dashboard from the last saved snapshot on mount so the screen
   // is useful with no connection, then persist fresh data whenever it loads.

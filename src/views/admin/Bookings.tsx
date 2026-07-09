@@ -801,12 +801,11 @@ function BookingSheet({
         },
       });
       if (error) throw error;
-      const d = data as { error?: string; status?: string; deltaCents?: number; hostedInvoiceUrl?: string };
+      const d = data as { error?: string; status?: string; deltaCents?: number };
       if (d?.error) throw new Error(d.error);
       if (d?.status === "paid") toast.success(`Charged ${fmtMoney(d.deltaCents)} for unpaid add-ons.`);
-      else if (d?.status === "invoiced") toast.success("Unpaid add-ons invoiced — customer emailed.");
+      else if (d?.status === "charge_failed") toast.warning("No usable card on file — amount stays on the booking balance and will be collected with the remaining balance.");
       else toast.success("Add-on charge retried.");
-      if (d?.hostedInvoiceUrl) window.open(d.hostedInvoiceUrl, "_blank", "noopener");
       onMutated();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not retry add-on charge");
@@ -1939,14 +1938,13 @@ function AddonDialog({
         body: { bookingId: booking.id, addOns: selected, charge, addOnPrices: buildPricedAddOns() },
       });
       if (error) throw error;
-      const d = data as { error?: string; status?: string; hostedInvoiceUrl?: string; deltaCents?: number };
+      const d = data as { error?: string; status?: string; deltaCents?: number };
       if (d?.error) throw new Error(d.error);
-      if (d?.status === "paid") toast.success(`Added & charged ${fmtMoney(d.deltaCents)} to card on file.`);
-      else if (d?.status === "invoiced") toast.success("Added — secure invoice emailed to the customer.");
+      if (d?.status === "paid") toast.success(`Added & charged ${fmtMoney(d.deltaCents)} to card on file. Customer notified.`);
+      else if (d?.status === "charge_failed") toast.warning("Add-ons saved — no usable card on file, so the amount will be collected with the booking balance. Customer notified.");
       else if (charge && d?.status === "no_charge") {
         throw new Error("Charge was $0.00 — the server may not recognize these add-ons yet. Use Retry charge after deploy.");
       } else toast.success("Add-ons updated.");
-      if (d?.hostedInvoiceUrl) window.open(d.hostedInvoiceUrl, "_blank", "noopener");
       onSuccess();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update add-ons");
@@ -1961,7 +1959,7 @@ function AddonDialog({
         <DialogHeader>
           <DialogTitle>Add-on services</DialogTitle>
           <DialogDescription>
-            Select add-ons for booking #{booking.booking_number || booking.id.slice(0, 6)}. The price difference is charged to the card on file (or a secure invoice is emailed).
+            Select add-ons for booking #{booking.booking_number || booking.id.slice(0, 6)}. The price difference is auto-charged to the card on file and the customer is notified — no pay links are sent.
           </DialogDescription>
         </DialogHeader>
 
