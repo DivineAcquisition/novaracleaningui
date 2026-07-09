@@ -26,6 +26,13 @@ import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import {
+  fetchCleanerPortal,
+  PayChip,
+  JobDetails,
+  type CleanerPortalData,
+  type PortalJob,
+} from "@/components/cleaner/portal-enrichment";
 
 interface CleanerProfile {
   id: string;
@@ -75,6 +82,8 @@ interface UpcomingJob {
 
 interface CompletedJob {
   id: string;
+  jobId?: string;
+  bookingId?: string;
   service_type: string;
   address: string;
   city: string;
@@ -161,6 +170,8 @@ export default function CleanerDashboard() {
   const [completedJobs, setCompletedJobs] = useState<CompletedJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Enriched jobs (customer name + ACTUAL pay + details) from get-cleaner-portal.
+  const [portal, setPortal] = useState<CleanerPortalData | null>(null);
 
   const fetchJobs = useCallback(
     // payPercentage is passed explicitly because this callback is created
@@ -296,6 +307,7 @@ export default function CleanerDashboard() {
               const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
               return {
                 id: a.id,
+                jobId: job?.id,
                 service_type: job?.service_type || "Cleaning",
                 address: job?.address || "",
                 city: job?.city || "",
@@ -320,6 +332,7 @@ export default function CleanerDashboard() {
             setCompletedJobs(
               completedBookings.map((b: any) => ({
                 id: b.id,
+                bookingId: b.id,
                 service_type: b.service_type || "Cleaning",
                 address: b.address || "",
                 city: b.city || "",
@@ -336,6 +349,8 @@ export default function CleanerDashboard() {
             setCompletedJobs([]);
           }
         }
+        // Enrich with customer name + ACTUAL pay + job details (non-blocking).
+        setPortal(await fetchCleanerPortal(cleanerId));
       } catch (err) {
         console.error("Error fetching jobs:", err);
         setUpcomingJobs([]);
@@ -345,6 +360,18 @@ export default function CleanerDashboard() {
       }
     },
     []
+  );
+
+  // Resolve the enriched portal job for a displayed job (by real jobs.id or booking id).
+  const enrichJob = useCallback(
+    (job: { jobId?: string; bookingId?: string; id?: string }): PortalJob | undefined => {
+      if (!portal) return undefined;
+      return (
+        (job.jobId ? portal.byJobId.get(job.jobId) : undefined) ||
+        (job.bookingId ? portal.byBooking.get(job.bookingId) : undefined)
+      );
+    },
+    [portal],
   );
 
   const checkAuthAndLoadProfile = useCallback(async () => {
@@ -547,7 +574,9 @@ export default function CleanerDashboard() {
       ? "pending"
       : "not_setup";
 
-  const totalEarnings = profile.total_earnings_cents ?? 0;
+  // Prefer the ACTUAL lifetime-paid total (sum of real payouts) over the
+  // running cleaners.total_earnings_cents, which can drift from what was paid.
+  const totalEarnings = portal?.summary?.lifetimePaidCents ?? (profile.total_earnings_cents ?? 0);
   const jobsCompleted = profile.completed_bookings ?? 0;
   const rating = profile.average_rating ?? 0;
   const totalRatings = profile.total_ratings ?? 0;
@@ -702,6 +731,7 @@ export default function CleanerDashboard() {
                       ? `${format(new Date(job.service_date), "EEEE, MMM d")} at ${job.time_slot}`
                       : "—";
                   const sharePct = profile?.pay_percentage ?? 35;
+                  const enriched = enrichJob(job);
                   const pay =
                     job.estimated_pay_cents ??
                     job.cleaner_payout_cents ??
@@ -730,17 +760,24 @@ export default function CleanerDashboard() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h3 className="font-semibold text-base">{job.service_type}</h3>
+                          <h3 className="font-semibold text-base">
+                            {enriched?.customerName || job.service_type}
+                          </h3>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {String(job.service_type || "cleaning").replaceAll("_", " ")}
+                          </p>
                           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                             <RiTimeLine className="w-3.5 h-3.5" />
                             {dateTime}
                           </p>
                         </div>
-                        {pay != null && (
+                        {enriched ? (
+                          <PayChip pay={enriched.pay} />
+                        ) : pay != null ? (
                           <p className="font-semibold text-primary whitespace-nowrap">
                             {formatCurrency(pay)}
                           </p>
-                        )}
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <RiMapPinLine className="w-4 h-4 flex-shrink-0" />
@@ -748,6 +785,7 @@ export default function CleanerDashboard() {
                           {job.address}, {job.city}, {job.state} {zip}
                         </span>
                       </div>
+                      {enriched && <JobDetails job={enriched} />}
                       <div className="flex flex-wrap gap-2">
                         {job.checklistToken && (
                           <Button
@@ -844,25 +882,31 @@ export default function CleanerDashboard() {
                       ? format(new Date(job.service_date), "MMM d, yyyy")
                       : "—";
                   const zip = zipForJob(job);
+                  const enriched = enrichJob(job);
                   const pay =
                     job.estimated_pay_cents ?? job.cleaner_payout_cents ?? null;
 
                   return (
                     <div
                       key={job.id}
-                      className="rounded-lg border bg-muted/30 p-3 flex items-center justify-between"
+                      className="rounded-lg border bg-muted/30 p-3 space-y-2"
                     >
-                      <div>
-                        <p className="font-medium text-sm">{job.service_type}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {job.address}, {job.city} · {dateStr}
-                        </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-sm">{enriched?.customerName || job.service_type}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {[job.city, job.state].filter(Boolean).join(", ")} · {dateStr}
+                          </p>
+                        </div>
+                        {enriched ? (
+                          <PayChip pay={enriched.pay} />
+                        ) : pay != null ? (
+                          <p className="font-semibold text-green-600 text-sm">
+                            {formatCurrency(pay)}
+                          </p>
+                        ) : null}
                       </div>
-                      {pay != null && (
-                        <p className="font-semibold text-green-600 text-sm">
-                          {formatCurrency(pay)}
-                        </p>
-                      )}
+                      {enriched && <JobDetails job={enriched} />}
                     </div>
                   );
                 })}

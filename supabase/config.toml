@@ -244,6 +244,11 @@ verify_jwt = false
 [functions.get-job-photos]
 verify_jwt = false
 
+# Contractor portal: enriched jobs + ACTUAL pay. Works for the signed-in
+# dashboard (JWT) and the public email/phone lookup portal (no JWT).
+[functions.get-cleaner-portal]
+verify_jwt = false
+
 # Weekly payroll auto-draft (pg_cron, service-role). No admin JWT.
 [functions.payroll-draft]
 verify_jwt = false

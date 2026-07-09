@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import { fetchCleanerPortal, type CleanerPortalData, type PortalJob } from "@/components/cleaner/portal-enrichment";
 import { toast } from "sonner";
 
 export default function MobileDashboard() {
@@ -30,6 +31,7 @@ export default function MobileDashboard() {
   const [upcomingJobs, setUpcomingJobs] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [portal, setPortal] = useState<CleanerPortalData | null>(null);
   const [stats, setStats] = useState({
     totalEarnings: 0,
     jobsCompleted: 0,
@@ -159,6 +161,15 @@ export default function MobileDashboard() {
           .ilike("status", "offered")
           .order("assigned_at", { ascending: false });
         setOffers((offerData || []) as any[]);
+
+        // Enrich with customer name + ACTUAL pay + job details, and surface the
+        // real lifetime-paid total (manual_payouts) instead of the running
+        // total_earnings_cents which can drift from what was actually paid.
+        const p = await fetchCleanerPortal(cleanerData.id);
+        setPortal(p);
+        if (p.summary) {
+          setStats((s) => ({ ...s, totalEarnings: p.summary!.lifetimePaidCents }));
+        }
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -340,6 +351,12 @@ export default function MobileDashboard() {
                 onCheckIn={handleCheckIn}
                 onComplete={handleComplete}
                 actionLoading={actionLoading}
+                getEnriched={(job: any): PortalJob | undefined =>
+                  portal
+                    ? (job.id ? portal.byJobId.get(job.id) : undefined) ||
+                      (job.bookingId ? portal.byBooking.get(job.bookingId) : undefined)
+                    : undefined
+                }
               />
             </TabsContent>
 
