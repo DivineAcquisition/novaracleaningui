@@ -10,6 +10,7 @@ import {
 } from "@remixicon/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PayChip, JobDetails, type PortalJob } from "@/components/cleaner/portal-enrichment";
 
 import { format } from "date-fns";
 
@@ -42,9 +43,11 @@ interface UpcomingJobsProps {
   onCheckIn?: (job: any) => void;
   onComplete?: (job: any) => void;
   actionLoading?: string | null;
+  // Resolves a job's enriched portal record (customer name + actual pay + details).
+  getEnriched?: (job: any) => PortalJob | undefined;
 }
 
-export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading }: UpcomingJobsProps) {
+export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading, getEnriched }: UpcomingJobsProps) {
   if (jobs.length === 0) {
     return (
       <div className="text-center py-8">
@@ -64,22 +67,35 @@ export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading }: Upc
       {jobs.map((job) => {
         const checkedIn = Boolean(job.check_in_time);
         const inProgress = String(job.status || "").toLowerCase() === "in progress";
+        const enriched = getEnriched?.(job);
         return (
           <Card key={job.id} className="p-4">
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h3 className="font-semibold text-base capitalize">
-                  {String(job.service_type || "cleaning").replaceAll("_", " ")}
+                  {enriched?.customerName || String(job.service_type || "cleaning").replaceAll("_", " ")}
                 </h3>
-                <p className="text-xs text-muted-foreground">{job.role}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-base text-primary">
-                  ${((job.estimated_pay_cents || 0) / 100).toFixed(2)}
+                <p className="text-xs text-muted-foreground capitalize">
+                  {enriched ? String(job.service_type || "cleaning").replaceAll("_", " ") : job.role}
                 </p>
-                <p className="text-xs text-muted-foreground">estimated pay</p>
               </div>
+              {enriched ? (
+                <PayChip pay={enriched.pay} />
+              ) : (
+                <div className="text-right">
+                  <p className="font-semibold text-base text-primary">
+                    ${((job.estimated_pay_cents || 0) / 100).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">estimated pay</p>
+                </div>
+              )}
             </div>
+
+            {enriched && (
+              <div className="mb-3">
+                <JobDetails job={enriched} />
+              </div>
+            )}
 
             <div className="space-y-1.5 mb-3">
               <div className="flex items-center gap-2 text-xs">
