@@ -682,33 +682,43 @@ export default function VaBooking() {
         `Booking created — ${data?.bookingNumber || data?.bookingId}`,
       );
 
-      // One-Time Service Agreement — verbally agreed over the phone. The
-      // customer always receives their mapped copy by email.
-      try {
-        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || email.trim();
-        const pdfBase64 = await buildSignedAgreementBase64({
-          name: fullName,
-          email: email.trim().toLowerCase(),
-          serviceType,
-          serviceDate,
-          totalCents: typeof data?.totalCents === "number" ? data.totalCents : (overrideTotal.trim() ? Math.round(parseFloat(overrideTotal) * 100) : undefined),
-          depositCents: typeof data?.depositCents === "number" ? data.depositCents : undefined,
-          balanceCents: typeof data?.balanceCents === "number" ? data.balanceCents : undefined,
-          verbalNote: `Verbally agreed over the phone — recorded by ${csrName.trim() || "Novara VA"} on ${new Date().toLocaleString()}`,
-        });
-        await supabase.functions.invoke("store-service-agreement", {
-          body: {
-            bookingId: data?.bookingId,
-            email: email.trim().toLowerCase(),
+      // One-Time Service Agreement.
+      //
+      // deposit_plus_preauth: SKIP the verbal record entirely — the customer
+      // signs the agreement themselves on the pay page (try.…/pay/<token>)
+      // BEFORE payment unlocks, and only then do they get their copy. A
+      // verbal row here would (a) email them an agreement they haven't seen
+      // and (b) used to make the pay page think legal was already done.
+      //
+      // Other invoice modes have no pay page, so the verbal record (customer
+      // receives their mapped copy by email) is still the right artifact.
+      if (invoiceMode !== "deposit_plus_preauth") {
+        try {
+          const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || email.trim();
+          const pdfBase64 = await buildSignedAgreementBase64({
             name: fullName,
+            email: email.trim().toLowerCase(),
             serviceType,
-            source: "va_phone",
-            agreed: { terms: true, disclaimer: true, refund: true, serviceAgreement: true },
-            pdfBase64,
-          },
-        });
-      } catch (agErr) {
-        console.error("[VaBooking] agreement store failed", agErr);
+            serviceDate,
+            totalCents: typeof data?.totalCents === "number" ? data.totalCents : (overrideTotal.trim() ? Math.round(parseFloat(overrideTotal) * 100) : undefined),
+            depositCents: typeof data?.depositCents === "number" ? data.depositCents : undefined,
+            balanceCents: typeof data?.balanceCents === "number" ? data.balanceCents : undefined,
+            verbalNote: `Verbally agreed over the phone — recorded by ${csrName.trim() || "Novara VA"} on ${new Date().toLocaleString()}`,
+          });
+          await supabase.functions.invoke("store-service-agreement", {
+            body: {
+              bookingId: data?.bookingId,
+              email: email.trim().toLowerCase(),
+              name: fullName,
+              serviceType,
+              source: "va_phone",
+              agreed: { terms: true, disclaimer: true, refund: true, serviceAgreement: true },
+              pdfBase64,
+            },
+          });
+        } catch (agErr) {
+          console.error("[VaBooking] agreement store failed", agErr);
+        }
       }
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
@@ -1792,7 +1802,12 @@ export default function VaBooking() {
 
                 <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-lg border border-primary/20 bg-primary/[0.03] p-3 mt-3">
                   <Checkbox checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
-                  <span>I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy &amp; One-Time Service Agreement over the phone. A signed copy will be emailed to them with their details.</span>
+                  <span>
+                    I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy &amp; One-Time Service Agreement over the phone.{" "}
+                    {invoiceMode === "deposit_plus_preauth"
+                      ? "They'll review, check each policy, and e-sign on their payment link before the deposit — their copy is delivered after signing."
+                      : "A signed copy will be emailed to them with their details."}
+                  </span>
                 </label>
 
                 {frequency !== "one-time" && (

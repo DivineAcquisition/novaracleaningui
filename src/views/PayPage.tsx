@@ -16,7 +16,7 @@
 //      and capture it on completion (that machinery is untouched).
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Elements } from "@stripe/react-stripe-js";
 import type { Stripe } from "@stripe/stripe-js";
 import {
@@ -43,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
 
 interface PaySummary {
+  bookingId: string;
   bookingNumber: number | null;
   status: string | null;
   firstName: string;
@@ -71,6 +72,7 @@ const SERVICE_LABELS: Record<string, string> = {
 
 export default function PayPage() {
   const params = useParams<{ token: string }>();
+  const router = useRouter();
   const token = String(params?.token || "");
 
   const [summary, setSummary] = useState<PaySummary | null>(null);
@@ -117,14 +119,22 @@ export default function PayPage() {
     if (token) void load();
   }, [token, load]);
 
-  // Returning from a 3DS redirect: Stripe appends redirect_status to the
-  // return URL. Trust "succeeded" optimistically (the webhook confirms the
-  // booking server-side moments later).
+  // Fallback for a 3DS redirect that lands back here instead of the
+  // confirmation page (older links): show the paid state.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const rs = new URLSearchParams(window.location.search).get("redirect_status");
     if (rs === "succeeded") setPaidNow(true);
   }, []);
+
+  // After a successful deposit: hand off to the booking confirmation page.
+  const goToConfirmation = useCallback(() => {
+    if (summary?.bookingId) {
+      router.push(`/book/confirmation?booking_id=${summary.bookingId}&deposit=ok`);
+    } else {
+      setPaidNow(true);
+    }
+  }, [router, summary]);
 
   // Once the agreement is signed, fetch the PaymentIntent (server re-checks
   // the agreement before minting) and warm Stripe.js.
@@ -278,6 +288,13 @@ export default function PayPage() {
               Your card is saved for the balance after the clean. A receipt is on its way to{" "}
               {summary.email || "your email"}.
             </p>
+            <Button
+              variant="outline"
+              className="mt-3 border-emerald-300 text-emerald-800"
+              onClick={goToConfirmation}
+            >
+              View your booking confirmation
+            </Button>
           </div>
         ) : !summary.agreementSigned ? (
           /* ── STEP 1: LEGAL (required before payment unlocks) ── */
@@ -379,10 +396,13 @@ export default function PayPage() {
                 <StripePaymentForm
                   amount={summary.depositCents}
                   customerEmail={summary.email}
-                  returnUrl={`/pay/${token}`}
+                  // 3DS redirects land straight on the confirmation page;
+                  // Success.tsx accepts booking_id + payment_intent params.
+                  returnUrl={`/book/confirmation?deposit=ok`}
+                  bookingId={summary.bookingId}
                   onSuccess={() => {
-                    setPaidNow(true);
                     toast.success("Deposit paid — thank you!");
+                    goToConfirmation();
                   }}
                   onRetry={() => void startPayment()}
                 />

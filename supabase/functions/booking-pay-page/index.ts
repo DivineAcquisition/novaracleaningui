@@ -65,13 +65,18 @@ async function loadBooking(supabase: any, token: string): Promise<Row | null> {
 }
 
 // The legal gate: a service_agreements row for this booking with every
-// required acceptance flag true.
+// required acceptance flag true AND source = 'pay_page'. The source filter
+// matters: the VA booking screen used to record a "verbally agreed" row at
+// booking time (source 'va_phone'), which made the pay page think the legal
+// step was already done and skip straight to payment. Only the customer's
+// own signature on THIS page satisfies the gate.
 // deno-lint-ignore no-explicit-any
 async function agreementAccepted(supabase: any, bookingId: string): Promise<boolean> {
   const { data } = await supabase
     .from("service_agreements")
     .select("id, agreed_terms, agreed_disclaimer, agreed_service_agreement")
     .eq("booking_id", bookingId)
+    .eq("source", "pay_page")
     .eq("agreed_terms", true)
     .eq("agreed_disclaimer", true)
     .eq("agreed_service_agreement", true)
@@ -89,6 +94,7 @@ function summarize(b: Row, signed: boolean) {
   const total = Number(b.total_estimate_cents) || 0;
   const due = depositDueCents(b);
   return {
+    bookingId: b.id,
     bookingNumber: b.booking_number ?? null,
     status: b.status,
     firstName: b.first_name || "",

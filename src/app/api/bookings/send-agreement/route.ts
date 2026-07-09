@@ -45,7 +45,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { data: booking } = await supabase
       .from("bookings")
       .select(
-        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option",
+        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token",
       )
       .eq("id", bookingId)
       .maybeSingle();
@@ -54,6 +54,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     // Only confirmed/completed bookings get the agreement.
     if (booking.status !== "confirmed" && booking.status !== "completed") {
       return NextResponse.json({ ok: true, skipped: `status=${booking.status}` });
+    }
+    // Pay-page bookings NEVER get the DocuSeal auto-send: the customer signs
+    // the agreement ON the pay page (legal step gates payment), and that
+    // signed copy is the binding artifact. Emailing a DocuSeal e-sign at
+    // booking time both duplicated the agreement and delivered it before the
+    // customer completed the legal step.
+    if ((booking as { pay_page_token?: string | null }).pay_page_token) {
+      return NextResponse.json({ ok: true, skipped: "pay_page booking — customer signs on the pay page" });
     }
 
     // CLAIM the booking atomically (unique index on booking_id). If the row
