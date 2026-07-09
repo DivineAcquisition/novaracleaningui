@@ -182,7 +182,6 @@ export function JobDetails({ job }: { job: PortalJob }) {
               <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
                 <RiToolsLine className="w-3.5 h-3.5 text-primary" /> Internal / office
               </p>
-              <DetailRow label="Job value" value={money(id.jobValueCents)} />
               <DetailRow
                 label="Your pay"
                 value={

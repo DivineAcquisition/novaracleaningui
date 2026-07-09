@@ -217,7 +217,6 @@ function JobDetails({ job }: { job: Job }) {
               <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
                 <RiToolsLine className="w-3.5 h-3.5 text-primary" /> Internal / office
               </p>
-              <DetailRow label="Job value" value={money(id.jobValueCents)} />
               <DetailRow
                 label="Your pay"
                 value={
@@ -590,51 +589,52 @@ export default function ContractorJobs() {
 
                         <JobDetails job={job} />
 
-                        <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => window.open(getMapsUrl(job), "_blank")}>
+                        {/* Primary action — one clear, full-width CTA */}
+                        {job.status !== "completed" && (
+                          isActive ? (
+                            <Button className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => handleComplete(job)} disabled={loading}>
+                              {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiCheckboxCircleLine className="w-4 h-4 mr-1.5" />}
+                              Mark job complete
+                            </Button>
+                          ) : (
+                            <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold" onClick={() => handleCheckIn(job)} disabled={loading}>
+                              {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiPlayCircleLine className="w-4 h-4 mr-1.5" />}
+                              Check in
+                            </Button>
+                          )
+                        )}
+
+                        {/* Secondary utilities — evenly sized, quiet */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => window.open(getMapsUrl(job), "_blank")}>
                             <RiNavigationLine className="w-3.5 h-3.5 mr-1" />Directions
                           </Button>
-                          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => window.open(getCalendarUrl(job), "_blank")}>
+                          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => window.open(getCalendarUrl(job), "_blank")}>
                             <RiCalendarCheckLine className="w-3.5 h-3.5 mr-1" />Calendar
                           </Button>
-
                           {job.photoUploadToken && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-xs h-8 border-emerald-200 text-emerald-700"
+                              className="h-9 text-xs border-emerald-200 text-emerald-700"
                               onClick={() => window.open(`${PHOTO_UPLOAD_BASE}${job.photoUploadToken}?phase=before`, "_blank")}
                             >
                               <RiSparklingLine className="w-3.5 h-3.5 mr-1" />Before photos
                             </Button>
                           )}
-
-                          {!isActive && job.status !== "completed" && (
-                            <Button size="sm" className="text-xs h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handleCheckIn(job)} disabled={loading}>
-                              {loading ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" /> : <RiPlayCircleLine className="w-3.5 h-3.5 mr-1" />}
-                              Check In
-                            </Button>
-                          )}
-
-                          {isActive && job.status !== "completed" && (
-                            <Button size="sm" className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleComplete(job)} disabled={loading}>
-                              {loading ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" /> : <RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1" />}
-                              Mark Complete
-                            </Button>
-                          )}
-
-                          {crewMembers.length > 0 && job.status !== "completed" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs h-8"
-                              onClick={() => { setHandoffJobId(handoffJobId === job.id ? null : job.id); setHandoffTarget(""); }}
-                            >
-                              <RiUserSharedLine className="w-3.5 h-3.5 mr-1" />
-                              Hand off to crew
-                            </Button>
-                          )}
                         </div>
+
+                        {/* Hand-off — subtle, out of the main flow */}
+                        {crewMembers.length > 0 && job.status !== "completed" && (
+                          <button
+                            type="button"
+                            onClick={() => { setHandoffJobId(handoffJobId === job.id ? null : job.id); setHandoffTarget(""); }}
+                            className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                          >
+                            <RiUserSharedLine className="w-3 h-3 inline mr-1" />
+                            {handoffJobId === job.id ? "Cancel hand-off" : "Hand off to a crewmate"}
+                          </button>
+                        )}
 
                         {handoffJobId === job.id && crewMembers.length > 0 && (
                           <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 p-3">
