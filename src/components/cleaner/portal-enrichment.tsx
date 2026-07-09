@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 
 export interface EnrichedPay {
   actualCents: number | null;
+  baseCents?: number | null;
+  extrasCents?: number;
   estimateCents: number | null;
   displayCents: number | null;
   isActual: boolean;
@@ -195,6 +197,12 @@ export function JobDetails({ job }: { job: PortalJob }) {
                   </span>
                 }
               />
+              {!!job.pay.extrasCents && job.pay.extrasCents > 0 && (
+                <>
+                  <DetailRow label="— Base cut" value={money(job.pay.baseCents ?? job.pay.estimateCents)} />
+                  <DetailRow label="— Extras (supplies/mileage/etc.)" value={money(job.pay.extrasCents)} />
+                </>
+              )}
               <DetailRow label="Dispatch notes" value={id.dispatchNotes} />
               <DetailRow label="Office notes" value={id.teamNotes} />
               {id.issuesFlag && <DetailRow label="Issue flagged" value={id.issuesNotes || "Yes"} />}
