@@ -2,22 +2,18 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   RiSearchLine,
   RiLoader4Line,
-  RiCalendarLine,
-  RiMapPinLine,
   RiTimeLine,
-  RiMoneyDollarCircleLine,
+  RiMapPinLine,
   RiCheckboxCircleLine,
   RiPlayCircleLine,
-  RiStopCircleLine,
   RiArrowLeftLine,
   RiPhoneLine,
   RiMailLine,
@@ -27,9 +23,13 @@ import {
   RiExternalLinkLine,
   RiUserSharedLine,
   RiCloseCircleLine,
+  RiUser3Line,
+  RiInformationLine,
+  RiToolsLine,
+  RiArrowDownSLine,
 } from "@remixicon/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format, isFuture, isPast } from "date-fns";
+import { format, isFuture } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -37,39 +37,83 @@ import { SEO } from "@/components/SEO";
 
 const logo = "/novara-logo.png";
 
+interface JobPay {
+  actualCents: number | null;
+  estimateCents: number | null;
+  displayCents: number | null;
+  isActual: boolean;
+  status: "paid" | "pending" | null;
+  pctPaid: number | null;
+}
+interface CustomerDetails {
+  bedrooms: number | null;
+  bathrooms: number | null;
+  sqft: number | null;
+  dwellingType: string | null;
+  flooringType: string | null;
+  pets: string | null;
+  addOns: string[];
+  frequency: string | null;
+  accessNotes: string | null;
+}
+interface InternalDetails {
+  jobValueCents: number | null;
+  estimateCents: number | null;
+  payoutStatus: string | null;
+  payoutNote: string | null;
+  dispatchNotes: string | null;
+  teamNotes: string | null;
+  issuesFlag: boolean;
+  issuesNotes: string | null;
+}
 interface Job {
   id: string;
-  booking_id?: string;
-  service_date: string;
-  time_slot: string;
-  service_type: string;
+  bookingId: string;
+  jobId: string | null;
+  bookingNumber: number | null;
   status: string;
+  serviceDate: string;
+  timeSlot: string | null;
+  serviceType: string;
+  homeSizeId: string | null;
+  customerName: string;
+  phone: string;
   address: string;
   city: string;
   state: string;
-  zip_code: string;
-  total_estimate_cents: number;
-  cleaner_payout_cents?: number | null;
-  home_size_id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  service_duration?: number;
-  checked_in?: boolean;
-  check_in_time?: string;
-  cleaner_id?: string;
-  photo_upload_token?: string | null;
-  photo_view_token?: string | null;
-  before_photos?: string[] | null;
-  after_photos?: string[] | null;
-  cancelled_at?: string | null;
+  zip: string;
+  checkInTime?: string | null;
+  cancelledAt?: string | null;
+  photoUploadToken?: string | null;
+  photoViewToken?: string | null;
+  beforePhotos?: string[] | null;
+  afterPhotos?: string[] | null;
+  pay: JobPay;
+  customerDetails: CustomerDetails | null;
+  internalDetails: InternalDetails | null;
 }
-
-const CANCELLED_VISIBLE_MS = 24 * 60 * 60 * 1000;
 
 const PHOTO_UPLOAD_BASE = "https://contractor.novaracleaning.com/cleaner/job-photos/";
 const PHOTO_VIEW_BASE = "https://try.novaracleaning.com/photos/";
+
+const money = (cents: number | null | undefined) =>
+  cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
+
+const titleCase = (s: string) => s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const ADDON_LABELS: Record<string, string> = {
+  deepBathroomDetail: "Deep bathroom detail",
+  trashHaul: "Trash haul",
+  petHair: "Heavy pet-hair removal",
+  basement: "Basement clean",
+  insideFridge: "Inside fridge",
+  insideOven: "Inside oven",
+  insideCabinets: "Inside cabinets",
+  interiorWindows: "Interior windows",
+  laundry: "Laundry",
+  dishes: "Dishes",
+};
+const addonLabel = (id: string) => ADDON_LABELS[id] || titleCase(id);
 
 function getStatusConfig(status: string) {
   const configs: Record<string, { label: string; class: string; dot: string }> = {
@@ -84,6 +128,126 @@ function getStatusConfig(status: string) {
   return configs[status] || { label: status, class: "bg-muted text-muted-foreground", dot: "bg-muted-foreground" };
 }
 
+// Pay chip: shows the ACTUAL payout (green when paid, amber when pending) and
+// only falls back to a labelled estimate when no payout has been recorded yet.
+function PayChip({ pay }: { pay: JobPay }) {
+  const amt = money(pay.displayCents);
+  if (pay.isActual && pay.status === "paid") {
+    return (
+      <span className="inline-flex flex-col items-end">
+        <span className="font-bold text-emerald-600 text-sm">{amt}</span>
+        <span className="text-[10px] font-medium text-emerald-600">Paid</span>
+      </span>
+    );
+  }
+  if (pay.isActual && pay.status === "pending") {
+    return (
+      <span className="inline-flex flex-col items-end">
+        <span className="font-bold text-amber-600 text-sm">{amt}</span>
+        <span className="text-[10px] font-medium text-amber-600">Payout pending</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-col items-end">
+      <span className="font-bold text-primary text-sm">{amt}</span>
+      <span className="text-[10px] font-medium text-muted-foreground">Estimate</span>
+    </span>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  if (value == null || value === "" ) return null;
+  return (
+    <div className="flex items-start justify-between gap-3 py-0.5">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-[11px] font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
+// Expandable "Details" panel: customer-provided info + office/internal info.
+function JobDetails({ job }: { job: Job }) {
+  const [open, setOpen] = useState(false);
+  const cd = job.customerDetails;
+  const id = job.internalDetails;
+  if (!cd && !id) return null;
+
+  const homeBits = [
+    cd?.bedrooms != null ? `${cd.bedrooms} bd` : null,
+    cd?.bathrooms != null ? `${cd.bathrooms} ba` : null,
+    cd?.sqft != null ? `${cd.sqft} sqft` : null,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium"
+      >
+        <span className="flex items-center gap-1.5">
+          <RiInformationLine className="w-3.5 h-3.5 text-primary" /> View job details
+        </span>
+        <RiArrowDownSLine className={cn("w-4 h-4 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-3">
+          {cd && (
+            <div className="rounded-lg bg-background border border-border/50 p-2.5">
+              <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
+                <RiUser3Line className="w-3.5 h-3.5 text-primary" /> Customer details
+              </p>
+              <DetailRow label="Service" value={titleCase(job.serviceType)} />
+              <DetailRow label="Home" value={homeBits || (job.homeSizeId ? titleCase(job.homeSizeId) : null)} />
+              <DetailRow label="Dwelling" value={cd.dwellingType ? titleCase(cd.dwellingType) : null} />
+              <DetailRow label="Flooring" value={cd.flooringType ? titleCase(cd.flooringType) : null} />
+              <DetailRow label="Pets" value={cd.pets ? titleCase(cd.pets) : null} />
+              <DetailRow label="Frequency" value={cd.frequency ? titleCase(cd.frequency) : null} />
+              <DetailRow
+                label="Add-ons"
+                value={cd.addOns.length ? cd.addOns.map(addonLabel).join(", ") : null}
+              />
+              <DetailRow label="Access notes" value={cd.accessNotes} />
+              {job.phone && (
+                <DetailRow
+                  label="Contact"
+                  value={<a href={`tel:${job.phone}`} className="text-primary hover:underline">{job.phone}</a>}
+                />
+              )}
+            </div>
+          )}
+          {id && (
+            <div className="rounded-lg bg-background border border-border/50 p-2.5">
+              <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
+                <RiToolsLine className="w-3.5 h-3.5 text-primary" /> Internal / office
+              </p>
+              <DetailRow label="Job value" value={money(id.jobValueCents)} />
+              <DetailRow
+                label="Your pay"
+                value={
+                  <span className={cn(
+                    job.pay.status === "paid" ? "text-emerald-600" : job.pay.status === "pending" ? "text-amber-600" : "",
+                  )}>
+                    {money(job.pay.displayCents)}
+                    {job.pay.isActual
+                      ? job.pay.status === "paid" ? " · paid" : " · pending"
+                      : " · estimate"}
+                    {job.pay.pctPaid != null ? ` (${job.pay.pctPaid}%)` : ""}
+                  </span>
+                }
+              />
+              <DetailRow label="Dispatch notes" value={id.dispatchNotes} />
+              <DetailRow label="Office notes" value={id.teamNotes} />
+              {id.issuesFlag && <DetailRow label="Issue flagged" value={id.issuesNotes || "Yes"} />}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ContractorJobs() {
   const [lookupType, setLookupType] = useState<"email" | "phone">("email");
   const [lookupValue, setLookupValue] = useState("");
@@ -92,6 +256,7 @@ export default function ContractorJobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [cleanerName, setCleanerName] = useState("");
   const [cleanerId, setCleanerId] = useState("");
+  const [summary, setSummary] = useState<{ lifetimePaidCents: number; pendingCents: number; paidJobs: number } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [crewMembers, setCrewMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [handoffJobId, setHandoffJobId] = useState<string | null>(null);
@@ -107,29 +272,30 @@ export default function ContractorJobs() {
     setIsSearching(true);
     setSearched(false);
     try {
+      // Resolve the cleaner (also gives us crew_id for hand-off) — the enriched
+      // jobs + actual pay come from the get-cleaner-portal edge function since
+      // manual_payouts is not client-readable.
       const filterColumn = lookupType === "email" ? "email" : "phone";
       const cleanValue = lookupType === "phone"
         ? lookupValue.replace(/\D/g, "").replace(/^1/, "")
         : lookupValue.trim().toLowerCase();
 
       const { data: cleaner, error: cleanerErr } = await (supabase.from as any)("cleaners")
-        .select("id, first_name, last_name, email, phone, crew_id")
+        .select("id, first_name, last_name, crew_id")
         .ilike(filterColumn, lookupType === "phone" ? `%${cleanValue.slice(-10)}%` : cleanValue)
         .maybeSingle();
-
       if (cleanerErr) throw cleanerErr;
 
       if (!cleaner) {
         setJobs([]);
+        setSummary(null);
         setSearched(true);
         return;
       }
 
-      setCleanerName(`${cleaner.first_name} ${cleaner.last_name}`);
+      setCleanerName(`${cleaner.first_name} ${cleaner.last_name}`.trim());
       setCleanerId(cleaner.id);
 
-      // Load crewmates (other active cleaners in the same crew) so the
-      // contractor can hand a clean off without calling the office.
       if ((cleaner as { crew_id?: string | null }).crew_id) {
         const { data: mates } = await (supabase.from as any)("cleaners")
           .select("id, first_name, last_name")
@@ -142,45 +308,19 @@ export default function ContractorJobs() {
         setCrewMembers([]);
       }
 
-      const { data: bookingJobs, error: jobErr } = await supabase
-        .from("bookings")
-        .select("*")
-        .eq("cleaner_id", cleaner.id)
-        .order("service_date", { ascending: false })
-        .limit(30);
-
-      if (jobErr) throw jobErr;
-      // Keep the contractor view in lockstep with cancellations:
-      //   • Cancelled jobs are kept for 24h (shown greyed) then dropped.
-      //   • A cancelled job exposes NO client info — strip the PII fields so
-      //     they never reach the contractor's device once the job is dead.
-      const now = Date.now();
-      const cleaned = (bookingJobs || [])
-        .filter((j: Job) => {
-          if (j.status !== "cancelled") return true;
-          const ts = j.cancelled_at ? new Date(j.cancelled_at).getTime() : 0;
-          return ts > 0 && now - ts < CANCELLED_VISIBLE_MS;
-        })
-        .map((j: Job) =>
-          j.status === "cancelled"
-            ? {
-                ...j,
-                address: "",
-                city: "",
-                state: "",
-                zip_code: "",
-                first_name: "",
-                last_name: "",
-                email: "",
-                phone: "",
-              }
-            : j,
-        );
-      setJobs(cleaned);
+      const { data, error } = await supabase.functions.invoke("get-cleaner-portal", {
+        body: { cleanerId: cleaner.id },
+      });
+      if (error) throw error;
+      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary };
+      if (!res?.ok) throw new Error("Could not load jobs");
+      setJobs(res.jobs || []);
+      setSummary(res.summary || null);
       setSearched(true);
     } catch (error: any) {
       console.error("Search error:", error);
       toast.error("Failed to look up jobs");
+      setSearched(true);
     } finally {
       setIsSearching(false);
     }
@@ -189,43 +329,33 @@ export default function ContractorJobs() {
   const handleCheckIn = async (job: Job) => {
     setActionLoading(job.id);
     try {
-      // job.id here is a BOOKING id (this page queries the bookings
-      // table directly). The job-check-in function expects the
-      // job_assignments row id, so resolve it via the booking + cleaner
-      // pair. Falls back to flipping `bookings.status` directly when no
-      // assignment row exists (admin-assigned bookings).
-      const { data: assignment } = await supabase
-        .from("job_assignments")
-        .select("id")
-        .eq("job_id", job.id)
-        .eq("cleaner_id", cleanerId)
-        .maybeSingle();
+      // Prefer the real jobs.id for the assignment lookup; fall back to
+      // flipping the booking status directly for admin-assigned bookings.
+      const { data: assignment } = job.jobId
+        ? await supabase
+            .from("job_assignments")
+            .select("id")
+            .eq("job_id", job.jobId)
+            .eq("cleaner_id", cleanerId)
+            .maybeSingle()
+        : { data: null };
 
       if (assignment?.id) {
         const response = await supabase.functions.invoke("job-check-in", {
-          body: {
-            jobAssignmentId: assignment.id,
-            action: "check_in",
-            cleanerId,
-          },
+          body: { jobAssignmentId: assignment.id, action: "check_in", cleanerId },
         });
         if (response.error) throw response.error;
       } else {
-        // No assignment row — mark the booking in_progress directly so
-        // the cleaner can still complete the job afterward.
         const { error } = await supabase
           .from("bookings")
-          .update({
-            status: "in_progress",
-            check_in_at: new Date().toISOString(),
-          } as any)
-          .eq("id", job.id)
+          .update({ status: "in_progress", check_in_at: new Date().toISOString() } as any)
+          .eq("id", job.bookingId)
           .eq("cleaner_id", cleanerId);
         if (error) throw error;
       }
       toast.success("Checked in successfully!");
       setJobs((prev) =>
-        prev.map((j) => j.id === job.id ? { ...j, checked_in: true, check_in_time: new Date().toISOString(), status: "in_progress" } : j)
+        prev.map((j) => (j.id === job.id ? { ...j, checkInTime: new Date().toISOString(), status: "in_progress" } : j)),
       );
     } catch (error: any) {
       toast.error(error.message || "Check-in failed");
@@ -237,24 +367,15 @@ export default function ContractorJobs() {
   const handleComplete = async (job: Job) => {
     setActionLoading(job.id);
     try {
-      // Cleaners no longer trigger the full completion flow (charge + payout +
-      // customer comms). `cleaner-mark-complete` moves the job into
-      // `pending_review` for the office to finalize and sends the cleaner their
-      // one-time photo-upload link. The public /contractor/jobs portal has no
-      // JWT, so we pass `cleanerId` for the function to verify against
-      // bookings.cleaner_id.
       const response = await supabase.functions.invoke("cleaner-mark-complete", {
-        body: {
-          bookingId: job.booking_id || job.id,
-          cleanerId,
-        },
+        body: { bookingId: job.bookingId, cleanerId },
       });
       if (response.error) throw response.error;
       if ((response.data as { error?: string })?.error) throw new Error((response.data as { error?: string }).error);
       const uploadToken = (response.data as { photoUploadToken?: string | null })?.photoUploadToken || null;
       toast.success("Marked complete and sent to the office for review. Add your before & after photos to release your payout.");
       setJobs((prev) =>
-        prev.map((j) => j.id === job.id ? { ...j, status: "pending_review", photo_upload_token: uploadToken ?? j.photo_upload_token } : j)
+        prev.map((j) => (j.id === job.id ? { ...j, status: "pending_review", photoUploadToken: uploadToken ?? j.photoUploadToken } : j)),
       );
     } catch (error: any) {
       toast.error(error.message || "Failed to complete job");
@@ -271,7 +392,7 @@ export default function ContractorJobs() {
     setActionLoading(`handoff-${job.id}`);
     try {
       const { data, error } = await supabase.functions.invoke("reassign-booking-cleaner", {
-        body: { bookingId: job.booking_id || job.id, fromCleanerId: cleanerId, toCleanerId: handoffTarget },
+        body: { bookingId: job.bookingId, fromCleanerId: cleanerId, toCleanerId: handoffTarget },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -288,19 +409,20 @@ export default function ContractorJobs() {
   };
 
   const getMapsUrl = (job: Job) =>
-    `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${job.address}, ${job.city}, ${job.state} ${job.zip_code}`)}`;
+    `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${job.address}, ${job.city}, ${job.state} ${job.zip}`)}`;
 
   const getCalendarUrl = (job: Job) => {
-    const date = job.service_date.replace(/-/g, "");
-    const title = encodeURIComponent(`Cleaning - ${job.service_type}`);
-    const location = encodeURIComponent(`${job.address}, ${job.city}, ${job.state} ${job.zip_code}`);
-    const details = encodeURIComponent(`Client: ${job.first_name} ${job.last_name}\nService: ${job.service_type}\nAddress: ${job.address}, ${job.city}`);
+    const date = (job.serviceDate || "").replace(/-/g, "");
+    const title = encodeURIComponent(`Cleaning - ${job.customerName || job.serviceType}`);
+    const location = encodeURIComponent(`${job.address}, ${job.city}, ${job.state} ${job.zip}`);
+    const details = encodeURIComponent(`Client: ${job.customerName}\nService: ${job.serviceType}\nAddress: ${job.address}, ${job.city}`);
     return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${date}/${date}&details=${details}&location=${location}`;
   };
 
   const handleReset = () => {
     setSearched(false);
     setJobs([]);
+    setSummary(null);
     setCleanerName("");
     setCleanerId("");
     setLookupValue("");
@@ -309,9 +431,10 @@ export default function ContractorJobs() {
     setHandoffTarget("");
   };
 
-  const upcomingJobs = jobs.filter((j) => isFuture(new Date(j.service_date)) && j.status !== "cancelled" && j.status !== "completed" && j.status !== "pending_review");
-  // "Submitted" (pending_review) and fully completed jobs both live in the
-  // history section so the cleaner can still attach photos after marking done.
+  const upcomingJobs = jobs.filter(
+    (j) => j.status !== "cancelled" && j.status !== "completed" && j.status !== "pending_review" &&
+      (isFuture(new Date(j.serviceDate)) || j.status === "in_progress" || j.checkInTime),
+  );
   const completedJobs = jobs.filter((j) => j.status === "completed" || j.status === "pending_review");
   const cancelledJobs = jobs.filter((j) => j.status === "cancelled");
 
@@ -407,13 +530,32 @@ export default function ContractorJobs() {
               <p className="text-sm text-muted-foreground">{jobs.length} job{jobs.length !== 1 ? "s" : ""} found</p>
             </div>
 
+            {summary && (summary.lifetimePaidCents > 0 || summary.pendingCents > 0) && (
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="border-0 shadow-sm bg-emerald-50/60">
+                  <CardContent className="p-3">
+                    <p className="text-[11px] font-medium text-emerald-700/80">Paid to you (lifetime)</p>
+                    <p className="text-lg font-bold text-emerald-700">{money(summary.lifetimePaidCents)}</p>
+                    <p className="text-[10px] text-emerald-700/70">{summary.paidJobs} job{summary.paidJobs === 1 ? "" : "s"} paid</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-sm bg-amber-50/60">
+                  <CardContent className="p-3">
+                    <p className="text-[11px] font-medium text-amber-700/80">Payout pending</p>
+                    <p className="text-lg font-bold text-amber-700">{money(summary.pendingCents)}</p>
+                    <p className="text-[10px] text-amber-700/70">Awaiting the office to release</p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             {/* Upcoming / Active Jobs */}
             {upcomingJobs.length > 0 && (
               <div className="space-y-3">
                 <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Upcoming & Active ({upcomingJobs.length})</h2>
                 {upcomingJobs.map((job) => {
                   const sc = getStatusConfig(job.status);
-                  const isActive = job.status === "in_progress" || job.checked_in;
+                  const isActive = job.status === "in_progress" || !!job.checkInTime;
                   const loading = actionLoading === job.id;
                   return (
                     <Card key={job.id} className={cn("shadow-sm hover:shadow-md transition-shadow", isActive && "border-amber-300 bg-amber-50/30")}>
@@ -421,44 +563,31 @@ export default function ContractorJobs() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <div className="text-center min-w-[48px] py-2 px-3 rounded-xl bg-primary/5">
-                              <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">{format(new Date(job.service_date), "MMM")}</p>
-                              <p className="text-xl font-bold leading-tight">{format(new Date(job.service_date), "d")}</p>
+                              <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">{format(new Date(job.serviceDate), "MMM")}</p>
+                              <p className="text-xl font-bold leading-tight">{format(new Date(job.serviceDate), "d")}</p>
                             </div>
                             <div>
-                              <p className="font-semibold text-sm">{format(new Date(job.service_date), "EEEE")}</p>
-                              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                <RiTimeLine className="w-3 h-3" />{job.time_slot}
+                              <p className="font-semibold text-sm leading-tight">{job.customerName || "Customer"}</p>
+                              <p className="text-xs text-muted-foreground">{titleCase(job.serviceType)}</p>
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <RiTimeLine className="w-3 h-3" />{format(new Date(job.serviceDate), "EEE")}{job.timeSlot ? ` · ${job.timeSlot}` : ""}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-end gap-1.5">
                             <Badge variant="outline" className={cn("text-[10px]", sc.class)}>
                               <span className={cn("w-1.5 h-1.5 rounded-full mr-1", sc.dot)} />{sc.label}
                             </Badge>
-                            <span className="font-bold text-primary text-sm">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.35)) / 100).toFixed(0)}</span>
+                            <PayChip pay={job.pay} />
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl bg-muted/30 text-xs">
-                          <div className="flex items-center gap-2">
-                            <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate">{job.address}, {job.city}, {job.state}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <RiSparklingLine className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <span>{job.service_type} &middot; {job.home_size_id}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <RiPhoneLine className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <span>{job.first_name} {job.last_name}</span>
-                          </div>
-                          {job.check_in_time && (
-                            <div className="flex items-center gap-2 text-amber-600">
-                              <RiPlayCircleLine className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span>Checked in at {format(new Date(job.check_in_time), "h:mm a")}</span>
-                            </div>
-                          )}
+                        <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/30 text-xs">
+                          <RiMapPinLine className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{[job.address, job.city, job.state].filter(Boolean).join(", ")}</span>
                         </div>
+
+                        <JobDetails job={job} />
 
                         <div className="flex flex-wrap gap-2">
                           <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => window.open(getMapsUrl(job), "_blank")}>
@@ -468,12 +597,12 @@ export default function ContractorJobs() {
                             <RiCalendarCheckLine className="w-3.5 h-3.5 mr-1" />Calendar
                           </Button>
 
-                          {job.photo_upload_token && (
+                          {job.photoUploadToken && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="text-xs h-8 border-emerald-200 text-emerald-700"
-                              onClick={() => window.open(`${PHOTO_UPLOAD_BASE}${job.photo_upload_token}?phase=before`, "_blank")}
+                              onClick={() => window.open(`${PHOTO_UPLOAD_BASE}${job.photoUploadToken}?phase=before`, "_blank")}
                             >
                               <RiSparklingLine className="w-3.5 h-3.5 mr-1" />Before photos
                             </Button>
@@ -539,22 +668,22 @@ export default function ContractorJobs() {
             {completedJobs.length > 0 && (
               <div className="space-y-3">
                 <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Completed &amp; submitted ({completedJobs.length})</h2>
-                {completedJobs.slice(0, 10).map((job) => {
-                  const photoCount = (job.before_photos?.length || 0) + (job.after_photos?.length || 0);
-                  const uploadHref = job.photo_upload_token ? `${PHOTO_UPLOAD_BASE}${job.photo_upload_token}?phase=after` : null;
-                  const viewHref = job.photo_view_token ? `${PHOTO_VIEW_BASE}${job.photo_view_token}` : null;
+                {completedJobs.slice(0, 12).map((job) => {
+                  const photoCount = (job.beforePhotos?.length || 0) + (job.afterPhotos?.length || 0);
+                  const uploadHref = job.photoUploadToken ? `${PHOTO_UPLOAD_BASE}${job.photoUploadToken}?phase=after` : null;
+                  const viewHref = job.photoViewToken ? `${PHOTO_VIEW_BASE}${job.photoViewToken}` : null;
                   return (
                     <Card key={job.id} className="bg-muted/20 border-border/60 shadow-none">
                       <CardContent className="p-3.5 space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="text-center min-w-[40px]">
-                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.service_date), "MMM")}</p>
-                              <p className="text-base font-bold leading-tight">{format(new Date(job.service_date), "d")}</p>
+                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.serviceDate), "MMM")}</p>
+                              <p className="text-base font-bold leading-tight">{format(new Date(job.serviceDate), "d")}</p>
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-sm truncate">{job.service_type}</p>
-                              <p className="text-xs text-muted-foreground truncate">{job.address}, {job.city}</p>
+                              <p className="font-medium text-sm truncate">{job.customerName || "Customer"}</p>
+                              <p className="text-xs text-muted-foreground truncate">{titleCase(job.serviceType)} · {[job.city, job.state].filter(Boolean).join(", ")}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
@@ -567,11 +696,14 @@ export default function ContractorJobs() {
                                 <RiCheckboxCircleLine className="w-3 h-3 mr-0.5" />Done
                               </Badge>
                             )}
-                            <span className="text-sm font-semibold text-emerald-600">${((job.cleaner_payout_cents ?? Math.floor(job.total_estimate_cents * 0.35)) / 100).toFixed(0)}</span>
+                            <PayChip pay={job.pay} />
                           </div>
                         </div>
+
+                        <JobDetails job={job} />
+
                         {(uploadHref || viewHref) && (
-                          <div className="flex flex-wrap items-center gap-2 pl-[52px]">
+                          <div className="flex flex-wrap items-center gap-2">
                             {uploadHref && (
                               <Button
                                 variant={photoCount > 0 ? "outline" : "default"}
@@ -611,11 +743,11 @@ export default function ContractorJobs() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="text-center min-w-[40px]">
-                            <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.service_date), "MMM")}</p>
-                            <p className="text-base font-bold leading-tight text-muted-foreground line-through">{format(new Date(job.service_date), "d")}</p>
+                            <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.serviceDate), "MMM")}</p>
+                            <p className="text-base font-bold leading-tight text-muted-foreground line-through">{format(new Date(job.serviceDate), "d")}</p>
                           </div>
                           <div className="min-w-0">
-                            <p className="font-medium text-sm text-muted-foreground">{job.service_type || "Cleaning"}</p>
+                            <p className="font-medium text-sm text-muted-foreground">{titleCase(job.serviceType || "Cleaning")}</p>
                             <p className="text-xs text-muted-foreground">This job was cancelled — client details removed.</p>
                           </div>
                         </div>
