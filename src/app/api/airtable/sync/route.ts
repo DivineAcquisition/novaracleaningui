@@ -32,8 +32,26 @@ import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function authorized(req: Request): boolean {
-  const expected = process.env.AIRTABLE_SYNC_WEBHOOK_SECRET;
+async function resolveSyncSecret(): Promise<string> {
+  const fromEnv = (process.env.AIRTABLE_SYNC_WEBHOOK_SECRET || "").trim();
+  if (fromEnv) return fromEnv;
+  // Fall back to Supabase app_secrets so the DB trigger (which signs with the
+  // app_secrets value) authorizes even when the Vercel env var isn't set.
+  try {
+    const { getAdminSupabase } = await import("@/lib/airtable/sources/admin-client");
+    const { data } = await getAdminSupabase()
+      .from("app_secrets")
+      .select("value")
+      .eq("key", "AIRTABLE_SYNC_WEBHOOK_SECRET")
+      .maybeSingle();
+    return (data?.value || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function authorized(req: Request): Promise<boolean> {
+  const expected = await resolveSyncSecret();
   if (!expected) return false; // closed by default until configured
   const header = req.headers.get("x-airtable-sync-secret");
   const url = new URL(req.url);
@@ -62,7 +80,7 @@ function normalize(body: Payload): { entity: string; id?: string; email?: string
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  if (!authorized(req)) {
+  if (!(await authorized(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
