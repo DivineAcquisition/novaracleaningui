@@ -18,13 +18,76 @@ import { payPeriodMonday, payPeriodSunday } from "./pay";
 
 const ASSIGNMENT_STATUSES = ["Confirmed", "Accepted", "accepted", "In Progress", "Completed"];
 
+const AGREEMENT_TYPE_BY_AUDIENCE: Record<string, string> = {
+  one_time: "One-Time",
+  membership: "Recurring",
+  str_host: "STR Partnership",
+};
+
+/**
+ * Hunt down the client's remaining data points so every Airtable column that
+ * CAN be filled IS filled: lifecycle from real booking history, agreement date
+ * + type from DocuSeal, payment method from Stripe.
+ */
+async function clientEnrichment(email: string, customer?: {
+  membership_status?: string | null;
+  membership_plan?: string | null;
+}): Promise<Partial<import("./mappers/types").ClientInput>> {
+  const supabase = getAdminSupabase();
+  const extra: Partial<import("./mappers/types").ClientInput> = {};
+
+  // Lifecycle from actual booking history.
+  try {
+    const { data: bks } = await supabase
+      .from("bookings")
+      .select("status")
+      .eq("email", email)
+      .limit(100);
+    const statuses = (bks || []).map((b) => String(b.status || "").toLowerCase());
+    const isMember =
+      String(customer?.membership_status || "") === "active" ||
+      (customer?.membership_plan && customer.membership_plan !== "none");
+    extra.lifecycleStage = isMember
+      ? "Member"
+      : statuses.includes("completed")
+        ? "Active"
+        : statuses.length > 0
+          ? "Quoted"
+          : "Lead";
+  } catch {
+    /* best-effort */
+  }
+
+  // Signed agreement (date + type) from DocuSeal.
+  try {
+    const { data: subs } = await supabase
+      .from("docuseal_submissions")
+      .select("audience, status, created_at")
+      .ilike("submitter_email", email)
+      .in("audience", ["one_time", "membership", "str_host"])
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const sub = (subs || [])[0];
+    if (sub) {
+      extra.agreementSignedDate = String(sub.created_at || "").slice(0, 10) || undefined;
+      extra.agreementType = AGREEMENT_TYPE_BY_AUDIENCE[String(sub.audience)] || undefined;
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  return extra;
+}
+
 /** Upsert a client by Supabase customer id. */
 export async function syncClientById(customerId: string): Promise<string | null> {
   const supabase = getAdminSupabase();
   const { data, error } = await supabase.from("customers").select("*").eq("id", customerId).maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return syncClient(customerToClientInput(data));
+  const extra = await clientEnrichment(data.email, data);
+  return syncClient(customerToClientInput(data, extra));
 }
 
 /** Upsert a client by email (used when only the email is known). */
@@ -32,7 +95,8 @@ export async function syncClientByEmail(email: string): Promise<string | null> {
   const supabase = getAdminSupabase();
   const { data } = await supabase.from("customers").select("*").eq("email", email).maybeSingle();
   if (!data) return null;
-  return syncClient(customerToClientInput(data));
+  const extra = await clientEnrichment(email, data);
+  return syncClient(customerToClientInput(data, extra));
 }
 
 /** Resolve the cleaners assigned to a booking via its dispatch job. */
@@ -87,7 +151,53 @@ export async function syncJobByBookingId(
   }
 
   const cleaners = await cleanersForBooking(booking.job_id);
-  const input = bookingToJobInput(booking, cleaners, { entrySource: opts?.entrySource });
+
+  // ── Authoritative pay from the REAL ledgers (custom payout + extra pay) ──
+  // The tier-% estimate is only a fallback; when money was actually recorded
+  // for this job, Airtable must show exactly that.
+  const [{ data: payout }, { data: extras }] = await Promise.all([
+    supabase
+      .from("manual_payouts")
+      .select("amount_cents, status, cleaner_breakdown, cleaner_name")
+      .eq("booking_id", bookingId)
+      .neq("status", "cancelled")
+      .maybeSingle(),
+    supabase
+      .from("job_extra_pay")
+      .select("total_cents, status")
+      .eq("booking_id", bookingId)
+      .neq("status", "failed"),
+  ]);
+
+  const extraCents = (extras || []).reduce((s, e) => s + (Number(e.total_cents) || 0), 0);
+  const breakdown = Array.isArray(payout?.cleaner_breakdown) ? payout?.cleaner_breakdown : [];
+  const crewCount = Math.max(cleaners.length, breakdown.length, Number(booking.num_cleaners_assigned) || 0, 0);
+
+  let poolCents: number | undefined;
+  let perCleanerCents: number | undefined;
+  let paymentStatus: string | undefined;
+  if (payout) {
+    poolCents = (Number(payout.amount_cents) || 0) + extraCents;
+    perCleanerCents = Math.round(poolCents / Math.max(1, crewCount));
+    const extrasAllPaid = (extras || []).every((e) => String(e.status) === "paid");
+    paymentStatus = String(payout.status) === "paid" && extrasAllPaid ? "Paid" : "Pending";
+  } else if (extraCents > 0) {
+    poolCents = extraCents;
+    perCleanerCents = Math.round(extraCents / Math.max(1, crewCount));
+    paymentStatus = (extras || []).every((e) => String(e.status) === "paid") ? "Paid" : "Pending";
+  } else {
+    // No money recorded yet — the job hasn't been paid regardless of booking status.
+    paymentStatus = String(booking.status || "").toLowerCase() === "cancelled" ? "Failed" : "Pending";
+  }
+
+  const input = bookingToJobInput(booking, cleaners, {
+    entrySource: opts?.entrySource,
+    cleanerPayPoolCents: poolCents,
+    payPerCleanerCents: perCleanerCents,
+    paymentStatus,
+    numberOfCleaners: crewCount || undefined,
+  });
+  if (!input.cleanerName && payout?.cleaner_name) input.cleanerName = String(payout.cleaner_name);
   return syncJob(input);
 }
 
@@ -112,6 +222,9 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     bookingIds: Set<string>;
     components: number;
     paidComponents: number;
+    customCount: number;
+    extraCount: number;
+    lastPaidAt?: string;
     transferId?: string;
   }
   const runs = new Map<string, RunAcc>();
@@ -122,7 +235,7 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     const key = `${cleanerId}_${monday}`;
     let r = runs.get(key);
     if (!r) {
-      r = { cleanerId, monday, grossCents: 0, bonusCents: 0, bookingIds: new Set(), components: 0, paidComponents: 0 };
+      r = { cleanerId, monday, grossCents: 0, bonusCents: 0, bookingIds: new Set(), components: 0, paidComponents: 0, customCount: 0, extraCount: 0 };
       runs.set(key, r);
     }
     return r;
@@ -172,7 +285,12 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
       r.grossCents += Number(b.amountCents) || 0;
       if (p.booking_id) r.bookingIds.add(String(p.booking_id));
       r.components += 1;
-      if (String(p.status) === "paid") r.paidComponents += 1;
+      r.customCount += 1;
+      if (String(p.status) === "paid") {
+        r.paidComponents += 1;
+        const paidDate = String(p.paid_at || "").slice(0, 10);
+        if (paidDate && (!r.lastPaidAt || paidDate > r.lastPaidAt)) r.lastPaidAt = paidDate;
+      }
     }
   }
 
@@ -186,7 +304,12 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     r.bonusCents += Number(e.total_cents) || 0;
     if (e.booking_id) r.bookingIds.add(String(e.booking_id));
     r.components += 1;
-    if (String(e.status) === "paid") r.paidComponents += 1;
+    r.extraCount += 1;
+    if (String(e.status) === "paid") {
+      r.paidComponents += 1;
+      const paidDate = String(e.paid_at || "").slice(0, 10);
+      if (paidDate && (!r.lastPaidAt || paidDate > r.lastPaidAt)) r.lastPaidAt = paidDate;
+    }
     if (e.stripe_transfer_id && !r.transferId) r.transferId = String(e.stripe_transfer_id);
   }
 
@@ -225,6 +348,10 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     const jobRecordIds = Array.from(r.bookingIds)
       .map((bid) => jobRecordIdByBookingId[bid])
       .filter(Boolean) as string[];
+    const allPaid = r.components > 0 && r.paidComponents === r.components;
+    const noteParts: string[] = [];
+    if (r.customCount > 0) noteParts.push(`Custom payouts ×${r.customCount}: $${gross.toFixed(2)}`);
+    if (r.extraCount > 0) noteParts.push(`Extra pay ×${r.extraCount} (supplies/mileage/surge/OT/job value): $${bonus.toFixed(2)}`);
     try {
       await syncPayrollRun({
         runId,
@@ -237,8 +364,10 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
         deduction: 0,
         netPay: gross + bonus,
         paymentMethod: "Manual",
-        status: r.components > 0 && r.paidComponents === r.components ? "Paid" : "Pending",
+        status: allPaid ? "Paid" : "Pending",
+        sentAt: allPaid ? r.lastPaidAt : undefined,
         stripeTransferId: r.transferId,
+        notes: noteParts.join(" · ") || undefined,
         jobRecordIds,
       });
       ok++;

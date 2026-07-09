@@ -28,11 +28,12 @@ export async function syncClient(client: ClientInput): Promise<string | null> {
     [CLIENT_FIELDS.leadSource]: client.leadSource,
     [CLIENT_FIELDS.lifecycleStage]: client.lifecycleStage,
     [CLIENT_FIELDS.onboardingStage]: client.onboardingStage,
-    [CLIENT_FIELDS.agreementSigned]: client.agreementSigned,
+    [CLIENT_FIELDS.agreementSigned]: client.agreementSignedDate,
     [CLIENT_FIELDS.agreementType]: client.agreementType,
     [CLIENT_FIELDS.stripeCustomerId]: client.stripeCustomerId,
     [CLIENT_FIELDS.paymentMethodOnFile]: client.paymentMethodOnFile,
     [CLIENT_FIELDS.smsOptIn]: client.smsOptIn,
+    [CLIENT_FIELDS.notes]: client.notes,
   };
 
   return upsertOne(TABLES.clients, [CLIENT_FIELDS.email], fields, { knownOptions });

@@ -27,7 +27,9 @@ export async function syncPayrollRun(run: PayrollRunInput): Promise<string | nul
     [PAYROLL_RUN_FIELDS.netPay]: run.netPay,
     [PAYROLL_RUN_FIELDS.paymentMethod]: run.paymentMethod,
     [PAYROLL_RUN_FIELDS.status]: run.status,
+    [PAYROLL_RUN_FIELDS.sentAt]: run.sentAt,
     [PAYROLL_RUN_FIELDS.stripeTransferId]: run.stripeTransferId,
+    [PAYROLL_RUN_FIELDS.notes]: run.notes,
   };
 
   const runRecordId = await upsertOne(TABLES.payrollRuns, [PAYROLL_RUN_FIELDS.runId], fields, {

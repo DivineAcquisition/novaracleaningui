@@ -65,6 +65,77 @@ export interface BookingRow {
 const fullName = (first?: string | null, last?: string | null): string =>
   `${first || ""} ${last || ""}`.trim();
 
+/** YYYY-MM-DD in America/New_York (UTC slicing shifts late-evening dates a day forward). */
+export function nyDate(iso?: string | null): string | undefined {
+  if (!iso) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso; // already a plain date
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+// ─── Service Zone: map raw city/ZIP → the canonical Airtable choices ─────────
+// Choices: Baltimore, Baltimore County, Howard County, Anne Arundel, PG County,
+// Montgomery County, DC, Northern VA, Columbia, Other.
+
+const ZONE_BY_CITY: Record<string, string> = {
+  baltimore: "Baltimore",
+  essex: "Baltimore County", dundalk: "Baltimore County", towson: "Baltimore County",
+  parkville: "Baltimore County", catonsville: "Baltimore County", pikesville: "Baltimore County",
+  rosedale: "Baltimore County", "middle river": "Baltimore County", "white marsh": "Baltimore County",
+  "owings mills": "Baltimore County", randallstown: "Baltimore County", reisterstown: "Baltimore County",
+  nottingham: "Baltimore County", "gwynn oak": "Baltimore County", "windsor mill": "Baltimore County",
+  columbia: "Columbia",
+  "ellicott city": "Howard County", elkridge: "Howard County", jessup: "Howard County",
+  savage: "Howard County", clarksville: "Howard County", fulton: "Howard County",
+  "glen burnie": "Anne Arundel", annapolis: "Anne Arundel", "severna park": "Anne Arundel",
+  pasadena: "Anne Arundel", crofton: "Anne Arundel", edgewater: "Anne Arundel",
+  arnold: "Anne Arundel", odenton: "Anne Arundel", millersville: "Anne Arundel",
+  severn: "Anne Arundel", hanover: "Anne Arundel", linthicum: "Anne Arundel",
+  crownsville: "Anne Arundel", davidsonville: "Anne Arundel", gambrills: "Anne Arundel",
+  hyattsville: "PG County", bowie: "PG County", laurel: "PG County", "college park": "PG County",
+  greenbelt: "PG County", beltsville: "PG County", lanham: "PG County", landover: "PG County",
+  largo: "PG County", "upper marlboro": "PG County", "capitol heights": "PG County",
+  suitland: "PG County", "district heights": "PG County", "temple hills": "PG County",
+  "oxon hill": "PG County", "fort washington": "PG County", clinton: "PG County",
+  riverdale: "PG County", bladensburg: "PG County", "mount rainier": "PG County",
+  adelphi: "PG County", cheverly: "PG County", "pg county": "PG County",
+  bethesda: "Montgomery County", "silver spring": "Montgomery County", rockville: "Montgomery County",
+  gaithersburg: "Montgomery County", germantown: "Montgomery County", "takoma park": "Montgomery County",
+  "chevy chase": "Montgomery County", potomac: "Montgomery County", kensington: "Montgomery County",
+  wheaton: "Montgomery County", olney: "Montgomery County", burtonsville: "Montgomery County",
+  "montgomery village": "Montgomery County", "montgomery county": "Montgomery County",
+  washington: "DC", "washington dc": "DC", dc: "DC",
+  arlington: "Northern VA", alexandria: "Northern VA", fairfax: "Northern VA",
+  "falls church": "Northern VA", mclean: "Northern VA", vienna: "Northern VA",
+  springfield: "Northern VA", annandale: "Northern VA", reston: "Northern VA", herndon: "Northern VA",
+};
+
+function zoneFromZip(zip: string): string | undefined {
+  const n = Number(zip.slice(0, 5));
+  if (!Number.isFinite(n) || zip.replace(/\D/g, "").length < 5) return undefined;
+  if (n >= 20001 && n <= 20599) return "DC";
+  if (n >= 20601 && n <= 20799) return "PG County";
+  if (n >= 20810 && n <= 20999) return "Montgomery County";
+  if ((n >= 21044 && n <= 21046) || n === 21029) return "Columbia";
+  if ((n >= 21041 && n <= 21043) || n === 21075 || n === 21163) return "Howard County";
+  if ([21012, 21032, 21035, 21037, 21054, 21060, 21061, 21076, 21077, 21090, 21108, 21113, 21114, 21122, 21140, 21144, 21146, 21401, 21403, 21409].includes(n)) return "Anne Arundel";
+  if (n >= 21201 && n <= 21231) return "Baltimore";
+  if (n >= 21001 && n <= 21299) return "Baltimore County";
+  if (n >= 22001 && n <= 22999) return "Northern VA";
+  return undefined;
+}
+
+/** Map a raw city / ZIP to one of the canonical Service Zone choices. */
+export function serviceZoneFor(city?: string | null, zip?: string | null): string | undefined {
+  const c = String(city || "").trim().toLowerCase();
+  if (c && ZONE_BY_CITY[c]) return ZONE_BY_CITY[c];
+  const z = String(zip || "").trim();
+  const byZip = z ? zoneFromZip(z) : undefined;
+  if (byZip) return byZip;
+  return c || z ? "Other" : undefined;
+}
+
 /** Map source lead-source hints to a readable label (loosely mirrors GHL). */
 function mapLeadSource(c: CustomerRow): string | undefined {
   const raw = (c.analytics_source || c.utm_source || "").toLowerCase();
@@ -82,9 +153,10 @@ export function customerToClientInput(c: CustomerRow, extra?: Partial<ClientInpu
     name: fullName(c.first_name, c.last_name) || c.email,
     type: extra?.type ?? "Residential",
     phone: c.phone || undefined,
-    serviceZone: c.city || c.zip || undefined,
+    serviceZone: serviceZoneFor(c.city, c.zip),
     leadSource: mapLeadSource(c),
     stripeCustomerId: c.stripe_customer_id || undefined,
+    paymentMethodOnFile: c.stripe_customer_id ? "Yes" : "No",
     ...extra,
   };
 }
@@ -98,14 +170,19 @@ export function customerToClientInput(c: CustomerRow, extra?: Partial<ClientInpu
 export function bookingToClientInput(b: BookingRow): ClientInput | null {
   if (!b.email) return null;
   const isCommercial = String(b.service_type || "").toLowerCase().includes("commercial");
+  const completed = String(b.status || "").toLowerCase() === "completed";
   return {
     email: b.email,
     name: fullName(b.first_name, b.last_name) || b.email,
     type: isCommercial ? "Commercial" : "Residential",
     phone: b.phone || undefined,
-    serviceZone: b.city || b.zip_code || undefined,
+    serviceZone: serviceZoneFor(b.city, b.zip_code),
     lifecycleStage:
-      b.membership_plan && b.membership_plan !== "none" ? "Member" : undefined,
+      b.membership_plan && b.membership_plan !== "none"
+        ? "Member"
+        : completed
+          ? "Active"
+          : undefined,
   };
 }
 
@@ -149,7 +226,13 @@ function mapEntrySource(channel?: string | null): string {
 export function bookingToJobInput(
   b: BookingRow,
   cleaners: CleanerRow[] = [],
-  opts?: { entrySource?: string; payPerCleanerCents?: number; cleanerPayPoolCents?: number },
+  opts?: {
+    entrySource?: string;
+    payPerCleanerCents?: number;
+    cleanerPayPoolCents?: number;
+    paymentStatus?: string;
+    numberOfCleaners?: number;
+  },
 ): JobInput {
   const pcts = cleaners.map((c) =>
     c.pay_percentage != null ? Number(c.pay_percentage) : TIER_PCT[tierFromPct(null)],
@@ -160,10 +243,14 @@ export function bookingToJobInput(
   const customerPaidCents = b.final_charge_cents ?? b.total_estimate_cents ?? 0;
   const numberOfCleaners = Math.max(
     1,
-    b.num_cleaners_assigned ?? (cleaners.length || 1),
+    opts?.numberOfCleaners ?? 0,
+    cleaners.length,
+    b.num_cleaners_assigned ?? 0,
   );
   const cleanerName = cleaners.map((c) => fullName(c.first_name, c.last_name)).filter(Boolean).join(", ");
-  const dateCompleted = (b.completed_at || b.service_date || "").slice(0, 10) || undefined;
+  // Completed date in local (Eastern) time — UTC slicing pushes late-night
+  // completions onto the next day. Fall back to the scheduled service date.
+  const dateCompleted = nyDate(b.completed_at) || nyDate(b.service_date);
 
   // The booking UUID is the only guaranteed-unique natural key — booking_number
   // is not reliably populated/unique in every environment, so keying on it can
@@ -182,7 +269,7 @@ export function bookingToJobInput(
     // exceed the pool on cancelled rows), so we don't default to it here. The
     // Revenue Ops view shows the consistent pool ÷ cleaners split.
     payPerCleanerCents: opts?.payPerCleanerCents,
-    paymentStatus: mapPaymentStatus(b.status),
+    paymentStatus: opts?.paymentStatus ?? mapPaymentStatus(b.status),
     entrySource: opts?.entrySource ?? mapEntrySource(b.booking_channel),
     clientEmail: b.email || undefined,
   };

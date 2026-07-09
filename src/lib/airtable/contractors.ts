@@ -20,8 +20,15 @@ import {
   type CreateFieldSpec,
   type Fields,
 } from "./client";
-import { JOB_FIELDS, PAYROLL_RUN_FIELDS, TABLES } from "./schema";
+import { PAYROLL_RUN_FIELDS, TABLES } from "./schema";
 import { getAdminSupabase } from "./sources/admin-client";
+
+// City fallbacks for cleaners whose profile only has a ZIP.
+const CITY_BY_ZIP: Record<string, string> = {
+  "20783": "Hyattsville", "20746": "Suitland", "21216": "Baltimore", "21230": "Baltimore",
+  "21217": "Baltimore", "21201": "Baltimore",
+};
+const MD_ZIP = /^2(0[6-9]|1[0-9])\d{2}$/;
 
 const TABLE_NAME = "Contractors";
 
@@ -96,10 +103,6 @@ function str(v: unknown): string {
   if (Array.isArray(v)) return v.map(String).join(", ");
   return String(v);
 }
-function num(v: unknown): number {
-  const n = Number(Array.isArray(v) ? v[0] : v);
-  return Number.isFinite(n) ? n : 0;
-}
 function normName(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -135,25 +138,53 @@ export async function syncContractors(): Promise<ContractorSyncResult> {
   const { data: cleaners, error: clErr } = await supabase
     .from("cleaners")
     .select(
-      "first_name, last_name, email, phone, status, pay_tier, pay_percentage, home_address, home_city, state, home_zip, stripe_account_id, payouts_enabled, onboarding_complete, ob_agreement_signed, ob_agreement_signed_at, skillset",
+      "id, first_name, last_name, email, phone, status, pay_tier, pay_percentage, home_address, home_city, home_state, state, home_zip, stripe_account_id, payouts_enabled, onboarding_complete, ob_agreement_signed, ob_agreement_signed_at, skillset",
     );
   if (clErr) throw new Error(`Read cleaners failed: ${clErr.message}`);
 
-  // 2. Pay aggregation from the Airtable Jobs table (matched by cleaner name).
-  const payByName = new Map<string, PayAgg>();
+  // 2. Pay aggregation straight from the REAL ledgers (custom payouts +
+  // extra pay) — the same sources that build Payroll Runs — keyed by
+  // cleaner id so the numbers always reconcile.
+  const payById = new Map<string, PayAgg>();
+  const monthPrefix = new Date().toISOString().slice(0, 7);
   try {
-    const jobs = await listRecords(TABLES.jobs);
-    const monthPrefix = new Date().toISOString().slice(0, 7);
-    for (const j of jobs) {
-      const nm = normName(str(j.fields[JOB_FIELDS.cleanerName]));
-      if (!nm) continue;
-      const pay = num(j.fields[JOB_FIELDS.payPerCleaner]);
-      const date = str(j.fields[JOB_FIELDS.dateCompleted]);
-      const agg = payByName.get(nm) || { jobs: 0, lifetime: 0, thisMonth: 0 };
-      agg.jobs += 1;
-      agg.lifetime += pay;
-      if (date.slice(0, 7) === monthPrefix) agg.thisMonth += pay;
-      payByName.set(nm, agg);
+    const [{ data: payouts }, { data: extras }] = await Promise.all([
+      supabase
+        .from("manual_payouts")
+        .select("booking_id, cleaner_id, cleaner_breakdown, amount_cents, service_date, created_at")
+        .neq("status", "cancelled"),
+      supabase
+        .from("job_extra_pay")
+        .select("booking_id, cleaner_id, total_cents, created_at")
+        .neq("status", "failed"),
+    ]);
+    const jobsCounted = new Map<string, Set<string>>();
+    const bump = (cleanerId: string, cents: number, dateStr: string, bookingId?: string | null) => {
+      const agg = payById.get(cleanerId) || { jobs: 0, lifetime: 0, thisMonth: 0 };
+      agg.lifetime += cents / 100;
+      if (dateStr.slice(0, 7) === monthPrefix) agg.thisMonth += cents / 100;
+      const seen = jobsCounted.get(cleanerId) || new Set<string>();
+      const key = bookingId || `x_${dateStr}_${cents}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        agg.jobs += 1;
+      }
+      jobsCounted.set(cleanerId, seen);
+      payById.set(cleanerId, agg);
+    };
+    for (const p of payouts || []) {
+      const date = String(p.service_date || p.created_at || "");
+      const breakdown = Array.isArray(p.cleaner_breakdown) && p.cleaner_breakdown.length
+        ? (p.cleaner_breakdown as { cleanerId?: string; amountCents?: number }[])
+        : p.cleaner_id
+          ? [{ cleanerId: String(p.cleaner_id), amountCents: Number(p.amount_cents) || 0 }]
+          : [];
+      for (const b of breakdown) {
+        if (b.cleanerId) bump(String(b.cleanerId), Number(b.amountCents) || 0, date, p.booking_id as string | null);
+      }
+    }
+    for (const e of extras || []) {
+      if (e.cleaner_id) bump(String(e.cleaner_id), Number(e.total_cents) || 0, String(e.created_at || ""), e.booking_id as string | null);
     }
   } catch (e) {
     warnings.push(`Pay aggregation skipped: ${(e as Error).message}`);
@@ -199,11 +230,15 @@ export async function syncContractors(): Promise<ContractorSyncResult> {
     if (!email) continue;
     const name = `${c.first_name || ""} ${c.last_name || ""}`.trim() || email;
     const nm = normName(name);
-    const pay = payByName.get(nm);
+    const pay = payById.get(String(c.id));
     const runs = runsByName.get(nm) || [];
     const agreementUrl = agreementByEmail.get(email.toLowerCase()) || "";
     if (pay) withPay += 1;
     if (agreementUrl) withAgreement += 1;
+
+    const zip = String(c.home_zip || "").trim();
+    const city = (c.home_city as string) || CITY_BY_ZIP[zip] || undefined;
+    const state = (c.state as string) || (c.home_state as string) || (MD_ZIP.test(zip) ? "MD" : undefined);
 
     const rec: Fields = {
       [F["Name"]]: name,
@@ -213,9 +248,9 @@ export async function syncContractors(): Promise<ContractorSyncResult> {
       [F["Pay Tier"]]: titleTier(c.pay_tier as string),
       [F["Pay %"]]: c.pay_percentage != null ? Number(c.pay_percentage) : undefined,
       [F["Home Address"]]: (c.home_address as string) || undefined,
-      [F["City"]]: (c.home_city as string) || undefined,
-      [F["State"]]: (c.state as string) || undefined,
-      [F["ZIP"]]: (c.home_zip as string) || undefined,
+      [F["City"]]: city,
+      [F["State"]]: state,
+      [F["ZIP"]]: zip || undefined,
       [F["Skillset"]]: Array.isArray(c.skillset) ? (c.skillset as string[]).join(", ") : undefined,
       [F["Stripe Account ID"]]: (c.stripe_account_id as string) || undefined,
       [F["Payouts Enabled"]]: c.payouts_enabled === true,

@@ -144,7 +144,9 @@ export const PAYROLL_RUN_FIELDS = {
   netPay: "fldwPSiefPgpg1JXB",
   paymentMethod: "fldU0IFWyFhjdz6Le",
   status: "fldq3EcOQXuVyz5JY",
+  sentAt: "fldZY62ImpkJc4jWe",
   stripeTransferId: "fldGvKPcpkSJvFmoX",
+  notes: "fldxFZwfMIkzOWFpY",
 } as const;
 
 // ─── The 6 link fields to create via the Meta API (Job A) ─────────────────────

@@ -23,11 +23,15 @@ export interface ClientInput {
   /** Mirrors GHL `membership_status` lifecycle. */
   lifecycleStage?: string;
   onboardingStage?: string;
-  agreementSigned?: boolean;
+  /** YYYY-MM-DD — the Airtable "Agreement Signed" column is a DATE field. */
+  agreementSignedDate?: string;
   agreementType?: string;
   stripeCustomerId?: string;
+  /** "Yes" | "No" (singleSelect in Airtable). */
   paymentMethodOnFile?: string;
-  smsOptIn?: boolean;
+  /** "Yes" | "No" (singleSelect in Airtable). */
+  smsOptIn?: string;
+  notes?: string;
 }
 
 export interface PropertyInput {
@@ -155,7 +159,11 @@ export interface PayrollRunInput {
   paymentMethod?: string;
   /** "Pending" | "Processing" | "Paid" | "Failed" */
   status?: string;
+  /** YYYY-MM-DD — when the money actually went out. */
+  sentAt?: string;
   stripeTransferId?: string;
+  /** Component breakdown (custom payouts vs extra pay). */
+  notes?: string;
   /** Job record ids that rolled into this run (sets the reverse "Payroll Run" link). */
   jobRecordIds?: string[];
 }

@@ -8,7 +8,7 @@
 // link still resolves.
 
 import { getAdminSupabase } from "./sources/admin-client";
-import { bookingToClientInput, mapServiceType, type CleanerRow } from "./sources/supabase";
+import { bookingToClientInput, mapServiceType, nyDate, type CleanerRow } from "./sources/supabase";
 import { syncClientById } from "./sync";
 import { syncClient, syncJob } from "./mappers";
 import { ENTRY_SOURCE, PAYMENT_STATUS } from "./schema";
@@ -82,7 +82,7 @@ export async function syncManualPayoutJob(
     .map((c) => `${c.first_name || ""} ${c.last_name || ""}`.trim())
     .filter(Boolean)
     .join(", ");
-  const dateCompleted = (booking.completed_at || booking.service_date || "").slice(0, 10) || undefined;
+  const dateCompleted = nyDate(booking.completed_at) || nyDate(booking.service_date);
   const paymentStatus =
     status === "paid"
       ? PAYMENT_STATUS.paid

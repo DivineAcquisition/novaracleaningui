@@ -13,18 +13,12 @@
 import { loadEnv } from "./_env";
 import { getAdminSupabase } from "../src/lib/airtable/sources/admin-client";
 import { ping } from "../src/lib/airtable/index";
-import { syncClient, syncJob } from "../src/lib/airtable/mappers/index";
+import { syncClient } from "../src/lib/airtable/mappers/index";
 import { ENTRY_SOURCE } from "../src/lib/airtable/schema";
-import {
-  bookingToClientInput,
-  bookingToJobInput,
-  customerToClientInput,
-  type CleanerRow,
-} from "../src/lib/airtable/sources/supabase";
-import { syncAllPayrollRuns } from "../src/lib/airtable/sync";
+import { customerToClientInput } from "../src/lib/airtable/sources/supabase";
+import { syncAllPayrollRuns, syncJobByBookingId } from "../src/lib/airtable/sync";
 
 const LIMIT = Number(process.env.AIRTABLE_BACKFILL_LIMIT || 1000);
-const ASSIGNMENT_STATUSES = ["Confirmed", "Accepted", "accepted", "In Progress", "Completed"];
 
 async function backfillClients(): Promise<void> {
   const supabase = getAdminSupabase();
@@ -52,52 +46,19 @@ async function backfillJobs(): Promise<void> {
   const supabase = getAdminSupabase();
   const { data, error } = await supabase
     .from("bookings")
-    .select(
-      "id, booking_number, status, service_type, service_date, completed_at, email, first_name, last_name, phone, city, state, zip_code, final_charge_cents, total_estimate_cents, cleaner_payout_cents, num_cleaners_assigned, booking_channel, membership_plan, job_id",
-    )
+    .select("id")
     .order("created_at", { ascending: false })
     .limit(LIMIT);
   if (error) throw error;
   const rows = data || [];
   console.log(`Jobs: ${rows.length} source bookings`);
 
-  // Preload assignments + cleaners for all jobs in one pass.
-  const jobIds = Array.from(new Set(rows.map((b) => b.job_id).filter(Boolean))) as string[];
-  const cleanersByJob = new Map<string, CleanerRow[]>();
-  if (jobIds.length) {
-    const { data: assigns } = await supabase
-      .from("job_assignments")
-      .select("job_id, cleaner_id, status")
-      .in("job_id", jobIds)
-      .in("status", ASSIGNMENT_STATUSES);
-    const cleanerIds = Array.from(new Set((assigns || []).map((a) => a.cleaner_id).filter(Boolean))) as string[];
-    const cleanerById = new Map<string, CleanerRow>();
-    if (cleanerIds.length) {
-      const { data: cleaners } = await supabase
-        .from("cleaners")
-        .select("id, first_name, last_name, pay_tier, pay_percentage")
-        .in("id", cleanerIds);
-      for (const c of cleaners || []) cleanerById.set(c.id, c as CleanerRow);
-    }
-    for (const a of assigns || []) {
-      if (!a.job_id || !a.cleaner_id) continue;
-      const list = cleanersByJob.get(a.job_id) || [];
-      const cleaner = cleanerById.get(a.cleaner_id);
-      if (cleaner) list.push(cleaner);
-      cleanersByJob.set(a.job_id, list);
-    }
-  }
-
   let ok = 0;
   for (const b of rows) {
     try {
-      // Ensure a Client exists for this booking's email so the Job→Client link
-      // resolves even for emails not present in the customers table.
-      const clientInput = bookingToClientInput(b);
-      if (clientInput) await syncClient(clientInput).catch(() => null);
-
-      const cleaners = b.job_id ? cleanersByJob.get(b.job_id) || [] : [];
-      await syncJob(bookingToJobInput(b, cleaners, { entrySource: ENTRY_SOURCE.backfill }));
+      // Route through the same ledger-aware sync the live webhook uses so the
+      // pay figures always come from manual_payouts + job_extra_pay.
+      await syncJobByBookingId(b.id, { entrySource: ENTRY_SOURCE.backfill });
       ok++;
     } catch (err) {
       console.error(`  booking ${b.id} failed: ${(err as Error).message}`);
