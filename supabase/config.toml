@@ -336,6 +336,11 @@ verify_jwt = false
 [functions.reassign-booking-cleaner]
 verify_jwt = false
 
+# Contractor portal "drop this job" (cleanerId is the credential, same model
+# as reassign-booking-cleaner).
+[functions.cleaner-drop-job]
+verify_jwt = false
+
 # Cleaner "mark complete" → moves booking to pending_review for admin review.
 # Public contractor portal has no JWT; cleanerId is verified against
 # bookings.cleaner_id inside the function (admin/va via JWT also allowed).

@@ -38,9 +38,20 @@ import {
   RiWallet3Line,
   RiHourglassLine,
   RiVipCrownLine,
+  RiErrorWarningLine,
+  RiHandCoinLine,
 } from "@remixicon/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format, isFuture } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { format, isFuture, differenceInHours } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -292,6 +303,8 @@ export default function ContractorJobs() {
   const [crewMembers, setCrewMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [handoffJobId, setHandoffJobId] = useState<string | null>(null);
   const [handoffTarget, setHandoffTarget] = useState<string>("");
+  const [dropJob, setDropJob] = useState<Job | null>(null);
+  const [dropReason, setDropReason] = useState("");
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,6 +445,35 @@ export default function ContractorJobs() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleDrop = async () => {
+    if (!dropJob) return;
+    setActionLoading(`drop-${dropJob.id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-drop-job", {
+        body: { bookingId: dropJob.bookingId, cleanerId, reason: dropReason.trim() || undefined },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Job dropped. The office has been alerted to reassign it.");
+      setJobs((prev) => prev.filter((j) => j.id !== dropJob.id));
+      setDropJob(null);
+      setDropReason("");
+    } catch (error: any) {
+      toast.error(error.message || "Couldn't drop the job");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Hours until a job's service day starts (uses the window's first hour).
+  const hoursUntil = (job: Job): number | null => {
+    if (!job.serviceDate) return null;
+    const startHour = /^(\d{1,2})/.exec(String(job.timeSlot || ""))?.[1] || "8";
+    const dt = new Date(`${job.serviceDate}T${startHour.padStart(2, "0")}:00:00`);
+    if (Number.isNaN(dt.getTime())) return null;
+    return differenceInHours(dt, new Date());
   };
 
   const getMapsUrl = (job: Job) =>
@@ -685,15 +727,27 @@ export default function ContractorJobs() {
                           )}
                         </div>
 
-                        {crewMembers.length > 0 && job.status !== "completed" && (
-                          <button
-                            type="button"
-                            onClick={() => { setHandoffJobId(handoffJobId === job.id ? null : job.id); setHandoffTarget(""); }}
-                            className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-                          >
-                            <RiUserSharedLine className="w-3 h-3 inline mr-1" />
-                            {handoffJobId === job.id ? "Cancel hand-off" : "Hand off to a crewmate"}
-                          </button>
+                        {job.status !== "completed" && (
+                          <div className="flex items-center justify-center gap-4">
+                            {crewMembers.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => { setHandoffJobId(handoffJobId === job.id ? null : job.id); setHandoffTarget(""); }}
+                                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                              >
+                                <RiUserSharedLine className="w-3 h-3 inline mr-1" />
+                                {handoffJobId === job.id ? "Cancel hand-off" : "Hand off to a crewmate"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => { setDropJob(job); setDropReason(""); }}
+                              className="text-[11px] text-red-500/80 hover:text-red-600 underline underline-offset-2"
+                            >
+                              <RiHandCoinLine className="w-3 h-3 inline mr-1" />
+                              Drop this job
+                            </button>
+                          </div>
                         )}
 
                         {handoffJobId === job.id && crewMembers.length > 0 && (
@@ -836,6 +890,80 @@ export default function ContractorJobs() {
           </div>
         )}
       </div>
+
+      {/* ── Drop-job confirmation with reliability warning ── */}
+      <Dialog open={!!dropJob} onOpenChange={(o) => { if (!o) { setDropJob(null); setDropReason(""); } }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          {dropJob && (() => {
+            const hrs = hoursUntil(dropJob);
+            const isLate = hrs != null && hrs < 48;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-red-600">
+                    <RiErrorWarningLine className="w-5 h-5" /> Drop this job?
+                  </DialogTitle>
+                  <DialogDescription asChild>
+                    <div className="space-y-3 pt-1 text-left">
+                      <p className="text-sm text-foreground">
+                        {dropJob.customerName || "Customer"} · {titleCase(dropJob.serviceType)} ·{" "}
+                        {format(new Date(dropJob.serviceDate), "EEE, MMM d")}
+                        {dropJob.timeSlot ? ` · ${dropJob.timeSlot}` : ""}
+                      </p>
+
+                      {isLate && (
+                        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                          <p className="font-bold uppercase tracking-wide mb-0.5">⚠ Less than 48 hours before this job</p>
+                          Late drops hurt the most — the office has very little time to find a
+                          replacement, and this counts heavily against your reliability score.
+                        </div>
+                      )}
+
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
+                        <p className="font-semibold">Before you drop, please know:</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          <li>Dropped jobs affect your <strong>reliability score</strong>.</li>
+                          <li>Frequent drops can mean <strong>fewer jobs assigned to you</strong> in the future.</li>
+                          <li>Drops within <strong>48 hours</strong> of the job impact your standing the most.</li>
+                        </ul>
+                        {crewMembers.length > 0 && (
+                          <p className="pt-1">Tip: handing off to a crewmate does <strong>not</strong> count against you.</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Reason (helps the office reassign faster)</Label>
+                        <Textarea
+                          value={dropReason}
+                          onChange={(e) => setDropReason(e.target.value)}
+                          placeholder="e.g. family emergency, double-booked, sick…"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="flex-col sm:flex-row gap-2">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setDropJob(null); setDropReason(""); }}>
+                    Keep the job
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="w-full sm:w-auto"
+                    onClick={handleDrop}
+                    disabled={actionLoading === `drop-${dropJob.id}`}
+                  >
+                    {actionLoading === `drop-${dropJob.id}` ? (
+                      <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" />
+                    ) : null}
+                    {isLate ? "Drop anyway (late drop)" : "Drop this job"}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
