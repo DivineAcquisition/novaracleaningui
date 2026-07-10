@@ -12,6 +12,7 @@ import {
   RiLoader4Line, RiCalendarCheckLine, RiCheckLine, RiMailSendLine,
   RiArrowRightLine, RiShieldCheckLine, RiHome3Line, RiAddLine, RiCloseLine,
 } from "@remixicon/react";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 
 interface Property { id: string; nickname: string | null; address: string | null; turnover_price: number | null; }
 interface AddPropForm { nickname: string; address: string; bedrooms: string; bathrooms: string; sqft: string; laundry_included: boolean; restock_included: boolean; special_notes: string; }
@@ -218,7 +219,17 @@ export default function OpenScheduler({ token }: { token: string }) {
               </div>
               <div className="space-y-2.5">
                 <input value={addForm.nickname} onChange={(e) => setAddForm((f) => ({ ...f, nickname: e.target.value }))} placeholder="Nickname (e.g. Lakehouse 2BR)" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-                <input value={addForm.address} onChange={(e) => setAddForm((f) => ({ ...f, address: e.target.value }))} placeholder="Address" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                <AddressAutocomplete
+                  label=""
+                  placeholder="Property address…"
+                  initialValue={addForm.address}
+                  onAddressSelect={(a) =>
+                    setAddForm((f) => ({
+                      ...f,
+                      address: [a.street, a.city, [a.state, a.zipCode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+                    }))
+                  }
+                />
                 <div className="grid grid-cols-3 gap-2">
                   <input value={addForm.bedrooms} onChange={(e) => setAddForm((f) => ({ ...f, bedrooms: e.target.value }))} inputMode="numeric" placeholder="Beds" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
                   <input value={addForm.bathrooms} onChange={(e) => setAddForm((f) => ({ ...f, bathrooms: e.target.value }))} inputMode="decimal" placeholder="Baths" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />

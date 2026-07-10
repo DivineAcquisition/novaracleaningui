@@ -36,8 +36,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { calculatePrice, SERVICE_TIER_PRICING, HOME_SIZE_RANGES, ADD_ONS, type AddOnId } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
+
+// Supabase/Postgrest errors are plain objects (not Error instances) — String()
+// on them renders "[object Object]". Always surface the real message.
+const errMsg = (e: unknown): string => {
+  if (e instanceof Error) return e.message;
+  const m = (e as { message?: unknown })?.message;
+  if (typeof m === "string" && m) return m;
+  try { return JSON.stringify(e); } catch { return String(e); }
+};
 
 interface Schedule {
   id: string; email: string; first_name: string | null; last_name: string | null; phone: string | null;
@@ -194,7 +205,7 @@ export default function AdminRecurringSchedules() {
       toast.success(r?.status === "created" ? "Next clean generated & assigned." : `Generator: ${r?.status || "done"}`);
       load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(errMsg(e));
     } finally {
       setWorking(null);
     }
@@ -210,7 +221,7 @@ export default function AdminRecurringSchedules() {
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success("Manage link texted to the customer.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(errMsg(e));
     } finally {
       setWorking(null);
     }
@@ -240,7 +251,7 @@ export default function AdminRecurringSchedules() {
       );
       load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(errMsg(e));
     } finally {
       setWorking(null);
     }
@@ -452,6 +463,16 @@ export default function AdminRecurringSchedules() {
   );
 }
 
+/** One cadence step after the given date (used by "Skip next visit"). */
+function nextCadenceDate(date: string, cadence: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return date;
+  if (cadence === "weekly") d.setDate(d.getDate() + 7);
+  else if (cadence === "monthly") d.setMonth(d.getMonth() + 1);
+  else d.setDate(d.getDate() + 14);
+  return d.toISOString().slice(0, 10);
+}
+
 function ScheduleRow({
   s, cleaners, cleanerName, working, onPatch, onGenerate, onTextLink, onCopyLink, timeSlots,
 }: {
@@ -462,6 +483,28 @@ function ScheduleRow({
 }) {
   const [open, setOpen] = useState(false);
   const upcoming = s.active && s.next_service_date ? previewDates(s.next_service_date, s.cadence, 3) : [];
+
+  const skipNext = () => {
+    if (!s.next_service_date) { toast.error("No next service date set."); return; }
+    const skipped = s.next_service_date;
+    const next = nextCadenceDate(skipped, s.cadence);
+    if (!confirm(`Skip the ${format(new Date(`${skipped}T12:00:00`), "EEE, MMM d")} visit? Next clean moves to ${format(new Date(`${next}T12:00:00`), "EEE, MMM d")}.`)) return;
+    onPatch(s.id, {
+      next_service_date: next,
+      notes: `${s.notes ? s.notes + " · " : ""}Skipped ${skipped} (admin)`,
+    });
+    toast.success(`Skipped — next visit ${format(new Date(`${next}T12:00:00`), "MMM d")}.`);
+  };
+
+  const endPlan = () => {
+    if (!confirm(`End this recurring plan for ${s.email}? This stops all future auto-booked cleans (already-created bookings are not touched). This is different from Pause — use Pause for a temporary hold.`)) return;
+    onPatch(s.id, {
+      active: false,
+      next_service_date: null,
+      notes: `${s.notes ? s.notes + " · " : ""}Plan ended by admin ${new Date().toISOString().slice(0, 10)}`,
+    });
+    toast.success("Recurring plan ended.");
+  };
   return (
     <Card className={cn("border", s.active ? "border-slate-200" : "border-slate-200 bg-slate-50/60")}>
       <CardContent className="py-3">
@@ -509,43 +552,83 @@ function ScheduleRow({
         </div>
 
         {open && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 border-t pt-3">
-            <div>
-              <Label className="text-xs">Cadence</Label>
-              <Select value={s.cadence} onValueChange={(v) => onPatch(s.id, { cadence: v })}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="mt-3 space-y-3 border-t pt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <div>
+                <Label className="text-xs">Cadence</Label>
+                <Select value={s.cadence} onValueChange={(v) => onPatch(s.id, { cadence: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Preferred cleaner</Label>
+                <Select value={s.preferred_cleaner_id || "auto"} onValueChange={(v) => onPatch(s.id, { preferred_cleaner_id: v === "auto" ? null : v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (previous cleaner)</SelectItem>
+                    {cleaners.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{`${c.first_name || ""} ${c.last_name || ""}`.trim()}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Time window</Label>
+                <Select value={s.preferred_time_slot || ""} onValueChange={(v) => onPatch(s.id, { preferred_time_slot: v })}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Pick" /></SelectTrigger>
+                  <SelectContent>
+                    {timeSlots.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Next service date</Label>
+                <Input type="date" className="h-9" defaultValue={s.next_service_date || ""}
+                  onBlur={(e) => e.target.value && e.target.value !== s.next_service_date && onPatch(s.id, { next_service_date: e.target.value })} />
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Preferred cleaner</Label>
-              <Select value={s.preferred_cleaner_id || "auto"} onValueChange={(v) => onPatch(s.id, { preferred_cleaner_id: v === "auto" ? null : v })}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">Auto (previous cleaner)</SelectItem>
-                  {cleaners.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{`${c.first_name || ""} ${c.last_name || ""}`.trim()}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <div>
+                <Label className="text-xs">Price per clean ($)</Label>
+                <Input type="number" min={0} step="1" className="h-9"
+                  defaultValue={s.price_cents != null ? (s.price_cents / 100).toFixed(0) : ""}
+                  onBlur={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (!Number.isNaN(v) && Math.round(v * 100) !== s.price_cents) onPatch(s.id, { price_cents: Math.round(v * 100) });
+                  }} />
+              </div>
+              <div className="lg:col-span-3">
+                <Label className="text-xs">Service address</Label>
+                <AddressAutocomplete
+                  label=""
+                  placeholder={s.address ? `${s.address}, ${s.city || ""} ${s.state || ""}` : "Type the customer's address…"}
+                  onAddressSelect={(a) => onPatch(s.id, { address: a.street, city: a.city, state: a.state, zip_code: a.zipCode })}
+                />
+              </div>
             </div>
+
             <div>
-              <Label className="text-xs">Time window</Label>
-              <Select value={s.preferred_time_slot || ""} onValueChange={(v) => onPatch(s.id, { preferred_time_slot: v })}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Pick" /></SelectTrigger>
-                <SelectContent>
-                  {timeSlots.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Notes (visible to office only)</Label>
+              <Textarea rows={2} defaultValue={s.notes || ""} placeholder="Gate code, preferences, billing notes…"
+                onBlur={(e) => e.target.value !== (s.notes || "") && onPatch(s.id, { notes: e.target.value || null })} />
             </div>
-            <div>
-              <Label className="text-xs">Next service date</Label>
-              <Input type="date" className="h-9" defaultValue={s.next_service_date || ""}
-                onBlur={(e) => e.target.value && e.target.value !== s.next_service_date && onPatch(s.id, { next_service_date: e.target.value })} />
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={skipNext} disabled={!s.next_service_date}>
+                Skip next visit
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs border-rose-200 text-rose-700" onClick={endPlan}>
+                <RiStopCircleLine className="w-3.5 h-3.5 mr-1" /> End plan
+              </Button>
+              <span className="text-[11px] text-slate-400">
+                Pause = temporary hold (resume anytime) · End = stops the plan and clears the next date.
+              </span>
             </div>
           </div>
         )}
@@ -610,7 +693,7 @@ function CreateForm({ cleaners, prefill, onCreated }: { cleaners: Cleaner[]; pre
           const r = (data as any)?.results?.[0];
           toast.success(r?.status === "created" ? "First clean booked & cleaner assigned." : `Generator: ${r?.status || "done"}`);
         } catch (e) {
-          toast.warning(`Plan saved, but first-clean generation failed: ${e instanceof Error ? e.message : String(e)}`);
+          toast.warning(`Plan saved, but first-clean generation failed: ${errMsg(e)}`);
         }
       }
       if (scheduleId && textLink && f.phone) {
@@ -622,12 +705,12 @@ function CreateForm({ cleaners, prefill, onCreated }: { cleaners: Cleaner[]; pre
           if ((data as any)?.error) throw new Error((data as any).error);
           toast.success("Customer texted their manage link.");
         } catch (e) {
-          toast.warning(`Plan saved, but the manage-link SMS failed: ${e instanceof Error ? e.message : String(e)}`);
+          toast.warning(`Plan saved, but the manage-link SMS failed: ${errMsg(e)}`);
         }
       }
       onCreated();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(errMsg(e));
     } finally {
       setSaving(false);
     }
@@ -652,8 +735,13 @@ function CreateForm({ cleaners, prefill, onCreated }: { cleaners: Cleaner[]; pre
           <Input placeholder="Last name" value={f.last_name} onChange={(e) => set("last_name", e.target.value)} />
           <Input placeholder="Phone (for SMS link)" value={f.phone} onChange={(e) => set("phone", e.target.value)} />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          <Input placeholder="Address" value={f.address} onChange={(e) => set("address", e.target.value)} />
+        <AddressAutocomplete
+          label="Service address"
+          placeholder="Start typing the customer's address…"
+          initialValue={f.address}
+          onAddressSelect={(a) => setF((p) => ({ ...p, address: a.street, city: a.city, state: a.state || p.state, zip_code: a.zipCode }))}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Input placeholder="City" value={f.city} onChange={(e) => set("city", e.target.value)} />
           <Input placeholder="State" value={f.state} onChange={(e) => set("state", e.target.value)} />
           <Input placeholder="ZIP" value={f.zip_code} onChange={(e) => set("zip_code", e.target.value)} />
