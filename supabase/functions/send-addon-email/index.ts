@@ -58,6 +58,16 @@ interface AddonEmailData {
   serviceDate?: string;
   bookingRef?: string;
   hostedInvoiceUrl?: string;
+  /** Why the add-on was billed (shown to customer). */
+  chargeReason?: string;
+  /** On-site cleaner report / notes for the extra work. */
+  cleanerReport?: string;
+  cleanerName?: string;
+  chargeDate?: string;
+  paymentRef?: string;
+  serviceAddress?: string;
+  /** When set, prepends an internal review banner (draft for approver). */
+  reviewFor?: string;
 }
 
 function renderHtml(opts: { heading: string; bodyHtml: string; rows: Array<{ label: string; value: string }>; ctaLabel?: string; ctaUrl?: string }): string {
@@ -119,6 +129,35 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
       }),
     };
   }
+  if (type === "addon_receipt") {
+    const reviewBanner = d.reviewFor
+      ? `<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:16px;margin-bottom:20px;font-size:14px;color:#92400E;"><strong>Internal review draft</strong> — this email has <em>not</em> been sent to the customer yet. Intended recipient: <strong>${d.reviewFor}</strong>.</div>`
+      : "";
+    const reasonBlock = d.chargeReason
+      ? `<p style="margin:20px 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Why this was charged</p><p style="margin:0 0 16px;">${d.chargeReason}</p>`
+      : "";
+    const reportBlock = d.cleanerReport
+      ? `<div style="background:${BRAND.gray50};border-left:4px solid ${BRAND.primary};padding:16px 20px;border-radius:0 8px 8px 0;margin:16px 0;"><p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Cleaner report${d.cleanerName ? ` — ${d.cleanerName}` : ""}</p><p style="margin:0;white-space:pre-wrap;">${d.cleanerReport}</p></div>`
+      : "";
+    const detailRows = [
+      { label: "Booking", value: d.bookingRef || "" },
+      { label: "Service date", value: d.serviceDate || "" },
+      { label: "Service address", value: d.serviceAddress || "" },
+      { label: "Add-on service", value: list },
+      { label: "Amount charged", value: d.amount || "" },
+      { label: "Charge date", value: d.chargeDate || "" },
+      { label: "Payment reference", value: d.paymentRef || "" },
+    ];
+    const subjectPrefix = d.reviewFor ? "[REVIEW] " : "";
+    return {
+      subject: `${subjectPrefix}Receipt: ${list}${d.amount ? ` — ${d.amount}` : ""}`,
+      html: renderHtml({
+        heading: "Add-on service receipt",
+        bodyHtml: `${reviewBanner}<p>${hi}</p><p>Thank you for choosing Novara Cleaning. This receipt confirms the additional service performed during your cleaning on <strong>${d.serviceDate || "your recent visit"}</strong>.</p>${reasonBlock}${reportBlock}<p style="margin-top:20px;">The amount below was charged to the card on file for this booking.</p>`,
+        rows: detailRows,
+      }),
+    };
+  }
   return null;
 }
 
@@ -132,7 +171,7 @@ serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let body: { type?: string; email?: string; data?: AddonEmailData };
+  let body: { type?: string; email?: string; data?: AddonEmailData; skipBillingCc?: boolean };
   try { body = await req.json(); } catch { return json({ ok: true }); }
   const type = String(body?.type || "");
   const email = String(body?.email || "").trim().toLowerCase();
@@ -145,9 +184,12 @@ serve(async (req) => {
   if (!resendKey) { console.error("[send-addon-email] RESEND_API_KEY missing"); return json({ ok: true }); }
   const resend = new Resend(resendKey);
 
+  const isReview = Boolean(body.data?.reviewFor);
+  const cc = body.skipBillingCc || isReview ? [] : [BILLING_CC];
+
   try {
     const result = await resend.emails.send({
-      from: FROM_ADDRESS, to: [email], cc: [BILLING_CC], subject: built.subject, html: built.html, replyTo: BRAND.supportEmail,
+      from: FROM_ADDRESS, to: [email], cc, subject: built.subject, html: built.html, replyTo: BRAND.supportEmail,
     });
     if ((result as { error?: unknown })?.error) console.error("[send-addon-email] resend error", type, (result as { error?: unknown }).error);
     else console.log("[send-addon-email] sent", type, email);
