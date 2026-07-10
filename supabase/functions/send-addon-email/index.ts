@@ -134,26 +134,29 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
       ? `<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:16px;margin-bottom:20px;font-size:14px;color:#92400E;"><strong>Internal review draft</strong> — this email has <em>not</em> been sent to the customer yet. Intended recipient: <strong>${d.reviewFor}</strong>.</div>`
       : "";
     const reasonBlock = d.chargeReason
-      ? `<p style="margin:20px 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Why this was charged</p><p style="margin:0 0 16px;">${d.chargeReason}</p>`
+      ? `<div style="background:#ffffff;border:2px solid ${BRAND.primary};border-radius:8px;padding:20px 22px;margin:20px 0 16px;"><p style="margin:0 0 12px;font-size:17px;font-weight:700;color:${BRAND.primary};">Why you were charged</p><p style="margin:0;font-size:16px;line-height:1.65;color:${BRAND.gray700};">${d.chargeReason}</p></div>`
       : "";
     const reportBlock = d.cleanerReport
-      ? `<div style="background:${BRAND.gray50};border-left:4px solid ${BRAND.primary};padding:16px 20px;border-radius:0 8px 8px 0;margin:16px 0;"><p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Cleaner report${d.cleanerName ? ` — ${d.cleanerName}` : ""}</p><p style="margin:0;white-space:pre-wrap;">${d.cleanerReport}</p></div>`
+      ? `<div style="background:${BRAND.gray50};border-left:4px solid ${BRAND.primary};padding:16px 20px;border-radius:0 8px 8px 0;margin:16px 0 20px;"><p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">What our cleaner found on site${d.cleanerName ? ` (${d.cleanerName})` : ""}</p><p style="margin:0;white-space:pre-wrap;font-size:15px;line-height:1.6;color:${BRAND.gray700};">${d.cleanerReport}</p></div>`
       : "";
     const detailRows = [
       { label: "Booking", value: d.bookingRef || "" },
       { label: "Service date", value: d.serviceDate || "" },
       { label: "Service address", value: d.serviceAddress || "" },
-      { label: "Add-on service", value: list },
+      { label: "Additional service", value: list },
       { label: "Amount charged", value: d.amount || "" },
       { label: "Charge date", value: d.chargeDate || "" },
       { label: "Payment reference", value: d.paymentRef || "" },
     ];
     const subjectPrefix = d.reviewFor ? "[REVIEW] " : "";
+    const intro = d.serviceDate
+      ? `During your cleaning on <strong>${d.serviceDate}</strong>, our crew completed extra work in your bathroom that goes beyond what is included in a standard cleaning.`
+      : "During your recent cleaning, our crew completed extra work in your bathroom that goes beyond what is included in a standard cleaning.";
     return {
-      subject: `${subjectPrefix}Receipt: ${list}${d.amount ? ` — ${d.amount}` : ""}`,
+      subject: `${subjectPrefix}Why you were charged for ${list}${d.amount ? ` (${d.amount})` : ""}`,
       html: renderHtml({
-        heading: "Add-on service receipt",
-        bodyHtml: `${reviewBanner}<p>${hi}</p><p>Thank you for choosing Novara Cleaning. This receipt confirms the additional service performed during your cleaning on <strong>${d.serviceDate || "your recent visit"}</strong>.</p>${reasonBlock}${reportBlock}<p style="margin-top:20px;">The amount below was charged to the card on file for this booking.</p>`,
+        heading: "Additional charge explanation",
+        bodyHtml: `${reviewBanner}<p>${hi}</p><p>${intro}</p><p style="margin-top:16px;">We're writing to explain <strong>why this additional charge was applied</strong> and what work was performed. A copy of the charge details is included below for your records.</p>${reasonBlock}${reportBlock}<p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Charge summary</p><p style="margin:0 0 4px;font-size:15px;color:${BRAND.gray700};">The <strong>${list}</strong> add-on (${d.amount || "see below"}) was charged to the card on file after this extra work was completed.</p>`,
         rows: detailRows,
       }),
     };
