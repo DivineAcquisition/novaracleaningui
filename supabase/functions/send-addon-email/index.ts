@@ -174,7 +174,7 @@ serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let body: { type?: string; email?: string; data?: AddonEmailData; skipBillingCc?: boolean };
+  let body: { type?: string; email?: string; data?: AddonEmailData; skipBillingCc?: boolean; cc?: string[] };
   try { body = await req.json(); } catch { return json({ ok: true }); }
   const type = String(body?.type || "");
   const email = String(body?.email || "").trim().toLowerCase();
@@ -188,7 +188,8 @@ serve(async (req) => {
   const resend = new Resend(resendKey);
 
   const isReview = Boolean(body.data?.reviewFor);
-  const cc = body.skipBillingCc || isReview ? [] : [BILLING_CC];
+  const extraCc = (body.cc || []).map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes("@"));
+  const cc = isReview ? [] : (extraCc.length > 0 ? extraCc : (body.skipBillingCc ? [] : [BILLING_CC]));
 
   try {
     const result = await resend.emails.send({
