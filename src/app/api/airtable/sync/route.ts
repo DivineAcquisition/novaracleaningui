@@ -27,6 +27,7 @@ import {
   syncClientById,
   syncJobByBookingId,
 } from "@/lib/airtable/sync";
+import { syncAllQcIssues, syncQcIssueById } from "@/lib/airtable/qc";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 
 export const runtime = "nodejs";
@@ -74,6 +75,7 @@ function normalize(body: Payload): { entity: string; id?: string; email?: string
     if (body.table === "customers") return { entity: "client", id: String(rec.id || ""), email: String(rec.email || "") };
     if (body.table === "bookings") return { entity: "job", id: String(rec.id || "") };
     if (body.table === "payouts") return { entity: "payroll_runs" };
+    if (body.table === "qc_issues") return { entity: "qc_issue", id: String(rec.id || "") };
     return { entity: body.table };
   }
   return { entity: String(body.type || ""), id: body.id, email: body.email };
@@ -117,6 +119,16 @@ export async function POST(req: Request): Promise<NextResponse> {
       case "payroll_run": {
         const count = await syncAllPayrollRuns();
         return NextResponse.json({ ok: true, entity: "payroll_runs", synced: count });
+      }
+      case "qc_issue": {
+        if (!id) return NextResponse.json({ error: "Missing issue id" }, { status: 400 });
+        const recordId = await syncQcIssueById(id);
+        if (!recordId) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+        return NextResponse.json({ ok: true, entity, recordId });
+      }
+      case "qc_issues_all": {
+        const count = await syncAllQcIssues();
+        return NextResponse.json({ ok: true, entity: "qc_issues_all", synced: count });
       }
       default:
         return NextResponse.json({ error: `Unsupported entity: ${entity}` }, { status: 400 });

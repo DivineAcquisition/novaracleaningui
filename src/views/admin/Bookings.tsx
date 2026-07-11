@@ -1181,6 +1181,7 @@ function BookingSheet({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <LivePhotoGallery bookingId={booking.id} />
                 {booking.cleaner_id && (
                   <div className="space-y-2">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -1673,6 +1674,62 @@ function BookingSheet({
         />
       )}
     </>
+  );
+}
+
+// ─── Live photo gallery ────────────────────────────────────────────────────
+// Shows the booking's CURRENT before/after photos, straight from the bookings
+// row, the moment they exist. Auto-refreshes while the sheet is open so a
+// cleaner uploading from the field appears here within seconds — no reload.
+function LivePhotoGallery({ bookingId }: { bookingId: string }) {
+  const [before, setBefore] = useState<string[]>([]);
+  const [after, setAfter] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const { data } = await supabase
+        .from("bookings")
+        .select("before_photos, after_photos")
+        .eq("id", bookingId)
+        .maybeSingle();
+      if (!alive || !data) return;
+      setBefore(((data.before_photos as string[]) || []).filter((u) => u?.startsWith("http")));
+      setAfter(((data.after_photos as string[]) || []).filter((u) => u?.startsWith("http")));
+      setLoaded(true);
+    };
+    void load();
+    const timer = setInterval(load, 12_000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [bookingId]);
+
+  if (!loaded || (before.length === 0 && after.length === 0)) return null;
+
+  const strip = (label: string, urls: string[]) =>
+    urls.length > 0 ? (
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+          {label} ({urls.length})
+        </p>
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {urls.map((u, i) => (
+            <a key={i} href={u} target="_blank" rel="noreferrer" className="shrink-0">
+              <img src={u} alt={`${label} ${i + 1}`} className="h-16 w-16 object-cover rounded-md border border-slate-200" loading="lazy" />
+            </a>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
+  return (
+    <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+      <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+        <RiCameraLine className="w-4 h-4" /> Uploaded photos (live)
+      </p>
+      {strip("Before", before)}
+      {strip("After", after)}
+    </div>
   );
 }
 
