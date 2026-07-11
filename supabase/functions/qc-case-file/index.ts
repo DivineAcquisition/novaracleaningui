@@ -37,6 +37,45 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
+async function resolveSecret(supabase: SB, key: string): Promise<string> {
+  try {
+    const { data } = await supabase.from("app_secrets").select("value").eq("key", key).maybeSingle();
+    return ((data?.value as string) || Deno.env.get(key) || "").trim();
+  } catch {
+    return (Deno.env.get(key) || "").trim();
+  }
+}
+
+/**
+ * Resolve a DocuSeal submission's signed-document URL live: use the stored
+ * document_url when present, otherwise fetch it from the DocuSeal API and
+ * backfill the row. Guarantees the case file links the EXECUTED document
+ * (mapped fields + signatures), not a template.
+ */
+async function resolveDocusealDocUrl(admin: SB, sub: { id: string; submission_id: string | null; document_url: string | null }): Promise<string | null> {
+  if (sub.document_url) return sub.document_url;
+  if (!sub.submission_id) return null;
+  try {
+    const token = await resolveSecret(admin, "DOCUSEAL_API_TOKEN");
+    if (!token) return null;
+    const baseUrl = ((await resolveSecret(admin, "DOCUSEAL_BASE_URL")) || "https://api.docuseal.com").replace(/\/+$/, "");
+    const res = await fetch(`${baseUrl}/submissions/${encodeURIComponent(sub.submission_id)}`, {
+      headers: { "X-Auth-Token": token },
+    });
+    if (!res.ok) return null;
+    const s = await res.json();
+    const docs = (s?.documents || s?.submission?.documents || []) as Array<{ url?: string }>;
+    const url = docs[0]?.url || s?.audit_log_url || null;
+    if (url) {
+      await admin.from("docuseal_submissions").update({ document_url: url }).eq("id", sub.id)
+        .then(() => undefined, () => undefined);
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureAdminOrVa(admin: SB, jwt: string): Promise<void> {
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -144,7 +183,7 @@ serve(async (req) => {
         .or(`booking_id.eq.${bookingId}${booking.email ? `,customer_email.ilike.${booking.email}` : ""}`)
         .order("created_at", { ascending: false }).limit(5),
       booking.email
-        ? admin.from("docuseal_submissions").select("id, audience, status, submitter_email, document_url, created_at, completed_at").ilike("submitter_email", booking.email).order("created_at", { ascending: false }).limit(5)
+        ? admin.from("docuseal_submissions").select("id, submission_id, audience, status, submitter_email, document_url, created_at, completed_at").ilike("submitter_email", booking.email).order("created_at", { ascending: false }).limit(5)
         : Promise.resolve({ data: [] }),
       admin.from("booking_addon_charges").select("id, added_addons, removed_addons, amount_cents, status, stripe_payment_intent_id, hosted_invoice_url, note, created_at").eq("booking_id", bookingId).order("created_at", { ascending: true }),
       admin.from("qc_issues").select("*").eq("booking_id", bookingId).order("created_at", { ascending: false }),
@@ -153,6 +192,13 @@ serve(async (req) => {
         ? admin.from("job_assignments").select("status, cleaner_id, cleaners(first_name, last_name, phone)").eq("job_id", booking.job_id)
         : Promise.resolve({ data: [] }),
     ]);
+
+    // ── DocuSeal: resolve executed-document URLs live (API fallback) ─────
+    const docuseal = [] as Array<Record<string, unknown>>;
+    for (const d of docusealRes.data || []) {
+      const document_url = String(d.status) === "completed" ? await resolveDocusealDocUrl(admin, d) : d.document_url;
+      docuseal.push({ ...d, document_url });
+    }
 
     // ── Agreements: mint fresh signed URLs for the private PDFs ──────────
     const agreements = [] as Array<Record<string, unknown>>;
@@ -247,7 +293,7 @@ serve(async (req) => {
           : { email: booking.email, first_name: booking.first_name, last_name: booking.last_name, phone: booking.phone },
         cleaners,
         agreements,
-        docuseal: docusealRes.data || [],
+        docuseal,
         payments: {
           totals: {
             total_cents: booking.final_charge_cents ?? booking.total_estimate_cents,

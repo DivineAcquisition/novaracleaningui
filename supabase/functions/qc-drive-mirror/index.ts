@@ -146,8 +146,70 @@ async function loadPaymentRecord(supabase: SB, bookingId: string): Promise<Payme
   return { rows };
 }
 
-/** Latest signed agreement PDF bytes for the booking (private bucket). */
-async function loadAgreementPdf(supabase: SB, bookingId: string, email: string | null): Promise<{ bytes: Uint8Array; signedAt: string } | null> {
+/**
+ * Resolve a DocuSeal submission's signed-document URL, calling the DocuSeal
+ * API when the webhook never stamped document_url, and backfilling the row so
+ * the next lookup is free. Returns null when unresolvable.
+ */
+async function resolveDocusealDocUrl(supabase: SB, sub: { id: string; submission_id: string | null; document_url: string | null }): Promise<string | null> {
+  if (sub.document_url) return sub.document_url;
+  if (!sub.submission_id) return null;
+  try {
+    const token = await resolveSecret(supabase, "DOCUSEAL_API_TOKEN");
+    if (!token) return null;
+    const baseUrl = ((await resolveSecret(supabase, "DOCUSEAL_BASE_URL")) || "https://api.docuseal.com").replace(/\/+$/, "");
+    const res = await fetch(`${baseUrl}/submissions/${encodeURIComponent(sub.submission_id)}`, {
+      headers: { "X-Auth-Token": token },
+    });
+    if (!res.ok) return null;
+    const s = await res.json();
+    const docs = (s?.documents || s?.submission?.documents || []) as Array<{ url?: string }>;
+    const url = docs[0]?.url || s?.audit_log_url || null;
+    if (url) {
+      await supabase.from("docuseal_submissions").update({ document_url: url }).eq("id", sub.id)
+        .then(() => undefined, () => undefined);
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The REAL executed agreement for the booking, in priority order:
+ *   1. DocuSeal completed submission — the signed document with every mapped
+ *      field (service date, client, address, fees) + signatures. This is the
+ *      legally-operative copy.
+ *   2. service-agreements bucket PDF (browser-generated acceptance) — fallback
+ *      only, for bookings that predate DocuSeal.
+ */
+async function loadAgreementPdf(supabase: SB, bookingId: string, email: string | null): Promise<{ bytes: Uint8Array; signedAt: string; source: "docuseal" | "bucket" } | null> {
+  // 1) DocuSeal executed document.
+  try {
+    const { data: subs } = await supabase
+      .from("docuseal_submissions")
+      .select("id, submission_id, document_url, audience, status, created_at, completed_at")
+      .or(`booking_id.eq.${bookingId}${email ? `,submitter_email.ilike.${email}` : ""}`)
+      .in("audience", ["one_time", "membership", "str_host"])
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(3);
+    for (const sub of subs || []) {
+      const url = await resolveDocusealDocUrl(supabase, sub);
+      if (!url) continue;
+      const pdfRes = await fetch(url);
+      if (!pdfRes.ok) continue;
+      const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+      if (bytes.length === 0) continue;
+      return {
+        bytes,
+        signedAt: String(sub.completed_at || sub.created_at).slice(0, 10),
+        source: "docuseal",
+      };
+    }
+  } catch { /* fall through to bucket */ }
+
+  // 2) Bucket fallback.
   try {
     let { data: agr } = await supabase
       .from("service_agreements")
@@ -171,7 +233,7 @@ async function loadAgreementPdf(supabase: SB, bookingId: string, email: string |
     if (!agr?.pdf_path) return null;
     const { data: blob, error } = await supabase.storage.from("service-agreements").download(agr.pdf_path);
     if (error || !blob) return null;
-    return { bytes: new Uint8Array(await blob.arrayBuffer()), signedAt: String(agr.created_at).slice(0, 10) };
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), signedAt: String(agr.created_at).slice(0, 10), source: "bucket" };
   } catch {
     return null;
   }
@@ -420,13 +482,16 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     throw new Error(`photo mirror incomplete (${failures.length}): ${failures.slice(0, 3).join("; ")}`);
   }
 
-  // Signed service agreement — part of the legal case file. Best-effort copy
+  // Executed service agreement (DocuSeal signed doc with mapped fields first,
+  // bucket copy as fallback) — part of the legal case file. Best-effort copy
   // into the job folder (skipped when already present).
   const jobFiles = await listChildNames(token, jobFolder);
   try {
     const agreement = await loadAgreementPdf(supabase, doc.booking_id, doc.client_email);
     if (agreement) {
-      const agrName = `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Signed Agreement (${agreement.signedAt}).pdf`;
+      const agrName = agreement.source === "docuseal"
+        ? `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Executed Agreement (DocuSeal, ${agreement.signedAt}).pdf`
+        : `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Signed Agreement (${agreement.signedAt}).pdf`;
       if (!jobFiles.has(agrName)) {
         await uploadFile(token, jobFolder, agrName, agreement.bytes, "application/pdf");
       }
