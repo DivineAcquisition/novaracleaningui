@@ -19,6 +19,7 @@ import {
   RiSearchLine,
   RiUserStarLine,
   RiCheckLine,
+  RiEdit2Line,
   RiTimeLine,
   RiCloseCircleLine,
   RiPhoneLine,
@@ -59,6 +60,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
 
@@ -545,7 +547,10 @@ function CleanerSheet({
                     {cleaner.activated_at ? "Activated" : "Not yet activated"}
                   </SheetDescription>
                 </div>
-                <StatusBadge status={cleaner.status} />
+                <div className="flex items-center gap-2">
+                  <EditCleanerProfileDialog cleaner={cleaner} onSaved={onRefresh} />
+                  <StatusBadge status={cleaner.status} />
+                </div>
               </div>
             </SheetHeader>
 
@@ -1704,5 +1709,127 @@ function AddCleanerDialog({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── Edit cleaner personal / profile info ──────────────────────────────────
+// Name, contact, home address, service area, travel radius, skills — routed
+// through admin-update-cleaner (allow-listed fields only; lifecycle/status/
+// pay stay with their dedicated flows). GHL re-syncs automatically on save.
+function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [f, setF] = useState({
+    first_name: cleaner.first_name || "",
+    last_name: cleaner.last_name || "",
+    email: cleaner.email || "",
+    phone: cleaner.phone || "",
+    home_address: cleaner.home_address || "",
+    home_city: cleaner.home_city || "",
+    state: cleaner.state || "",
+    home_zip: cleaner.home_zip || "",
+    service_zip_codes: (cleaner.service_zip_codes || []).join(", "),
+    max_travel_miles: cleaner.max_travel_miles != null ? String(cleaner.max_travel_miles) : "",
+    skillset: (cleaner.skillset || []).join(", "),
+    preferred_work_days: (cleaner.preferred_work_days || []).join(", "),
+  });
+
+  // Re-seed the form each time the dialog opens for a (possibly different) cleaner.
+  useEffect(() => {
+    if (!open) return;
+    setF({
+      first_name: cleaner.first_name || "",
+      last_name: cleaner.last_name || "",
+      email: cleaner.email || "",
+      phone: cleaner.phone || "",
+      home_address: cleaner.home_address || "",
+      home_city: cleaner.home_city || "",
+      state: cleaner.state || "",
+      home_zip: cleaner.home_zip || "",
+      service_zip_codes: (cleaner.service_zip_codes || []).join(", "),
+      max_travel_miles: cleaner.max_travel_miles != null ? String(cleaner.max_travel_miles) : "",
+      skillset: (cleaner.skillset || []).join(", "),
+      preferred_work_days: (cleaner.preferred_work_days || []).join(", "),
+    });
+  }, [open, cleaner]);
+
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setF((prev) => ({ ...prev, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!f.first_name.trim()) { toast.error("First name is required"); return; }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-update-cleaner", {
+        body: { cleanerId: cleaner.id, fields: f },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string })?.error || "Update failed");
+      }
+      toast.success("Profile updated — GHL re-syncing");
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" className="h-8" onClick={() => setOpen(true)}>
+        <RiEdit2Line className="w-3.5 h-3.5 mr-1.5" /> Edit profile
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit cleaner profile</DialogTitle>
+            <DialogDescription>
+              Personal & service details. Status, pay tier, and termination stay in their own flows below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>First name *</Label><Input value={f.first_name} onChange={set("first_name")} className="mt-1" /></div>
+              <div><Label>Last name</Label><Input value={f.last_name} onChange={set("last_name")} className="mt-1" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Email</Label><Input type="email" value={f.email} onChange={set("email")} className="mt-1" /></div>
+              <div><Label>Phone</Label><Input type="tel" value={f.phone} onChange={set("phone")} className="mt-1" /></div>
+            </div>
+            <div><Label>Home address</Label><Input value={f.home_address} onChange={set("home_address")} placeholder="Street address" className="mt-1" /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <div><Label>City</Label><Input value={f.home_city} onChange={set("home_city")} className="mt-1" /></div>
+              <div><Label>State</Label><Input value={f.state} onChange={set("state")} placeholder="MD" className="mt-1" /></div>
+              <div><Label>ZIP</Label><Input value={f.home_zip} onChange={set("home_zip")} className="mt-1" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Service ZIP codes</Label>
+                <Input value={f.service_zip_codes} onChange={set("service_zip_codes")} placeholder="21201, 21202…" className="mt-1" />
+              </div>
+              <div>
+                <Label>Max travel (miles)</Label>
+                <Input type="number" min={1} value={f.max_travel_miles} onChange={set("max_travel_miles")} className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <Label>Skills</Label>
+              <Input value={f.skillset} onChange={set("skillset")} placeholder="deep clean, move-out, commercial…" className="mt-1" />
+            </div>
+            <div>
+              <Label>Preferred work days</Label>
+              <Input value={f.preferred_work_days} onChange={set("preferred_work_days")} placeholder="Monday, Tuesday…" className="mt-1" />
+            </div>
+            <Button className="w-full" onClick={() => void save()} disabled={saving}>
+              {saving ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-2" />}
+              Save profile
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

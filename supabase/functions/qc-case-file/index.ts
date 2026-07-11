@@ -37,6 +37,18 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
+// Policies the client agreed to at booking — surfaced on every case file so
+// VAs cite the exact commitments when handling disputes.
+const POLICY_HIGHLIGHTS: string[] = [
+  "Agreed at booking: Terms of Service, Disclaimer, Refund Policy, One-Time Service Agreement.",
+  "Deposit + post-service balance charge authorized at booking.",
+  "Cancel <24h before appointment: $50 short-notice fee (full refund otherwise).",
+  "Reschedule <24h before appointment: $25 short-notice fee.",
+  "Concerns must be reported within 24 hours; remedy is a free re-clean within 48 hours — not a refund for subjective dissatisfaction.",
+  "Memberships: recurring billing authorized; 14 days written notice to cancel.",
+  "Before/after photos are captured on every job as completion evidence.",
+];
+
 async function resolveSecret(supabase: SB, key: string): Promise<string> {
   try {
     const { data } = await supabase.from("app_secrets").select("value").eq("key", key).maybeSingle();
@@ -335,6 +347,7 @@ serve(async (req) => {
         issues,
         issue_events: issueEvents,
         timeline: eventsRes.data || [],
+        policy_highlights: POLICY_HIGHLIGHTS,
       },
     });
   } catch (e) {

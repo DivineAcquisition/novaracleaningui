@@ -179,6 +179,24 @@ export async function uploadFile(
   return file.id as string;
 }
 
+/** Overwrite an existing Drive file's content in place (keeps the file id). */
+export async function updateFile(
+  token: string,
+  fileId: string,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<void> {
+  const res = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media&supportsAllDrives=true`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": mimeType },
+      body: bytes as unknown as BodyInit,
+    },
+  );
+  if (!res.ok) throw new Error(`drive update failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+}
+
 /**
  * Make a file/folder readable by anyone with the link (so the Drive URL on
  * the Airtable job record / QC console opens without account juggling).

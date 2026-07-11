@@ -965,6 +965,7 @@ interface CaseFile {
   issues: IssueRow[];
   issue_events: Array<Record<string, any>>;
   timeline: Array<{ event_type: string; occurred_at: string; source: string; summary: string }>;
+  policy_highlights?: string[];
 }
 
 const cents = (c: number | null | undefined) => (c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—");
@@ -1170,6 +1171,23 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 </div>
               ))}
             </section>
+
+            {/* Policies the client agreed to */}
+            {(cf.policy_highlights || []).length > 0 && (
+              <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+                <p className="text-sm font-bold text-amber-900 mb-2">Policies the client agreed to</p>
+                <ul className="space-y-1">
+                  {cf.policy_highlights!.map((p, i) => (
+                    <li key={i} className="text-xs text-amber-900/80 flex gap-1.5">
+                      <span className="shrink-0">•</span> {p}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-amber-700/70 mt-2">
+                  These commitments are baked into every dispute packet PDF alongside the signed agreement.
+                </p>
+              </section>
+            )}
 
             {/* Timeline */}
             <section className="rounded-xl border border-slate-200 p-4">

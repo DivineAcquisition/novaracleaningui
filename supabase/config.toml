@@ -409,3 +409,7 @@ verify_jwt = false
 # Recurring partner-job generator (pg_cron, service-role bearer).
 [functions.partner-jobs-generate]
 verify_jwt = false
+
+# Admin/VA cleaner profile editor — JWT enforced inside.
+[functions.admin-update-cleaner]
+verify_jwt = false

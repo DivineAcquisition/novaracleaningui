@@ -33,6 +33,7 @@ import {
   getDriveToken,
   listChildNames,
   shareReadableByLink,
+  updateFile,
   uploadFile,
 } from "../_shared/google-drive.ts";
 
@@ -54,7 +55,22 @@ type SB = any;
 
 const BATCH_SIZE = 4;
 const MAX_ATTEMPTS = 8;
-const MAX_PDF_PHOTOS = 12;
+// The dispute packet embeds EVERY before/after photo. A soft byte cap guards
+// edge-function memory on pathological sets — photos beyond it are still in
+// the Drive folders, and the packet notes the truncation.
+const MAX_PDF_PHOTO_BYTES = 100 * 1024 * 1024;
+
+// Policies the client agreed to at booking (checkout / pay page / phone
+// confirmation) — cited in every dispute packet so the packet stands alone.
+const POLICY_HIGHLIGHTS: string[] = [
+  "Client agreed at booking to the Terms of Service, Disclaimer, Refund Policy, and the One-Time Service Agreement (checkout consent / signed acceptance).",
+  "Deposit + post-service balance charge explicitly authorized by the client at booking.",
+  "Cancellations within 24 hours of the appointment incur a $50 short-notice fee; earlier cancellations receive a full refund.",
+  "Reschedules within 24 hours of the appointment incur a $25 short-notice fee.",
+  "Satisfaction remedy: concerns must be reported within 24 hours of service; remedy is a complimentary re-clean (within 48 hours), not a refund for subjective dissatisfaction.",
+  "Memberships: recurring billing authorized; cancellation requires 14 days written notice before the next billing cycle.",
+  "Before/after photos are captured on every job as service documentation and completion evidence.",
+];
 // Edge functions get ~150s of wall clock. Budget the run and resume next
 // pass — deterministic filenames make every upload idempotent, so a job
 // with 100+ photos converges across several cron ticks instead of dying.
@@ -304,6 +320,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   cleanerNames: string;
   agreementRef: string | null;
   payment?: PaymentRecord;
+  agreementBytes?: Uint8Array | null;
   photos: Array<{ label: string; bytes: Uint8Array }>;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -369,8 +386,19 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   y -= 6;
   line(`Generated ${new Date().toUTCString()} — Novara QC Documentation Hub`, { size: 8, color: gray });
 
-  // Photo pages — 2 per page, labelled, preserving aspect ratio.
-  const photos = extras.photos.slice(0, MAX_PDF_PHOTOS);
+  // Policies the client agreed to — cited so the packet stands alone in a
+  // dispute (card processor / legal) without hunting the website.
+  y -= 8;
+  line("Policies the Client Agreed To", { size: 12, font: bold, color: violet, gap: 8 });
+  for (const clause of POLICY_HIGHLIGHTS) {
+    const chunks = clause.match(/.{1,100}(\s|$)/g) || [clause];
+    chunks.forEach((chunk, idx) => {
+      line(`${idx === 0 ? "• " : "   "}${chunk.trim()}`, { size: 9, color: gray, gap: 3 });
+    });
+  }
+
+  // Photo pages — 2 per page, labelled, preserving aspect ratio. ALL photos.
+  const photos = extras.photos;
   for (let i = 0; i < photos.length; i += 2) {
     const photoPage = pdf.addPage([PAGE_W, PAGE_H]);
     for (let slot = 0; slot < 2; slot++) {
@@ -391,6 +419,23 @@ async function buildSummaryPdf(doc: DocRow, extras: {
           x: MARGIN, y: slot === 0 ? PAGE_H - MARGIN - 12 : PAGE_H / 2 - 22, size: 9, font, color: gray,
         });
       }
+    }
+  }
+
+  // Append the executed service agreement so the packet is one self-contained
+  // file: summary + policies + ALL photos + the signed agreement.
+  if (extras.agreementBytes) {
+    try {
+      const agrDoc = await PDFDocument.load(extras.agreementBytes as unknown as ArrayBuffer, { ignoreEncryption: true });
+      const divider = pdf.addPage([PAGE_W, PAGE_H]);
+      divider.drawText("SIGNED SERVICE AGREEMENT", { x: MARGIN, y: PAGE_H / 2 + 10, size: 18, font: bold, color: violet });
+      divider.drawText("Executed copy — the following pages are the agreement the client signed.", {
+        x: MARGIN, y: PAGE_H / 2 - 14, size: 10, font, color: gray,
+      });
+      const pages = await pdf.copyPages(agrDoc, agrDoc.getPageIndices());
+      for (const pg of pages) pdf.addPage(pg);
+    } catch (e) {
+      log("agreement merge into packet failed (kept as separate file)", { error: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -443,6 +488,7 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   const existingBefore = await listChildNames(token, beforeFolder);
   const existingAfter = await listChildNames(token, afterFolder);
   const photoBytes: Array<{ label: string; bytes: Uint8Array }> = [];
+  let pdfBytesTotal = 0;
   let uploaded = 0;
   const failures: string[] = [];
 
@@ -451,7 +497,7 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
       const url = urls[i];
       const name = `${prefix}-${String(i + 1).padStart(2, "0")}.${extFromUrl(url)}`;
       const needsUpload = !existing.has(name);
-      const needsPdfCopy = photoBytes.length < MAX_PDF_PHOTOS;
+      const needsPdfCopy = pdfBytesTotal < MAX_PDF_PHOTO_BYTES;
       if (!needsUpload && !needsPdfCopy) continue;
       if (needsUpload && (Date.now() > budget.deadline || budget.uploadsLeft <= 0)) {
         throw new BudgetExhausted();
@@ -463,6 +509,7 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
         if (bytes.length === 0) { failures.push(`${name}: empty`); continue; }
         if (needsPdfCopy) {
           photoBytes.push({ label: `${prefix.toUpperCase()} ${i + 1} — ${doc.booking_ref || ""}`, bytes });
+          pdfBytesTotal += bytes.length;
         }
         if (needsUpload) {
           const mime = name.endsWith(".png") ? "image/png" : "image/jpeg";
@@ -485,11 +532,11 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   }
 
   // Executed service agreement (DocuSeal signed doc with mapped fields first,
-  // bucket copy as fallback) — part of the legal case file. Best-effort copy
-  // into the job folder (skipped when already present).
+  // bucket copy as fallback) — uploaded standalone AND merged into the packet.
   const jobFiles = await listChildNames(token, jobFolder);
+  let agreement: { bytes: Uint8Array; signedAt: string; source: "docuseal" | "bucket" } | null = null;
   try {
-    const agreement = doc.booking_id ? await loadAgreementPdf(supabase, doc.booking_id, doc.client_email) : null;
+    agreement = doc.booking_id ? await loadAgreementPdf(supabase, doc.booking_id, doc.client_email) : null;
     if (agreement) {
       const agrName = agreement.source === "docuseal"
         ? `${safeName(docRef)} — Executed Agreement (DocuSeal, ${agreement.signedAt}).pdf`
@@ -502,12 +549,24 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     log("agreement copy failed (non-blocking)", { docId: doc.id, error: e instanceof Error ? e.message : String(e) });
   }
 
-  // Completion summary PDF with the live payment record baked in.
+  // Dispute packet: summary + policy highlights + ALL photos + the signed
+  // agreement, regenerated on every mirror so it always reflects the record.
   const payment = doc.booking_id ? await loadPaymentRecord(supabase, doc.booking_id) : { rows: [] };
-  const pdfBytes = await buildSummaryPdf(doc, { ...extras, payment, photos: photoBytes });
+  const pdfBytes = await buildSummaryPdf(doc, {
+    ...extras,
+    payment,
+    agreementBytes: agreement?.bytes || null,
+    photos: photoBytes,
+  });
   const pdfName = `${safeName(docRef)} — Completion Summary.pdf`;
   let pdfId = doc.drive_pdf_id;
-  if (!pdfId || !jobFiles.has(pdfName)) {
+  if (pdfId) {
+    try {
+      await updateFile(token, pdfId, pdfBytes, "application/pdf");
+    } catch {
+      pdfId = await uploadFile(token, jobFolder, pdfName, pdfBytes, "application/pdf");
+    }
+  } else {
     pdfId = await uploadFile(token, jobFolder, pdfName, pdfBytes, "application/pdf");
   }
 
