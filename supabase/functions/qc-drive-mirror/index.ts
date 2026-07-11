@@ -60,23 +60,106 @@ const MAX_ATTEMPTS = 8;
 // the Drive folders, and the packet notes the truncation.
 const MAX_PDF_PHOTO_BYTES = 100 * 1024 * 1024;
 
-// Policies the client agreed to at booking (checkout / pay page / phone
-// confirmation) — cited in every dispute packet so the packet stands alone.
-const POLICY_HIGHLIGHTS: string[] = [
-  "Client agreed at booking to the Terms of Service, Disclaimer, Refund Policy, and the One-Time Service Agreement (checkout consent / signed acceptance).",
-  "Deposit + post-service balance charge explicitly authorized by the client at booking.",
-  "Cancellations within 24 hours of the appointment incur a $50 short-notice fee; earlier cancellations receive a full refund.",
-  "Reschedules within 24 hours of the appointment incur a $25 short-notice fee.",
-  "Satisfaction remedy: concerns must be reported within 24 hours of service; remedy is a complimentary re-clean (within 48 hours), not a refund for subjective dissatisfaction.",
-  "Memberships: recurring billing authorized; cancellation requires 14 days written notice before the next billing cycle.",
-  "Before/after photos are captured on every job as service documentation and completion evidence.",
+// Policies the client agreed to at booking — cited BY SECTION against the
+// live published policies so every claim in the packet maps to the exact
+// clause. URLs included so a processor/adjuster can verify the source.
+const POLICY_URLS: Array<{ label: string; url: string }> = [
+  { label: "Terms of Service", url: "https://novaracleaning.com/terms" },
+  { label: "Refund Policy", url: "https://novaracleaning.com/refund-policy" },
+  { label: "Cancellation Policy", url: "https://novaracleaning.com/cancellation-policy" },
+  { label: "Disclaimer", url: "https://novaracleaning.com/disclaimer" },
 ];
+
+interface PolicyRef { claim: string; cite: string }
+const POLICY_REFS: PolicyRef[] = [
+  {
+    claim: "Acceptance is binding on booking: clicking agree, submitting a booking, providing payment, or granting property access constitutes acceptance of all policies.",
+    cite: "Terms of Service §1.2, §1.4",
+  },
+  {
+    claim: "All sales are final once service has been rendered; completed-service payments are non-refundable outside the narrow stated exceptions.",
+    cite: "Terms of Service §6.3 · Refund Policy §1.1",
+  },
+  {
+    claim: "The primary and default remedy for any legitimate quality concern is a complimentary re-clean — not a refund.",
+    cite: "Terms of Service §7.1, §7.3 · Refund Policy §1.2, §2.1",
+  },
+  {
+    claim: "Concerns must be reported IN WRITING within 24 hours of completion, with specific itemized areas and timestamped photos; the property must be undisturbed.",
+    cite: "Terms of Service §7.1 · Refund Policy §3.1–3.4",
+  },
+  {
+    claim: "Subjective dissatisfaction, buyer's remorse, and services performed to the checklist standard are never refundable.",
+    cite: "Terms of Service §6.4 · Refund Policy §5.1–5.2, §6 · Disclaimer §1.3",
+  },
+  {
+    claim: "Tasks not included in the purchased package (e.g. inside fridge/oven, add-ons never booked) are not refundable events.",
+    cite: "Refund Policy §5.7",
+  },
+  {
+    claim: "Cancellations require 24-hour notice; late cancellations incur the published fee, and same-day cancellations / no-shows (including access failures caused by the customer) forfeit 100% of the service amount.",
+    cite: "Cancellation Policy §1.1, §2.1–2.3, §10 · Terms of Service §6.1",
+  },
+  {
+    claim: "Before initiating any chargeback the customer is contractually required to complete written dispute resolution and allow 72 hours for investigation; unauthorized chargebacks constitute material breach and fraud, with a $150 administrative fee plus full liability.",
+    cite: "Terms of Service §10.1–10.4 · Refund Policy §8.2–8.5",
+  },
+  {
+    claim: "The customer expressly consented to comprehensive service documentation — timestamped before/after photographs, GPS/service records, checklists, and communication logs — retained a minimum of four (4) years and usable in dispute resolution and chargeback defense.",
+    cite: "Terms of Service §13.1–13.4 · Refund Policy §3.3, §9.2 · Disclaimer §8.4",
+  },
+  {
+    claim: "Liability is capped at the amount actually paid for the service; damage claims must be reported within 24 hours.",
+    cite: "Terms of Service §11.2–11.3",
+  },
+  {
+    claim: "Memberships: recurring billing is authorized and cancellation requires 14 days' written notice before the next billing cycle.",
+    cite: "Terms of Service §6.2 · Refund Policy §10.1",
+  },
+  {
+    claim: "Disputes are subject to binding arbitration with a class-action waiver, governed by Maryland law.",
+    cite: "Terms of Service §14.1, §14.5, §14.7",
+  },
+];
+
+interface IssueForPacket {
+  issue_number: number;
+  issue_type: string;
+  severity: string;
+  status: string;
+  title: string;
+  description: string | null;
+  reported_via: string;
+  reported_by_name: string | null;
+  resolution_note: string | null;
+  resolved_by_name: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+/** Complaints / QC issues raised on this job — disclosed in the packet so it
+ *  presents the complete record, including how each was resolved. */
+async function loadIssuesForPacket(supabase: SB, bookingId: string | null): Promise<IssueForPacket[]> {
+  if (!bookingId) return [];
+  try {
+    const { data } = await supabase
+      .from("qc_issues")
+      .select("issue_number, issue_type, severity, status, title, description, reported_via, reported_by_name, resolution_note, resolved_by_name, resolved_at, created_at")
+      .eq("booking_id", bookingId)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    return (data || []) as IssueForPacket[];
+  } catch {
+    return [];
+  }
+}
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
 // Edge functions get ~150s of wall clock. Budget the run and resume next
-// pass — deterministic filenames make every upload idempotent, so a job
-// with 100+ photos converges across several cron ticks instead of dying.
+// pass — deterministic filenames make every upload idempotent.
 const RUN_TIME_BUDGET_MS = 95_000;
 const RUN_UPLOAD_BUDGET = 70;
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 async function resolveSecret(supabase: SB, key: string): Promise<string> {
   try {
@@ -258,7 +341,7 @@ async function loadAgreementPdf(supabase: SB, bookingId: string, email: string |
 // ─── Snapshot enrichment (checklist + cleaners) ──────────────────────────────
 
 async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
-  checklist: { name?: string; progress_pct?: number; completed_items?: number; total_items?: number; completed_at?: string | null } | null;
+  checklist: { name?: string; progress_pct?: number; completed_items?: number; total_items?: number; completed_at?: string | null; items?: unknown } | null;
   cleanerNames: string;
   agreementRef: string | null;
 }> {
@@ -321,6 +404,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   agreementRef: string | null;
   payment?: PaymentRecord;
   agreementBytes?: Uint8Array | null;
+  issues?: IssueForPacket[];
   photos: Array<{ label: string; bytes: Uint8Array }>;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -386,15 +470,46 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   y -= 6;
   line(`Generated ${new Date().toUTCString()} — Novara QC Documentation Hub`, { size: 8, color: gray });
 
-  // Policies the client agreed to — cited so the packet stands alone in a
-  // dispute (card processor / legal) without hunting the website.
+  // Policies the client agreed to — cited BY SECTION with source links so
+  // every supported claim maps to the exact clause of the published policy.
   y -= 8;
-  line("Policies the Client Agreed To", { size: 12, font: bold, color: violet, gap: 8 });
-  for (const clause of POLICY_HIGHLIGHTS) {
-    const chunks = clause.match(/.{1,100}(\s|$)/g) || [clause];
+  line("Policies the Client Agreed To (with section citations)", { size: 12, font: bold, color: violet, gap: 8 });
+  for (const ref of POLICY_REFS) {
+    const chunks = ref.claim.match(/.{1,98}(\s|$)/g) || [ref.claim];
     chunks.forEach((chunk, idx) => {
-      line(`${idx === 0 ? "• " : "   "}${chunk.trim()}`, { size: 9, color: gray, gap: 3 });
+      line(`${idx === 0 ? "• " : "   "}${chunk.trim()}`, { size: 9, color: gray, gap: 2.5 });
     });
+    line(`   Source: ${ref.cite}`, { size: 8, font: bold, color: violet, gap: 6 });
+  }
+  y -= 4;
+  line("Full policy texts (agreed at booking):", { size: 10, font: bold, color: dark, gap: 5 });
+  for (const p of POLICY_URLS) {
+    line(`   ${p.label}: ${p.url}`, { size: 9, color: gray, gap: 3 });
+  }
+  line("   One-Time Service Agreement: executed copy attached at the end of this packet.", { size: 9, color: gray, gap: 3 });
+
+  // Complaint / QC issue record — full disclosure of anything raised on this
+  // job and how it was handled (with the 24h reporting rule as context).
+  const packIssues = extras.issues || [];
+  y -= 8;
+  line("Complaint & QC Issue Record for This Job", { size: 12, font: bold, color: violet, gap: 8 });
+  if (packIssues.length === 0) {
+    line("No complaints or quality issues were reported on this job.", { size: 10, color: gray, gap: 4 });
+    line("(Concerns must be reported in writing within 24 hours of completion — Terms of Service §7.1.)", { size: 8, color: gray, gap: 4 });
+  } else {
+    for (const iss of packIssues) {
+      line(`Issue #${iss.issue_number} — ${iss.issue_type.replace(/_/g, " ")} · severity: ${iss.severity} · status: ${iss.status.replace(/_/g, " ")}`, { size: 10, font: bold, color: dark, gap: 3 });
+      line(`   Reported ${new Date(iss.created_at).toUTCString()} via ${iss.reported_via.replace(/_/g, " ")}${iss.reported_by_name ? ` by ${iss.reported_by_name}` : ""}`, { size: 8.5, color: gray, gap: 3 });
+      const titleChunks = `${iss.title}${iss.description ? ` — ${iss.description}` : ""}`.match(/.{1,98}(\s|$)/g) || [];
+      for (const c of titleChunks.slice(0, 6)) line(`   ${c.trim()}`, { size: 9, color: gray, gap: 2.5 });
+      if (iss.resolution_note) {
+        line(`   RESOLVED${iss.resolved_at ? ` ${new Date(iss.resolved_at).toUTCString()}` : ""}${iss.resolved_by_name ? ` by ${iss.resolved_by_name}` : ""}:`, { size: 8.5, font: bold, color: dark, gap: 2.5 });
+        for (const c of (iss.resolution_note.match(/.{1,98}(\s|$)/g) || []).slice(0, 4)) {
+          line(`   ${c.trim()}`, { size: 9, color: gray, gap: 2.5 });
+        }
+      }
+      y -= 4;
+    }
   }
 
   // Photo pages — 2 per page, labelled, preserving aspect ratio. ALL photos.
@@ -552,10 +667,12 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   // Dispute packet: summary + policy highlights + ALL photos + the signed
   // agreement, regenerated on every mirror so it always reflects the record.
   const payment = doc.booking_id ? await loadPaymentRecord(supabase, doc.booking_id) : { rows: [] };
+  const packetIssues = await loadIssuesForPacket(supabase, doc.booking_id);
   const pdfBytes = await buildSummaryPdf(doc, {
     ...extras,
     payment,
     agreementBytes: agreement?.bytes || null,
+    issues: packetIssues,
     photos: photoBytes,
   });
   const pdfName = `${safeName(docRef)} — Completion Summary.pdf`;
