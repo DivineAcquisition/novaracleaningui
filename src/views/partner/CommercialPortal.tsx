@@ -64,6 +64,14 @@ interface BookingRow {
   is_recurring: boolean | null;
   recurring_frequency: string | null;
 }
+interface SiteRow {
+  id: string;
+  nickname: string;
+  address: string | null;
+  city: string | null;
+  facility_type: string | null;
+  sqft: number | null;
+}
 interface DocRow { label: string; url: string | null; date: string }
 
 const money = (c: number | null | undefined) => (c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—");
@@ -77,6 +85,7 @@ export default function CommercialPortal() {
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<Account | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [sites, setSites] = useState<SiteRow[]>([]);
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestText, setRequestText] = useState("");
@@ -89,10 +98,11 @@ export default function CommercialPortal() {
         body: { action: "overview" },
       });
       if (error) throw error;
-      const d = data as { ok?: boolean; error?: string; account?: Account; bookings?: BookingRow[]; documents?: DocRow[] };
+      const d = data as { ok?: boolean; error?: string; account?: Account; bookings?: BookingRow[]; sites?: SiteRow[]; documents?: DocRow[] };
       if (!d?.ok) throw new Error(d?.error || "Couldn't load your account");
       setAccount(d.account || null);
       setBookings(d.bookings || []);
+      setSites(d.sites || []);
       setDocs(d.documents || []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't load your account");
@@ -199,6 +209,26 @@ export default function CommercialPortal() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* ─── Sites ────────────────────────────────────────────────────── */}
+        {sites.length > 0 && (
+          <section>
+            <h2 className="font-bold text-slate-900 flex items-center gap-1.5 mb-2">
+              <RiBuilding2Line className="w-4 h-4 text-violet-600" /> Your sites
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {sites.map((st) => (
+                <Card key={st.id}><CardContent className="p-4">
+                  <p className="font-semibold text-slate-900">{st.nickname}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {st.facility_type || "—"}{st.sqft ? ` · ${st.sqft.toLocaleString()} sqft` : ""}
+                    {st.address ? ` · ${st.address}${st.city ? `, ${st.city}` : ""}` : ""}
+                  </p>
+                </CardContent></Card>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ─── Upcoming visits ──────────────────────────────────────────── */}

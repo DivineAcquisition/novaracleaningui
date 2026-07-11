@@ -99,6 +99,13 @@ serve(async (req) => {
         .order("service_date", { ascending: false })
         .limit(100);
 
+      const { data: sites } = await admin
+        .from("business_sites")
+        .select("id, nickname, address, city, facility_type, sqft")
+        .eq("business_account_id", account.id)
+        .eq("active", true)
+        .order("created_at", { ascending: true });
+
       // Documents: signed agreements by email (bucket + DocuSeal).
       const { data: agreements } = await admin
         .from("service_agreements")
@@ -145,6 +152,7 @@ serve(async (req) => {
           setup_complete: setupComplete,
         },
         bookings: bookings || [],
+        sites: sites || [],
         documents: docs,
       });
     }

@@ -32,7 +32,6 @@ import {
   RiCalendarCheckLine,
   RiTeamLine,
   RiRocket2Line,
-  RiBuilding2Line,
   RiHotelLine,
   RiRepeatLine,
   RiGroup2Line,
@@ -90,16 +89,10 @@ const NAV_ITEMS: NavItem[] = [
     description: "VA booking submission",
   },
   {
-    title: "Commercial",
-    url: "/admin/commercial",
-    icon: RiBuilding2Line,
-    description: "Office · commercial · partnerships",
-  },
-  {
     title: "Partnerships",
     url: "/admin/partner",
     icon: RiHotelLine,
-    description: "Commercial · Office · STR — pipeline, accounts, revenue",
+    description: "Commercial · Office · STR — one hub: pipeline, accounts, booking, revenue",
   },
   {
     title: "Customers",

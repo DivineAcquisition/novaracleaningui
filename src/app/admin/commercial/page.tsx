@@ -1,19 +1,9 @@
-import { Suspense } from "react";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import CommercialBooking from "@/views/admin/CommercialBooking";
+import { redirect } from "next/navigation";
 
-// Commercial / Office / Partnership booking workspace.
+// The commercial booking workspace merged into the Partnerships Hub
+// (Book Service tab). Old bookmarks land in the right place.
 export default function Page() {
-  return (
-    <ProtectedRoute requiredRole="admin">
-      <AdminLayout>
-        <Suspense>
-          <CommercialBooking />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+  redirect("/admin/partner?tab=book");
 }
 
 export const dynamic = "force-dynamic";

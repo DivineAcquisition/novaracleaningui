@@ -14,8 +14,9 @@
 // keeps ownership of rates/lifecycle).
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiBuilding2Line } from "@remixicon/react";
+import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiBuilding2Line, RiCalendarCheckLine } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,10 +24,15 @@ import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
 import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
 import CommercialAccountsAdmin from "@/views/admin/CommercialAccountsAdmin";
+import CommercialBooking from "@/views/admin/CommercialBooking";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
+const VALID_TABS = ["overview", "commercial", "book", "accounts", "turnovers"];
+
 export default function Partnerships() {
-  const [tab, setTab] = useState("overview");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams?.get("tab") || "overview";
+  const [tab, setTab] = useState(VALID_TABS.includes(initialTab) ? initialTab : "overview");
   const [syncing, setSyncing] = useState(false);
   const [syncingContractors, setSyncingContractors] = useState(false);
 
@@ -94,6 +100,9 @@ export default function Partnerships() {
           <TabsTrigger value="commercial" className="gap-1.5">
             <RiBuilding2Line className="w-4 h-4" /> Commercial &amp; Office
           </TabsTrigger>
+          <TabsTrigger value="book" className="gap-1.5">
+            <RiCalendarCheckLine className="w-4 h-4" /> Book Service
+          </TabsTrigger>
           <TabsTrigger value="accounts" className="gap-1.5">
             <RiHotelLine className="w-4 h-4" /> STR Hosts
           </TabsTrigger>
@@ -108,6 +117,9 @@ export default function Partnerships() {
         </TabsContent>
         <TabsContent value="commercial" className="mt-4">
           {tab === "commercial" && <CommercialAccountsAdmin />}
+        </TabsContent>
+        <TabsContent value="book" className="mt-4">
+          {tab === "book" && <CommercialBooking />}
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
           {tab === "accounts" && <PartnerAccounts />}

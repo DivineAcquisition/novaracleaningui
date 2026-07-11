@@ -193,6 +193,36 @@ export default function CommercialAccountsAdmin() {
   );
 }
 
+// ─── Server action helper (admin JWT attached) ───────────────────────────────
+
+async function accountAction(body: Record<string, unknown>): Promise<Record<string, any>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const res = await fetch("/api/commercial-accounts/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok || out?.ok === false) throw new Error(out?.error || `Request failed (${res.status})`);
+  return out;
+}
+
+interface SiteRow {
+  id: string;
+  nickname: string;
+  address: string | null;
+  city: string | null;
+  facility_type: string | null;
+  sqft: number | null;
+  restrooms: number | null;
+  floors: number | null;
+  scope_notes: string | null;
+  access_method: string | null;
+  access_instructions: string | null;
+  active: boolean;
+}
+
 // ─── Account detail / edit sheet ─────────────────────────────────────────────
 
 function AccountSheet({ account, onClose, reload }: { account: AccountRow; onClose: () => void; reload: () => Promise<void> }) {
@@ -205,12 +235,63 @@ function AccountSheet({ account, onClose, reload }: { account: AccountRow; onClo
   const [stripeId, setStripeId] = useState(account.stripe_customer_id || "");
   const [autopay, setAutopay] = useState(account.autopay_enabled);
   const [coiSent, setCoiSent] = useState(Boolean(account.coi_sent_at));
+  const [sites, setSites] = useState<SiteRow[]>([]);
+  const [siteEdit, setSiteEdit] = useState<Partial<SiteRow> | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const canGoActive = agreementSigned && stripeId.trim() !== "";
+  useEffect(() => {
+    void (async () => {
+      const { data } = await (supabase.from as any)("business_sites")
+        .select("*")
+        .eq("business_account_id", account.id)
+        .order("created_at", { ascending: true });
+      setSites((data || []) as SiteRow[]);
+    })();
+  }, [account.id]);
+
+  const runAction = async (action: string, success: string, extra: Record<string, unknown> = {}) => {
+    setBusy(action);
+    try {
+      const out = await accountAction({ action, accountId: account.id, ...extra });
+      toast.success(success);
+      if (action === "send_payment_link" && out.setupUrl) {
+        await navigator.clipboard?.writeText(String(out.setupUrl)).catch(() => undefined);
+        toast.info(out.emailed ? "Link also emailed to the contact." : "Link copied — email delivery unavailable, send it manually.");
+        setStripeId(String(out.customerId || stripeId));
+      }
+      if (action === "send_agreement") setAgreementSigned(true);
+      await reload();
+      return out;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Action failed");
+      return null;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveSite = async () => {
+    if (!siteEdit?.nickname?.trim()) { toast.error("Site nickname required"); return; }
+    setBusy("save_site");
+    try {
+      await accountAction({ action: "save_site", accountId: account.id, site: siteEdit });
+      toast.success("Site saved + synced to Airtable");
+      const { data } = await (supabase.from as any)("business_sites")
+        .select("*").eq("business_account_id", account.id).order("created_at", { ascending: true });
+      setSites((data || []) as SiteRow[]);
+      setSiteEdit(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Site save failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const canGoActive = agreementSigned && stripeId.trim() !== "" && sites.some((st) => st.active);
 
   const save = async () => {
     if (status === "active" && !canGoActive) {
-      toast.error("Can't set Active — a signed agreement AND a payment method (Stripe customer) are required first.");
+      toast.error("Can't set Active — signed agreement + payment method + at least one site are required first.");
       return;
     }
     setSaving(true);
@@ -286,6 +367,77 @@ function AccountSheet({ account, onClose, reload }: { account: AccountRow; onClo
             <Input value={frequency} onChange={(e) => setFrequency(e.target.value)} placeholder="e.g. weekly, 3x/week" className="mt-1" />
           </div>
 
+          {/* Onboarding actions */}
+          <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+            <p className="text-xs font-bold text-slate-800">Onboarding actions</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={busy !== null}
+                onClick={() => void runAction("send_agreement", "Agreement sent — completed copy emailed to the contact.")}>
+                {busy === "send_agreement" ? <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
+                Send service agreement
+              </Button>
+              <Button size="sm" variant="outline" disabled={busy !== null}
+                onClick={() => void runAction("send_payment_link", "Payment setup link created.")}>
+                {busy === "send_payment_link" ? <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
+                Send payment setup link
+              </Button>
+              <Button size="sm" variant="outline" disabled={busy !== null}
+                onClick={() => void runAction("sync_airtable", "Account + sites re-synced to Airtable.")}>
+                {busy === "sync_airtable" ? <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
+                Sync to Airtable
+              </Button>
+            </div>
+          </div>
+
+          {/* Sites */}
+          <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-800">Sites ({sites.filter((st) => st.active).length})</p>
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-violet-700"
+                onClick={() => setSiteEdit({ nickname: "", facility_type: account.facility_type || "" })}>
+                + Add site
+              </Button>
+            </div>
+            {sites.length === 0 && !siteEdit && (
+              <p className="text-xs text-amber-600">No sites yet — at least one active site is required to go Active.</p>
+            )}
+            {sites.map((st) => (
+              <button key={st.id} onClick={() => setSiteEdit(st)}
+                className={cn("w-full text-left rounded-md border px-2.5 py-1.5 text-xs hover:border-violet-300", st.active ? "border-slate-200" : "border-slate-100 opacity-50")}>
+                <span className="font-semibold text-slate-800">{st.nickname}</span>
+                <span className="text-slate-500"> · {st.facility_type || "—"}{st.sqft ? ` · ${st.sqft.toLocaleString()} sqft` : ""}{st.address ? ` · ${st.address}` : ""}</span>
+              </button>
+            ))}
+            {siteEdit && (
+              <div className="rounded-md bg-slate-50 border border-slate-200 p-2.5 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input placeholder="Nickname *" value={siteEdit.nickname || ""} onChange={(e) => setSiteEdit({ ...siteEdit, nickname: e.target.value })} className="h-8 text-xs" />
+                  <Input placeholder="Facility type" value={siteEdit.facility_type || ""} onChange={(e) => setSiteEdit({ ...siteEdit, facility_type: e.target.value })} className="h-8 text-xs" />
+                </div>
+                <Input placeholder="Street address" value={siteEdit.address || ""} onChange={(e) => setSiteEdit({ ...siteEdit, address: e.target.value })} className="h-8 text-xs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <Input placeholder="City" value={siteEdit.city || ""} onChange={(e) => setSiteEdit({ ...siteEdit, city: e.target.value })} className="h-8 text-xs" />
+                  <Input placeholder="Sqft" type="number" value={siteEdit.sqft ?? ""} onChange={(e) => setSiteEdit({ ...siteEdit, sqft: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" />
+                  <Input placeholder="Restrooms" type="number" value={siteEdit.restrooms ?? ""} onChange={(e) => setSiteEdit({ ...siteEdit, restrooms: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" />
+                </div>
+                <Input placeholder="Access (lockbox, key, badge…)" value={siteEdit.access_method || ""} onChange={(e) => setSiteEdit({ ...siteEdit, access_method: e.target.value })} className="h-8 text-xs" />
+                <Textarea placeholder="Scope notes" value={siteEdit.scope_notes || ""} onChange={(e) => setSiteEdit({ ...siteEdit, scope_notes: e.target.value })} rows={2} className="text-xs" />
+                <div className="flex gap-2 items-center">
+                  <Button size="sm" className="h-7 text-xs" disabled={busy === "save_site"} onClick={() => void saveSite()}>
+                    {busy === "save_site" ? <RiLoader4Line className="w-3 h-3 mr-1 animate-spin" /> : null} Save site
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSiteEdit(null)}>Cancel</Button>
+                  {siteEdit.id && (
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 ml-auto">
+                      <input type="checkbox" checked={siteEdit.active !== false} onChange={(e) => setSiteEdit({ ...siteEdit, active: e.target.checked })} className="rounded" />
+                      Active
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Go-live gates */}
           <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 space-y-2">
             <p className="text-xs font-bold text-violet-800">Go-live gates — required before Active</p>
@@ -307,7 +459,7 @@ function AccountSheet({ account, onClose, reload }: { account: AccountRow; onClo
             </label>
             {!canGoActive && (
               <p className="text-[11px] text-amber-700 flex items-center gap-1">
-                <RiErrorWarningLine className="w-3.5 h-3.5" /> Active is locked until agreement + Stripe customer are set.
+                <RiErrorWarningLine className="w-3.5 h-3.5" /> Active is locked until agreement + payment + at least one site are set.
               </p>
             )}
           </div>
