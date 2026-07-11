@@ -1,18 +1,19 @@
 "use client";
 
-// ─── team.novaracleaning.com — VA onboarding & agreement signing ────────────
+// ─── team.novaracleaning.com — VA offer acceptance & onboarding ─────────────
 //
-// The full VA intake flow, gated in the required order:
+// INVITE-DRIVEN: an admin emails a tokenized OFFER LETTER from Admin → Team;
+// the link expires 30 minutes after being sent (resending mints a fresh
+// window). The token carries the VA's identity, so the flow starts with the
+// AGREEMENT — exactly the order required:
 //
-//   1. Who you are — name, email (the identity key everywhere), phone, role.
-//   2. READ + SIGN the VA Independent Contractor Agreement (existing DocuSeal
-//      template; fields pre-mapped server-side; the drawn signature renders in
-//      the executed document and the VA is emailed their completed copy).
-//   3. Onboarding form — timezone, working hours, experience, tools. Only
-//      unlocks AFTER the agreement is signed.
-//   4. Pending screen — "you're in the approval queue." NO access exists until
-//      an admin approves in the workspace (which provisions the GHL USER seat
-//      + internal workspace access).
+//   1. Offer + AGREEMENT — read the VA Independent Contractor Agreement
+//      (existing DocuSeal template, fields pre-mapped), accept, and sign.
+//   2. Onboarding form — phone, timezone, working hours, experience, tools.
+//   3. Pending — the admin approval queue. NO access is provisioned until an
+//      admin approves (GHL USER seat + workspace access).
+//
+// Visitors WITHOUT a valid invite see an invitation-required screen.
 
 import { useEffect, useState } from "react";
 import {
@@ -20,11 +21,11 @@ import {
   RiErrorWarningLine,
   RiFileTextLine,
   RiLoader4Line,
+  RiMailLine,
   RiQuillPenLine,
   RiShieldCheckLine,
   RiTeamLine,
   RiTimeLine,
-  RiUser3Line,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { SignaturePad } from "@/components/booking/SignaturePad";
@@ -33,14 +34,49 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SEO } from "@/components/SEO";
 import { RiDiscordFill } from "@remixicon/react";
 
-type Step = "identity" | "agreement" | "form" | "pending";
+type Step = "no-invite" | "expired" | "agreement" | "form" | "pending";
 
-// Team Discord invite card — shown once the agreement is signed (form +
-// pending steps). Renders only when DISCORD_INVITE_URL is configured.
+interface Session {
+  id: string;
+  status: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  vaRole: string;
+  agreementSigned: boolean;
+  agreementPreviewUrl?: string | null;
+  discordInviteUrl?: string | null;
+  offerNote?: string | null;
+}
+
+const STORAGE_KEY = "novara_va_onboarding_id";
+
+const ROLE_LABELS: Record<string, string> = {
+  operations: "Operations VA",
+  sales: "Sales VA",
+  recruiting: "Recruiting VA",
+  all: "All-in-one VA",
+};
+
+async function api<T>(body: Record<string, unknown>): Promise<T> {
+  const res = await fetch("/api/va/onboarding", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok || json?.error) {
+    const err = new Error(json?.error || `Request failed (${res.status})`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return json as T;
+}
+
+// Team Discord invite card — shown once the agreement is signed.
 function DiscordJoinCard({ url }: { url?: string | null }) {
   if (!url) return null;
   return (
@@ -63,95 +99,73 @@ function DiscordJoinCard({ url }: { url?: string | null }) {
   );
 }
 
-interface Session {
-  id: string;
-  status: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  vaRole: string;
-  agreementSigned: boolean;
-  agreementPreviewUrl?: string | null;
-  discordInviteUrl?: string | null;
-}
-
-const STORAGE_KEY = "novara_va_onboarding_id";
-
-const VA_ROLES = [
-  { id: "operations", label: "Operations VA", hint: "Conversations, bookings, calendars, dispatch pipeline" },
-  { id: "sales", label: "Sales VA", hint: "Sales pipeline, outreach, contact tools" },
-  { id: "recruiting", label: "Recruiting VA", hint: "Recruiting pipeline & applicant records" },
-  { id: "all", label: "All-in-one VA", hint: "Operations + sales + recruiting (still not account admin)" },
-];
-
-async function api<T>(body: Record<string, unknown>): Promise<T> {
-  const res = await fetch("/api/va/onboarding", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!res.ok || json?.error) throw new Error(json?.error || `Request failed (${res.status})`);
-  return json as T;
-}
-
 export default function VaOnboarding() {
-  const [step, setStep] = useState<Step>("identity");
+  const [step, setStep] = useState<Step>("no-invite");
   const [session, setSession] = useState<Session | null>(null);
   const [busy, setBusy] = useState(false);
   const [resuming, setResuming] = useState(true);
+  const [expiredMsg, setExpiredMsg] = useState<string | null>(null);
 
-  // Step 1 state
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [vaRole, setVaRole] = useState("operations");
-
-  // Step 2 state
+  // Agreement step state
   const [readAgreement, setReadAgreement] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [legalName, setLegalName] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
 
-  // Step 3 state
+  // Form step state
+  const [phone, setPhone] = useState("");
   const [timezone, setTimezone] = useState("");
   const [workingHours, setWorkingHours] = useState("");
   const [experience, setExperience] = useState("");
   const [tools, setTools] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Resume a session from this browser.
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    if (!saved) { setResuming(false); return; }
-    api<Session>({ action: "status", id: saved })
-      .then((s) => {
-        setSession((prev) => ({ ...(prev || s), ...s }));
-        if (s.status === "started") setStep("agreement");
-        else if (s.status === "signed") setStep("form");
-        else if (["submitted", "approved", "rejected"].includes(s.status)) setStep("pending");
-      })
-      .catch(() => localStorage.removeItem(STORAGE_KEY))
-      .finally(() => setResuming(false));
-  }, []);
-
-  const start = async () => {
-    setBusy(true);
-    try {
-      const s = await api<Session & { agreementPreviewUrl: string | null }>({
-        action: "start", email, firstName, lastName, phone, vaRole,
-      });
-      setSession(s);
-      localStorage.setItem(STORAGE_KEY, s.id);
-      setLegalName(`${firstName} ${lastName}`.trim());
-      setStep(s.agreementSigned ? "form" : "agreement");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not start onboarding");
-    } finally {
-      setBusy(false);
-    }
+  const applySession = (s: Session) => {
+    setSession((prev) => ({ ...(prev || s), ...s }));
+    setLegalName((prev) => prev || `${s.firstName || ""} ${s.lastName || ""}`.trim());
+    if (s.agreementSigned && ["invited", "started", "signed"].includes(s.status)) setStep("form");
+    else if (["submitted", "approved", "rejected"].includes(s.status)) setStep("pending");
+    else setStep("agreement");
   };
+
+  // Entry: ?invite=<token> (offer email) or a saved session in this browser.
+  useEffect(() => {
+    const inviteToken = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("invite")
+      : null;
+    const saved = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+
+    const boot = async () => {
+      if (inviteToken) {
+        try {
+          const s = await api<Session>({ action: "redeem", inviteToken });
+          localStorage.setItem(STORAGE_KEY, s.id);
+          applySession(s);
+          return;
+        } catch (e) {
+          const err = e as Error & { status?: number };
+          if (err.status === 410) {
+            setExpiredMsg(err.message);
+            setStep("expired");
+            return;
+          }
+          toast.error(err.message);
+        }
+      }
+      if (saved) {
+        try {
+          const s = await api<Session>({ action: "status", id: saved });
+          applySession(s);
+          return;
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+      setStep("no-invite");
+    };
+    void boot().finally(() => setResuming(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sign = async () => {
     if (!session) return;
@@ -173,7 +187,7 @@ export default function VaOnboarding() {
     setBusy(true);
     try {
       const s = await api<Session>({
-        action: "submit", id: session.id, timezone, workingHours, experience, tools, notes,
+        action: "submit", id: session.id, phone, timezone, workingHours, experience, tools, notes,
       });
       setSession((prev) => ({ ...(prev as Session), ...s }));
       setStep("pending");
@@ -184,8 +198,6 @@ export default function VaOnboarding() {
     }
   };
 
-  const stepIndex = step === "identity" ? 1 : step === "agreement" ? 2 : step === "form" ? 3 : 4;
-
   if (resuming) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -194,22 +206,36 @@ export default function VaOnboarding() {
     );
   }
 
+  const roleLabel = session ? (ROLE_LABELS[session.vaRole] || session.vaRole) : "";
+  const stepIndex = step === "agreement" ? 1 : step === "form" ? 2 : 3;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 pb-16">
-      <SEO title="Join the Novara team — VA onboarding" noindex />
+      <SEO title="Your offer — Novara Cleaning team onboarding" noindex />
       <div className="max-w-xl mx-auto p-4 pt-8 space-y-5">
-        {/* Header */}
+        {/* Header / offer letter banner */}
         <header className="rounded-3xl bg-gradient-to-br from-violet-700 via-violet-600 to-purple-500 p-6 text-white shadow-xl shadow-violet-200/60">
           <div className="flex items-center gap-2.5">
             <RiTeamLine className="w-6 h-6" />
             <div>
-              <p className="font-bold text-lg leading-tight">Novara Cleaning — Team onboarding</p>
-              <p className="text-[12px] text-violet-100/90">Virtual assistant intake · agreement · approval</p>
+              <p className="font-bold text-lg leading-tight">
+                {session && step !== "no-invite" && step !== "expired"
+                  ? `Welcome aboard, ${session.firstName || "there"}!`
+                  : "Novara Cleaning — Team onboarding"}
+              </p>
+              <p className="text-[12px] text-violet-100/90">
+                {session && step !== "no-invite" && step !== "expired"
+                  ? `Your offer: ${roleLabel} · independent contractor`
+                  : "Offer acceptance · agreement · approval"}
+              </p>
             </div>
           </div>
-          {step !== "pending" && (
+          {session?.offerNote && ["agreement", "form"].includes(step) && (
+            <p className="mt-3 text-[12px] text-violet-50/95 border-l-2 border-white/40 pl-3">{session.offerNote}</p>
+          )}
+          {["agreement", "form", "pending"].includes(step) && (
             <div className="mt-4 flex items-center gap-1.5">
-              {["Your info", "Agreement", "Onboarding"].map((label, i) => (
+              {["Sign the agreement", "Onboarding", "Approval"].map((label, i) => (
                 <div key={label} className="flex-1">
                   <div className={`h-1.5 rounded-full ${i + 1 <= stepIndex ? "bg-white" : "bg-white/25"}`} />
                   <p className="text-[10px] mt-1 text-violet-100/80">{label}</p>
@@ -219,62 +245,39 @@ export default function VaOnboarding() {
           )}
         </header>
 
-        {/* ── STEP 1: identity ── */}
-        {step === "identity" && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
-              <RiUser3Line className="w-4 h-4 text-violet-700" /> Step 1 — Who you are
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <Input placeholder="First name *" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-              <Input placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            </div>
-            <div>
-              <Input type="email" placeholder="Email *" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Your email is your identity across every system (CRM login, workspace, notifications) — use the one you'll work with.
-              </p>
-            </div>
-            <Input type="tel" placeholder="Phone (WhatsApp ok)" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <div>
-              <Label className="text-xs text-slate-600">Which role are you onboarding for? *</Label>
-              <div className="mt-1.5 space-y-1.5">
-                {VA_ROLES.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => setVaRole(r.id)}
-                    className={`w-full text-left rounded-xl border px-3.5 py-2.5 transition-all ${
-                      vaRole === r.id
-                        ? "border-violet-500 bg-violet-50 ring-1 ring-violet-200"
-                        : "border-slate-200 bg-white hover:border-violet-300"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold text-slate-900">{r.label}</p>
-                    <p className="text-[11px] text-slate-500">{r.hint}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Button
-              className="w-full h-12 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
-              disabled={busy || !firstName.trim() || !email.includes("@")}
-              onClick={start}
-            >
-              {busy ? <RiLoader4Line className="w-5 h-5 animate-spin mr-2" /> : null}
-              Continue to the agreement
-            </Button>
-            <p className="text-[11px] text-slate-400 text-center">
-              No access is granted until you've signed the agreement and an admin approves you.
+        {/* ── No invite ── */}
+        {step === "no-invite" && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center space-y-3 shadow-sm">
+            <RiMailLine className="w-10 h-10 text-violet-600 mx-auto" />
+            <p className="font-bold text-slate-900">Onboarding is by invitation</p>
+            <p className="text-sm text-slate-500 max-w-sm mx-auto">
+              VA onboarding starts from an offer-letter email sent by a Novara admin. If you're expecting one,
+              check your inbox — the link inside is valid for 30 minutes. Need a fresh link? Contact your admin
+              or <a className="text-violet-700 underline" href="mailto:support@novaracleaning.com">support@novaracleaning.com</a>.
             </p>
           </div>
         )}
 
-        {/* ── STEP 2: read + sign the agreement ── */}
+        {/* ── Expired link ── */}
+        {step === "expired" && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center space-y-3 shadow-sm">
+            <RiTimeLine className="w-10 h-10 text-amber-600 mx-auto" />
+            <p className="font-bold text-amber-900">This offer link has expired</p>
+            <p className="text-sm text-amber-800 max-w-sm mx-auto">
+              {expiredMsg || "Offer links are valid for 30 minutes after being sent."} Ask your admin to resend
+              your offer — it takes them one click.
+            </p>
+          </div>
+        )}
+
+        {/* ── STEP 1: read + sign the agreement (FIRST) ── */}
         {step === "agreement" && session && (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
             <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
-              <RiQuillPenLine className="w-4 h-4 text-violet-700" /> Step 2 — VA Independent Contractor Agreement
+              <RiQuillPenLine className="w-4 h-4 text-violet-700" /> Step 1 — VA Independent Contractor Agreement
+            </p>
+            <p className="text-xs text-slate-500 -mt-2">
+              Signing as <strong>{session.email}</strong> for the <strong>{roleLabel}</strong> role.
             </p>
 
             {session.agreementPreviewUrl ? (
@@ -326,22 +329,23 @@ export default function VaOnboarding() {
               {busy ? (
                 <><RiLoader4Line className="w-5 h-5 animate-spin mr-2" /> Executing agreement…</>
               ) : (
-                <><RiShieldCheckLine className="w-5 h-5 mr-2" /> Sign the agreement</>
+                <><RiShieldCheckLine className="w-5 h-5 mr-2" /> Accept offer & sign the agreement</>
               )}
             </Button>
             <p className="text-[11px] text-slate-400 text-center">
               Your signature and timestamp are recorded, and you'll receive your executed copy by email.
+              No access is granted until an admin approves your onboarding.
             </p>
           </div>
         )}
 
-        {/* ── STEP 3: onboarding form (only after signing) ── */}
+        {/* ── STEP 2: onboarding form (only after signing) ── */}
         {step === "form" && session && <DiscordJoinCard url={session.discordInviteUrl} />}
         {step === "form" && session && (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
-                <RiTimeLine className="w-4 h-4 text-violet-700" /> Step 3 — Onboarding details
+                <RiTimeLine className="w-4 h-4 text-violet-700" /> Step 2 — Onboarding details
               </p>
               <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
                 <RiCheckboxCircleLine className="w-3.5 h-3.5" /> Agreement signed
@@ -350,13 +354,17 @@ export default function VaOnboarding() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
+                <Label className="text-xs text-slate-600">Phone (WhatsApp ok)</Label>
+                <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 123 4567" />
+              </div>
+              <div>
                 <Label className="text-xs text-slate-600">Time zone *</Label>
                 <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="e.g. GMT+8 / Manila" />
               </div>
-              <div>
-                <Label className="text-xs text-slate-600">Working hours (ET) *</Label>
-                <Input value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} placeholder="e.g. 9am–5pm ET Mon–Fri" />
-              </div>
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Working hours (ET) *</Label>
+              <Input value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} placeholder="e.g. 9am–5pm ET Mon–Fri" />
             </div>
             <div>
               <Label className="text-xs text-slate-600">Relevant experience</Label>
@@ -383,7 +391,7 @@ export default function VaOnboarding() {
           </div>
         )}
 
-        {/* ── STEP 4: pending / outcome ── */}
+        {/* ── STEP 3: pending / outcome ── */}
         {step === "pending" && session && (
           <div className={`rounded-2xl border p-6 text-center space-y-2 shadow-sm ${
             session.status === "approved"

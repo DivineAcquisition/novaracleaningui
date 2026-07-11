@@ -181,6 +181,101 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "");
 
+    // ── invite: send the tokenized OFFER LETTER (30-minute link) ────────
+    // Mints a fresh token + 30-min window every time (resend = new window),
+    // upserts the onboarding row in 'invited' state, and emails the offer.
+    if (action === "invite") {
+      const email = String(body?.email || "").trim().toLowerCase();
+      const firstName = String(body?.firstName || "").trim();
+      const lastName = String(body?.lastName || "").trim();
+      const vaRole = String(body?.vaRole || "operations").toLowerCase();
+      const offerNote = String(body?.offerNote || "").trim().slice(0, 600);
+      if (!email.includes("@")) return json({ error: "A valid email is required." }, 400);
+      if (!firstName) return json({ error: "First name is required." }, 400);
+      if (!["operations", "sales", "recruiting", "all"].includes(vaRole)) {
+        return json({ error: "vaRole must be operations|sales|recruiting|all" }, 400);
+      }
+
+      const bytes = new Uint8Array(24);
+      crypto.getRandomValues(bytes);
+      const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+      const { data: existing } = await admin.from("va_onboarding").select("id, status").ilike("email", email).maybeSingle();
+      if (existing && ["approved", "offboarded"].includes(String(existing.status))) {
+        return json({ error: `This email already has a ${existing.status} record.` }, 409);
+      }
+      const stamp = {
+        first_name: firstName,
+        last_name: lastName,
+        va_role: vaRole,
+        offer_note: offerNote || null,
+        invite_token: token,
+        invite_expires_at: expiresAt,
+        invite_sent_at: new Date().toISOString(),
+        invited_by: callerId,
+        updated_at: new Date().toISOString(),
+      };
+      let rowId: string;
+      if (existing) {
+        await admin.from("va_onboarding").update(stamp).eq("id", existing.id);
+        rowId = existing.id;
+      } else {
+        const { data: created, error } = await admin.from("va_onboarding")
+          .insert({ email, status: "invited", ...stamp })
+          .select("id").single();
+        if (error) throw error;
+        rowId = created.id;
+      }
+
+      const offerUrl = `https://team.novaracleaning.com/team?invite=${token}`;
+      const roleLabel: Record<string, string> = {
+        operations: "Operations VA", sales: "Sales VA", recruiting: "Recruiting VA", all: "All-in-one VA",
+      };
+      let offerEmailSent = false;
+      try {
+        const inviteResendKey = Deno.env.get("RESEND_API_KEY");
+        if (inviteResendKey) {
+          const resend = new Resend(inviteResendKey);
+          await resend.emails.send({
+            from: "Novara Team <hello@novaracleaning.com>",
+            to: [email],
+            subject: `Your offer from Novara Cleaning — ${roleLabel[vaRole] || "VA"} 🎉`,
+            html: `
+              <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1e1b2e">
+                <div style="background:linear-gradient(135deg,#6d28d9,#8b5cf6);border-radius:14px;padding:24px;color:#fff">
+                  <p style="margin:0;font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.85">Offer letter</p>
+                  <h2 style="margin:6px 0 0">Welcome aboard, ${firstName}!</h2>
+                </div>
+                <p style="margin:18px 0 6px">We're excited to offer you the <strong>${roleLabel[vaRole] || vaRole}</strong> position with Novara Cleaning as an independent contractor.</p>
+                ${offerNote ? `<p style="font-size:14px;color:#3f3d56;border-left:3px solid #8b5cf6;padding-left:12px">${offerNote}</p>` : ""}
+                <p style="font-size:14px;color:#3f3d56">To accept, review and sign the VA Independent Contractor Agreement, then complete your onboarding details:</p>
+                <p style="text-align:center;margin:22px 0">
+                  <a href="${offerUrl}" style="background:#6d28d9;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">Accept your offer &amp; sign</a>
+                </p>
+                <p style="font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px">
+                  ⏳ For security this link expires <strong>30 minutes</strong> after being sent. If it expires, reply to this email and we'll send a fresh one.
+                </p>
+                <p style="font-size:12px;color:#8a87a5">No access to our systems is granted until your agreement is signed and an admin approves your onboarding.</p>
+                <p style="font-size:13px">— Novara Cleaning</p>
+              </div>`,
+          });
+          offerEmailSent = true;
+        }
+      } catch (e) {
+        console.warn("[admin-va-provision] offer email failed", e instanceof Error ? e.message : String(e));
+      }
+
+      await admin.from("events").insert({
+        event_type: "va.onboarding_submitted",
+        source: "admin-va-provision",
+        summary: `✉️ VA offer letter sent — ${firstName} ${lastName} (${email}, ${vaRole}). Link expires in 30 min.`,
+        data: { vaOnboardingId: rowId, email, vaRole, invitedBy: callerId, expiresAt },
+      }).then(() => undefined, () => undefined);
+
+      return json({ ok: true, invited: true, onboardingId: rowId, offerUrl, expiresAt, offerEmailSent });
+    }
+
     // Resolve the onboarding row by id or email.
     const onboardingId = body?.onboardingId ? String(body.onboardingId) : "";
     const emailKey = body?.email ? String(body.email).trim().toLowerCase() : "";
