@@ -52,6 +52,7 @@ interface IssueRow {
   id: string;
   issue_number: number;
   booking_id: string;
+  client_type?: string | null;
   booking_ref: string | null;
   documentation_id: string | null;
   cleaner_id: string | null;
@@ -85,7 +86,9 @@ interface IssueEvent {
 
 interface DocRow {
   id: string;
-  booking_id: string;
+  booking_id: string | null;
+  client_type?: string | null;
+  source_kind?: string | null;
   booking_ref: string | null;
   client_name: string | null;
   service_type: string | null;
@@ -139,6 +142,19 @@ const MIRROR_STYLE: Record<string, string> = {
   failed: "bg-rose-100 text-rose-700",
   skipped: "bg-slate-100 text-slate-500",
 };
+const CLIENT_TYPES = [
+  { id: "residential", label: "Residential" },
+  { id: "commercial", label: "Commercial" },
+  { id: "office", label: "Office" },
+  { id: "str", label: "STR / Airbnb" },
+];
+const CLIENT_TYPE_STYLE: Record<string, string> = {
+  residential: "bg-slate-100 text-slate-600",
+  commercial: "bg-blue-100 text-blue-700",
+  office: "bg-cyan-100 text-cyan-700",
+  str: "bg-fuchsia-100 text-fuchsia-700",
+};
+
 const ISSUE_TYPES = [
   { id: "complaint", label: "Complaint" },
   { id: "reclean", label: "Re-clean" },
@@ -161,9 +177,19 @@ const fmtD = (iso?: string | null) => (iso ? format(new Date(`${iso}`.slice(0, 1
 export default function QualityControl() {
   const [tab, setTab] = useState<"issues" | "docs" | "cleaners">("issues");
   const [loading, setLoading] = useState(true);
-  const [issues, setIssues] = useState<IssueRow[]>([]);
-  const [docs, setDocs] = useState<DocRow[]>([]);
+  const [allIssues, setAllIssues] = useState<IssueRow[]>([]);
+  const [allDocs, setAllDocs] = useState<DocRow[]>([]);
+  // One hub, three sources — the client-type dimension filters every view.
+  const [clientType, setClientType] = useState("all");
   const [completed30, setCompleted30] = useState(0);
+  const issues = useMemo(
+    () => (clientType === "all" ? allIssues : allIssues.filter((i) => (i.client_type || "residential") === clientType)),
+    [allIssues, clientType],
+  );
+  const docs = useMemo(
+    () => (clientType === "all" ? allDocs : allDocs.filter((d) => (d.client_type || "residential") === clientType)),
+    [allDocs, clientType],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -173,15 +199,15 @@ export default function QualityControl() {
       const [issuesRes, docsRes, completedRes] = await Promise.all([
         (supabase.from as any)("qc_issues").select("*").order("created_at", { ascending: false }).limit(500),
         (supabase.from as any)("job_documentation")
-          .select("id, booking_id, booking_ref, client_name, service_type, service_date, cleaner_names, before_photos, after_photos, photo_count, checklist_progress_pct, documented, mirror_status, mirror_attempts, mirror_last_error, mirrored_at, drive_folder_url, drive_pdf_url, photos_purged_at, completed_at")
+          .select("id, booking_id, client_type, source_kind, booking_ref, client_name, service_type, service_date, cleaner_names, before_photos, after_photos, photo_count, checklist_progress_pct, documented, mirror_status, mirror_attempts, mirror_last_error, mirrored_at, drive_folder_url, drive_pdf_url, photos_purged_at, completed_at")
           .gte("completed_at", since90)
           .order("completed_at", { ascending: false })
           .limit(500),
         supabase.from("bookings").select("id", { count: "exact", head: true })
           .eq("status", "completed").gte("completed_at", since30),
       ]);
-      setIssues(((issuesRes.data || []) as IssueRow[]));
-      setDocs(((docsRes.data || []) as DocRow[]));
+      setAllIssues(((issuesRes.data || []) as IssueRow[]));
+      setAllDocs(((docsRes.data || []) as DocRow[]));
       setCompleted30(completedRes.count || 0);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load QC data");
@@ -208,6 +234,19 @@ export default function QualityControl() {
     return Math.round((docs30.filter((d) => d.documented).length / docs30.length) * 100);
   }, [docs30]);
   const undocumented = useMemo(() => docs.filter((d) => !d.documented && !d.photos_purged_at), [docs]);
+  // Documentation compliance per client type (30d) — an undocumented
+  // commercial visit is as much a gap as an undocumented turnover.
+  const complianceByType = useMemo(() => {
+    const recent = allDocs.filter((d) => d.completed_at && new Date(d.completed_at).getTime() > Date.now() - 30 * 86400_000);
+    return CLIENT_TYPES.map((t) => {
+      const ofType = recent.filter((d) => (d.client_type || "residential") === t.id);
+      return {
+        ...t,
+        total: ofType.length,
+        pct: ofType.length ? Math.round((ofType.filter((d) => d.documented).length / ofType.length) * 100) : null,
+      };
+    }).filter((t) => t.total > 0);
+  }, [allDocs]);
   const issues30 = useMemo(
     () => issues.filter((i) => new Date(i.created_at).getTime() > Date.now() - 30 * 86400_000),
     [issues],
@@ -241,9 +280,18 @@ export default function QualityControl() {
             A documented job is a defensible job — photos + checklist in Supabase, dispute packets in Drive.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void load()} disabled={loading}>
-          <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={clientType} onValueChange={setClientType}>
+            <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All client types</SelectItem>
+              {CLIENT_TYPES.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* ─── Dashboard cards ───────────────────────────────────────────── */}
@@ -270,6 +318,15 @@ export default function QualityControl() {
             <p className="text-[11px] text-slate-500 mt-2">
               {docs30.filter((d) => d.documented).length}/{docs30.length} completed jobs fully documented
             </p>
+            {clientType === "all" && complianceByType.length > 1 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {complianceByType.map((t) => (
+                  <span key={t.id} className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", CLIENT_TYPE_STYLE[t.id])}>
+                    {t.label}: {t.pct}%
+                  </span>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -393,6 +450,9 @@ function IssuesTab({ issues, docs, reload }: { issues: IssueRow[]; docs: DocRow[
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs text-slate-400">#{i.issue_number}</span>
+                <Badge className={cn("border-0", CLIENT_TYPE_STYLE[i.client_type || "residential"])}>
+                  {CLIENT_TYPES.find((t) => t.id === (i.client_type || "residential"))?.label}
+                </Badge>
                 <Badge className={cn("border-0", SEVERITY_STYLE[i.severity])}>{label(i.severity)}</Badge>
                 <Badge className={cn("border-0", STATUS_STYLE[i.status])}>{label(i.status)}</Badge>
                 <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === i.issue_type)?.label || i.issue_type}</Badge>
@@ -818,17 +878,23 @@ function DocsTab({ docs, reload }: { docs: DocRow[]; reload: () => Promise<void>
           )}>
             <div className="flex flex-wrap items-center gap-2">
               <button
-                className="font-semibold text-slate-900 hover:text-violet-700 hover:underline"
-                onClick={() => setCaseOpen({ bookingId: d.booking_id, ref: d.booking_ref })}
+                className="font-semibold text-slate-900 hover:text-violet-700 hover:underline disabled:no-underline disabled:text-slate-900"
+                disabled={!d.booking_id}
+                onClick={() => d.booking_id && setCaseOpen({ bookingId: d.booking_id, ref: d.booking_ref })}
               >
-                {d.booking_ref || d.booking_id.slice(0, 8)}
+                {d.booking_ref || d.id.slice(0, 8)}
               </button>
+              <Badge className={cn("border-0", CLIENT_TYPE_STYLE[d.client_type || "residential"])}>
+                {CLIENT_TYPES.find((t) => t.id === (d.client_type || "residential"))?.label}
+              </Badge>
               <span className="text-sm text-slate-500">{d.client_name} · {fmtD(d.service_date)} · {d.service_type}</span>
               <div className="flex gap-1.5 ml-auto items-center">
-                <Button size="sm" variant="ghost" className="h-6 text-xs text-violet-700"
-                  onClick={() => setCaseOpen({ bookingId: d.booking_id, ref: d.booking_ref })}>
-                  <RiFolderCheckLine className="w-3.5 h-3.5 mr-1" /> Case file
-                </Button>
+                {d.booking_id && (
+                  <Button size="sm" variant="ghost" className="h-6 text-xs text-violet-700"
+                    onClick={() => setCaseOpen({ bookingId: d.booking_id!, ref: d.booking_ref })}>
+                    <RiFolderCheckLine className="w-3.5 h-3.5 mr-1" /> Case file
+                  </Button>
+                )}
                 <Badge className={cn("border-0", d.documented ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
                   {d.documented ? "Documented ✓" : "No photos"}
                 </Badge>

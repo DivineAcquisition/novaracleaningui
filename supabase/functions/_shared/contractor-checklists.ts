@@ -174,12 +174,110 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
   },
 ];
 
+// ─── Partner job checklists (Commercial · Office · STR turnover) ─────────
+// Every job type documents into the same QC hub, so every type carries a
+// type-appropriate execution checklist. These are the crew lists for the
+// three partner lines of business.
+
+const TURNOVER_SECTIONS: ContractorChecklistSection[] = [
+  {
+    title: "Guest-ready reset",
+    items: [
+      "Walk the unit — note any damage or missing items BEFORE cleaning (report in app)",
+      "Strip all beds and gather used linens/towels",
+      "Start laundry per linen instructions (host-provided / on-site / brought)",
+      "Remove all trash and recycling; replace liners",
+      "Wash, dry, and put away any dishes; empty dishwasher",
+    ],
+  },
+  {
+    title: "Clean",
+    items: [
+      "Kitchen: counters, sink, stove top, microwave, appliance exteriors, floor",
+      "Bathrooms: shower/tub, toilet, sink, mirrors, floor — hotel standard",
+      "All rooms: dust surfaces, disinfect touch points, vacuum and mop floors",
+      "Spot-check walls, switches, and doors for marks",
+      "Check under beds and sofas for guest items",
+    ],
+  },
+  {
+    title: "Stage & restock",
+    items: [
+      "Make all beds with fresh linens (per staging guide)",
+      "Fold and stage towels per host's staging notes",
+      "Restock consumables per restock list (TP, paper towels, soap, coffee…)",
+      "Stage welcome setup exactly as the host specified",
+      "Set thermostat / lights / blinds per instructions",
+      "Final walkthrough — take AFTER photos of every room",
+      "Lock up per access instructions and confirm secure",
+    ],
+  },
+];
+
+const COMMERCIAL_SECTIONS: ContractorChecklistSection[] = [
+  {
+    title: "Arrival & setup",
+    items: [
+      "Check in per site access instructions (badge / code / contact)",
+      "Notify the required contact on arrival (if specified)",
+      "Take BEFORE photos of all areas in scope",
+    ],
+  },
+  {
+    title: "Service areas",
+    items: [
+      "Clean all areas listed in the job scope",
+      "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+      "Empty all trash and recycling; replace liners; take to designated disposal",
+      "Vacuum carpets and mats; sweep and mop hard floors",
+      "Wipe and disinfect touch points (handles, switches, rails)",
+      "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+      "Dust surfaces, ledges, and reachable vents",
+      "Interior glass at entrances (streak-free)",
+    ],
+  },
+  {
+    title: "Close-out",
+    items: [
+      "Complete any deep tasks scheduled for this visit (per scope)",
+      "Take AFTER photos of every area cleaned",
+      "Secure the site per lock-up procedure (doors, alarm, lights)",
+      "Notify the required contact on departure (if specified)",
+    ],
+  },
+];
+
+const OFFICE_SECTIONS: ContractorChecklistSection[] = [
+  ...COMMERCIAL_SECTIONS.slice(0, 2),
+  {
+    title: "Office rules",
+    items: [
+      "Respect the desk policy — do NOT move or touch papers/electronics unless scope says otherwise",
+      "Clean around workstations: wipe desks per policy, sanitize phones/shared equipment only if in scope",
+      "Conference rooms: tables, chairs, glass, whiteboard trays (do not erase boards)",
+      "Handle sensitive areas exactly per instructions (server rooms, exec offices)",
+    ],
+  },
+  {
+    title: "After-hours close-out",
+    items: [
+      "Take AFTER photos of every area cleaned",
+      "Turn off lights per building instructions",
+      "Set the alarm and lock up exactly per the security notes",
+      "Badge out / check out with security if required",
+    ],
+  },
+];
+
 const CHECKLISTS: Record<string, ContractorChecklist> = {
   standard: { key: "standard", name: "Standard Clean", sections: STANDARD_SECTIONS },
   deep: { key: "deep", name: "Deep Clean", sections: DEEP_SECTIONS },
   combo: { key: "combo", name: "Deep + Standard Combo", sections: DEEP_SECTIONS },
   move_in_out: { key: "move_in_out", name: "Move In / Move Out Clean", sections: MOVE_IN_OUT_SECTIONS },
   recurring: { key: "recurring", name: "Recurring Clean", sections: STANDARD_SECTIONS },
+  turnover: { key: "turnover", name: "STR Turnover — Guest-Ready", sections: TURNOVER_SECTIONS },
+  commercial: { key: "commercial", name: "Commercial Site Service", sections: COMMERCIAL_SECTIONS },
+  office: { key: "office", name: "Office Clean (After-Hours)", sections: OFFICE_SECTIONS },
 };
 
 /** Normalize a booking/job service_type to a checklist key. */
@@ -189,6 +287,9 @@ export function normalizeServiceType(serviceType: string | null | undefined): st
   if (raw === "membership" || raw === "recurring") return "recurring";
   if (raw === "deep") return "deep";
   if (raw === "combo" || raw === "deep_standard" || raw === "deep_+_standard") return "combo";
+  if (raw === "turnover" || raw === "str_turnover" || raw === "str") return "turnover";
+  if (raw === "commercial") return "commercial";
+  if (raw === "office") return "office";
   return CHECKLISTS[raw] ? raw : "standard";
 }
 

@@ -66,15 +66,29 @@ interface BookingLite {
   last_name: string | null;
   email: string | null;
   cleaner_id: string | null;
+  booking_type?: string | null;
+  partner_details?: Record<string, unknown> | null;
 }
 
 async function loadBooking(admin: SB, bookingId: string): Promise<BookingLite | null> {
   const { data } = await admin
     .from("bookings")
-    .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id")
+    .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details")
     .eq("id", bookingId)
     .maybeSingle();
   return data || null;
+}
+
+/** Client type is a tag, not a fork — same mapping as the DB helper. */
+function clientTypeOf(b: BookingLite): string {
+  const t = String(b.booking_type || "");
+  if (t === "commercial") return "commercial";
+  if (t === "office") return "office";
+  if (t === "str_turnover") return "str";
+  if (t === "partnership") {
+    return String((b.partner_details as Record<string, unknown> | null)?.booking_type || "") === "str_turnover" ? "str" : "commercial";
+  }
+  return "residential";
 }
 
 function bookingRef(b: BookingLite): string {
@@ -130,6 +144,7 @@ async function createIssue(admin: SB, opts: {
     .insert({
       booking_id: opts.booking.id,
       job_id: opts.booking.job_id,
+      client_type: clientTypeOf(opts.booking),
       documentation_id: docRow?.id || null,
       cleaner_id: cleaner.id,
       cleaner_name: cleaner.name,
@@ -207,7 +222,7 @@ serve(async (req) => {
 
       const { data: booking } = await admin
         .from("bookings")
-        .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id")
+        .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details")
         .eq("job_id", assignment.job_id)
         .order("created_at", { ascending: false })
         .limit(1)

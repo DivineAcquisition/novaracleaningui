@@ -87,7 +87,7 @@ function extFromUrl(url: string): string {
 
 interface DocRow {
   id: string;
-  booking_id: string;
+  booking_id: string | null;
   job_id: string | null;
   booking_ref: string | null;
   client_name: string | null;
@@ -283,6 +283,7 @@ async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
   }
 
   try {
+    if (!doc.booking_id) throw new Error("no booking");
     const { data: agr } = await supabase
       .from("service_agreements")
       .select("id, created_at")
@@ -327,7 +328,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   line("Job Completion & Documentation Summary", { size: 13, color: gray, gap: 16 });
 
   const rows: Array<[string, string]> = [
-    ["Booking", doc.booking_ref || doc.booking_id],
+    ["Booking", doc.booking_ref || doc.booking_id || doc.id.slice(0, 8)],
     ["Client", `${doc.client_name || "—"}${doc.client_email ? ` <${doc.client_email}>` : ""}`],
     ["Service", `${doc.service_type || "—"} on ${doc.service_date || "—"}`],
     ["Address", doc.address || "—"],
@@ -407,6 +408,7 @@ class BudgetExhausted extends Error {
 }
 
 async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc: DocRow, budget: RunBudget): Promise<void> {
+  const docRef = doc.booking_ref || (doc.booking_id ? doc.booking_id.slice(0, 8) : doc.id.slice(0, 8));
   const before = (Array.isArray(doc.before_photos) ? doc.before_photos : []).map(String).filter(Boolean);
   const after = (Array.isArray(doc.after_photos) ? doc.after_photos : []).map(String).filter(Boolean);
 
@@ -419,7 +421,7 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   const yearFolder = await ensureFolder(token, rootFolderId, yy);
   const monthFolder = await ensureFolder(token, yearFolder, `${mm} - ${monthName}`);
   const jobFolderName = safeName(
-    `${doc.booking_ref || doc.booking_id.slice(0, 8)} — ${doc.client_name || "Client"} — ${dateStr} — ${doc.service_type || "clean"}`,
+    `${docRef} — ${doc.client_name || "Client"} — ${dateStr} — ${doc.service_type || "clean"}`,
   );
   const jobFolder = doc.drive_folder_id || await ensureFolder(token, monthFolder, jobFolderName);
   await shareReadableByLink(token, jobFolder);
@@ -487,11 +489,11 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   // into the job folder (skipped when already present).
   const jobFiles = await listChildNames(token, jobFolder);
   try {
-    const agreement = await loadAgreementPdf(supabase, doc.booking_id, doc.client_email);
+    const agreement = doc.booking_id ? await loadAgreementPdf(supabase, doc.booking_id, doc.client_email) : null;
     if (agreement) {
       const agrName = agreement.source === "docuseal"
-        ? `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Executed Agreement (DocuSeal, ${agreement.signedAt}).pdf`
-        : `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Signed Agreement (${agreement.signedAt}).pdf`;
+        ? `${safeName(docRef)} — Executed Agreement (DocuSeal, ${agreement.signedAt}).pdf`
+        : `${safeName(docRef)} — Signed Agreement (${agreement.signedAt}).pdf`;
       if (!jobFiles.has(agrName)) {
         await uploadFile(token, jobFolder, agrName, agreement.bytes, "application/pdf");
       }
@@ -501,9 +503,9 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   }
 
   // Completion summary PDF with the live payment record baked in.
-  const payment = await loadPaymentRecord(supabase, doc.booking_id);
+  const payment = doc.booking_id ? await loadPaymentRecord(supabase, doc.booking_id) : { rows: [] };
   const pdfBytes = await buildSummaryPdf(doc, { ...extras, payment, photos: photoBytes });
-  const pdfName = `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Completion Summary.pdf`;
+  const pdfName = `${safeName(docRef)} — Completion Summary.pdf`;
   let pdfId = doc.drive_pdf_id;
   if (!pdfId || !jobFiles.has(pdfName)) {
     pdfId = await uploadFile(token, jobFolder, pdfName, pdfBytes, "application/pdf");
@@ -627,7 +629,7 @@ serve(async (req) => {
 
       try {
         await mirrorOne(supabase, token, rootFolderId, doc, budget);
-        await pushAirtable(supabase, doc.booking_id);
+        if (doc.booking_id) await pushAirtable(supabase, doc.booking_id);
         mirrored++;
       } catch (e) {
         // Budget exhaustion is NOT a failure — release the claim back to

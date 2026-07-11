@@ -82,19 +82,26 @@ serve(async (req) => {
     let purged = 0, filesRemoved = 0;
     for (const doc of docs) {
       try {
-        // 1) Storage objects for this booking.
-        const files = await listAll(supabase, `bookings/${doc.booking_id}`);
-        for (let i = 0; i < files.length; i += 100) {
-          const batch = files.slice(i, i + 100);
-          const { error: rmErr } = await supabase.storage.from(BUCKET).remove(batch);
-          if (rmErr) throw new Error(`storage remove failed: ${rmErr.message}`);
-          filesRemoved += batch.length;
-        }
+        // Turnover-sourced docs (booking_id null): their photos live in the
+        // turnover-photos bucket, already purged at 7 days by
+        // purge-old-turnover-photos. Just stamp the doc — Drive is the archive.
+        let docFiles = 0;
+        if (doc.booking_id) {
+          // 1) Storage objects for this booking.
+          const files = await listAll(supabase, `bookings/${doc.booking_id}`);
+          docFiles = files.length;
+          for (let i = 0; i < files.length; i += 100) {
+            const batch = files.slice(i, i + 100);
+            const { error: rmErr } = await supabase.storage.from(BUCKET).remove(batch);
+            if (rmErr) throw new Error(`storage remove failed: ${rmErr.message}`);
+            filesRemoved += batch.length;
+          }
 
-        // 2) Booking arrays (dead links otherwise).
-        await supabase.from("bookings")
-          .update({ before_photos: [], after_photos: [] })
-          .eq("id", doc.booking_id);
+          // 2) Booking arrays (dead links otherwise).
+          await supabase.from("bookings")
+            .update({ before_photos: [], after_photos: [] })
+            .eq("id", doc.booking_id);
+        }
 
         // 3) Documentation record: point at the Drive archive.
         const driveRef = doc.drive_folder_url ? [doc.drive_folder_url] : [];
@@ -106,7 +113,7 @@ serve(async (req) => {
         }).eq("id", doc.id);
 
         purged++;
-        log("purged", { ref: doc.booking_ref, bookingId: doc.booking_id, files: files.length });
+        log("purged", { ref: doc.booking_ref, bookingId: doc.booking_id, files: docFiles });
       } catch (e) {
         // Leave the row unpurged — next run retries. Never purge on error.
         log("purge failed (will retry)", {

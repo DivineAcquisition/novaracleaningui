@@ -139,7 +139,11 @@ serve(async (req) => {
     const arrivalWindow = s(body.arrivalWindow, 60);
     const hardDeadline = s(body.hardDeadline, 120);
     const scopeNotes = s(body.scopeNotes, 3000);
-    const serviceType = s(body.serviceType, 40) || (isStr ? "turnover" : "commercial");
+    // service_type drives the type-appropriate QC checklist in the hub:
+    // turnover / commercial / office specs in _shared/contractor-checklists.
+    const defaultServiceType = isStr ? "turnover" : bookingType;
+    const requested = s(body.serviceType, 40);
+    const serviceType = requested && requested !== "commercial" ? requested : defaultServiceType;
 
     if (!serviceDate || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
       return json({ ok: false, error: "A service date is required." }, 400);
@@ -243,7 +247,7 @@ serve(async (req) => {
     const { data: booking, error: insErr } = await admin
       .from("bookings")
       .insert({
-        booking_type: bookingType === "str_turnover" ? "partnership" : bookingType,
+        booking_type: bookingType,
         business_account_id: account?.id || null,
         business_name: clientLabel,
         facility_type: isStr ? "Airbnb / Short-term rental" : (account?.facility_type || null),
