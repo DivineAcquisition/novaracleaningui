@@ -161,8 +161,10 @@ serve(async (req) => {
           succeeded = true;
           usedSender = "ghl";
           messageId = (ghlData as { messageId?: string })?.messageId || undefined;
-          messageStatus = "sent";
-          console.log("[SMS] Sent via GHL fallback");
+          // Recipient texted STOP: treated as success (permanent, do not
+          // retry) but surfaced as "suppressed" so logs stay honest.
+          messageStatus = (ghlData as { suppressed?: boolean })?.suppressed ? "suppressed" : "sent";
+          console.log(`[SMS] ${messageStatus === "suppressed" ? "Suppressed (recipient unsubscribed)" : "Sent via GHL fallback"}`);
         } else {
           lastErrorDetail = `Telnyx: ${lastErrorDetail}; GHL: ${typeof ghlFail === "string" ? ghlFail : JSON.stringify(ghlFail)}`;
         }
@@ -179,10 +181,10 @@ serve(async (req) => {
       await supabase
         .from("sms_logs")
         .update({
-          status: "sent",
+          status: messageStatus === "suppressed" ? "suppressed" : "sent",
           provider_message_id: messageId,
           cost: messageCost,
-          error_message: null,
+          error_message: messageStatus === "suppressed" ? "recipient unsubscribed (STOP)" : null,
         })
         .eq("id", logEntry.id);
     }
