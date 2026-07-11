@@ -152,17 +152,29 @@ export default function SimplePayoutTab() {
   const [editingCost, setEditingCost] = useState(false);
   const [costDraft, setCostDraft] = useState("");
   const [savingCost, setSavingCost] = useState(false);
+  // Crew management — assign/unassign right from payroll, using the SAME
+  // canonical endpoints as Bookings/Dispatch so every page stays in sync.
+  const [allCleaners, setAllCleaners] = useState<{ id: string; name: string }[]>([]);
+  const [assignPick, setAssignPick] = useState("");
+  const [crewWorking, setCrewWorking] = useState<string | null>(null);
 
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const [s, j] = await Promise.all([
+      const [s, j, c] = await Promise.all([
         callApi<Summary>("summary"),
         callApi<{ jobs: JobOption[] }>("jobs"),
+        (supabase.from as any)("cleaners").select("id, first_name, last_name").eq("status", "active").order("first_name"),
       ]);
       setSummary(s);
       setJobs(j.jobs || []);
+      setAllCleaners(
+        ((c?.data as { id: string; first_name: string | null; last_name: string | null }[]) || []).map((x) => ({
+          id: x.id,
+          name: `${x.first_name || ""} ${x.last_name || ""}`.trim() || "Cleaner",
+        })),
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load payouts");
     } finally {
@@ -174,6 +186,66 @@ export default function SimplePayoutTab() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Re-select the same job after an assign/unassign so the crew list reflects
+  // the fresh server state (jobs payload carries the crew).
+  const refreshSelected = useCallback(async (bookingId: string) => {
+    try {
+      const j = await callApi<{ jobs: JobOption[] }>("jobs");
+      setJobs(j.jobs || []);
+      const fresh = (j.jobs || []).find((x) => x.bookingId === bookingId) || null;
+      setSelected(fresh);
+      if (fresh) {
+        const init: Record<string, { selected: boolean; dollars: string }> = {};
+        for (const c of fresh.crew) {
+          init[c.id] = { selected: true, dollars: ((c.suggestedPayoutCents || 0) / 100).toFixed(2) };
+        }
+        setCrewPay(init);
+      }
+    } catch { /* list refresh is best-effort */ }
+  }, []);
+
+  const assignCleaner = async () => {
+    if (!selected || !assignPick) { toast.error("Pick a cleaner to assign."); return; }
+    setCrewWorking("assign");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
+        body: { bookingId: selected.bookingId, cleanerIds: [assignPick], mode: "add", notify: true },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
+      toast.success("Cleaner assigned — notified, and synced everywhere (Bookings, Dispatch, portals, GHL).");
+      setAssignPick("");
+      await refreshSelected(selected.bookingId);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message || "Assign failed");
+    } finally {
+      setCrewWorking(null);
+    }
+  };
+
+  const unassignCleaner = async (cleanerId: string, name: string) => {
+    if (!selected) return;
+    if (!confirm(`Unassign ${name} from this job? They drop off the job everywhere (dashboards, dispatch, payroll crew).`)) return;
+    setCrewWorking(cleanerId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/unassign-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ bookingId: selected.bookingId, cleanerId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) throw new Error(json?.error || "Unassign failed");
+      toast.success(`${name} unassigned — reflected across Bookings, Dispatch, and portals.`);
+      await refreshSelected(selected.bookingId);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message || "Unassign failed");
+    } finally {
+      setCrewWorking(null);
+    }
+  };
 
   const filteredJobs = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -437,12 +509,12 @@ export default function SimplePayoutTab() {
                   </div>
                 </div>
 
-                {/* Crew + pay per cleaner */}
+                {/* Crew + pay per cleaner (with real assign/unassign controls) */}
                 <div>
                   <Label className="text-xs">Who was on this job &amp; pay per cleaner</Label>
                   {selected.crew.length === 0 ? (
                     <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-1">
-                      No cleaner is assigned to this job. Assign one in Bookings first.
+                      No cleaner is assigned to this job — assign one below.
                     </p>
                   ) : (
                     <div className="mt-1 space-y-2">
@@ -481,6 +553,17 @@ export default function SimplePayoutTab() {
                                 placeholder="0.00"
                               />
                             </div>
+                            <button
+                              type="button"
+                              title={`Unassign ${c.name} from this job`}
+                              onClick={() => unassignCleaner(c.id, c.name)}
+                              disabled={crewWorking !== null}
+                              className="text-slate-300 hover:text-rose-600 transition-colors shrink-0 p-1"
+                            >
+                              {crewWorking === c.id
+                                ? <RiLoader4Line className="w-4 h-4 animate-spin" />
+                                : <span className="text-base leading-none">✕</span>}
+                            </button>
                           </div>
                         );
                       })}
@@ -490,6 +573,34 @@ export default function SimplePayoutTab() {
                       </div>
                     </div>
                   )}
+
+                  {/* Assign a cleaner — same canonical endpoint as Bookings/Dispatch */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <select
+                      value={assignPick}
+                      onChange={(e) => setAssignPick(e.target.value)}
+                      className="h-9 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm"
+                    >
+                      <option value="">Assign a cleaner to this job…</option>
+                      {allCleaners
+                        .filter((c) => !selected.crew.some((m) => m.id === c.id))
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 shrink-0"
+                      onClick={assignCleaner}
+                      disabled={!assignPick || crewWorking !== null}
+                    >
+                      {crewWorking === "assign" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Assign"}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Assign/unassign here updates the booking, dispatch job, cleaner dashboards, GHL &amp; Airtable — the same as doing it from Bookings.
+                  </p>
                 </div>
 
                 {/* Live calculations */}

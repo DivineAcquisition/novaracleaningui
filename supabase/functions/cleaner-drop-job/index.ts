@@ -94,13 +94,21 @@ serve(async (req) => {
       .select("id");
     if (!claimed || claimed.length === 0) return json({ error: "Job already dropped or reassigned" }, 409);
 
-    // Park any assignment row so dispatch loops ignore it.
+    // Park any assignment row so dispatch loops ignore it, and flip the jobs
+    // row back to 'unassigned' so EVERY reader (Dispatch console, payroll crew
+    // resolution, Airtable sync) sees the job as open again — same writes as
+    // the admin unassign route, so all avenues stay in lockstep.
     if (booking.job_id) {
       await admin
         .from("job_assignments")
         .update({ status: "needs_reassignment" })
         .eq("job_id", booking.job_id)
         .eq("cleaner_id", cleanerId)
+        .then(() => undefined, () => undefined);
+      await admin
+        .from("jobs")
+        .update({ status: "unassigned" })
+        .eq("id", booking.job_id)
         .then(() => undefined, () => undefined);
     }
 

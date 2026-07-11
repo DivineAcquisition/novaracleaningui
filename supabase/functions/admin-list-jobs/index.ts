@@ -99,14 +99,22 @@ serve(async (req) => {
     const jobIds = jobs.map((j) => String(j.id));
 
     // ─── Assignments + cleaner names ────────────────────────────────────
+    // Dead rows (withdrawn on reassignment/unassign, parked after a cleaner
+    // dropped the job) are excluded — they made the Dispatch crew chips show
+    // stale cleaners that other pages (payroll, portals) correctly ignore.
+    const DEAD_ASSIGNMENT_STATUSES = ["withdrawn", "needs_reassignment"];
     const assignmentsByJob = new Map<string, Record<string, unknown>[]>();
     if (jobIds.length > 0) {
-      const { data: assigns } = await admin
+      const { data: allAssigns } = await admin
         .from("job_assignments")
         .select(
           "id, job_id, cleaner_id, role, status, distance_miles, estimated_pay_cents, pay_percentage_snapshot, expires_at, accepted_at, declined_at, created_at",
         )
         .in("job_id", jobIds);
+      const assigns = (allAssigns || []).filter(
+        (a: Record<string, unknown>) =>
+          !DEAD_ASSIGNMENT_STATUSES.includes(String(a.status || "").toLowerCase()),
+      );
 
       const cleanerIds = Array.from(
         new Set((assigns || []).map((a) => a.cleaner_id).filter(Boolean) as string[]),

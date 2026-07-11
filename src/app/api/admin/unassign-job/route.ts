@@ -4,7 +4,8 @@
 // active on any cleaner's dashboard:
 //   • bookings.cleaner_id → null, num_cleaners_assigned → 0, status reset to
 //     'confirmed' (unless already completed/cancelled).
-//   • job_assignments for the job → 'withdrawn' (drops out of the cleaner
+//   • job_assignments for the job → 'Withdrawn' (same casing admin-booking-assign
+//     writes on replace, so the two unassign paths are indistinguishable; drops
 //     dashboards, which only read active statuses).
 //   • jobs.status → 'unassigned' so it's an open job again.
 //   • Re-sync GHL (opportunity back to unassigned stage) + Airtable.
@@ -55,7 +56,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (booking.job_id) {
       let q = supabase
         .from("job_assignments")
-        .update({ status: "withdrawn" })
+        .update({ status: "Withdrawn" })
         .eq("job_id", booking.job_id);
       if (cleanerId) q = q.eq("cleaner_id", cleanerId);
       await q.then(() => undefined, () => undefined);
