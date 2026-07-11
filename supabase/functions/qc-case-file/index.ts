@@ -37,16 +37,23 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-// Policies the client agreed to at booking — surfaced on every case file so
-// VAs cite the exact commitments when handling disputes.
+// Policies the client agreed to at booking — cited by section against the
+// live published policies so VAs quote the exact clause when handling
+// disputes. Full texts: novaracleaning.com/terms · /refund-policy ·
+// /cancellation-policy · /disclaimer.
 const POLICY_HIGHLIGHTS: string[] = [
-  "Agreed at booking: Terms of Service, Disclaimer, Refund Policy, One-Time Service Agreement.",
-  "Deposit + post-service balance charge authorized at booking.",
-  "Cancel <24h before appointment: $50 short-notice fee (full refund otherwise).",
-  "Reschedule <24h before appointment: $25 short-notice fee.",
-  "Concerns must be reported within 24 hours; remedy is a free re-clean within 48 hours — not a refund for subjective dissatisfaction.",
-  "Memberships: recurring billing authorized; 14 days written notice to cancel.",
-  "Before/after photos are captured on every job as completion evidence.",
+  "Booking = binding acceptance of all policies (ToS §1.2, §1.4).",
+  "All sales final once service is rendered (ToS §6.3 · Refund §1.1).",
+  "Primary remedy is a complimentary re-clean, not a refund (ToS §7.1, §7.3 · Refund §1.2, §2.1). Declining it waives further refund eligibility (Refund §2.5).",
+  "Concerns must be reported IN WRITING within 24h with itemized areas + timestamped photos, property undisturbed (ToS §7.1 · Refund §3.1–3.4).",
+  "Subjective dissatisfaction is never refundable (ToS §6.4 · Refund §5.2, §6).",
+  "Out-of-scope tasks (fridge/oven/add-ons never booked) are not refundable (Refund §5.7).",
+  "24h cancellation notice; same-day cancel/no-show/access failure forfeits 100% (Cancellation §1.1, §2.2–2.3, §10 · ToS §6.1).",
+  "72h written dispute resolution is REQUIRED before any chargeback; unauthorized chargebacks = fraud + $150 fee + full liability (ToS §10.1–10.4 · Refund §8.2–8.5).",
+  "Client consented to photo/GPS/checklist evidence retention (4 years) usable in disputes (ToS §13.1–13.4 · Disclaimer §8.4).",
+  "Liability capped at the amount paid; damage claims within 24h (ToS §11.2–11.3).",
+  "Memberships: 14 days' written notice to cancel (ToS §6.2 · Refund §10.1).",
+  "Binding arbitration + class-action waiver, Maryland law (ToS §14.1, §14.5, §14.7).",
 ];
 
 async function resolveSecret(supabase: SB, key: string): Promise<string> {
