@@ -13,8 +13,34 @@ import {
 } from "./sources/supabase";
 import { syncClient, syncJob, syncPayrollRun } from "./mappers";
 import { ENTRY_SOURCE, JOB_FIELDS, PAYROLL_RUN_FIELDS, TABLES } from "./schema";
-import { deleteRecords, listRecords } from "./client";
+import { createField, deleteRecords, listRecords, listTableFields } from "./client";
 import { payPeriodMonday, payPeriodSunday } from "./pay";
+
+// ─── QC documentation fields (Drive Folder / Documented) ─────────────────────
+// Written by NAME; created lazily via the Meta API on first use so the sync
+// never hard-fails on a base that predates the QC hub. Cached per lambda.
+let qcJobFieldsReady: boolean | null = null;
+async function ensureQcJobFields(): Promise<boolean> {
+  if (qcJobFieldsReady !== null) return qcJobFieldsReady;
+  try {
+    const fields = await listTableFields(TABLES.jobs);
+    const names = new Set(fields.map((f) => f.name));
+    if (!names.has(JOB_FIELDS.driveFolder)) {
+      await createField(TABLES.jobs, { name: JOB_FIELDS.driveFolder, type: "url" });
+    }
+    if (!names.has(JOB_FIELDS.documented)) {
+      await createField(TABLES.jobs, {
+        name: JOB_FIELDS.documented,
+        type: "checkbox",
+        options: { icon: "check", color: "greenBright" },
+      });
+    }
+    qcJobFieldsReady = true;
+  } catch {
+    qcJobFieldsReady = false;
+  }
+  return qcJobFieldsReady;
+}
 
 const ASSIGNMENT_STATUSES = ["Confirmed", "Accepted", "accepted", "In Progress", "Completed"];
 
@@ -198,6 +224,24 @@ export async function syncJobByBookingId(
     numberOfCleaners: crewCount || undefined,
   });
   if (!input.cleanerName && payout?.cleaner_name) input.cleanerName = String(payout.cleaner_name);
+
+  // ── QC documentation: Drive link + "documented ✓" onto the job record ──
+  try {
+    const { data: doc } = await supabase
+      .from("job_documentation")
+      .select("documented, drive_folder_url, mirror_status")
+      .eq("booking_id", bookingId)
+      .maybeSingle();
+    if (doc && (await ensureQcJobFields())) {
+      input.documented = Boolean(doc.documented);
+      if (doc.mirror_status === "mirrored" && doc.drive_folder_url) {
+        input.driveFolderUrl = String(doc.drive_folder_url);
+      }
+    }
+  } catch {
+    /* best-effort — job sync must not fail on QC enrichment */
+  }
+
   return syncJob(input);
 }
 

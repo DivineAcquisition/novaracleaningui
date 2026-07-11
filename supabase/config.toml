@@ -377,3 +377,14 @@ verify_jwt = false
 
 
 
+# QC & Job Documentation Hub. qc-drive-mirror + qc-retention-purge are
+# invoked by pg_cron with the service-role bearer; qc-issues handles both
+# admin/VA JWTs and cleaner field-report tokens internally.
+[functions.qc-drive-mirror]
+verify_jwt = false
+
+[functions.qc-retention-purge]
+verify_jwt = false
+
+[functions.qc-issues]
+verify_jwt = false

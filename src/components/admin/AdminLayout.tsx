@@ -37,6 +37,7 @@ import {
   RiRepeatLine,
   RiGroup2Line,
   RiMoneyDollarCircleLine,
+  RiShieldCheckLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -123,6 +124,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/payroll",
     icon: RiMoneyDollarCircleLine,
     description: "Stripe Connect cleaner payouts",
+  },
+  {
+    title: "Quality Control",
+    url: "/admin/qc",
+    icon: RiShieldCheckLine,
+    description: "Job documentation · issues · dispute packets",
   },
   {
     title: "Map",

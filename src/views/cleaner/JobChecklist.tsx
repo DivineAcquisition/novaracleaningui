@@ -126,6 +126,9 @@ export default function CleanerJobChecklistPage() {
   const [addonNote, setAddonNote] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedAddon, setSelectedAddon] = useState<string | null>(null);
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueText, setIssueText] = useState("");
+  const [issueSending, setIssueSending] = useState(false);
 
   const call = useCallback(
     async (body: Record<string, unknown>) => {
@@ -214,6 +217,28 @@ export default function CleanerJobChecklistPage() {
       toast.error(err instanceof Error ? err.message : "Couldn't submit add-on");
     } finally {
       setBusyKey(null);
+    }
+  };
+
+  const sendFieldReport = async () => {
+    const description = issueText.trim();
+    if (!description) return;
+    setIssueSending(true);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "field_report", token, description },
+      });
+      if (invokeError) throw invokeError;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string })?.error || "Couldn't send report");
+      }
+      toast.success("Report sent — dispatch has been alerted. Stay put unless it's unsafe.");
+      setIssueOpen(false);
+      setIssueText("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send report — call dispatch instead");
+    } finally {
+      setIssueSending(false);
     }
   };
 
@@ -514,6 +539,51 @@ export default function CleanerJobChecklistPage() {
           )}
         </div>
       </div>
+
+      {/* ─── Field issue report (stop-and-flag SOP) ─────────────────── */}
+      {state.canWrite && (
+        <div className="rounded-2xl border border-rose-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-4">
+            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+              <RiAlertLine className="w-4 h-4 text-rose-500" /> Problem on site?
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Biohazard conditions, damage, access issues, anything unsafe or wrong — flag it here the
+              moment you hit it. Dispatch is alerted immediately.
+            </p>
+            {!issueOpen ? (
+              <Button variant="outline" className="w-full mt-3 border-rose-300 text-rose-600 hover:bg-rose-50" onClick={() => setIssueOpen(true)}>
+                <RiAlertLine className="w-4 h-4 mr-1.5" /> Report an issue to dispatch
+              </Button>
+            ) : (
+              <div className="mt-3 space-y-2.5">
+                <textarea
+                  placeholder="What's wrong? Be specific — dispatch acts on exactly what you write here."
+                  value={issueText}
+                  onChange={(e) => setIssueText(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 bg-rose-600 hover:bg-rose-700"
+                    disabled={!issueText.trim() || issueSending}
+                    onClick={() => void sendFieldReport()}
+                  >
+                    {issueSending
+                      ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" />
+                      : <RiAlertLine className="w-4 h-4 mr-1.5" />}
+                    Send to dispatch now
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setIssueOpen(false); setIssueText(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── Finish ──────────────────────────────────────────────────── */}
       {state.canWrite && !checklist.completed_at && (
