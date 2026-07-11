@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-interface AccountRow {
+export interface AccountRow {
   id: string;
   account_type: string;
   business_name: string;
@@ -224,8 +224,10 @@ interface SiteRow {
 }
 
 // ─── Account detail / edit sheet ─────────────────────────────────────────────
+// Exported: the unified Accounts view (PartnershipAccounts) opens the same
+// sheet, so commercial/office accounts are managed identically everywhere.
 
-function AccountSheet({ account, onClose, reload }: { account: AccountRow; onClose: () => void; reload: () => Promise<void> }) {
+export function AccountSheet({ account, onClose, reload }: { account: AccountRow; onClose: () => void; reload: () => Promise<void> }) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(account.status);
   const [rateDollars, setRateDollars] = useState(account.default_rate_cents != null ? String(account.default_rate_cents / 100) : "");

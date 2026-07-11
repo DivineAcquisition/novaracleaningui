@@ -1,41 +1,44 @@
 "use client";
 
-// ─── /admin/partner — Partnerships (unified) ──────────────────────────────────
+// ─── /admin/partner — Partnerships Hub ────────────────────────────────────────
 //
-// One tab for the whole STR partner program, combining the two halves that used
-// to be separate nav items:
-//   • Host Accounts  — the management console (Airtable Client & Revenue Ops):
-//     lifecycle, pricing/Active gate, revenue, needs-attention, admin actions.
-//   • Turnover Ops   — the operational console (Supabase turnover portal):
-//     per-property pricing, crew, recurring schedules, assignments, requests.
-//
-// A "Sync to Airtable" action reconciles the operational Supabase data into the
-// Airtable base so both halves read as one dataset (identity backfill; Airtable
-// keeps ownership of rates/lifecycle).
+// The single console for every line of business — Commercial, Office, STR:
+//   • Overview   — pipeline, revenue per line, needs-attention
+//   • Accounts   — THE account-base view: every commercial/office account and
+//     every STR host in one list; click any row for the type-appropriate
+//     detail (sites/gates/rates vs properties/turnovers/pricing). The legacy
+//     Airtable host console is available inside as an advanced section.
+//   • Book Job   — the unified internal booking flow (all three types)
+//   • Recurring  — partner cadences (the residential-style recurring setup)
+//   • Ops Queue  — turnover dispatch operations (crew, assignments, batches)
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiBuilding2Line, RiCalendarCheckLine } from "@remixicon/react";
+import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiCalendarCheckLine, RiArrowDownSLine } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
 import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
-import CommercialAccountsAdmin from "@/views/admin/CommercialAccountsAdmin";
+import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
 import PartnershipBooking from "@/views/admin/PartnershipBooking";
 import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
-const VALID_TABS = ["overview", "commercial", "book", "recurring", "accounts", "turnovers"];
+const VALID_TABS = ["overview", "accounts", "book", "recurring", "ops"];
+// Old deep links keep working: commercial → accounts, turnovers → ops.
+const TAB_ALIASES: Record<string, string> = { commercial: "accounts", turnovers: "ops" };
 
 export default function Partnerships() {
   const searchParams = useSearchParams();
-  const initialTab = searchParams?.get("tab") || "overview";
+  const rawTab = searchParams?.get("tab") || "overview";
+  const initialTab = TAB_ALIASES[rawTab] || rawTab;
   const [tab, setTab] = useState(VALID_TABS.includes(initialTab) ? initialTab : "overview");
   const [syncing, setSyncing] = useState(false);
   const [syncingContractors, setSyncingContractors] = useState(false);
+  const [showAirtableConsole, setShowAirtableConsole] = useState(false);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -98,8 +101,8 @@ export default function Partnerships() {
           <TabsTrigger value="overview" className="gap-1.5">
             <RiDashboardLine className="w-4 h-4" /> Overview
           </TabsTrigger>
-          <TabsTrigger value="commercial" className="gap-1.5">
-            <RiBuilding2Line className="w-4 h-4" /> Commercial &amp; Office
+          <TabsTrigger value="accounts" className="gap-1.5">
+            <RiHotelLine className="w-4 h-4" /> Accounts
           </TabsTrigger>
           <TabsTrigger value="book" className="gap-1.5">
             <RiCalendarCheckLine className="w-4 h-4" /> Book Job
@@ -107,11 +110,8 @@ export default function Partnerships() {
           <TabsTrigger value="recurring" className="gap-1.5">
             <RiRefreshLine className="w-4 h-4" /> Recurring
           </TabsTrigger>
-          <TabsTrigger value="accounts" className="gap-1.5">
-            <RiHotelLine className="w-4 h-4" /> STR Hosts
-          </TabsTrigger>
-          <TabsTrigger value="turnovers" className="gap-1.5">
-            <RiToolsLine className="w-4 h-4" /> Turnover Ops
+          <TabsTrigger value="ops" className="gap-1.5">
+            <RiToolsLine className="w-4 h-4" /> Ops Queue
           </TabsTrigger>
         </TabsList>
 
@@ -119,8 +119,22 @@ export default function Partnerships() {
         <TabsContent value="overview" className="mt-4">
           {tab === "overview" && <PartnershipsOverview />}
         </TabsContent>
-        <TabsContent value="commercial" className="mt-4">
-          {tab === "commercial" && <CommercialAccountsAdmin />}
+        <TabsContent value="accounts" className="mt-4 space-y-4">
+          {tab === "accounts" && (
+            <>
+              <PartnershipAccounts />
+              {/* Legacy Airtable host console — advanced lifecycle actions
+                  (approve-live gate, offboard-retain) until fully absorbed. */}
+              <button
+                className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-600"
+                onClick={() => setShowAirtableConsole((v) => !v)}
+              >
+                <RiArrowDownSLine className={`w-4 h-4 transition-transform ${showAirtableConsole ? "rotate-180" : ""}`} />
+                Advanced: Airtable host lifecycle console
+              </button>
+              {showAirtableConsole && <PartnerAccounts />}
+            </>
+          )}
         </TabsContent>
         <TabsContent value="book" className="mt-4">
           {tab === "book" && <PartnershipBooking />}
@@ -128,11 +142,8 @@ export default function Partnerships() {
         <TabsContent value="recurring" className="mt-4">
           {tab === "recurring" && <PartnerRecurringSchedules />}
         </TabsContent>
-        <TabsContent value="accounts" className="mt-4">
-          {tab === "accounts" && <PartnerAccounts />}
-        </TabsContent>
-        <TabsContent value="turnovers" className="mt-4">
-          {tab === "turnovers" && <PartnerAdmin />}
+        <TabsContent value="ops" className="mt-4">
+          {tab === "ops" && <PartnerAdmin />}
         </TabsContent>
       </Tabs>
     </div>
