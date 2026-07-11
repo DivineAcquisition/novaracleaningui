@@ -35,8 +35,33 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SEO } from "@/components/SEO";
+import { RiDiscordFill } from "@remixicon/react";
 
 type Step = "identity" | "agreement" | "form" | "pending";
+
+// Team Discord invite card — shown once the agreement is signed (form +
+// pending steps). Renders only when DISCORD_INVITE_URL is configured.
+function DiscordJoinCard({ url }: { url?: string | null }) {
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/70 transition-colors p-4"
+    >
+      <span className="w-10 h-10 rounded-xl bg-[#5865F2] flex items-center justify-center shrink-0">
+        <RiDiscordFill className="w-6 h-6 text-white" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-bold text-indigo-900">Join the team Discord</span>
+        <span className="block text-xs text-indigo-700/80">
+          Announcements, dispatch, and day-to-day comms happen here — join now so you're ready on day one.
+        </span>
+      </span>
+    </a>
+  );
+}
 
 interface Session {
   id: string;
@@ -47,6 +72,7 @@ interface Session {
   vaRole: string;
   agreementSigned: boolean;
   agreementPreviewUrl?: string | null;
+  discordInviteUrl?: string | null;
 }
 
 const STORAGE_KEY = "novara_va_onboarding_id";
@@ -310,6 +336,7 @@ export default function VaOnboarding() {
         )}
 
         {/* ── STEP 3: onboarding form (only after signing) ── */}
+        {step === "form" && session && <DiscordJoinCard url={session.discordInviteUrl} />}
         {step === "form" && session && (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -391,6 +418,10 @@ export default function VaOnboarding() {
               </>
             )}
           </div>
+        )}
+
+        {step === "pending" && session && session.status !== "rejected" && (
+          <DiscordJoinCard url={session.discordInviteUrl} />
         )}
 
         <p className="text-center text-[11px] text-slate-400">

@@ -55,6 +55,36 @@ function tempPassword(): string {
   return `Novara${Math.random().toString(36).slice(2, 8)}!${new Date().getFullYear()}`;
 }
 
+// Fire a VA lifecycle event at the Zapier Catch Hook (ZAPIER_VA_HOOK_URL).
+// No-ops until configured; never throws.
+async function sendVaZapier(admin: DB, event: string, row: Row, extra: Row = {}) {
+  try {
+    const hook = await secret(admin, "ZAPIER_VA_HOOK_URL");
+    if (!hook.startsWith("https://hooks.zapier.com/")) return;
+    await fetch(hook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event, // va.approved | va.rejected | va.offboarded
+        email: row.email,
+        firstName: row.first_name || "",
+        lastName: row.last_name || "",
+        name: `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email,
+        phone: row.phone || "",
+        vaRole: row.va_role,
+        timezone: row.timezone || "",
+        workingHours: row.working_hours || "",
+        agreementSignedAt: row.agreement_signed_at || null,
+        onboardingId: row.id,
+        timestamp: new Date().toISOString(),
+        ...extra,
+      }),
+    });
+  } catch (e) {
+    console.warn("[admin-va-provision] zapier hook failed (non-blocking)", e instanceof Error ? e.message : String(e));
+  }
+}
+
 // ── GHL user lookup + delete (offboarding) ──────────────────────────────────
 async function ghlFetch(token: string, path: string, init: RequestInit = {}) {
   const res = await fetch(`${GHL_BASE}${path}`, {
@@ -231,10 +261,12 @@ serve(async (req) => {
         data: { vaOnboardingId: row.id, email: row.email, vaRole: row.va_role, ghlUserId: ghl.ghlUserId, portalUserId, approvedBy: callerId },
       }).then(() => undefined, () => undefined);
 
-      // 5) Send the VA their CRM login (workspace invite arrives separately).
+      // 5) Send the VA their CRM login (workspace invite arrives separately),
+      //    including the team Discord invite when configured.
       let vaEmailSent = false;
       try {
         if (resendKey) {
+          const discordInvite = await secret(admin, "DISCORD_INVITE_URL");
           const resend = new Resend(resendKey);
           await resend.emails.send({
             from: "Novara Team <hello@novaracleaning.com>",
@@ -257,6 +289,12 @@ serve(async (req) => {
                     ? "A separate invite email with your workspace access is on its way."
                     : `Access <a href="https://admin.novaracleaning.com">admin.novaracleaning.com</a> — if you don't receive an invite, ask your admin to resend it.`}</p>
                 </div>
+                ${discordInvite ? `
+                <div style="border:1px solid #dfe2fb;border-radius:10px;padding:14px 16px;margin:14px 0;background:#f5f6ff">
+                  <p style="margin:0 0 6px"><strong>3. Team Discord</strong></p>
+                  <p style="margin:0;font-size:14px">Announcements, dispatch, and day-to-day comms happen here:<br/>
+                  <a href="${discordInvite}" style="display:inline-block;margin-top:8px;background:#5865F2;color:#fff;padding:9px 18px;border-radius:8px;text-decoration:none;font-weight:600">Join the Novara Discord</a></p>
+                </div>` : ""}
                 <p style="font-size:13px;color:#3f3d56">Your access matches your role — if something you need is missing, ask your admin.</p>
                 <p style="font-size:13px">— Novara Cleaning</p>
               </div>`,
@@ -266,6 +304,9 @@ serve(async (req) => {
       } catch (e) {
         console.warn("[admin-va-provision] VA email failed", e instanceof Error ? e.message : String(e));
       }
+
+      // Zapier lifecycle event.
+      await sendVaZapier(admin, "va.approved", row, { ghlUserId: ghl.ghlUserId, portalUserId });
 
       return json({
         ok: true,
@@ -295,6 +336,7 @@ serve(async (req) => {
         summary: `❌ VA application rejected — ${name} (${row.email}).${reason ? ` Reason: ${reason}` : ""} No access was provisioned.`,
         data: { vaOnboardingId: row.id, email: row.email, rejectedBy: callerId, reason: reason || null },
       }).then(() => undefined, () => undefined);
+      await sendVaZapier(admin, "va.rejected", row, { reason: reason || null });
       return json({ ok: true, rejected: true });
     }
 
@@ -334,6 +376,8 @@ serve(async (req) => {
         summary: `🔒 VA offboarded — ${name} (${email}). GHL user ${results.ghlDeleted ? "deleted" : "not found/failed"}, workspace roles ${results.workspaceRevoked ? "revoked" : "not found"}, login ${results.authBanned ? "banned" : "n/a"}.`,
         data: { vaOnboardingId: row.id, email, offboardedBy: callerId, ...results },
       }).then(() => undefined, () => undefined);
+
+      await sendVaZapier(admin, "va.offboarded", row, results);
 
       return json({ ok: true, offboarded: true, ...results });
     }

@@ -401,3 +401,25 @@ if (booking.total_estimate_cents < 10000) {
 - Automatic retry logic
 - Admin monitoring dashboard
 - Test utilities
+
+## VA Onboarding Workflow (2026-07)
+
+VA lifecycle events fire at a dedicated Zapier Catch Hook, separate from the
+booking webhook. Configure it once:
+
+1. In Zapier: **Webhooks by Zapier → Catch Hook** → copy the hook URL.
+2. Store it (SQL editor):
+   `update app_secrets set value = 'https://hooks.zapier.com/hooks/catch/…' where key = 'ZAPIER_VA_HOOK_URL';`
+3. Events arrive as JSON with an `event` discriminator:
+   - `va.submitted`  — onboarding form completed (agreement already signed)
+   - `va.approved`   — admin approved; GHL user + workspace access provisioned
+   - `va.rejected`   — application rejected (includes `reason`)
+   - `va.offboarded` — access revoked (includes ghlDeleted/workspaceRevoked flags)
+
+Payload fields: `event, email, firstName, lastName, name, phone, vaRole,
+timezone, workingHours, experience, tools, agreementSignedAt, submittedAt,
+status, onboardingId, timestamp` (+ per-event extras). Build one Zap with a
+Paths step (branch on `event`) or separate Zaps filtered per event.
+
+Related: `DISCORD_INVITE_URL` in app_secrets powers the "Join the team
+Discord" card in VA onboarding and the approval email.

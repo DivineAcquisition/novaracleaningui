@@ -37,6 +37,49 @@ function bad(error: string, status = 400) {
 }
 
 // deno-lint-ignore no-explicit-any
+async function getSecret(supabase: any, key: string): Promise<string> {
+  try {
+    const { data } = await supabase.from("app_secrets").select("value").eq("key", key).maybeSingle();
+    if (data?.value) return String(data.value).trim();
+  } catch { /* fall through */ }
+  return (process.env[key] || "").trim();
+}
+
+// Fire a VA lifecycle event at the Zapier Catch Hook (ZAPIER_VA_HOOK_URL in
+// app_secrets). No-ops silently until the hook is configured. Never throws.
+// deno-lint-ignore no-explicit-any
+async function sendVaZapier(supabase: any, event: string, row: Record<string, any>) {
+  try {
+    const hook = await getSecret(supabase, "ZAPIER_VA_HOOK_URL");
+    if (!hook.startsWith("https://hooks.zapier.com/")) return;
+    await fetch(hook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event, // va.submitted | va.approved | va.rejected | va.offboarded
+        email: row.email,
+        firstName: row.first_name || "",
+        lastName: row.last_name || "",
+        name: `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email,
+        phone: row.phone || "",
+        vaRole: row.va_role,
+        timezone: row.timezone || "",
+        workingHours: row.working_hours || "",
+        experience: row.experience || "",
+        tools: row.tools || "",
+        agreementSignedAt: row.agreement_signed_at || null,
+        submittedAt: row.submitted_at || null,
+        status: row.status,
+        onboardingId: row.id,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch (e) {
+    console.warn("[va-onboarding] zapier hook failed (non-blocking)", e instanceof Error ? e.message : String(e));
+  }
+}
+
+// deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
 
 function summarize(r: Row) {
@@ -108,7 +151,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         agreementPreviewUrl = await getAgreementPreviewUrl("va_contractor");
       } catch { /* preview is best-effort; signing still enforces the terms */ }
 
-      return NextResponse.json({ ok: true, ...summarize(row!), agreementPreviewUrl });
+      const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
+      return NextResponse.json({ ok: true, ...summarize(row!), agreementPreviewUrl, discordInviteUrl });
     }
 
     // Everything below requires the row id minted by start.
@@ -119,7 +163,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     // ── status ──────────────────────────────────────────────────────────
     if (action === "status") {
-      return NextResponse.json({ ok: true, ...summarize(row) });
+      const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
+      return NextResponse.json({ ok: true, ...summarize(row), discordInviteUrl });
     }
 
     // ── sign: execute the VA Independent Contractor Agreement ──────────
@@ -160,7 +205,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         .single();
       if (error) throw error;
 
-      return NextResponse.json({ ok: true, ...summarize(updated as Row) });
+      const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
+      return NextResponse.json({ ok: true, ...summarize(updated as Row), discordInviteUrl });
     }
 
     // ── submit: onboarding form (only AFTER the signed agreement) ──────
@@ -190,6 +236,9 @@ export async function POST(req: Request): Promise<NextResponse> {
         .single();
       if (error) throw error;
 
+      // Zapier: VA lifecycle event for any external workflow (sheets, Slack…).
+      void sendVaZapier(supabase, "va.submitted", updated as Row);
+
       // Ops visibility: Discord (routed) + best-effort admin email. Still NO access.
       const name = `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email;
       await supabase.from("events").insert({
@@ -214,7 +263,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         }
       } catch { /* best-effort */ }
 
-      return NextResponse.json({ ok: true, ...summarize(updated as Row) });
+      const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
+      return NextResponse.json({ ok: true, ...summarize(updated as Row), discordInviteUrl });
     }
 
     return bad("Unknown action");
