@@ -58,6 +58,16 @@ interface AddonEmailData {
   serviceDate?: string;
   bookingRef?: string;
   hostedInvoiceUrl?: string;
+  /** Why the add-on was billed (shown to customer). */
+  chargeReason?: string;
+  /** On-site cleaner report / notes for the extra work. */
+  cleanerReport?: string;
+  cleanerName?: string;
+  chargeDate?: string;
+  paymentRef?: string;
+  serviceAddress?: string;
+  /** When set, prepends an internal review banner (draft for approver). */
+  reviewFor?: string;
 }
 
 function renderHtml(opts: { heading: string; bodyHtml: string; rows: Array<{ label: string; value: string }>; ctaLabel?: string; ctaUrl?: string }): string {
@@ -119,6 +129,38 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
       }),
     };
   }
+  if (type === "addon_receipt") {
+    const reviewBanner = d.reviewFor
+      ? `<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:16px;margin-bottom:20px;font-size:14px;color:#92400E;"><strong>Internal review draft</strong> — this email has <em>not</em> been sent to the customer yet. Intended recipient: <strong>${d.reviewFor}</strong>.</div>`
+      : "";
+    const reasonBlock = d.chargeReason
+      ? `<div style="background:#ffffff;border:2px solid ${BRAND.primary};border-radius:8px;padding:20px 22px;margin:20px 0 16px;"><p style="margin:0 0 12px;font-size:17px;font-weight:700;color:${BRAND.primary};">Why you were charged</p><p style="margin:0;font-size:16px;line-height:1.65;color:${BRAND.gray700};">${d.chargeReason}</p></div>`
+      : "";
+    const reportBlock = d.cleanerReport
+      ? `<div style="background:${BRAND.gray50};border-left:4px solid ${BRAND.primary};padding:16px 20px;border-radius:0 8px 8px 0;margin:16px 0 20px;"><p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">What our cleaner found on site${d.cleanerName ? ` (${d.cleanerName})` : ""}</p><p style="margin:0;white-space:pre-wrap;font-size:15px;line-height:1.6;color:${BRAND.gray700};">${d.cleanerReport}</p></div>`
+      : "";
+    const detailRows = [
+      { label: "Booking", value: d.bookingRef || "" },
+      { label: "Service date", value: d.serviceDate || "" },
+      { label: "Service address", value: d.serviceAddress || "" },
+      { label: "Additional service", value: list },
+      { label: "Amount charged", value: d.amount || "" },
+      { label: "Charge date", value: d.chargeDate || "" },
+      { label: "Payment reference", value: d.paymentRef || "" },
+    ];
+    const subjectPrefix = d.reviewFor ? "[REVIEW] " : "";
+    const intro = d.serviceDate
+      ? `During your cleaning on <strong>${d.serviceDate}</strong>, our crew completed extra work in your bathroom that goes beyond what is included in a standard cleaning.`
+      : "During your recent cleaning, our crew completed extra work in your bathroom that goes beyond what is included in a standard cleaning.";
+    return {
+      subject: `${subjectPrefix}Why you were charged for ${list}${d.amount ? ` (${d.amount})` : ""}`,
+      html: renderHtml({
+        heading: "Additional charge explanation",
+        bodyHtml: `${reviewBanner}<p>${hi}</p><p>${intro}</p><p style="margin-top:16px;">We're writing to explain <strong>why this additional charge was applied</strong> and what work was performed. A copy of the charge details is included below for your records.</p>${reasonBlock}${reportBlock}<p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Charge summary</p><p style="margin:0 0 4px;font-size:15px;color:${BRAND.gray700};">The <strong>${list}</strong> add-on (${d.amount || "see below"}) was charged to the card on file after this extra work was completed.</p>`,
+        rows: detailRows,
+      }),
+    };
+  }
   return null;
 }
 
@@ -132,7 +174,7 @@ serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let body: { type?: string; email?: string; data?: AddonEmailData };
+  let body: { type?: string; email?: string; data?: AddonEmailData; skipBillingCc?: boolean; cc?: string[] };
   try { body = await req.json(); } catch { return json({ ok: true }); }
   const type = String(body?.type || "");
   const email = String(body?.email || "").trim().toLowerCase();
@@ -145,9 +187,13 @@ serve(async (req) => {
   if (!resendKey) { console.error("[send-addon-email] RESEND_API_KEY missing"); return json({ ok: true }); }
   const resend = new Resend(resendKey);
 
+  const isReview = Boolean(body.data?.reviewFor);
+  const extraCc = (body.cc || []).map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes("@"));
+  const cc = isReview ? [] : (extraCc.length > 0 ? extraCc : (body.skipBillingCc ? [] : [BILLING_CC]));
+
   try {
     const result = await resend.emails.send({
-      from: FROM_ADDRESS, to: [email], cc: [BILLING_CC], subject: built.subject, html: built.html, replyTo: BRAND.supportEmail,
+      from: FROM_ADDRESS, to: [email], cc, subject: built.subject, html: built.html, replyTo: BRAND.supportEmail,
     });
     if ((result as { error?: unknown })?.error) console.error("[send-addon-email] resend error", type, (result as { error?: unknown }).error);
     else console.log("[send-addon-email] sent", type, email);
