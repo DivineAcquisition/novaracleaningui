@@ -376,6 +376,16 @@ serve(async (req) => {
     }
 
     const nowIso = new Date().toISOString();
+
+    // Recover rows stuck in 'mirroring' (a big photo set can outlive one
+    // function invocation — uploads dedupe by filename, so resuming from
+    // 'pending' converges across runs instead of stalling forever).
+    await supabase
+      .from("job_documentation")
+      .update({ mirror_status: "pending", updated_at: nowIso })
+      .eq("mirror_status", "mirroring")
+      .lt("updated_at", new Date(Date.now() - 30 * 60_000).toISOString());
+
     let query = supabase
       .from("job_documentation")
       .select("id, booking_id, job_id, booking_ref, client_name, client_email, service_type, service_date, address, cleaner_names, before_photos, after_photos, notes, completed_at, mirror_attempts, drive_folder_id, drive_pdf_id")
