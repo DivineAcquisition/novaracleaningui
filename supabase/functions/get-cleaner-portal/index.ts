@@ -263,6 +263,20 @@ serve(async (req) => {
           ? ""
           : `${b.first_name || ""} ${b.last_name || ""}`.trim();
 
+        // Access details are TIME-SCOPED: codes/entry instructions unlock 48h
+        // before the visit and stay through the day after — never indefinitely.
+        // (Partner-hub bookings carry codes in access_notes; residential
+        // bookings keep prior behavior unless a code marker is present.)
+        let accessNotes: string | null = b.access_notes || null;
+        if (accessNotes && b.service_date && /ACCESS:|code:/i.test(accessNotes)) {
+          const svc = Date.parse(`${String(b.service_date).slice(0, 10)}T00:00:00`);
+          const unlockAt = svc - 48 * 3600_000;
+          const relockAt = svc + 48 * 3600_000;
+          if (Number.isFinite(svc) && (Date.now() < unlockAt || Date.now() > relockAt)) {
+            accessNotes = "🔒 Access details unlock 48 hours before the visit.";
+          }
+        }
+
         return {
           id: b.id,
           bookingId: b.id,
@@ -305,7 +319,7 @@ serve(async (req) => {
             pets: b.pets || null,
             addOns: Array.isArray(b.add_ons) ? b.add_ons : [],
             frequency: b.frequency || null,
-            accessNotes: b.access_notes || null,
+            accessNotes,
           },
           internalDetails: cancelled ? null : {
             jobValueCents: b.total_estimate_cents ?? null,

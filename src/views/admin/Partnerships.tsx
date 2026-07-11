@@ -24,10 +24,11 @@ import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
 import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
 import CommercialAccountsAdmin from "@/views/admin/CommercialAccountsAdmin";
-import CommercialBooking from "@/views/admin/CommercialBooking";
+import PartnershipBooking from "@/views/admin/PartnershipBooking";
+import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
-const VALID_TABS = ["overview", "commercial", "book", "accounts", "turnovers"];
+const VALID_TABS = ["overview", "commercial", "book", "recurring", "accounts", "turnovers"];
 
 export default function Partnerships() {
   const searchParams = useSearchParams();
@@ -101,7 +102,10 @@ export default function Partnerships() {
             <RiBuilding2Line className="w-4 h-4" /> Commercial &amp; Office
           </TabsTrigger>
           <TabsTrigger value="book" className="gap-1.5">
-            <RiCalendarCheckLine className="w-4 h-4" /> Book Service
+            <RiCalendarCheckLine className="w-4 h-4" /> Book Job
+          </TabsTrigger>
+          <TabsTrigger value="recurring" className="gap-1.5">
+            <RiRefreshLine className="w-4 h-4" /> Recurring
           </TabsTrigger>
           <TabsTrigger value="accounts" className="gap-1.5">
             <RiHotelLine className="w-4 h-4" /> STR Hosts
@@ -119,7 +123,10 @@ export default function Partnerships() {
           {tab === "commercial" && <CommercialAccountsAdmin />}
         </TabsContent>
         <TabsContent value="book" className="mt-4">
-          {tab === "book" && <CommercialBooking />}
+          {tab === "book" && <PartnershipBooking />}
+        </TabsContent>
+        <TabsContent value="recurring" className="mt-4">
+          {tab === "recurring" && <PartnerRecurringSchedules />}
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
           {tab === "accounts" && <PartnerAccounts />}

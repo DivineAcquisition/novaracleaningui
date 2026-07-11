@@ -400,3 +400,12 @@ verify_jwt = false
 # Commercial/office partner portal — logged-in partner JWT enforced inside.
 [functions.partner-commercial-portal]
 verify_jwt = false
+
+# Partnerships internal booking engine — admin/VA JWT or service-role (cron)
+# enforced inside.
+[functions.book-partner-job]
+verify_jwt = false
+
+# Recurring partner-job generator (pg_cron, service-role bearer).
+[functions.partner-jobs-generate]
+verify_jwt = false
