@@ -37,6 +37,7 @@ import {
   RiGroup2Line,
   RiMoneyDollarCircleLine,
   RiShieldCheckLine,
+  RiFileChartLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -123,6 +124,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/qc",
     icon: RiShieldCheckLine,
     description: "Job documentation · issues · dispute packets",
+  },
+  {
+    title: "P&L Data",
+    url: "/admin/pnl",
+    icon: RiFileChartLine,
+    description: "Expenses · ad spend · EOD — daily sheet mirror",
   },
   {
     title: "Map",

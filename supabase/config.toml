@@ -413,3 +413,8 @@ verify_jwt = false
 # Admin/VA cleaner profile editor — JWT enforced inside.
 [functions.admin-update-cleaner]
 verify_jwt = false
+
+# Daily P&L Supabase -> Google Sheet mirror (pg_cron service-role bearer;
+# admin can also trigger from the P&L page).
+[functions.pl-sheet-sync]
+verify_jwt = false
