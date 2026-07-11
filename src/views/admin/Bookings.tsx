@@ -462,17 +462,29 @@ function BookingAssignBlock({
       const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
         body: { bookingId: booking.id, cleanerIds: selectedIds, mode: "replace", allowUnpaid },
       });
-      // The deposit gate returns HTTP 402 with code "deposit_unpaid". The
-      // supabase client surfaces non-2xx via `error`, but the JSON body is
-      // still in `data` — check both so we can offer an override.
-      const payload = (data ?? (error as any)?.context ?? {}) as { error?: string; code?: string };
+      // On non-2xx the supabase client returns a FunctionsHttpError whose
+      // `context` is the raw Response — the JSON body (error message +
+      // code like "deposit_unpaid") must be parsed out of it, otherwise
+      // every failure surfaces as a useless generic toast and the deposit
+      // override button never appears.
+      let payload = (data ?? {}) as { error?: string; code?: string };
+      if (!payload?.code && !payload?.error && error) {
+        const ctx = (error as any)?.context;
+        try {
+          if (ctx && typeof ctx.json === "function" && !ctx.bodyUsed) {
+            payload = await ctx.json();
+          }
+        } catch { /* body unavailable — fall through to generic error */ }
+      }
       if (payload?.code === "deposit_unpaid") {
         setDepositBlocked(true);
-        toast.error("Customer hasn't paid the deposit yet — assignment blocked.");
+        toast.error(
+          "Customer hasn't paid the deposit yet — assignment blocked. Use the override below for cash/comp jobs.",
+        );
         return;
       }
+      if (payload?.error) throw new Error(payload.error);
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
       setDepositBlocked(false);
       const notes = (data as { notifications?: Array<{ email?: boolean; sms?: boolean }> })?.notifications;
       const emailed = notes?.filter((n) => n.email).length ?? 0;
