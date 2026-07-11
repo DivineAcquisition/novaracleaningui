@@ -4,6 +4,10 @@
 // The row id (uuid, returned to the same browser) is the session credential.
 //
 // Actions:
+//   redeem { inviteToken }
+//          → open a tokenized OFFER LETTER link sent from Admin → Team.
+//            Tokens expire 30 minutes after being sent (410 when expired);
+//            identity comes from the token, so the AGREEMENT step is first.
 //   start  { email, firstName, lastName, phone, vaRole }
 //          → upsert the pending record (identity step), returns
 //            { id, status, agreementPreviewUrl } so the VA can READ the
@@ -105,6 +109,44 @@ export async function POST(req: Request): Promise<NextResponse> {
   const supabase = getAdminSupabase();
 
   try {
+    // ── redeem: open a tokenized OFFER LETTER link (30-minute expiry) ───
+    // The token carries the VA's identity, so the wizard can put the
+    // AGREEMENT step first. Expired links return 410 with a clear message.
+    if (action === "redeem") {
+      const token = String(body.inviteToken || "").trim();
+      if (token.length < 16) return bad("Invalid invite link.");
+      const { data: row } = await supabase
+        .from("va_onboarding")
+        .select("*")
+        .eq("invite_token", token)
+        .maybeSingle();
+      if (!row) return bad("This offer link isn't valid — ask your admin for a fresh one.", 404);
+      if (["approved", "offboarded", "rejected"].includes(String(row.status))) {
+        return bad(`This onboarding is already ${row.status}.`, 409);
+      }
+      const expired = !row.invite_expires_at || new Date(row.invite_expires_at).getTime() < Date.now();
+      // Once the VA has started (signed/submitted), their saved session keeps
+      // working — expiry only gates FRESH redemptions of the emailed link.
+      if (expired && row.status === "invited") {
+        return NextResponse.json(
+          { error: "This offer link has expired (links are valid for 30 minutes). Ask your admin to resend it." },
+          { status: 410 },
+        );
+      }
+      let agreementPreviewUrl: string | null = null;
+      try {
+        agreementPreviewUrl = await getAgreementPreviewUrl("va_contractor");
+      } catch { /* best-effort */ }
+      const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
+      return NextResponse.json({
+        ok: true,
+        ...summarize(row),
+        offerNote: row.offer_note || null,
+        agreementPreviewUrl,
+        discordInviteUrl,
+      });
+    }
+
     // ── start: identity + role, mint/resume the pending record ─────────
     if (action === "start") {
       const email = String(body.email || "").trim().toLowerCase();
@@ -164,7 +206,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     // ── status ──────────────────────────────────────────────────────────
     if (action === "status") {
       const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
-      return NextResponse.json({ ok: true, ...summarize(row), discordInviteUrl });
+      let agreementPreviewUrl: string | null = null;
+      if (!row.agreement_signed_at) {
+        try {
+          agreementPreviewUrl = await getAgreementPreviewUrl("va_contractor");
+        } catch { /* best-effort */ }
+      }
+      return NextResponse.json({
+        ok: true,
+        ...summarize(row),
+        offerNote: row.offer_note || null,
+        agreementPreviewUrl,
+        discordInviteUrl,
+      });
     }
 
     // ── sign: execute the VA Independent Contractor Agreement ──────────
@@ -224,6 +278,9 @@ export async function POST(req: Request): Promise<NextResponse> {
         .update({
           timezone,
           working_hours: workingHours,
+          // Invited VAs skip the identity step (the offer carries it), so the
+          // form is where their phone lands.
+          ...(body.phone !== undefined ? { phone: String(body.phone || "").trim() || null } : {}),
           experience: String(body.experience || "").trim() || null,
           tools: String(body.tools || "").trim() || null,
           notes: String(body.notes || "").trim() || null,

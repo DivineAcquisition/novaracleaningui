@@ -446,10 +446,13 @@ interface VaRow {
   approved_at: string | null;
   provisioned_at: string | null;
   ghl_user_id: string | null;
+  invite_expires_at?: string | null;
+  invite_sent_at?: string | null;
   created_at: string;
 }
 
 const VA_STATUS_TONE: Record<string, string> = {
+  invited: "bg-violet-100 text-violet-700",
   started: "bg-slate-100 text-slate-600",
   signed: "bg-blue-100 text-blue-700",
   submitted: "bg-amber-100 text-amber-800",
@@ -463,6 +466,13 @@ function VaOnboardingQueue() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Offer-letter form
+  const [offerEmail, setOfferEmail] = useState("");
+  const [offerFirst, setOfferFirst] = useState("");
+  const [offerLast, setOfferLast] = useState("");
+  const [offerRole, setOfferRole] = useState("operations");
+  const [offerNote, setOfferNote] = useState("");
+  const [sendingOffer, setSendingOffer] = useState(false);
 
   const loadRows = async () => {
     setLoading(true);
@@ -474,6 +484,45 @@ function VaOnboardingQueue() {
     setLoading(false);
   };
   useEffect(() => { void loadRows(); }, []);
+
+  // Send (or resend) the tokenized offer letter — 30-minute link.
+  const sendOffer = async (prefill?: { email: string; first: string; last: string; role: string }) => {
+    const email = (prefill?.email ?? offerEmail).trim().toLowerCase();
+    const firstName = (prefill?.first ?? offerFirst).trim();
+    if (!email.includes("@") || !firstName) {
+      toast.error("Email and first name are required to send an offer.");
+      return;
+    }
+    setSendingOffer(true);
+    setWorking(prefill ? `offer-${email}` : "offer-new");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-va-provision", {
+        body: {
+          action: "invite",
+          email,
+          firstName,
+          lastName: prefill?.last ?? offerLast,
+          vaRole: prefill?.role ?? offerRole,
+          offerNote: prefill ? undefined : offerNote.trim() || undefined,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = data as { offerEmailSent?: boolean; expiresAt?: string };
+      toast.success(
+        d.offerEmailSent
+          ? `Offer letter emailed to ${email} — link expires in 30 minutes.`
+          : `Offer created for ${email}, but the email failed — resend or share the link manually.`,
+      );
+      if (!prefill) { setOfferEmail(""); setOfferFirst(""); setOfferLast(""); setOfferNote(""); }
+      await loadRows();
+    } catch (e) {
+      toast.error((e as { message?: string })?.message || "Could not send the offer");
+    } finally {
+      setSendingOffer(false);
+      setWorking(null);
+    }
+  };
 
   const act = async (row: VaRow, action: "approve" | "reject" | "offboard") => {
     const name = `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email;
@@ -516,12 +565,16 @@ function VaOnboardingQueue() {
   };
 
   const pending = rows.filter((r) => r.status === "submitted");
+  const invited = rows.filter((r) => r.status === "invited");
   const inProgress = rows.filter((r) => ["started", "signed"].includes(r.status));
   const active = rows.filter((r) => r.status === "approved");
   const archived = rows.filter((r) => ["rejected", "offboarded"].includes(r.status));
 
   const renderRow = (r: VaRow) => {
     const name = `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email;
+    const inviteExpired = r.status === "invited" && r.invite_expires_at
+      ? new Date(r.invite_expires_at).getTime() < Date.now()
+      : false;
     return (
       <div key={r.id} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
@@ -540,9 +593,22 @@ function VaOnboardingQueue() {
             <Badge className={cn("text-[11px]", VA_STATUS_TONE[r.status] || "bg-slate-100 text-slate-600")}>
               {r.status}
             </Badge>
-            <Badge className={cn("text-[11px]", r.agreement_signed_at ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
-              {r.agreement_signed_at ? "Agreement signed ✓" : "NOT signed"}
-            </Badge>
+            {r.status === "invited" ? (
+              <Badge className={cn("text-[11px]", inviteExpired ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800")}>
+                {inviteExpired ? "Offer link expired" : "Offer link live (30 min)"}
+              </Badge>
+            ) : (
+              <Badge className={cn("text-[11px]", r.agreement_signed_at ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
+                {r.agreement_signed_at ? "Agreement signed ✓" : "NOT signed"}
+              </Badge>
+            )}
+            {(r.status === "invited" || r.status === "started") && (
+              <Button size="sm" variant="outline" className="h-8 text-xs"
+                disabled={working !== null}
+                onClick={() => sendOffer({ email: r.email, first: r.first_name || "", last: r.last_name || "", role: r.va_role })}>
+                {working === `offer-${r.email}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Resend offer link"}
+              </Button>
+            )}
             {r.status === "submitted" && (
               <>
                 <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -588,11 +654,46 @@ function VaOnboardingQueue() {
           </Button>
         </div>
 
+        {/* Send an offer letter (tokenized link, expires in 30 minutes) */}
+        <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3.5 space-y-2">
+          <p className="text-xs font-semibold text-violet-900">Send a VA offer letter</p>
+          <p className="text-[11px] text-violet-800/70 -mt-1">
+            Emails a tokenized offer link that <strong>expires 30 minutes</strong> after sending
+            (resending mints a fresh link). The VA signs the agreement first, then completes onboarding.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <Input placeholder="Email *" type="email" value={offerEmail} onChange={(e) => setOfferEmail(e.target.value)} />
+            <Input placeholder="First name *" value={offerFirst} onChange={(e) => setOfferFirst(e.target.value)} />
+            <Input placeholder="Last name" value={offerLast} onChange={(e) => setOfferLast(e.target.value)} />
+            <select
+              value={offerRole}
+              onChange={(e) => setOfferRole(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-500"
+            >
+              <option value="operations">Operations VA</option>
+              <option value="sales">Sales VA</option>
+              <option value="recruiting">Recruiting VA</option>
+              <option value="all">All-in-one VA</option>
+            </select>
+          </div>
+          <Input placeholder="Optional note included in the offer letter (rate, start date, expectations…)"
+            value={offerNote} onChange={(e) => setOfferNote(e.target.value)} />
+          <Button
+            size="sm"
+            className="bg-violet-600 hover:bg-violet-700 text-white"
+            disabled={sendingOffer || !offerEmail.includes("@") || !offerFirst.trim()}
+            onClick={() => sendOffer()}
+          >
+            {sendingOffer && working === "offer-new" ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : null}
+            Email the offer letter
+          </Button>
+        </div>
+
         {loading ? (
           <div className="py-6 text-center"><RiLoader4Line className="w-5 h-5 animate-spin text-violet-600 mx-auto" /></div>
         ) : rows.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-4">
-            No VA applications yet — send candidates to team.novaracleaning.com.
+            No VAs yet — send an offer letter above to start onboarding someone.
           </p>
         ) : (
           <div className="space-y-3">
@@ -600,6 +701,12 @@ function VaOnboardingQueue() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold text-amber-700">Awaiting your approval ({pending.length})</p>
                 {pending.map(renderRow)}
+              </div>
+            )}
+            {invited.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-violet-700">Offer sent — awaiting signature ({invited.length})</p>
+                {invited.map(renderRow)}
               </div>
             )}
             {active.length > 0 && (
