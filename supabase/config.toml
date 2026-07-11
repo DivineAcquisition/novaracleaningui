@@ -388,3 +388,7 @@ verify_jwt = false
 
 [functions.qc-issues]
 verify_jwt = false
+
+# Live case-file assembly for the QC console — admin/VA JWT enforced inside.
+[functions.qc-case-file]
+verify_jwt = false

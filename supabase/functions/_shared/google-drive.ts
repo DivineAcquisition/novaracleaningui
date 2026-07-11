@@ -39,8 +39,15 @@ export function driveConfigured(): boolean {
   );
 }
 
-/** Mint a short-lived Drive access token via the service-account JWT flow. */
-export async function getDriveToken(): Promise<string | null> {
+/**
+ * Mint a short-lived Drive access token via the service-account JWT flow.
+ *
+ * `impersonate` (optional): a Google Workspace user email to act as via
+ * domain-wide delegation. Needed when the archive folder lives in a user's
+ * My Drive — service accounts have NO storage quota of their own, so files
+ * must be owned by either a Shared Drive or an impersonated user.
+ */
+export async function getDriveToken(impersonate?: string): Promise<string | null> {
   const saEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   const saKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
   if (!saEmail || !saKey) return null;
@@ -53,6 +60,7 @@ export async function getDriveToken(): Promise<string | null> {
       aud: "https://oauth2.googleapis.com/token",
       iat: now,
       exp: now + 3600,
+      ...(impersonate ? { sub: impersonate } : {}),
     })),
   );
   const key = await crypto.subtle.importKey(

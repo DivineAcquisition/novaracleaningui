@@ -25,6 +25,7 @@ import {
   RiFileTextLine,
   RiFolderCheckLine,
   RiLoader4Line,
+  RiMoneyDollarCircleLine,
   RiRefreshLine,
   RiSearch2Line,
   RiShieldCheckLine,
@@ -432,6 +433,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
   const [events, setEvents] = useState<IssueEvent[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [caseOpen, setCaseOpen] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -490,9 +492,14 @@ function IssueSheet({ issue, doc, onClose, reload }: {
 
           {/* ─── Evidence: the linked job's documentation ─────────────── */}
           <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-3">
-            <p className="text-sm font-bold text-violet-800 flex items-center gap-1.5">
-              <RiFolderCheckLine className="w-4 h-4" /> Job evidence
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-violet-800 flex items-center gap-1.5">
+                <RiFolderCheckLine className="w-4 h-4" /> Job evidence
+              </p>
+              <Button size="sm" variant="outline" className="h-7 text-xs border-violet-300 text-violet-700" onClick={() => setCaseOpen(true)}>
+                Full case file
+              </Button>
+            </div>
             {doc ? (
               <>
                 <div className="flex flex-wrap gap-2 text-xs">
@@ -612,6 +619,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             </div>
           )}
         </div>
+        {caseOpen && (
+          <CaseFileSheet bookingId={issue.booking_id} caseRef={issue.booking_ref} onClose={() => setCaseOpen(false)} />
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -748,6 +758,7 @@ function DocsTab({ docs, reload }: { docs: DocRow[]; reload: () => Promise<void>
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [caseOpen, setCaseOpen] = useState<{ bookingId: string; ref: string | null } | null>(null);
 
   const filtered = useMemo(() => docs.filter((d) => {
     if (filter === "undocumented" && (d.documented || d.photos_purged_at)) return false;
@@ -806,9 +817,18 @@ function DocsTab({ docs, reload }: { docs: DocRow[]; reload: () => Promise<void>
             !d.documented && !d.photos_purged_at ? "border-rose-300 bg-rose-50/40" : "border-slate-200",
           )}>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-slate-900">{d.booking_ref || d.booking_id.slice(0, 8)}</span>
+              <button
+                className="font-semibold text-slate-900 hover:text-violet-700 hover:underline"
+                onClick={() => setCaseOpen({ bookingId: d.booking_id, ref: d.booking_ref })}
+              >
+                {d.booking_ref || d.booking_id.slice(0, 8)}
+              </button>
               <span className="text-sm text-slate-500">{d.client_name} · {fmtD(d.service_date)} · {d.service_type}</span>
               <div className="flex gap-1.5 ml-auto items-center">
+                <Button size="sm" variant="ghost" className="h-6 text-xs text-violet-700"
+                  onClick={() => setCaseOpen({ bookingId: d.booking_id, ref: d.booking_ref })}>
+                  <RiFolderCheckLine className="w-3.5 h-3.5 mr-1" /> Case file
+                </Button>
                 <Badge className={cn("border-0", d.documented ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
                   {d.documented ? "Documented ✓" : "No photos"}
                 </Badge>
@@ -847,7 +867,263 @@ function DocsTab({ docs, reload }: { docs: DocRow[]; reload: () => Promise<void>
           <Card><CardContent className="p-10 text-center text-slate-500 text-sm">No documentation records match.</CardContent></Card>
         )}
       </div>
+      {caseOpen && (
+        <CaseFileSheet bookingId={caseOpen.bookingId} caseRef={caseOpen.ref} onClose={() => setCaseOpen(null)} />
+      )}
     </div>
+  );
+}
+
+// ─── Case file sheet (live case-management view) ────────────────────────
+//
+// Everything assembled LIVE by the qc-case-file edge function at open time:
+// customer + signed agreement PDFs, Stripe payment records w/ receipts,
+// cleaner photos, checklist, Drive archive, issues + audit, event timeline.
+
+interface CaseFile {
+  ref: string;
+  booking: Record<string, any>;
+  customer: Record<string, any>;
+  cleaners: Array<{ name: string; status: string }>;
+  agreements: Array<{ id: string; signed_by: string | null; signed_at: string; pdf_url: string | null; source: string }>;
+  docuseal: Array<{ id: string; audience: string; status: string; document_url: string | null; created_at: string; completed_at: string | null }>;
+  payments: {
+    totals: Record<string, any>;
+    stripe: Array<{ kind: string; payment_intent_id: string; amount_cents: number | null; status: string | null; receipt_url: string | null; refunded_cents: number; created: string | null; error?: string }>;
+    addon_charges: Array<Record<string, any>>;
+    completion_hold: Record<string, any> | null;
+  };
+  photos: { before: string[]; after: string[]; purged: boolean; submitted_at: string | null };
+  checklist: Record<string, any> | null;
+  documentation: Record<string, any> | null;
+  issues: IssueRow[];
+  issue_events: Array<Record<string, any>>;
+  timeline: Array<{ event_type: string; occurred_at: string; source: string; summary: string }>;
+}
+
+const cents = (c: number | null | undefined) => (c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—");
+
+export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: string; caseRef?: string | null; onClose: () => void }) {
+  const [cf, setCf] = useState<CaseFile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data, error: invErr } = await supabase.functions.invoke("qc-case-file", { body: { bookingId } });
+        if (invErr) throw invErr;
+        if ((data as { ok?: boolean; error?: string })?.ok === false) throw new Error((data as { error?: string }).error || "Failed");
+        setCf((data as { case: CaseFile }).case);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't load case file");
+      }
+    })();
+  }, [bookingId]);
+
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <RiFolderCheckLine className="w-5 h-5 text-violet-600" /> Case file — {cf?.ref || caseRef || "…"}
+          </SheetTitle>
+          <SheetDescription>
+            Assembled live: agreement, payments, photos, checklist, issues, and full timeline for this job.
+          </SheetDescription>
+        </SheetHeader>
+
+        {error && <p className="mt-6 text-sm text-rose-600">{error}</p>}
+        {!cf && !error && (
+          <div className="mt-6 space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
+        )}
+
+        {cf && (
+          <div className="mt-4 space-y-5">
+            {/* Customer & job */}
+            <section className="rounded-xl border border-slate-200 p-4 space-y-1.5">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RiUserSmileLine className="w-4 h-4 text-violet-600" /> Customer & job
+              </p>
+              <p className="text-sm text-slate-800 font-semibold">
+                {cf.customer.first_name} {cf.customer.last_name}
+                <span className="font-normal text-slate-500"> · {cf.customer.email} · {cf.customer.phone || "no phone"}</span>
+              </p>
+              <p className="text-xs text-slate-500">
+                {label(String(cf.booking.service_type || ""))} on {fmtD(cf.booking.service_date)} · {cf.booking.time_slot || ""} · {cf.booking.address}
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <Badge variant="outline">Status: {label(String(cf.booking.status || ""))}</Badge>
+                {cf.booking.membership_plan && cf.booking.membership_plan !== "none" && <Badge variant="outline">Member: {cf.booking.membership_plan}</Badge>}
+                {cf.cleaners.map((c, i) => <Badge key={i} className="bg-violet-100 text-violet-700 border-0">Cleaner: {c.name}</Badge>)}
+              </div>
+              <div className="text-[11px] text-slate-400 pt-1 space-x-3">
+                {cf.booking.confirmed_at && <span>Confirmed {fmtDT(cf.booking.confirmed_at)}</span>}
+                {cf.booking.check_in_time && <span>Check-in {fmtDT(cf.booking.check_in_time)}</span>}
+                {cf.booking.check_out_time && <span>Check-out {fmtDT(cf.booking.check_out_time)}</span>}
+                {cf.booking.completed_at && <span>Completed {fmtDT(cf.booking.completed_at)}</span>}
+              </div>
+            </section>
+
+            {/* Agreements */}
+            <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RiFileTextLine className="w-4 h-4 text-violet-600" /> Signed agreements
+              </p>
+              {cf.agreements.length === 0 && cf.docuseal.length === 0 && (
+                <p className="text-xs text-rose-600 font-medium">⚠ No signed agreement on file for this customer — legal exposure.</p>
+              )}
+              {cf.agreements.map((a) => (
+                <div key={a.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="text-slate-700">
+                    Service agreement — signed by <strong>{a.signed_by || "customer"}</strong> · {fmtDT(a.signed_at)} <span className="text-slate-400">({a.source})</span>
+                  </span>
+                  {a.pdf_url
+                    ? <a href={a.pdf_url} target="_blank" rel="noreferrer" className="text-violet-600 font-semibold text-xs hover:underline shrink-0 ml-2">Open PDF</a>
+                    : <span className="text-xs text-slate-400 shrink-0 ml-2">no PDF</span>}
+                </div>
+              ))}
+              {cf.docuseal.map((d) => (
+                <div key={d.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="text-slate-700">
+                    DocuSeal ({label(d.audience)}) — {label(d.status)} · {fmtDT(d.completed_at || d.created_at)}
+                  </span>
+                  {d.document_url && <a href={d.document_url} target="_blank" rel="noreferrer" className="text-violet-600 font-semibold text-xs hover:underline shrink-0 ml-2">Open</a>}
+                </div>
+              ))}
+            </section>
+
+            {/* Payments — live from Stripe */}
+            <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-600" /> Payment record <span className="text-[10px] font-normal text-emerald-600">(live from Stripe)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
+                <span>Total: <strong className="text-slate-900">{cents(cf.payments.totals.total_cents)}</strong></span>
+                <span>Payment option: <strong className="text-slate-900">{cf.payments.totals.payment_option || "—"}</strong></span>
+                {Number(cf.payments.totals.deposit_cents) > 0 && <span>Deposit: {cents(cf.payments.totals.deposit_cents)}</span>}
+                {Number(cf.payments.totals.applied_credit_cents) > 0 && <span>Credit applied: {cents(cf.payments.totals.applied_credit_cents)}</span>}
+                {Number(cf.payments.totals.tip_cents) > 0 && <span>Tip: {cents(cf.payments.totals.tip_cents)}</span>}
+                {cf.payments.totals.payment_received_at && <span>Received: {fmtDT(cf.payments.totals.payment_received_at)}</span>}
+              </div>
+              {cf.payments.stripe.map((p, i) => (
+                <div key={i} className="flex items-center justify-between text-sm bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="text-slate-700">
+                    <strong>{p.kind}</strong> — {cents(p.amount_cents)}{" "}
+                    <Badge className={cn("border-0 ml-1", p.status === "succeeded" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                      {p.status || p.error || "?"}
+                    </Badge>
+                    {p.refunded_cents > 0 && <Badge className="bg-rose-100 text-rose-700 border-0 ml-1">refunded {cents(p.refunded_cents)}</Badge>}
+                    <span className="block text-[10px] text-slate-400 font-mono">{p.payment_intent_id}</span>
+                  </span>
+                  {p.receipt_url && <a href={p.receipt_url} target="_blank" rel="noreferrer" className="text-violet-600 font-semibold text-xs hover:underline shrink-0 ml-2">Receipt</a>}
+                </div>
+              ))}
+              {cf.payments.totals.hosted_invoice_url && (
+                <a href={cf.payments.totals.hosted_invoice_url} target="_blank" rel="noreferrer" className="text-xs text-violet-600 font-semibold hover:underline inline-flex items-center gap-1">
+                  <RiExternalLinkLine className="w-3.5 h-3.5" /> Invoice / pay link
+                </a>
+              )}
+            </section>
+
+            {/* Photos */}
+            <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RiCameraLine className="w-4 h-4 text-violet-600" /> Cleaner photos
+                <span className="text-[10px] font-normal text-slate-400">
+                  {cf.photos.before.length} before · {cf.photos.after.length} after
+                  {cf.photos.submitted_at ? ` · submitted ${fmtDT(cf.photos.submitted_at)}` : ""}
+                </span>
+              </p>
+              {cf.photos.purged ? (
+                <p className="text-xs text-slate-500">
+                  Supabase copies purged under the 14-day policy — the originals live in the Drive archive below.
+                </p>
+              ) : cf.photos.before.length + cf.photos.after.length === 0 ? (
+                <p className="text-xs text-rose-600 font-medium">⚠ No photos uploaded — this job is undefendable in a dispute.</p>
+              ) : (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[...cf.photos.before.slice(0, 5).map((u) => ({ u, l: "B" })), ...cf.photos.after.slice(0, 5).map((u) => ({ u, l: "A" }))].map(({ u, l }, i) => (
+                    <a key={i} href={u} target="_blank" rel="noreferrer" className="relative">
+                      <img src={u} alt={l} className="w-full h-14 object-cover rounded border border-slate-200" />
+                      <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-black/60 text-white px-1 rounded">{l === "B" ? "Before" : "After"}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+              {cf.documentation && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Badge className={cn("border-0", MIRROR_STYLE[cf.documentation.mirror_status] || "bg-slate-100")}>
+                    Drive archive: {label(String(cf.documentation.mirror_status))}
+                  </Badge>
+                  {cf.documentation.drive_folder_url && (
+                    <a href={cf.documentation.drive_folder_url} target="_blank" rel="noreferrer" className="text-xs text-violet-600 font-semibold hover:underline inline-flex items-center gap-0.5">
+                      <RiExternalLinkLine className="w-3.5 h-3.5" /> Drive folder
+                    </a>
+                  )}
+                  {cf.documentation.drive_pdf_url && (
+                    <a href={cf.documentation.drive_pdf_url} target="_blank" rel="noreferrer" className="text-xs text-violet-600 font-semibold hover:underline inline-flex items-center gap-0.5">
+                      <RiFileTextLine className="w-3.5 h-3.5" /> Dispute packet (PDF)
+                    </a>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Checklist */}
+            {cf.checklist && (
+              <section className="rounded-xl border border-slate-200 p-4">
+                <p className="text-sm font-bold text-slate-800">Checklist execution</p>
+                <p className="text-xs text-slate-600 mt-1">
+                  {cf.checklist.completed_items}/{cf.checklist.total_items} items ({cf.checklist.progress_pct}%)
+                  {cf.checklist.completed_at ? ` — completed ${fmtDT(cf.checklist.completed_at)}` : " — not finished"}
+                  {cf.checklist.last_activity_by ? ` · by ${cf.checklist.last_activity_by}` : ""}
+                </p>
+              </section>
+            )}
+
+            {/* Issues on this job */}
+            <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RiAlertLine className="w-4 h-4 text-violet-600" /> QC issues on this job ({cf.issues.length})
+              </p>
+              {cf.issues.length === 0 && <p className="text-xs text-slate-500">None reported.</p>}
+              {cf.issues.map((i) => (
+                <div key={i.id} className="bg-slate-50 rounded-lg px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-[10px] text-slate-400">#{i.issue_number}</span>
+                    <Badge className={cn("border-0", SEVERITY_STYLE[i.severity])}>{label(i.severity)}</Badge>
+                    <Badge className={cn("border-0", STATUS_STYLE[i.status])}>{label(i.status)}</Badge>
+                    <span className="text-xs text-slate-400 ml-auto">{fmtDT(i.created_at)}</span>
+                  </div>
+                  <p className="font-medium text-slate-800 mt-1">{i.title}</p>
+                  {cf.issue_events.filter((e) => e.issue_id === i.id).map((e, j) => (
+                    <p key={j} className="text-[11px] text-slate-500 mt-0.5">
+                      {fmtDT(String(e.created_at))} — <strong>{String(e.actor_name || "System")}</strong> {String(e.action)}{e.note ? `: “${String(e.note)}”` : ""}
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </section>
+
+            {/* Timeline */}
+            <section className="rounded-xl border border-slate-200 p-4">
+              <p className="text-sm font-bold text-slate-800 mb-2">Event timeline</p>
+              <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                {cf.timeline.map((e, i) => (
+                  <div key={i} className="flex gap-2 text-[11px]">
+                    <span className="text-slate-400 whitespace-nowrap shrink-0">{fmtDT(e.occurred_at)}</span>
+                    <span className="text-slate-600">
+                      <span className="font-mono text-violet-600">{e.event_type}</span> — {e.summary}
+                    </span>
+                  </div>
+                ))}
+                {cf.timeline.length === 0 && <p className="text-xs text-slate-400">No events recorded.</p>}
+              </div>
+            </section>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }
 

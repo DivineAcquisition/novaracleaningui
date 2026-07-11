@@ -54,7 +54,12 @@ type SB = any;
 
 const BATCH_SIZE = 4;
 const MAX_ATTEMPTS = 8;
-const MAX_PDF_PHOTOS = 24;
+const MAX_PDF_PHOTOS = 12;
+// Edge functions get ~150s of wall clock. Budget the run and resume next
+// pass — deterministic filenames make every upload idempotent, so a job
+// with 100+ photos converges across several cron ticks instead of dying.
+const RUN_TIME_BUDGET_MS = 95_000;
+const RUN_UPLOAD_BUDGET = 70;
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 async function resolveSecret(supabase: SB, key: string): Promise<string> {
@@ -98,6 +103,78 @@ interface DocRow {
   mirror_attempts: number;
   drive_folder_id: string | null;
   drive_pdf_id: string | null;
+}
+
+interface PaymentRecord {
+  rows: Array<[string, string]>;
+}
+
+/** Live payment record for the dispute packet — booking financials + charges. */
+async function loadPaymentRecord(supabase: SB, bookingId: string): Promise<PaymentRecord> {
+  const rows: Array<[string, string]> = [];
+  try {
+    const { data: b } = await supabase
+      .from("bookings")
+      .select("total_estimate_cents, final_charge_cents, deposit_cents, payment_option, payment_method, payment_received_at, payment_intent_id, hosted_invoice_url, applied_credit_cents, tip_cents")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (b) {
+      const money = (c: number | null | undefined) => c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—";
+      rows.push(["Total price", money(b.final_charge_cents ?? b.total_estimate_cents)]);
+      if (b.deposit_cents) rows.push(["Deposit", money(b.deposit_cents)]);
+      if (b.applied_credit_cents) rows.push(["Credit applied", money(b.applied_credit_cents)]);
+      if (b.tip_cents) rows.push(["Tip", money(b.tip_cents)]);
+      rows.push(["Payment option", String(b.payment_option || "—")]);
+      if (b.payment_method) rows.push(["Payment method", String(b.payment_method)]);
+      if (b.payment_received_at) rows.push(["Payment received", new Date(b.payment_received_at).toUTCString()]);
+      if (b.payment_intent_id) rows.push(["Stripe payment intent", String(b.payment_intent_id)]);
+      if (b.hosted_invoice_url) rows.push(["Invoice / pay link", String(b.hosted_invoice_url)]);
+    }
+    const { data: addons } = await supabase
+      .from("booking_addon_charges")
+      .select("added_addons, amount_cents, status, stripe_payment_intent_id, created_at")
+      .eq("booking_id", bookingId)
+      .order("created_at", { ascending: true });
+    for (const a of addons || []) {
+      const labels = Array.isArray(a.added_addons) ? a.added_addons.join(", ") : "add-ons";
+      rows.push([
+        `Add-on charge (${String(a.status)})`,
+        `${labels} — $${(Number(a.amount_cents) / 100).toFixed(2)}${a.stripe_payment_intent_id ? ` · ${a.stripe_payment_intent_id}` : ""}`,
+      ]);
+    }
+  } catch { /* best-effort */ }
+  return { rows };
+}
+
+/** Latest signed agreement PDF bytes for the booking (private bucket). */
+async function loadAgreementPdf(supabase: SB, bookingId: string, email: string | null): Promise<{ bytes: Uint8Array; signedAt: string } | null> {
+  try {
+    let { data: agr } = await supabase
+      .from("service_agreements")
+      .select("id, pdf_path, created_at")
+      .eq("booking_id", bookingId)
+      .not("pdf_path", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!agr && email) {
+      const res = await supabase
+        .from("service_agreements")
+        .select("id, pdf_path, created_at")
+        .ilike("customer_email", email)
+        .not("pdf_path", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      agr = res.data;
+    }
+    if (!agr?.pdf_path) return null;
+    const { data: blob, error } = await supabase.storage.from("service-agreements").download(agr.pdf_path);
+    if (error || !blob) return null;
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), signedAt: String(agr.created_at).slice(0, 10) };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Snapshot enrichment (checklist + cleaners) ──────────────────────────────
@@ -163,6 +240,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   checklist: { name?: string; progress_pct?: number; completed_items?: number; total_items?: number } | null;
   cleanerNames: string;
   agreementRef: string | null;
+  payment?: PaymentRecord;
   photos: Array<{ label: string; bytes: Uint8Array }>;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -206,6 +284,17 @@ async function buildSummaryPdf(doc: DocRow, extras: {
     y -= 18;
   }
 
+  if (extras.payment && extras.payment.rows.length > 0) {
+    y -= 8;
+    line("Payment Record", { size: 12, font: bold, color: violet, gap: 8 });
+    for (const [k, v] of extras.payment.rows) {
+      if (y < MARGIN + 12) { page = pdf.addPage([PAGE_W, PAGE_H]); y = PAGE_H - MARGIN; }
+      page.drawText(`${k}:`, { x: MARGIN, y, size: 10, font: bold, color: gray });
+      page.drawText(String(v).slice(0, 84), { x: MARGIN + 140, y, size: 10, font, color: dark });
+      y -= 16;
+    }
+  }
+
   if (doc.notes) {
     y -= 8;
     line("Notes", { size: 12, font: bold, color: violet, gap: 8 });
@@ -245,9 +334,17 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   return await pdf.save();
 }
 
-// ─── Mirror one documentation row ────────────────────────────────────────────
+// ─── Mirror one documentation row (resumable across runs) ────────────────────
 
-async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc: DocRow): Promise<void> {
+interface RunBudget {
+  deadline: number;
+  uploadsLeft: number;
+}
+class BudgetExhausted extends Error {
+  constructor() { super("run budget exhausted — resuming next pass"); }
+}
+
+async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc: DocRow, budget: RunBudget): Promise<void> {
   const before = (Array.isArray(doc.before_photos) ? doc.before_photos : []).map(String).filter(Boolean);
   const after = (Array.isArray(doc.after_photos) ? doc.after_photos : []).map(String).filter(Boolean);
 
@@ -265,6 +362,16 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   const jobFolder = doc.drive_folder_id || await ensureFolder(token, monthFolder, jobFolderName);
   await shareReadableByLink(token, jobFolder);
 
+  // Persist the folder immediately so a mid-run death resumes into the SAME
+  // folder next pass instead of creating a duplicate tree.
+  if (!doc.drive_folder_id) {
+    await supabase.from("job_documentation").update({
+      drive_folder_id: jobFolder,
+      drive_folder_url: folderUrl(jobFolder),
+      updated_at: new Date().toISOString(),
+    }).eq("id", doc.id);
+  }
+
   const beforeFolder = await ensureFolder(token, jobFolder, "before");
   const afterFolder = await ensureFolder(token, jobFolder, "after");
 
@@ -279,20 +386,28 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
       const name = `${prefix}-${String(i + 1).padStart(2, "0")}.${extFromUrl(url)}`;
+      const needsUpload = !existing.has(name);
+      const needsPdfCopy = photoBytes.length < MAX_PDF_PHOTOS;
+      if (!needsUpload && !needsPdfCopy) continue;
+      if (needsUpload && (Date.now() > budget.deadline || budget.uploadsLeft <= 0)) {
+        throw new BudgetExhausted();
+      }
       try {
         const res = await fetch(url);
         if (!res.ok) { failures.push(`${name}: fetch ${res.status}`); continue; }
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (bytes.length === 0) { failures.push(`${name}: empty`); continue; }
-        if (photoBytes.length < MAX_PDF_PHOTOS) {
+        if (needsPdfCopy) {
           photoBytes.push({ label: `${prefix.toUpperCase()} ${i + 1} — ${doc.booking_ref || ""}`, bytes });
         }
-        if (!existing.has(name)) {
+        if (needsUpload) {
           const mime = name.endsWith(".png") ? "image/png" : "image/jpeg";
           await uploadFile(token, folderId, name, bytes, mime);
           uploaded++;
+          budget.uploadsLeft--;
         }
       } catch (e) {
+        if (e instanceof BudgetExhausted) throw e;
         failures.push(`${name}: ${e instanceof Error ? e.message : "error"}`);
       }
     }
@@ -305,12 +420,27 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     throw new Error(`photo mirror incomplete (${failures.length}): ${failures.slice(0, 3).join("; ")}`);
   }
 
-  // Completion summary PDF (regenerated on re-mirror so it includes new photos).
-  const pdfBytes = await buildSummaryPdf(doc, { ...extras, photos: photoBytes });
+  // Signed service agreement — part of the legal case file. Best-effort copy
+  // into the job folder (skipped when already present).
+  const jobFiles = await listChildNames(token, jobFolder);
+  try {
+    const agreement = await loadAgreementPdf(supabase, doc.booking_id, doc.client_email);
+    if (agreement) {
+      const agrName = `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Signed Agreement (${agreement.signedAt}).pdf`;
+      if (!jobFiles.has(agrName)) {
+        await uploadFile(token, jobFolder, agrName, agreement.bytes, "application/pdf");
+      }
+    }
+  } catch (e) {
+    log("agreement copy failed (non-blocking)", { docId: doc.id, error: e instanceof Error ? e.message : String(e) });
+  }
+
+  // Completion summary PDF with the live payment record baked in.
+  const payment = await loadPaymentRecord(supabase, doc.booking_id);
+  const pdfBytes = await buildSummaryPdf(doc, { ...extras, payment, photos: photoBytes });
   const pdfName = `${safeName(doc.booking_ref || doc.booking_id.slice(0, 8))} — Completion Summary.pdf`;
-  const pdfFiles = await listChildNames(token, jobFolder);
   let pdfId = doc.drive_pdf_id;
-  if (!pdfId || !pdfFiles.has(pdfName)) {
+  if (!pdfId || !jobFiles.has(pdfName)) {
     pdfId = await uploadFile(token, jobFolder, pdfName, pdfBytes, "application/pdf");
   }
 
@@ -377,14 +507,14 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
 
-    // Recover rows stuck in 'mirroring' (a big photo set can outlive one
-    // function invocation — uploads dedupe by filename, so resuming from
+    // Recover rows stuck in 'mirroring' (a run that hit the wall-clock limit
+    // leaves its claim behind — uploads dedupe by filename, so resuming from
     // 'pending' converges across runs instead of stalling forever).
     await supabase
       .from("job_documentation")
       .update({ mirror_status: "pending", updated_at: nowIso })
       .eq("mirror_status", "mirroring")
-      .lt("updated_at", new Date(Date.now() - 30 * 60_000).toISOString());
+      .lt("updated_at", new Date(Date.now() - 5 * 60_000).toISOString());
 
     let query = supabase
       .from("job_documentation")
@@ -401,14 +531,25 @@ serve(async (req) => {
     if (error) throw error;
     if (!docs || docs.length === 0) return json({ ok: true, processed: 0 });
 
-    const token = await getDriveToken();
+    // Optional domain-wide delegation: when the archive folder is in a user's
+    // My Drive (not a Shared Drive), uploads must be owned by a real user —
+    // set GOOGLE_DRIVE_IMPERSONATE_EMAIL in app_secrets to that user.
+    const impersonate = await resolveSecret(supabase, "GOOGLE_DRIVE_IMPERSONATE_EMAIL");
+    const token = await getDriveToken(impersonate || undefined);
     if (!token) {
       log("drive token failed — leaving queue untouched");
       return json({ ok: false, error: "drive_token_failed" }, 200);
     }
 
-    let mirrored = 0, failed = 0;
+    const budget: RunBudget = {
+      deadline: Date.now() + RUN_TIME_BUDGET_MS,
+      uploadsLeft: RUN_UPLOAD_BUDGET,
+    };
+
+    let mirrored = 0, failed = 0, resumed = 0;
     for (const doc of docs as DocRow[]) {
+      if (Date.now() > budget.deadline || budget.uploadsLeft <= 0) break;
+
       // Claim the row so overlapping runs don't double-process.
       const { data: claimed } = await supabase
         .from("job_documentation")
@@ -420,10 +561,22 @@ serve(async (req) => {
       if (!claimed) continue;
 
       try {
-        await mirrorOne(supabase, token, rootFolderId, doc);
+        await mirrorOne(supabase, token, rootFolderId, doc, budget);
         await pushAirtable(supabase, doc.booking_id);
         mirrored++;
       } catch (e) {
+        // Budget exhaustion is NOT a failure — release the claim back to
+        // pending (attempts unchanged) and let the next pass resume.
+        if (e instanceof BudgetExhausted) {
+          await supabase.from("job_documentation").update({
+            mirror_status: "pending",
+            mirror_next_attempt_at: null,
+            updated_at: new Date().toISOString(),
+          }).eq("id", doc.id);
+          resumed++;
+          log("budget hit — will resume", { docId: doc.id, ref: doc.booking_ref });
+          break;
+        }
         const msg = e instanceof Error ? e.message : String(e);
         const attempts = (doc.mirror_attempts || 0) + 1;
         const next = new Date(Date.now() + backoffMinutes(attempts) * 60_000).toISOString();
@@ -452,7 +605,7 @@ serve(async (req) => {
       }
     }
 
-    return json({ ok: true, processed: docs.length, mirrored, failed });
+    return json({ ok: true, processed: docs.length, mirrored, failed, resumed });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log("ERROR", msg);
