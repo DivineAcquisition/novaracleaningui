@@ -15,11 +15,17 @@ function b64url(bytes: Uint8Array): string {
 }
 
 function pemToDer(pem: string): Uint8Array {
-  const body = pem
-    .replace(/\\n/g, "\n")
-    .replace(/-----BEGIN [^-]+-----/g, "")
-    .replace(/-----END [^-]+-----/g, "")
-    .replace(/\s+/g, "");
+  // Normalise escaped newlines, slice strictly between the PEM markers (the
+  // stored env value may carry surrounding quotes or other wrapper chars),
+  // then drop anything that isn't base64.
+  const normalized = pem.replace(/\\n/g, "\n");
+  const begin = normalized.indexOf("-----BEGIN");
+  const beginEnd = begin >= 0 ? normalized.indexOf("-----", begin + 10) : -1;
+  const end = normalized.indexOf("-----END");
+  const body = (begin >= 0 && end > begin
+    ? normalized.slice(beginEnd + 5, end)
+    : normalized
+  ).replace(/[^A-Za-z0-9+/=]/g, "");
   const bin = atob(body);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
