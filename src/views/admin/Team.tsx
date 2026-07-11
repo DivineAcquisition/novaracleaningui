@@ -197,6 +197,9 @@ export default function AdminTeam() {
         </Button>
       </div>
 
+      {/* VA onboarding approval queue (team.novaracleaning.com applicants) */}
+      <VaOnboardingQueue />
+
       {/* Add user */}
       <Card className="border-slate-200">
         <CardContent className="p-4 sm:p-5 space-y-3">
@@ -417,5 +420,211 @@ export default function AdminTeam() {
         </div>
       </Card>
     </div>
+  );
+}
+
+// ─── VA onboarding approval queue ───────────────────────────────────────
+//
+// Applicants from team.novaracleaning.com. The rule: NO access before a
+// signed agreement AND approval here. Approve provisions the GHL USER seat
+// (role-scoped) + workspace access; Offboard revokes everything in one
+// logged action.
+interface VaRow {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  va_role: string;
+  timezone: string | null;
+  working_hours: string | null;
+  experience: string | null;
+  tools: string | null;
+  status: string;
+  agreement_signed_at: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  provisioned_at: string | null;
+  ghl_user_id: string | null;
+  created_at: string;
+}
+
+const VA_STATUS_TONE: Record<string, string> = {
+  started: "bg-slate-100 text-slate-600",
+  signed: "bg-blue-100 text-blue-700",
+  submitted: "bg-amber-100 text-amber-800",
+  approved: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-rose-100 text-rose-700",
+  offboarded: "bg-slate-200 text-slate-600",
+};
+
+function VaOnboardingQueue() {
+  const [rows, setRows] = useState<VaRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  const loadRows = async () => {
+    setLoading(true);
+    const { data, error } = await (supabase.from as any)("va_onboarding")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) toast.error(`VA queue: ${error.message}`);
+    setRows((data as VaRow[]) || []);
+    setLoading(false);
+  };
+  useEffect(() => { void loadRows(); }, []);
+
+  const act = async (row: VaRow, action: "approve" | "reject" | "offboard") => {
+    const name = `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email;
+    if (action === "approve" && !confirm(
+      `Approve ${name}?\n\nThis provisions their access NOW:\n• GoHighLevel USER seat (${row.va_role} role template)\n• Admin Workspace access (va role)\n\nThey'll be emailed their logins.`,
+    )) return;
+    let reason: string | undefined;
+    if (action === "reject") {
+      reason = prompt(`Reject ${name}? Optional reason (kept internal):`) ?? undefined;
+      if (reason === undefined) return;
+    }
+    if (action === "offboard" && !confirm(
+      `Offboard ${name}?\n\nOne action closes every door:\n• GHL user deleted\n• Workspace roles revoked + login banned\n\nThis is logged.`,
+    )) return;
+
+    setWorking(row.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-va-provision", {
+        body: { action, onboardingId: row.id, reason },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      if (action === "approve") {
+        const d = data as { ghlUserCreated?: boolean; workspaceInviteSent?: boolean; vaEmailSent?: boolean };
+        toast.success(
+          `Approved & provisioned — GHL user ${d.ghlUserCreated ? "created" : "already existed"}, workspace ${d.workspaceInviteSent ? "invite sent" : "granted"}, VA ${d.vaEmailSent ? "emailed their access" : "email pending"}.`,
+        );
+      } else if (action === "reject") {
+        toast.success("Application rejected — nothing was provisioned.");
+      } else {
+        const d = data as { ghlDeleted?: boolean; workspaceRevoked?: boolean };
+        toast.success(`Offboarded — GHL ${d.ghlDeleted ? "deleted" : "not found"}, workspace ${d.workspaceRevoked ? "revoked" : "n/a"}. Logged.`);
+      }
+      await loadRows();
+    } catch (e) {
+      toast.error((e as { message?: string })?.message || "Action failed");
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const pending = rows.filter((r) => r.status === "submitted");
+  const inProgress = rows.filter((r) => ["started", "signed"].includes(r.status));
+  const active = rows.filter((r) => r.status === "approved");
+  const archived = rows.filter((r) => ["rejected", "offboarded"].includes(r.status));
+
+  const renderRow = (r: VaRow) => {
+    const name = `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email;
+    return (
+      <div key={r.id} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate">
+              {name} <span className="text-slate-400 font-normal">· {r.email}</span>
+              {r.phone ? <span className="text-slate-400 font-normal hidden sm:inline"> · {r.phone}</span> : null}
+            </p>
+            <p className="text-xs text-slate-500">
+              {r.va_role} VA{r.timezone ? ` · ${r.timezone}` : ""}{r.working_hours ? ` · ${r.working_hours}` : ""}
+              {r.tools ? ` · knows: ${r.tools}` : ""}
+            </p>
+            {r.experience && <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{r.experience}</p>}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            <Badge className={cn("text-[11px]", VA_STATUS_TONE[r.status] || "bg-slate-100 text-slate-600")}>
+              {r.status}
+            </Badge>
+            <Badge className={cn("text-[11px]", r.agreement_signed_at ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
+              {r.agreement_signed_at ? "Agreement signed ✓" : "NOT signed"}
+            </Badge>
+            {r.status === "submitted" && (
+              <>
+                <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={working !== null || !r.agreement_signed_at}
+                  onClick={() => act(r, "approve")}>
+                  {working === r.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Approve & provision"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs border-rose-200 text-rose-700"
+                  disabled={working !== null}
+                  onClick={() => act(r, "reject")}>
+                  Reject
+                </Button>
+              </>
+            )}
+            {r.status === "approved" && (
+              <Button size="sm" variant="outline" className="h-8 text-xs border-rose-200 text-rose-700"
+                disabled={working !== null}
+                onClick={() => act(r, "offboard")}>
+                {working === r.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Offboard (revoke all)"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Card className="border-violet-200">
+      <CardContent className="p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-violet-700 font-semibold">
+              VA onboarding queue
+            </p>
+            <p className="text-xs text-slate-500">
+              Applicants from team.novaracleaning.com. No access is provisioned until the agreement is signed
+              AND you approve here.
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => void loadRows()} disabled={loading}>
+            <RiRefreshLine className={cn("w-4 h-4", loading && "animate-spin")} />
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="py-6 text-center"><RiLoader4Line className="w-5 h-5 animate-spin text-violet-600 mx-auto" /></div>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-4">
+            No VA applications yet — send candidates to team.novaracleaning.com.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {pending.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-amber-700">Awaiting your approval ({pending.length})</p>
+                {pending.map(renderRow)}
+              </div>
+            )}
+            {active.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-emerald-700">Active VAs ({active.length})</p>
+                {active.map(renderRow)}
+              </div>
+            )}
+            {inProgress.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-slate-500">Still onboarding ({inProgress.length})</p>
+                {inProgress.map(renderRow)}
+              </div>
+            )}
+            {archived.length > 0 && (
+              <div className="space-y-1.5">
+                <button type="button" className="text-xs text-slate-400 underline underline-offset-2" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? "Hide" : "Show"} rejected / offboarded ({archived.length})
+                </button>
+                {showAll && archived.map(renderRow)}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

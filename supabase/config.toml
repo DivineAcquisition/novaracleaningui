@@ -341,6 +341,10 @@ verify_jwt = false
 [functions.cleaner-drop-job]
 verify_jwt = false
 
+# VA approval/provisioning/offboarding — admin JWT enforced in-function.
+[functions.admin-va-provision]
+verify_jwt = true
+
 # Cleaner "mark complete" → moves booking to pending_review for admin review.
 # Public contractor portal has no JWT; cleanerId is verified against
 # bookings.cleaner_id inside the function (admin/va via JWT also allowed).
