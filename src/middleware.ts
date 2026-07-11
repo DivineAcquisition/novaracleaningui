@@ -141,6 +141,10 @@ const GLOBAL_ALLOWLIST = [
   "/favicon",
   "/robots.txt",
   "/sitemap.xml",
+  // pdf.js web worker (static asset) — must be SAME-ORIGIN on every
+  // subdomain that renders PDFs (browsers refuse cross-origin workers,
+  // so a 308 to try.* would break the in-page agreement viewer).
+  "/pdf.worker.min.mjs",
 ];
 
 function ownerOf(pathname: string): SubdomainKey {

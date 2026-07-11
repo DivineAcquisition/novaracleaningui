@@ -303,6 +303,23 @@ serve(async (req) => {
     );
     const text = await res.text();
     if (!res.ok) {
+      // The recipient texted STOP. This is a PERMANENT condition, not an
+      // error: report success + suppressed so cron callers stamp their
+      // sent_at markers and stop retrying, and nobody routes around the
+      // opt-out via another transport (TCPA).
+      if (/unsubscrib|CONVERSATIONS_MSG_UNSUBSCRIBED/i.test(text)) {
+        logStep("recipient unsubscribed — suppressing permanently", { normalizedPhone });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            suppressed: true,
+            reason: "recipient_unsubscribed",
+            contactId,
+            normalizedPhone,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
+      }
       logStep("send failed", { status: res.status, body: text.slice(0, 500) });
       return new Response(
         JSON.stringify({

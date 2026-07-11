@@ -17,6 +17,15 @@ export function getAdminSupabase(): SupabaseClient {
       "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY for the Airtable sync (server-side only).",
     );
   }
-  cached = createClient(url, key, { auth: { persistSession: false } });
+  cached = createClient(url, key, {
+    auth: { persistSession: false },
+    global: {
+      // Next 14 patches global fetch and CACHES GET requests in the Data
+      // Cache — which persists across deployments on Vercel. Without
+      // no-store, service-role READS (app_secrets, bookings, …) can return
+      // stale rows indefinitely. Live data must never be cached.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
+  });
   return cached;
 }

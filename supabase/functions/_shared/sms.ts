@@ -18,6 +18,28 @@ export interface SendSmsArgs {
 
 const SUPPORTED_TYPES: SmsType[] = ["job_offer", "reminder", "confirmation", "verification"];
 
+// Extract a readable error string from a supabase.functions.invoke failure.
+// On non-2xx responses supabase-js returns a FunctionsHttpError whose
+// `context` is the raw Response — the useful details (e.g. GHL's
+// "has unsubscribed") live in that body, so read it when available.
+// deno-lint-ignore no-explicit-any
+async function describeInvokeError(err: any, data: any): Promise<string> {
+  try {
+    const ctx = err?.context;
+    if (ctx && typeof ctx.text === "function" && !ctx.bodyUsed) {
+      const text = await ctx.text();
+      if (text) return text;
+    }
+  } catch { /* fall through */ }
+  if (typeof err === "string") return err;
+  if (err?.message && err.message !== "Edge Function returned a non-2xx status code") return String(err.message);
+  try {
+    return JSON.stringify(data ?? err);
+  } catch {
+    return String(err);
+  }
+}
+
 /**
  * Fire a Telnyx SMS via the `send-sms-notification` Edge Function.
  * Never throws — returns true if the invocation succeeded, false otherwise.
@@ -50,7 +72,17 @@ export async function sendSms(
     });
     const ghlError = error || (data && (data as { error?: string }).error);
     if (!ghlError) return true;
-    console.warn("[sendSms] GHL send failed, falling back to Telnyx", ghlError);
+
+    // PERMANENT failure: the recipient texted STOP. Never retry, and never
+    // route around the opt-out via another transport — that's a TCPA
+    // violation. Report success so cron callers stamp their sent_at marker
+    // and stop re-attempting every sweep.
+    const errText = await describeInvokeError(ghlError, data);
+    if (/unsubscrib/i.test(errText)) {
+      console.warn(`[sendSms] Recipient has unsubscribed (STOP) — dropping message permanently`, { phone });
+      return true;
+    }
+    console.warn("[sendSms] GHL send failed, falling back to Telnyx", errText.slice(0, 300));
   } catch (err) {
     console.warn(
       "[sendSms] GHL send threw, falling back to Telnyx",

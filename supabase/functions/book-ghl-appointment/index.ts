@@ -318,18 +318,62 @@ serve(async (req) => {
         }
       }
       if (!appointmentId) {
-        const createBody = {
+        const createBody: Record<string, unknown> = {
           ...appointmentBody,
           calendarId,
           locationId,
           contactId,
         };
-        const r = await ghlFetch(
+        let r = await ghlFetch(
           "/calendars/events/appointments",
           { method: "POST", body: JSON.stringify(createBody) },
           token,
         );
-        const t = await r.text();
+        let t = await r.text();
+
+        // Novara's booking system is the source of truth for scheduling —
+        // this appointment mirrors an ALREADY-CONFIRMED booking, so GHL's
+        // free-slot validation must never permanently block the sync
+        // (common when the booking's own prior appointment occupies the
+        // slot, leaving the reconcile cron looping on 400s forever).
+        // Retry once with ignoreFreeSlotValidation, which requires an
+        // explicit assignedUserId: app_secrets.GHL_DEFAULT_APPT_USER_ID,
+        // else the calendar's first team member.
+        if (!r.ok && /slot.*(no longer|not) available|SLOT_UNAVAILABLE/i.test(t)) {
+          let assignedUserId = await resolveSecret(supabase, "GHL_DEFAULT_APPT_USER_ID");
+          if (!assignedUserId) {
+            try {
+              const calRes = await ghlFetch(
+                `/calendars/${encodeURIComponent(calendarId)}`,
+                { method: "GET" },
+                token,
+              );
+              if (calRes.ok) {
+                const calJson = await calRes.json();
+                const members =
+                  (calJson?.calendar?.teamMembers || calJson?.teamMembers || []) as Array<{ userId?: string }>;
+                assignedUserId = members.find((m) => m?.userId)?.userId || "";
+              }
+            } catch { /* fall through to normal failure */ }
+          }
+          if (assignedUserId) {
+            logStep("slot unavailable — retrying with ignoreFreeSlotValidation", { assignedUserId });
+            r = await ghlFetch(
+              "/calendars/events/appointments",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  ...createBody,
+                  ignoreFreeSlotValidation: true,
+                  assignedUserId,
+                }),
+              },
+              token,
+            );
+            t = await r.text();
+          }
+        }
+
         if (!r.ok) {
           logStep("create failed", { status: r.status, body: t.slice(0, 500) });
           await supabase

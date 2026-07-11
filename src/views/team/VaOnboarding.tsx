@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import {
   RiCheckboxCircleLine,
   RiErrorWarningLine,
+  RiExternalLinkLine,
   RiFileTextLine,
   RiLoader4Line,
   RiMailLine,
@@ -27,6 +28,7 @@ import {
   RiTeamLine,
   RiTimeLine,
 } from "@remixicon/react";
+import { PdfViewer } from "@/components/PdfViewer";
 import { toast } from "sonner";
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { Button } from "@/components/ui/button";
@@ -53,6 +55,10 @@ interface Session {
 }
 
 const STORAGE_KEY = "novara_va_onboarding_id";
+
+// Same-origin proxy for the agreement template PDF (DocuSeal links lack the
+// CORS headers pdf.js needs, and mobile browsers won't iframe them).
+const AGREEMENT_PDF_URL = "/api/va/agreement";
 
 const ROLE_LABELS: Record<string, string> = {
   operations: "Operations VA",
@@ -281,11 +287,27 @@ export default function VaOnboarding() {
             </p>
 
             {session.agreementPreviewUrl ? (
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <iframe
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                    <RiFileTextLine className="w-3.5 h-3.5 text-violet-600" />
+                    Scroll to read the full agreement — every page is below.
+                  </p>
+                  <a
+                    href={AGREEMENT_PDF_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-semibold text-violet-700 underline underline-offset-2 flex items-center gap-1 shrink-0"
+                  >
+                    <RiExternalLinkLine className="w-3.5 h-3.5" /> Open in new tab
+                  </a>
+                </div>
+                {/* Whole document rendered in-page (pdf.js) — unlike a PDF
+                    iframe, this shows EVERY page on mobile too. */}
+                <PdfViewer
+                  url={AGREEMENT_PDF_URL}
                   title="VA Independent Contractor Agreement"
-                  src={session.agreementPreviewUrl}
-                  className="w-full h-[420px] bg-slate-50"
+                  className="rounded-xl border border-slate-200 overflow-y-auto h-[65vh] min-h-[380px] bg-slate-100 shadow-inner"
                 />
               </div>
             ) : (

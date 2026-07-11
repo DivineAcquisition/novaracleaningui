@@ -40,10 +40,15 @@ const AUDIENCE_TEMPLATE_SECRET: Record<AgreementAudience, string> = {
 
 // ─── Config resolution (app_secrets → env), cached ────────────────────────────
 
-const secretCache = new Map<string, string>();
+// Cache secrets with a short TTL — NOT forever. app_secrets exists so ops can
+// repoint things (e.g. swap a DocuSeal template) at runtime; a warm serverless
+// instance holding stale values indefinitely defeats that.
+const SECRET_TTL_MS = 60_000;
+const secretCache = new Map<string, { value: string; expires: number }>();
 
 async function resolveSecret(name: string): Promise<string> {
-  if (secretCache.has(name)) return secretCache.get(name) || "";
+  const hit = secretCache.get(name);
+  if (hit && hit.expires > Date.now()) return hit.value;
   let value = "";
   try {
     const supabase = getAdminSupabase();
@@ -53,7 +58,7 @@ async function resolveSecret(name: string): Promise<string> {
     /* fall through to env */
   }
   if (!value) value = (process.env[name] || "").trim();
-  secretCache.set(name, value);
+  secretCache.set(name, { value, expires: Date.now() + SECRET_TTL_MS });
   return value;
 }
 
@@ -64,8 +69,11 @@ export async function getDocusealWebhookSecret(): Promise<string> {
 /** Fetch the (blank) template PDF URL for an audience — used for in-app preview. */
 export async function getAgreementPreviewUrl(audience: AgreementAudience): Promise<string | null> {
   const { token, baseUrl, templateId } = await getConfig(audience);
+  // no-store: Next 14 caches GET fetches in the Data Cache (persists across
+  // deploys) — a swapped template would keep serving the old document.
   const res = await fetch(`${baseUrl}/templates/${templateId}`, {
     headers: { "X-Auth-Token": token },
+    cache: "no-store",
   });
   if (!res.ok) return null;
   const t = await res.json().catch(() => null);
@@ -260,6 +268,11 @@ interface AudienceSpec {
   signerSignatures?: string[];
   /** Optional "Initials" field on the signer role. */
   signerInitials?: string;
+  /** The signer's date field name (defaults to "Date"). */
+  signerDateField?: string;
+  /** Signer-role fields that carry COMPANY info (e.g. the VA template's
+   *  "Authorized Rep" line sits on the Contractor submitter). */
+  signerCompanyValues?: (c: CompanyInfo) => Record<string, string | number>;
   /** The second submitter role (the execution/company page) + its field values. */
   companyRole: string;
   companyValues: (c: CompanyInfo, signer: SignerInfo) => Record<string, string | number>;
@@ -309,13 +322,57 @@ const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
     companyRole: "Company",
     companyValues: (c) => ({ "Effective Date": today(), "Name": c.rep, "Title": "Owner", "Signature": c.rep, "Date": today() }),
   },
+  // VA Independent Contractor Agreement (V2) — template 4943110 fields:
+  //   Contractor: "Contractor Name", "Full Name", "Authorized Rep",
+  //               "Contractor Date", "Contractor Signature"
+  //   Company:    "Effective Date", "Company Date", "Company Signature"
   va_contractor: {
     signerRole: "Contractor",
-    signerSignatures: ["Signature"],
+    signerSignatures: ["Contractor Signature"],
+    signerDateField: "Contractor Date",
+    // The "Authorized Rep" line sits on the Contractor submitter but carries
+    // the company representative's printed name.
+    signerCompanyValues: (c) => ({ "Authorized Rep": c.rep }),
     companyRole: "Company",
-    companyValues: (c) => ({ "Effective Date": today(), "Name": c.rep, "Date": today(), "Signature": c.rep }),
+    companyValues: (c) => ({
+      "Effective Date": today(),
+      "Company Date": today(),
+      "Company Signature": c.rep,
+    }),
   },
 };
+
+// Fetch the template's field names per submitter role so we can drop values
+// whose fields don't exist on the CURRENT template revision. DocuSeal rejects
+// unknown field names, so without this, re-uploading/replacing a template
+// (field renames) silently breaks every send until the code catches up.
+async function templateFieldsByRole(
+  baseUrl: string,
+  token: string,
+  templateId: string,
+): Promise<Record<string, Set<string>> | null> {
+  try {
+    const res = await fetch(`${baseUrl}/templates/${templateId}`, {
+      headers: { "X-Auth-Token": token },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const t = await res.json().catch(() => null);
+    const roleByUuid = new Map<string, string>();
+    for (const s of (t?.submitters || []) as Array<{ uuid?: string; name?: string }>) {
+      if (s.uuid && s.name) roleByUuid.set(s.uuid, s.name);
+    }
+    const map: Record<string, Set<string>> = {};
+    for (const f of (t?.fields || []) as Array<{ name?: string; submitter_uuid?: string }>) {
+      if (!f.name) continue;
+      const role = roleByUuid.get(f.submitter_uuid || "") || "";
+      (map[role] ||= new Set()).add(f.name);
+    }
+    return Object.keys(map).length ? map : null;
+  } catch {
+    return null;
+  }
+}
 
 function initialsOf(name: string): string {
   return name.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 3).toUpperCase();
@@ -339,14 +396,41 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
   // Signer fields: the caller's data values + auto signature(s)/initials/date.
   // A drawn signature image (data URL) renders the actual signature; otherwise
   // we fall back to the typed name (DocuSeal renders it in a signature font).
-  const signerValues: Record<string, string | number | boolean> = { ...(input.values || {}) };
+  const signerValues: Record<string, string | number | boolean> = {
+    ...(input.values || {}),
+    ...(spec.signerCompanyValues ? spec.signerCompanyValues(co) : {}),
+  };
   const sigValue =
     input.signatureImage && /^data:image\/(png|jpe?g);base64,/.test(input.signatureImage)
       ? input.signatureImage
       : name || "Accepted electronically";
   for (const f of spec.signerSignatures || []) signerValues[f] = sigValue;
   if (spec.signerInitials && name) signerValues[spec.signerInitials] = initialsOf(name);
-  if (!("Date" in signerValues)) signerValues["Date"] = today();
+  const dateField = spec.signerDateField || "Date";
+  if (!(dateField in signerValues)) signerValues[dateField] = today();
+
+  let companyValues: Record<string, string | number | boolean> =
+    spec.companyValues(co, { name, email: input.email });
+
+  // Drop values whose field names don't exist on the CURRENT template
+  // revision — DocuSeal rejects unknown fields, so a re-uploaded template
+  // with renamed fields would otherwise break every send.
+  const fieldsByRole = await templateFieldsByRole(baseUrl, token, templateId);
+  const keepKnown = (
+    values: Record<string, string | number | boolean>,
+    roleName: string,
+  ): Record<string, string | number | boolean> => {
+    const known = fieldsByRole?.[roleName];
+    if (!known) return values;
+    const out: Record<string, string | number | boolean> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (known.has(k)) out[k] = v;
+      else console.warn(`[docuseal] dropping value for unknown field "${k}" (role ${roleName}, template ${templateId})`);
+    }
+    return out;
+  };
+  const filteredSignerValues = keepKnown(signerValues, role);
+  companyValues = keepKnown(companyValues, spec.companyRole);
 
   const submitters: Array<Record<string, unknown>> = [
     {
@@ -355,7 +439,7 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
       ...(name ? { name } : {}),
       completed: true,
       send_email: input.sendEmail !== false, // emails the customer the completed copy
-      values: signerValues,
+      values: filteredSignerValues,
     },
     {
       role: spec.companyRole,
@@ -363,7 +447,7 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
       name: co.name,
       completed: true,
       send_email: false,
-      values: spec.companyValues(co, { name, email: input.email }),
+      values: companyValues,
     },
   ];
   if (spec.guarantorRole) {
