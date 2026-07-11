@@ -524,7 +524,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
                     </a>
                   )}
                 </div>
-                {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+                {!doc.photos_purged_at && (beforePhotos.length > 0 || afterPhotos.length > 0) && (
                   <div className="grid grid-cols-4 gap-1.5">
                     {[...beforePhotos.slice(0, 4).map((u) => ({ u, l: "Before" })), ...afterPhotos.slice(0, 4).map((u) => ({ u, l: "After" }))].map(({ u, l }, i) => (
                       <a key={i} href={u} target="_blank" rel="noreferrer" className="relative group">
