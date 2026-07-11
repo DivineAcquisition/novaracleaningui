@@ -40,6 +40,7 @@ const HOSTS = {
   app: "app.novaracleaning.com",
   contractor: "contractor.novaracleaning.com",
   partner: "partner.novaracleaning.com",
+  team: "team.novaracleaning.com",
 } as const;
 
 type SubdomainKey = keyof typeof HOSTS;
@@ -95,6 +96,11 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // the customer). Sign the service agreement → pay the deposit + save the
   // card. Lives on try.* so the link works without any login.
   ["/pay", "try"],
+
+  // VA onboarding (team.novaracleaning.com): agreement signing + onboarding
+  // form + pending status. Access provisioning happens only in the admin
+  // workspace after approval.
+  ["/team", "team"],
 ];
 
 const DEFAULT_LANDING: Record<SubdomainKey, string> = {
@@ -103,6 +109,7 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   app: "/auth",
   contractor: "/cleaner/auth",
   partner: "/partner",
+  team: "/team",
 };
 
 // Paths that ALL subdomains may serve (framework / static / crawler files).
@@ -143,6 +150,7 @@ function subdomainOf(hostname: string): SubdomainKey | null {
   if (h.startsWith("app.")) return "app";
   if (h.startsWith("contractor.")) return "contractor";
   if (h.startsWith("partner.")) return "partner";
+  if (h.startsWith("team.")) return "team";
   // hiring.* is hosted on Framer — if DNS still points here for any
   // reason, fall through to `try` (marketing) so we never serve broken
   // content on the hiring subdomain.
