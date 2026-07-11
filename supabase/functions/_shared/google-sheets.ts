@@ -5,7 +5,10 @@
 // to spreadsheets. Supports domain-wide-delegation impersonation for
 // workbooks living in a user's My Drive.
 
-const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
+// The Sheets API accepts the Drive scope, and the Drive scope is what the
+// domain-wide delegation grant already authorizes (same as the QC archive) —
+// so one DWD entry covers both integrations.
+const SHEETS_SCOPE = "https://www.googleapis.com/auth/drive";
 
 function b64url(bytes: Uint8Array): string {
   let bin = "";
