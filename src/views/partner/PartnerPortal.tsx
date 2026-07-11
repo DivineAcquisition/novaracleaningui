@@ -8,6 +8,7 @@
 // is enforced server-side by the partner-turnover edge function.
 
 import { useEffect, useState, useCallback } from "react";
+import CommercialPortal from "@/views/partner/CommercialPortal";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -120,7 +121,41 @@ export default function PartnerPortal() {
     return <div className="min-h-screen flex items-center justify-center"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
   }
   if (session && recovery) return <SetPasswordForm onDone={() => setRecovery(false)} />;
-  return session ? <Dashboard /> : <AuthScreen />;
+  return session ? <PortalRouter /> : <AuthScreen />;
+}
+
+// ─── Route the logged-in partner to the right surface by type ───────────────
+// STR hosts get the turnover Dashboard; commercial/office partners get the
+// CommercialPortal. The lookup runs BEFORE Dashboard mounts because the STR
+// dashboard's host.ensure would otherwise create host rows for commercial
+// users. Email is the identity key on both sides.
+function PortalRouter() {
+  const [kind, setKind] = useState<"loading" | "host" | "commercial" | "none">("loading");
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("partner-commercial-portal", {
+          body: { action: "lookup" },
+        });
+        if (error) throw error;
+        const k = (data as { kind?: string })?.kind;
+        setKind(k === "commercial" ? "commercial" : k === "none" ? "none" : "host");
+      } catch {
+        // Lookup hiccup → default to the STR dashboard (pre-existing behavior).
+        setKind("host");
+      }
+    })();
+  }, []);
+
+  if (kind === "loading") {
+    return <div className="min-h-screen flex items-center justify-center"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+  if (kind === "commercial") return <CommercialPortal />;
+  // "none" = brand-new signup → the STR dashboard provisions a host record
+  // (existing self-serve host flow). Commercial partners are created by the
+  // team from intake, so their email already matches a business account.
+  return <Dashboard />;
 }
 
 // ─── Brand tokens (purple ramp — used as a scalpel, not a flood) ────────────

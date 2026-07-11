@@ -15,16 +15,18 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line } from "@remixicon/react";
+import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiBuilding2Line } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
+import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
+import CommercialAccountsAdmin from "@/views/admin/CommercialAccountsAdmin";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
 export default function Partnerships() {
-  const [tab, setTab] = useState("accounts");
+  const [tab, setTab] = useState("overview");
   const [syncing, setSyncing] = useState(false);
   const [syncingContractors, setSyncingContractors] = useState(false);
 
@@ -66,9 +68,10 @@ export default function Partnerships() {
     <div className="max-w-6xl mx-auto px-1 sm:px-4 py-2 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Partnerships</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Partnerships Hub</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            STR host accounts, pricing, revenue, turnovers, crew, and recurring schedules — in one place.
+            Commercial, Office &amp; STR in one place — pipeline, accounts, pricing, revenue, turnovers, crew.
+            Intake: commercial.novaracleaning.com · Partner app: partner.novaracleaning.com
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -85,8 +88,14 @@ export default function Partnerships() {
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList>
+          <TabsTrigger value="overview" className="gap-1.5">
+            <RiDashboardLine className="w-4 h-4" /> Overview
+          </TabsTrigger>
+          <TabsTrigger value="commercial" className="gap-1.5">
+            <RiBuilding2Line className="w-4 h-4" /> Commercial &amp; Office
+          </TabsTrigger>
           <TabsTrigger value="accounts" className="gap-1.5">
-            <RiHotelLine className="w-4 h-4" /> Host Accounts
+            <RiHotelLine className="w-4 h-4" /> STR Hosts
           </TabsTrigger>
           <TabsTrigger value="turnovers" className="gap-1.5">
             <RiToolsLine className="w-4 h-4" /> Turnover Ops
@@ -94,6 +103,12 @@ export default function Partnerships() {
         </TabsList>
 
         {/* Mount lazily per tab so each console only fetches when viewed. */}
+        <TabsContent value="overview" className="mt-4">
+          {tab === "overview" && <PartnershipsOverview />}
+        </TabsContent>
+        <TabsContent value="commercial" className="mt-4">
+          {tab === "commercial" && <CommercialAccountsAdmin />}
+        </TabsContent>
         <TabsContent value="accounts" className="mt-4">
           {tab === "accounts" && <PartnerAccounts />}
         </TabsContent>

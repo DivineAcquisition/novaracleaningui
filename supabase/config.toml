@@ -396,3 +396,7 @@ verify_jwt = false
 # Live case-file assembly for the QC console — admin/VA JWT enforced inside.
 [functions.qc-case-file]
 verify_jwt = false
+
+# Commercial/office partner portal — logged-in partner JWT enforced inside.
+[functions.partner-commercial-portal]
+verify_jwt = false

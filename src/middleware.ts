@@ -41,6 +41,7 @@ const HOSTS = {
   contractor: "contractor.novaracleaning.com",
   partner: "partner.novaracleaning.com",
   team: "team.novaracleaning.com",
+  commercial: "commercial.novaracleaning.com",
 } as const;
 
 type SubdomainKey = keyof typeof HOSTS;
@@ -74,10 +75,15 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/auth", "app"],
   ["/membership/success", "app"],
 
-  // Partner (Airbnb/STR host) turnover portal — its own subdomain. Owns the
-  // whole /partner/* tree, including its auth callback (/partner/auth/callback).
+  // Partner (Airbnb/STR host + commercial/office) portal — its own subdomain.
+  // Owns the whole /partner/* tree, including its auth callback
+  // (/partner/auth/callback). partners.* is an alias of partner.*.
   // Listed before the try.* marketing prefixes so it can never fall through.
   ["/partner", "partner"],
+
+  // Public commercial / office / STR partnership intake funnel — no login.
+  // Lead capture only (never prices); feeds the internal Partnerships Hub.
+  ["/commercial", "commercial"],
 
   // Public marketing + booking funnel (try.*). /book/confirmation stays
   // on try so the entire Stripe-checkout-return flow keeps a single host.
@@ -110,6 +116,7 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   contractor: "/cleaner/auth",
   partner: "/partner",
   team: "/team",
+  commercial: "/commercial",
 };
 
 // Paths that ALL subdomains may serve (framework / static / crawler files).
@@ -149,7 +156,10 @@ function subdomainOf(hostname: string): SubdomainKey | null {
   if (h.startsWith("try.")) return "try";
   if (h.startsWith("app.")) return "app";
   if (h.startsWith("contractor.")) return "contractor";
+  // partners.* is an alias for the partner portal (check before "partner.").
+  if (h.startsWith("partners.")) return "partner";
   if (h.startsWith("partner.")) return "partner";
+  if (h.startsWith("commercial.")) return "commercial";
   if (h.startsWith("team.")) return "team";
   // hiring.* is hosted on Framer — if DNS still points here for any
   // reason, fall through to `try` (marketing) so we never serve broken

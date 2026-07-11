@@ -99,7 +99,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Partnerships",
     url: "/admin/partner",
     icon: RiHotelLine,
-    description: "STR host accounts · pricing · revenue · turnovers · crew",
+    description: "Commercial · Office · STR — pipeline, accounts, revenue",
   },
   {
     title: "Customers",
