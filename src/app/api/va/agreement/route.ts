@@ -12,13 +12,21 @@ import { getAgreementPreviewUrl } from "@/lib/docuseal";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse | Response> {
+export async function GET(req: Request): Promise<NextResponse | Response> {
   try {
     const url = await getAgreementPreviewUrl("va_contractor");
     if (!url) {
       return NextResponse.json({ error: "Agreement template is not configured." }, { status: 404 });
     }
-    const res = await fetch(url);
+    // Ops probe: confirm which template document the server resolves
+    // without streaming the whole PDF.
+    if (new URL(req.url).searchParams.get("debug") === "1") {
+      return NextResponse.json(
+        { docUrl: url },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok || !res.body) {
       return NextResponse.json({ error: `Could not load the agreement (${res.status}).` }, { status: 502 });
     }

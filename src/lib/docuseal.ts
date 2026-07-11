@@ -69,8 +69,11 @@ export async function getDocusealWebhookSecret(): Promise<string> {
 /** Fetch the (blank) template PDF URL for an audience — used for in-app preview. */
 export async function getAgreementPreviewUrl(audience: AgreementAudience): Promise<string | null> {
   const { token, baseUrl, templateId } = await getConfig(audience);
+  // no-store: Next 14 caches GET fetches in the Data Cache (persists across
+  // deploys) — a swapped template would keep serving the old document.
   const res = await fetch(`${baseUrl}/templates/${templateId}`, {
     headers: { "X-Auth-Token": token },
+    cache: "no-store",
   });
   if (!res.ok) return null;
   const t = await res.json().catch(() => null);
@@ -351,6 +354,7 @@ async function templateFieldsByRole(
   try {
     const res = await fetch(`${baseUrl}/templates/${templateId}`, {
       headers: { "X-Auth-Token": token },
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const t = await res.json().catch(() => null);
