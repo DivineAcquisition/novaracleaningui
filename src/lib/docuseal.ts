@@ -40,10 +40,15 @@ const AUDIENCE_TEMPLATE_SECRET: Record<AgreementAudience, string> = {
 
 // ─── Config resolution (app_secrets → env), cached ────────────────────────────
 
-const secretCache = new Map<string, string>();
+// Cache secrets with a short TTL — NOT forever. app_secrets exists so ops can
+// repoint things (e.g. swap a DocuSeal template) at runtime; a warm serverless
+// instance holding stale values indefinitely defeats that.
+const SECRET_TTL_MS = 60_000;
+const secretCache = new Map<string, { value: string; expires: number }>();
 
 async function resolveSecret(name: string): Promise<string> {
-  if (secretCache.has(name)) return secretCache.get(name) || "";
+  const hit = secretCache.get(name);
+  if (hit && hit.expires > Date.now()) return hit.value;
   let value = "";
   try {
     const supabase = getAdminSupabase();
@@ -53,7 +58,7 @@ async function resolveSecret(name: string): Promise<string> {
     /* fall through to env */
   }
   if (!value) value = (process.env[name] || "").trim();
-  secretCache.set(name, value);
+  secretCache.set(name, { value, expires: Date.now() + SECRET_TTL_MS });
   return value;
 }
 
