@@ -1,11 +1,14 @@
 // purge-old-turnover-photos
 //
-// Privacy/retention sweep: deletes turnover & cleaner job photos older than 7
-// days from Storage and blanks the now-dangling photo URL arrays on the rows.
-// Hosts are told (in the portal) that photos are kept for 7 days — this is the
-// job that enforces it. Idempotent; safe to run daily via pg_cron.
+// Privacy/retention sweep: deletes STR turnover photos older than 7 days from
+// Storage and blanks the now-dangling photo URL arrays on the rows. Hosts are
+// told (in the portal) that photos are kept for 7 days — this is the job that
+// enforces it. Idempotent; safe to run daily via pg_cron.
 //
-// Buckets purged: `turnover-photos`, `cleaner-job-photos`.
+// Buckets purged: `turnover-photos` ONLY. Residential job photos
+// (cleaner-job-photos) are owned by qc-retention-purge, which enforces a
+// 14-day window and — critically — never deletes anything until the job's
+// Google Drive documentation mirror is confirmed.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -23,7 +26,7 @@ function json(payload: unknown, status = 200) {
 type SB = any;
 
 const RETENTION_DAYS = 7;
-const BUCKETS = ["turnover-photos", "cleaner-job-photos"];
+const BUCKETS = ["turnover-photos"];
 const log = (s: string, d?: unknown) => console.log(`[purge-photos] ${s}${d === undefined ? "" : " " + JSON.stringify(d)}`);
 
 interface FileEntry { path: string; createdAt: number }
@@ -87,17 +90,9 @@ serve(async (req) => {
     }
 
     // 2) Blank the dangling photo arrays so the app stops showing dead links.
-    //    Bookings: completed/serviced before the cutoff.
-    const { data: oldBookings } = await supabase
-      .from("bookings")
-      .select("id")
-      .lt("service_date", cutoffIso.slice(0, 10))
-      .limit(2000);
-    let bookingsCleared = 0;
-    for (const b of oldBookings || []) {
-      await supabase.from("bookings").update({ before_photos: [], after_photos: [] }).eq("id", b.id);
-      bookingsCleared++;
-    }
+    //    (Booking photo arrays are managed by qc-retention-purge — 14 days,
+    //    Drive-mirror-gated — so we no longer touch bookings here.)
+    const bookingsCleared = 0;
 
     //    Turnover requests: requested before the cutoff.
     const { data: oldTurnovers } = await supabase

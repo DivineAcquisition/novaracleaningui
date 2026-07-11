@@ -74,6 +74,10 @@ export const JOB_FIELDS = {
   client: "Client", // multipleRecordLinks → Clients (write by name)
   property: "Property", // multipleRecordLinks → Properties (STR turnovers)
   payrollRun: "Payroll Run", // multipleRecordLinks → Payroll Runs
+  // QC documentation hub (written by name; auto-created via Meta API on first
+  // sync — see ensureQcJobFields in sync.ts)
+  driveFolder: "Drive Folder", // url — Google Drive documentation folder
+  documented: "Documented", // checkbox — before+after photos captured
   // Field ID of the Client link — used when READING (returnFieldsByFieldId)
   // to group a host's turnover history by their Client record id.
   clientLinkId: "fldiOCbiJyxwxBLXh",

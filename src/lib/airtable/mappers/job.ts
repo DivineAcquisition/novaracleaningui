@@ -82,6 +82,10 @@ export async function syncJob(job: JobInput): Promise<string | null> {
     [JOB_FIELDS.payPeriod]: payPeriod,
     [JOB_FIELDS.paymentStatus]: job.paymentStatus,
     [JOB_FIELDS.entrySource]: job.entrySource,
+    // QC documentation — only written when the columns exist in Airtable
+    // (sync.ts strips these if ensureQcJobFields could not create them).
+    ...(job.driveFolderUrl ? { [JOB_FIELDS.driveFolder]: job.driveFolderUrl } : {}),
+    ...(job.documented !== undefined ? { [JOB_FIELDS.documented]: job.documented } : {}),
     ...(clientRecordId ? { [JOB_FIELDS.client]: [clientRecordId] } : {}),
     ...(propertyRecordId ? { [JOB_FIELDS.property]: [propertyRecordId] } : {}),
     ...(job.payrollRunRecordId ? { [JOB_FIELDS.payrollRun]: [job.payrollRunRecordId] } : {}),

@@ -136,6 +136,10 @@ export interface JobInput {
   propertyRecordId?: string;
   /** Link to the Payroll Run this job rolled into (record id). */
   payrollRunRecordId?: string;
+  /** Google Drive documentation folder URL (QC hub). */
+  driveFolderUrl?: string;
+  /** True when the job has full documentation (before + after photos). */
+  documented?: boolean;
 }
 
 export interface PayrollRunInput {
