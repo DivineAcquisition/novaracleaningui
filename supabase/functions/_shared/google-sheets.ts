@@ -99,6 +99,21 @@ export async function writeRange(
   if (!res.ok) throw new Error(`sheets write failed (${range}): ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
 
+/** Read values from a range (verification / read-back). */
+export async function readRange(
+  token: string,
+  spreadsheetId: string,
+  range: string,
+): Promise<(string | number)[][]> {
+  const res = await fetch(
+    `${API}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`sheets read failed (${range}): ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  return data.values || [];
+}
+
 /** List tab titles (to fail fast with a clear message when a tab is missing). */
 export async function listTabs(token: string, spreadsheetId: string): Promise<string[]> {
   const res = await fetch(

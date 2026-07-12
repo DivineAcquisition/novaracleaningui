@@ -26,7 +26,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { clearRange, getSheetsToken, listTabs, writeRange } from "../_shared/google-sheets.ts";
+import { clearRange, getSheetsToken, listTabs, readRange, writeRange } from "../_shared/google-sheets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,15 +51,30 @@ const TABS = {
   eod: "EOD",
 } as const;
 
-// Data ranges (row 2 down; formula columns excluded). Generous row ceiling —
-// the clear wipes stale rows when the dataset shrinks.
+// Per-tab data geometry. The branded template keeps its title in row 1 and
+// the column headers around row 4 — the sync AUTO-DETECTS the header row
+// (the row whose column A reads "Date") and writes data directly beneath it,
+// so template redesigns can't get clobbered. Formula columns sit outside
+// lastCol and are never touched.
 const MAX_ROWS = 10000;
-const RANGES = {
-  jobs: `'${TABS.jobs}'!A2:I${MAX_ROWS}`,
-  expenses: `'${TABS.expenses}'!A2:G${MAX_ROWS}`,
-  adSpend: `'${TABS.adSpend}'!A2:F${MAX_ROWS}`,
-  eod: `'${TABS.eod}'!A2:J${MAX_ROWS}`,
+const TAB_GEOMETRY = {
+  jobs: { lastCol: "I", headers: ["Date", "Client Type", "Service Type", "Client / Property", "Revenue (Collected)", "Cleaner Pay", "Supplies / Materials", "Other Job Cost", "Notes"] },
+  expenses: { lastCol: "G", headers: ["Date", "Type", "Who (Cleaner / VA / Vendor)", "Description", "Amount", "Status", "Paid Date"] },
+  adSpend: { lastCol: "F", headers: ["Date", "Platform", "Spend", "Leads / Calls", "Booked Jobs", "Campaign / Notes"] },
+  eod: { lastCol: "J", headers: ["Date", "VA Name", "Inbound Leads Handled", "Bookings Closed", "Outbound Calls", "Applications Reviewed", "Phone Screens", "Complaints / Issues", "Revenue Booked", "Blockers / Notes"] },
 } as const;
+const DEFAULT_HEADER_ROW = 4;
+
+/** Find the header row (column A == "Date") within the first 10 rows. */
+async function findHeaderRow(token: string, sheetId: string, tab: string): Promise<number> {
+  try {
+    const rows = await readRange(token, sheetId, `'${tab}'!A1:A10`);
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i]?.[0] ?? "").trim().toLowerCase() === "date") return i + 1;
+    }
+  } catch { /* fall through */ }
+  return DEFAULT_HEADER_ROW;
+}
 
 async function resolveSecret(supabase: SB, key: string): Promise<string> {
   try {
@@ -272,6 +287,17 @@ serve(async (req) => {
     const token = await getSheetsToken(impersonate || undefined);
     if (!token) return json({ ok: false, error: "sheets_token_failed" }, 200);
 
+    // Read-back verification: { action: "read" } returns the first rows of
+    // each tab so the mirror can be audited without opening the sheet.
+    const body = await req.json().catch(() => ({}));
+    if (String(body?.action || "") === "read") {
+      const out: Record<string, (string | number)[][]> = {};
+      for (const [key, tab] of Object.entries(TABS)) {
+        out[key] = await readRange(token, sheetId, `'${tab}'!A1:K12`).catch(() => []);
+      }
+      return json({ ok: true, preview: out });
+    }
+
     // Fail fast with a clear message if the workbook is missing a tab.
     const tabs = await listTabs(token, sheetId);
     const missing = Object.values(TABS).filter((t) => !tabs.includes(t));
@@ -289,20 +315,37 @@ serve(async (req) => {
       buildEodRows(supabase, since),
     ]);
 
-    // Clean rewrite per tab: clear the data range, then write from A2.
-    // RAW keeps YYYY-MM-DD as literal text. Formula columns are outside
-    // every range and are never touched.
-    const writes: Array<[string, (string | number)[][]]> = [
-      [RANGES.jobs, jobRows],
-      [RANGES.expenses, expenseRows],
-      [RANGES.adSpend, adRows],
-      [RANGES.eod, eodRows],
+    // Clean rewrite per tab: locate the header row, ensure the header text
+    // is intact (self-heals templates), clear the data range beneath it,
+    // then write. RAW keeps YYYY-MM-DD as literal text. Formula columns are
+    // outside every range and are never touched.
+    const writes: Array<[keyof typeof TABS, (string | number)[][]]> = [
+      ["jobs", jobRows],
+      ["expenses", expenseRows],
+      ["adSpend", adRows],
+      ["eod", eodRows],
     ];
-    for (const [range, values] of writes) {
-      await clearRange(token, sheetId, range);
+    for (const [key, values] of writes) {
+      const tab = TABS[key];
+      const geo = TAB_GEOMETRY[key];
+      const headerRow = await findHeaderRow(token, sheetId, tab);
+      // Self-heal: stray SYNCED rows above the header (recognizable by a
+      // literal YYYY-MM-DD in column A — template text never looks like
+      // that) get cleared so a past mis-write can't linger.
+      try {
+        const above = await readRange(token, sheetId, `'${tab}'!A2:A${Math.max(2, headerRow - 1)}`);
+        for (let i = 0; i < above.length; i++) {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(String(above[i]?.[0] ?? ""))) {
+            await clearRange(token, sheetId, `'${tab}'!A${i + 2}:${geo.lastCol}${i + 2}`);
+          }
+        }
+      } catch { /* best-effort */ }
+      // Keep the header row itself canonical (repairs any past damage).
+      await writeRange(token, sheetId, `'${tab}'!A${headerRow}`, [[...geo.headers]]);
+      const dataStart = headerRow + 1;
+      await clearRange(token, sheetId, `'${tab}'!A${dataStart}:${geo.lastCol}${MAX_ROWS}`);
       if (values.length > 0) {
-        const startRange = range.split(":")[0]; // e.g. 'Daily Log'!A2
-        await writeRange(token, sheetId, startRange, values);
+        await writeRange(token, sheetId, `'${tab}'!A${dataStart}`, values);
       }
     }
 
