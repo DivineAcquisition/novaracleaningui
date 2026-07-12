@@ -249,7 +249,7 @@ export default function PayPage() {
             </p>
           </div>
           <p className="mt-2 text-xs text-violet-50 leading-snug">
-            NOV-{String(summary.bookingNumber || 0).padStart(5, "0")} · {serviceLabel}
+            NVC-{String(summary.bookingNumber || 0).padStart(4, "0")} · {serviceLabel}
             <span className="block">
               {summary.serviceDate
                 ? format(new Date(`${summary.serviceDate}T12:00:00`), "EEEE, MMM d")

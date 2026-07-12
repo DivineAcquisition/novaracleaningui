@@ -73,7 +73,7 @@ serve(async (req) => {
     const remainingCents = Math.max(0, totalCents - depositCents);
 
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `BK-${bookingId.slice(0, 8)}`;
 
     const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");

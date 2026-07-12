@@ -299,7 +299,7 @@ async function toolCreateBooking(supabase: any, body: any): Promise<unknown> {
     const price: any = await stripe.prices.create({
       currency: "usd",
       unit_amount: p.depositCents,
-      product_data: { name: `NOV-${String(bookingNumber).padStart(5, "0")} — 50% deposit` },
+      product_data: { name: `NVC-${String(bookingNumber).padStart(4, "0")} — 50% deposit` },
     });
     const link: any = await stripe.paymentLinks.create({
       line_items: [{ price: price.id, quantity: 1 }],

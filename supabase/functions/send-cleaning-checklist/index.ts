@@ -347,7 +347,7 @@ function renderHtml(opts: {
   const bookingMetaRows: string[] = [];
   if (opts.bookingNumber) {
     bookingMetaRows.push(
-      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Booking #</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">NOV-${String(opts.bookingNumber).padStart(5, "0")}</td></tr>`,
+      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Booking #</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">NVC-${String(opts.bookingNumber).padStart(4, "0")}</td></tr>`,
     );
   }
   if (opts.serviceDate) {

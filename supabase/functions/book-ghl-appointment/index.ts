@@ -240,7 +240,7 @@ serve(async (req) => {
     }
 
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `BK-${String(bookingId).slice(0, 8)}`;
     const serviceLabel = ({
       standard: "Standard",

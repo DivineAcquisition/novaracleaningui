@@ -111,7 +111,7 @@ serve(async (req) => {
       }
       if (bIds.length > 0) {
         const { data: bs } = await admin.from("bookings").select("id, booking_number, service_date").in("id", bIds);
-        for (const b of bs || []) bookingNums.set(String(b.id), b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : "");
+        for (const b of bs || []) bookingNums.set(String(b.id), b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : "");
       }
       const ledger = list.map((p) => ({
         id: p.id,
@@ -228,7 +228,7 @@ serve(async (req) => {
       const isCompleted = String(b.status) === "completed";
       return {
         bookingId: b.id,
-        bookingNumber: b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : null,
+        bookingNumber: b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : null,
         status: b.status,
         serviceType: b.service_type,
         serviceDate: b.service_date,

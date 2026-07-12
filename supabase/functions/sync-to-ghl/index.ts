@@ -190,7 +190,7 @@ function bookingToContact(p: BookingPayload, extraTags: string[] = []): GhlConta
 
 function bookingDisplayName(p: BookingPayload): string {
   const ref = p.bookingNumber
-    ? `NOV-${String(p.bookingNumber).padStart(5, "0")}`
+    ? `NVC-${String(p.bookingNumber).padStart(4, "0")}`
     : p.bookingId
       ? `BK-${String(p.bookingId).slice(0, 8)}`
       : "Novara Booking";

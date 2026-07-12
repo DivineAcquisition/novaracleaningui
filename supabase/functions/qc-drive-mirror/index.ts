@@ -9,7 +9,7 @@
 // Per job it:
 //   1. Refreshes the documentation snapshot (photos, checklist, cleaners).
 //   2. Builds the Drive folder tree:
-//        <QC root>/<YYYY>/<MM - Month>/<NOV-xxxxx — Client — date>/{before,after}
+//        <QC root>/<YYYY>/<MM - Month>/<NVC-xxxxx — Client — date>/{before,after}
 //   3. Uploads every ORIGINAL photo (deterministic filenames → retries dedupe).
 //   4. Generates the completion-summary PDF (job details, checklist,
 //      before/after photos) — the one-file dispute/chargeback packet.
@@ -574,7 +574,7 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
 
   const extras = await enrichSnapshot(supabase, doc);
 
-  // Folder tree: root / YYYY / "MM - Month" / "NOV-xxxxx — Client — date — service"
+  // Folder tree: root / YYYY / "MM - Month" / "NVC-xxxxx — Client — date — service"
   const dateStr = doc.service_date || (doc.completed_at || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
   const [yy, mm] = dateStr.split("-");
   const monthName = MONTHS[Math.max(0, Math.min(11, Number(mm) - 1))];

@@ -150,7 +150,7 @@ async function buildJobRows(supabase: SB, sinceYmd: string): Promise<(string | n
 
   for (const b of bookings || []) {
     const clientType = clientTypeLabel(b.booking_type, b.partner_details);
-    const ref = b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : String(b.id).slice(0, 8);
+    const ref = b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : String(b.id).slice(0, 8);
     const client = String(b.business_name || `${b.first_name || ""} ${b.last_name || ""}`.trim() || "Client");
     const basePay = payByBooking.has(b.id) ? payByBooking.get(b.id)! : (Number(b.cleaner_payout_cents) || 0);
     const extras = extrasByBooking.get(b.id) || 0;

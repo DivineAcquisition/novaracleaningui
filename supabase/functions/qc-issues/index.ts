@@ -92,7 +92,7 @@ function clientTypeOf(b: BookingLite): string {
 }
 
 function bookingRef(b: BookingLite): string {
-  return b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : `Job ${b.id.slice(0, 8)}`;
+  return b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : `Job ${b.id.slice(0, 8)}`;
 }
 
 async function cleanerNameForBooking(admin: SB, b: BookingLite): Promise<{ id: string | null; name: string | null }> {

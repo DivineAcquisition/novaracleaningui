@@ -155,7 +155,7 @@ serve(async (req) => {
       if (!pmId) throw new Error("No saved card on file for off-session charge");
 
       const bookingRef = booking.booking_number
-        ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+        ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
         : `BK-${String(bookingId).slice(0, 8)}`;
 
       const charge = await stripe.paymentIntents.create({
@@ -265,7 +265,7 @@ serve(async (req) => {
       `Remaining balance for ${booking.service_type || "cleaning"} on ${booking.service_date} ` +
       (booking.address ? `@ ${booking.address}` : "");
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `BK-${String(bookingId).slice(0, 8)}`;
 
     if (normalizedLineItems.length > 0) {

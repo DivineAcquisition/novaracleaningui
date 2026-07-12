@@ -279,7 +279,7 @@ export default function AdminMap() {
         lng: p.lng,
         color: p.status === "clocked_in" ? "#a855f7" : "#94a3b8",
         title: `${p.cleanerName || "Cleaner"} · ${p.status}`,
-        subtitle: `Last ping: ${p.pingedAt ? new Date(p.pingedAt).toLocaleTimeString() : "—"}${p.activeBookingNumber ? ` · on NOV-${String(p.activeBookingNumber).padStart(5, "0")}` : ""}`,
+        subtitle: `Last ping: ${p.pingedAt ? new Date(p.pingedAt).toLocaleTimeString() : "—"}${p.activeBookingNumber ? ` · on NVC-${String(p.activeBookingNumber).padStart(4, "0")}` : ""}`,
       });
     });
 

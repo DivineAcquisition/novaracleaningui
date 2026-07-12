@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   RiSearchLine,
+  RiAlertLine,
   RiLoader4Line,
   RiTimeLine,
   RiMapPinLine,
@@ -110,6 +111,7 @@ interface Job {
   zip: string;
   checkInTime?: string | null;
   cancelledAt?: string | null;
+  qcToken?: string | null;
   photoUploadToken?: string | null;
   photoViewToken?: string | null;
   beforePhotos?: string[] | null;
@@ -727,6 +729,10 @@ export default function ContractorJobs() {
                           )}
                         </div>
 
+                        {job.qcToken && (
+                          <QcReportBlock job={job} />
+                        )}
+
                         {job.status !== "completed" && (
                           <div className="flex items-center justify-center gap-4">
                             {crewMembers.length > 0 && (
@@ -844,6 +850,8 @@ export default function ContractorJobs() {
                             )}
                           </div>
                         )}
+
+                        {job.qcToken && <QcReportBlock job={job} />}
                       </CardContent>
                     </Card>
                   );
@@ -964,6 +972,98 @@ export default function ContractorJobs() {
           })()}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── QC report from the field ────────────────────────────────────────────────
+// Contractors submit a QC report about the job (damage found, biohazard,
+// access problem, quality flag…) straight into the QC hub. Uses the same
+// assignment token that powers the job checklist; high severity by default
+// per the stop-and-flag SOP, and dispatch is alerted immediately.
+const QC_REPORT_TYPES = [
+  { id: "quality_flag", label: "Quality / condition issue" },
+  { id: "damage", label: "Damage found / caused" },
+  { id: "complaint", label: "Customer complaint on site" },
+  { id: "other", label: "Something else" },
+];
+
+function QcReportBlock({ job }: { job: Job }) {
+  const [open, setOpen] = useState(false);
+  const [issueType, setIssueType] = useState("quality_flag");
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const submit = async () => {
+    const description = text.trim();
+    if (!description || !job.qcToken) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "field_report", token: job.qcToken, issueType, description },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string })?.error || "Couldn't send report");
+      }
+      toast.success("QC report sent — dispatch has been alerted.");
+      setSent(true);
+      setOpen(false);
+      setText("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send report — text dispatch instead");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (sent) {
+    return (
+      <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-center">
+        ✓ QC report submitted — the office has it with this job's photos attached as evidence.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full text-[11px] font-semibold text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1.5"
+        >
+          <RiAlertLine className="w-3.5 h-3.5 text-amber-500" />
+          Submit a QC report about this job (damage, condition, complaint…)
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+            <RiAlertLine className="w-4 h-4 text-amber-500" /> QC report — goes straight to the office
+          </p>
+          <Select value={issueType} onValueChange={setIssueType}>
+            <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {QC_REPORT_TYPES.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Textarea
+            placeholder="What happened? Be specific — this becomes part of the job's QC record with your photos as evidence."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            className="text-sm"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="flex-1 h-9 bg-amber-600 hover:bg-amber-700 text-white" disabled={!text.trim() || sending} onClick={() => void submit()}>
+              {sending ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RiAlertLine className="w-3.5 h-3.5 mr-1.5" />}
+              Send QC report
+            </Button>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

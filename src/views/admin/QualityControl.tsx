@@ -705,7 +705,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
     if (q.length < 2) return;
     setSearching(true);
     try {
-      const num = q.replace(/^nov-?0*/i, "");
+      const num = q.replace(/^(nvc|nov)-?0*/i, "");
       let sel = supabase.from("bookings")
         .select("id, booking_number, first_name, last_name, email, service_date, service_type, status")
         .order("service_date", { ascending: false })
@@ -753,7 +753,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
             <>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Find job: client email, name, or NOV-00012…"
+                  placeholder="Find job: client email, name, or NVC-00012…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void searchBookings()}
@@ -767,7 +767,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                   <button key={b.id} onClick={() => setBooking(b)}
                     className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 text-sm hover:border-violet-300">
                     <span className="font-semibold">
-                      {b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : b.id.slice(0, 8)}
+                      {b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : b.id.slice(0, 8)}
                     </span>{" "}
                     · {b.first_name} {b.last_name} · {fmtD(b.service_date)} · {b.service_type} · {b.status}
                   </button>
@@ -778,7 +778,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
             <>
               <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm flex items-center justify-between">
                 <span>
-                  <strong>{booking.booking_number ? `NOV-${String(booking.booking_number).padStart(5, "0")}` : booking.id.slice(0, 8)}</strong>{" "}
+                  <strong>{booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : booking.id.slice(0, 8)}</strong>{" "}
                   · {booking.first_name} {booking.last_name} · {fmtD(booking.service_date)}
                 </span>
                 <button className="text-xs text-violet-600 font-semibold" onClick={() => setBooking(null)}>Change</button>

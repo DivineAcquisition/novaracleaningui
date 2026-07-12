@@ -342,7 +342,7 @@ export default function CleanerJobPhotosPage() {
             </p>
           )}
           <p className="mt-2 text-xs text-emerald-50 leading-snug">
-            Job NOV-{String(info.bookingNumber || 0).padStart(5, "0")} ·{" "}
+            Job NVC-{String(info.bookingNumber || 0).padStart(4, "0")} ·{" "}
             {info.customerFirstName || "Customer"} · {info.serviceDate}{" "}
             {info.timeSlot && `· ${info.timeSlot}`}
             {info.addressLine && <span className="block">{info.addressLine}</span>}

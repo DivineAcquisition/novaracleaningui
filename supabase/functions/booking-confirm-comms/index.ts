@@ -75,7 +75,7 @@ serve(async (req) => {
     // 1. Confirmation email.
     await callEmail("confirmation", {
       firstName: b.first_name, lastName: b.last_name, bookingId: b.id,
-      bookingNumber: b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : undefined,
+      bookingNumber: b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : undefined,
       serviceDate: b.service_date, timeSlot: b.time_slot, arrivalWindow: b.arrival_window || b.time_slot,
       serviceType: b.service_type, homeSize: b.home_size_id, bedrooms: b.bedrooms, bathrooms: b.bathrooms,
       sqft: b.sqft, address: b.address, city: b.city, state: b.state, zipCode: b.zip_code,

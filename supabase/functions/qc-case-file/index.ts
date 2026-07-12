@@ -183,7 +183,7 @@ serve(async (req) => {
     if (!booking) return json({ ok: false, error: "Booking not found." }, 404);
 
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : bookingId.slice(0, 8);
 
     // ── Parallel live pulls ───────────────────────────────────────────────

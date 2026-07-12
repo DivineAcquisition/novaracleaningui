@@ -91,7 +91,7 @@ export async function requestDispatchApproval(
     .maybeSingle();
 
   const ref = booking?.booking_number
-    ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+    ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
     : `Job ${String(jobId).slice(0, 8)}`;
   const customer = booking
     ? `${booking.first_name || ""} ${booking.last_name || ""}`.trim()

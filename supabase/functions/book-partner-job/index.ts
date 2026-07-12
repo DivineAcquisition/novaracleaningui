@@ -310,7 +310,7 @@ serve(async (req) => {
       .single();
     if (insErr) throw insErr;
     const bookingId = booking.id as string;
-    const ref = booking.booking_number ? `NOV-${String(booking.booking_number).padStart(5, "0")}` : bookingId.slice(0, 8);
+    const ref = booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : bookingId.slice(0, 8);
 
     // ─── Recurring schedule (optional) ───────────────────────────────────
     let scheduleId: string | null = null;

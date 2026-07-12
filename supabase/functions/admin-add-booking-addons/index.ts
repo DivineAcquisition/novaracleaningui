@@ -186,7 +186,7 @@ serve(async (req) => {
     }
 
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `BK-${bookingId.slice(0, 8)}`;
 
     // Best-effort customer SMS (GHL primary). Never blocks the charge flow.

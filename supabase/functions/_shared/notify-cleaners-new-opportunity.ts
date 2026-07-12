@@ -47,7 +47,7 @@ export async function notifyAllCleanersOfNewOpportunity(
   }
 
   const ref = booking.booking_number
-    ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+    ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
     : `#${booking.id.slice(0, 8)}`;
   const date = booking.service_date || "TBD";
   const location = [booking.city, booking.state, booking.zip_code].filter(Boolean).join(", ") ||

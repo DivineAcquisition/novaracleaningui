@@ -249,7 +249,7 @@ serve(async (req) => {
         setup_future_usage: "off_session",
         automatic_payment_methods: { enabled: true },
         receipt_email: booking.email || undefined,
-        description: `NOV-${String(booking.booking_number || "").padStart(5, "0")} — Deposit (Novara Cleaning)`,
+        description: `NVC-${String(booking.booking_number || "").padStart(4, "0")} — Deposit (Novara Cleaning)`,
         metadata: {
           booking_id: booking.id,
           booking_number: String(booking.booking_number || ""),

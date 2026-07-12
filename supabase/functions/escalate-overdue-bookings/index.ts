@@ -32,7 +32,7 @@ function serviceDayHasEnded(serviceDate: string): boolean {
 
 function bookingRef(row: { booking_number?: number | null; id: string }): string {
   if (row.booking_number) {
-    return `NOV-${String(row.booking_number).padStart(5, "0")}`;
+    return `NVC-${String(row.booking_number).padStart(4, "0")}`;
   }
   return row.id.slice(0, 8).toUpperCase();
 }

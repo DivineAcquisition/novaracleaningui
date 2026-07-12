@@ -172,7 +172,7 @@ serve(async (req) => {
     event_type: `booking.${toStatus}`,
     booking_id: bookingId, job_id: booking.job_id,
     source: "update-job-status",
-    summary: `Booking ${booking.booking_number ? `NOV-${String(booking.booking_number).padStart(5, "0")}` : bookingId} — ${fromStatus} → ${toStatus}${reason ? " (" + reason + ")" : ""}`,
+    summary: `Booking ${booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : bookingId} — ${fromStatus} → ${toStatus}${reason ? " (" + reason + ")" : ""}`,
     data: { from: fromStatus, to: toStatus, reason, noShowBy, cancelledBy, by: uid, metadata },
   });
 

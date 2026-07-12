@@ -495,7 +495,7 @@ export default function AdminDispatch() {
                         <div className="min-w-0">
                           <p className="font-semibold text-sm text-slate-900 truncate">
                             {b.first_name} {b.last_name}
-                            {b.booking_number ? <span className="text-slate-400 font-normal"> · NOV-{String(b.booking_number).padStart(5, "0")}</span> : null}
+                            {b.booking_number ? <span className="text-slate-400 font-normal"> · NVC-{String(b.booking_number).padStart(4, "0")}</span> : null}
                           </p>
                           <p className="text-xs text-slate-500">
                             {fmtDate(b.service_date)} · {fmtWindow(b.time_slot || b.arrival_window) || "time TBD"}
@@ -678,7 +678,7 @@ function AddonReviewCard({
     ? `${job.booking.first_name || ""} ${job.booking.last_name || ""}`.trim()
     : "Customer";
   const ref = job.booking?.booking_number
-    ? `NOV-${String(job.booking.booking_number).padStart(5, "0")}`
+    ? `NVC-${String(job.booking.booking_number).padStart(4, "0")}`
     : `Job ${job.id.slice(0, 8)}`;
 
   const parsedPrice = Number(price);

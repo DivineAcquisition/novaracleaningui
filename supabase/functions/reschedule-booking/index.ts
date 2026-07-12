@@ -474,7 +474,7 @@ serve(async (req) => {
           customFieldsByKey: ghlCustomFields,
         },
         opportunity: {
-          name: `NOV-${String(booking.booking_number).padStart(5, "0")} — ${booking.first_name} ${booking.last_name}`,
+          name: `NVC-${String(booking.booking_number).padStart(4, "0")} — ${booking.first_name} ${booking.last_name}`,
           status: "open",
           monetaryValue: Math.round(
             ((booking.total_estimate_cents || 0) + feeDecision.feeCents) / 100,

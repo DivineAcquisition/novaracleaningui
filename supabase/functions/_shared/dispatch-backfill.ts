@@ -187,7 +187,7 @@ export async function notifyStaffNoCleanersAvailable(
   const resend = new Resend(resendKey);
 
   const ref = booking?.booking_number
-    ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+    ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
     : jobId.slice(0, 8);
   const when = job.start_datetime
     ? new Date(job.start_datetime).toLocaleString("en-US", { timeZone: "America/New_York" })

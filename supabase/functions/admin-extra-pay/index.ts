@@ -107,7 +107,7 @@ serve(async (req) => {
         const c = cleanerById.get(String(r.cleaner_id));
         return {
           ...r,
-          booking_ref: b?.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : null,
+          booking_ref: b?.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : null,
           customer: b ? `${b.first_name || ""} ${b.last_name || ""}`.trim() : null,
           service_date: b?.service_date ?? null,
           cleaner_name: c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() : null,
@@ -150,7 +150,7 @@ serve(async (req) => {
           .maybeSingle();
         if (!b) return json({ error: "Booking not found" }, 404);
         if (!jobId && b.job_id) jobId = String(b.job_id);
-        bookingRef = b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : `BK-${bookingId.slice(0, 8)}`;
+        bookingRef = b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : `BK-${bookingId.slice(0, 8)}`;
       }
 
       const { data: cleaner } = await admin

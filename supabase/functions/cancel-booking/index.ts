@@ -325,7 +325,7 @@ Deno.serve(async (req) => {
           },
         },
         opportunity: {
-          name: `NOV-${String(booking.booking_number).padStart(5, "0")} — ${booking.first_name} ${booking.last_name} (CANCELLED)`,
+          name: `NVC-${String(booking.booking_number).padStart(4, "0")} — ${booking.first_name} ${booking.last_name} (CANCELLED)`,
           status: "lost",
           monetaryValue: Math.round(((booking.final_charge_cents || booking.total_estimate_cents || 0) - refundCents) / 100),
           source: "Novara Cancellation",

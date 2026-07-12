@@ -146,7 +146,7 @@ serve(async (req) => {
       ? `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Cleaner"
       : "Team";
     const bookingRef = booking?.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `Job ${String(jobId).slice(0, 8)}`;
 
     // ─── Mutations ───────────────────────────────────────────────────────

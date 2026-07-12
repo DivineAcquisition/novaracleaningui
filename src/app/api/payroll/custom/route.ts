@@ -200,7 +200,7 @@ async function listJobs(
 
     return {
       bookingId: b.id,
-      bookingNumber: b.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : null,
+      bookingNumber: b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : null,
       status: b.status,
       serviceType: b.service_type,
       serviceDate: b.service_date,
@@ -383,7 +383,7 @@ async function submitPayout(
   const profitCents = revenueCents - totalCents;
   const pctPaid = pct(totalCents, revenueCents);
   const bookingLabel = booking.booking_number
-    ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+    ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
     : "your recent job";
 
   // Upsert the single per-booking payout row (carrying the crew breakdown).

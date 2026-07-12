@@ -126,6 +126,24 @@ serve(async (req) => {
     const bookingRows: Row[] = bookings || [];
     const primaryIds = new Set(bookingRows.map((b) => b.id));
 
+    // ── Per-job QC token: the cleaner's assignment response_token doubles as
+    //    the credential for field QC reports (same model as the job
+    //    checklist). Map job_id → this cleaner's token. ──
+    const qcTokenByJob = new Map<string, string>();
+    const jobIds = bookingRows.map((b) => b.job_id).filter(Boolean) as string[];
+    if (jobIds.length > 0) {
+      const { data: assigns } = await admin
+        .from("job_assignments")
+        .select("job_id, response_token, status")
+        .eq("cleaner_id", cleanerId)
+        .in("job_id", jobIds);
+      for (const a of assigns || []) {
+        if (a.response_token && ["confirmed", "accepted", "assigned", "in progress", "completed"].includes(String(a.status || "").toLowerCase())) {
+          qcTokenByJob.set(String(a.job_id), String(a.response_token));
+        }
+      }
+    }
+
     // ── Lifetime actual totals from the two pay ledgers (custom pay +
     //    extra pay), including crew splits via cleaner_breakdown ──
     let lifetimePaidCents = 0;
@@ -294,6 +312,7 @@ serve(async (req) => {
           zip: cancelled ? "" : (b.zip_code || ""),
           checkInTime: b.check_in_time || null,
           cancelledAt: b.cancelled_at || null,
+          qcToken: cancelled ? null : (b.job_id ? qcTokenByJob.get(String(b.job_id)) || null : null),
           photoUploadToken: b.photo_upload_token || null,
           photoViewToken: b.photo_view_token || null,
           beforePhotos: b.before_photos || null,

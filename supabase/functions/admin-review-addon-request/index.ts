@@ -77,7 +77,7 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
     const refFromBooking = (b: { booking_number?: number | null } | null, fallback: string) =>
-      b?.booking_number ? `NOV-${String(b.booking_number).padStart(5, "0")}` : fallback;
+      b?.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : fallback;
 
     // ─── REJECT ──────────────────────────────────────────────────────────
     if (action === "reject") {

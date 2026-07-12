@@ -114,7 +114,7 @@ serve(async (req) => {
     if (!pmId) throw new Error("No saved card on file for off-session charge");
 
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `BK-${bookingId.slice(0, 8)}`;
 
     const charge = await stripe.paymentIntents.create({

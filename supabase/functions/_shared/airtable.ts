@@ -204,7 +204,7 @@ export async function syncJobToAirtable(
     }
 
     const bookingNumber = b.booking_number
-      ? `NOV-${String(b.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(b.booking_number).padStart(4, "0")}`
       : null;
 
     const fields: Record<string, unknown> = {
@@ -290,7 +290,7 @@ export async function syncPayoutToAirtable(
         .maybeSingle();
       if (b) {
         bookingNumber = b.booking_number
-          ? `NOV-${String(b.booking_number).padStart(5, "0")}`
+          ? `NVC-${String(b.booking_number).padStart(4, "0")}`
           : null;
         serviceDate = b.service_date ?? null;
         serviceType = b.service_type ?? null;

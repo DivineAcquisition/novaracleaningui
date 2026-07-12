@@ -256,7 +256,7 @@ async function sendConfirmationEmails(
           lastName: booking.last_name,
           bookingId: booking.id,
           bookingNumber: booking.booking_number
-            ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+            ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
             : undefined,
           serviceDate: booking.service_date,
           timeSlot: booking.time_slot,

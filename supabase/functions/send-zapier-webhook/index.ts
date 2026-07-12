@@ -425,7 +425,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     const payload = {
       // Basic Job Information
       "Job ID": booking.id,
-      "External Job Ref": `NOV-${String(booking.booking_number).padStart(5, '0')}`,
+      "External Job Ref": `NVC-${String(booking.booking_number).padStart(4, '0')}`,
       "Booking Channel": booking.booking_channel || "Website",
       "Booker Source": booking.booker_source || (booking.booking_number === 1 ? "New Lead" : "Returning Client"),
       
@@ -695,7 +695,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
               const price: any = await sk.prices.create({
                 currency: 'usd',
                 unit_amount: outstanding,
-                product_data: { name: `NOV-${String(booking.booking_number).padStart(5, '0')} balance` },
+                product_data: { name: `NVC-${String(booking.booking_number).padStart(4, '0')} balance` },
               });
               const link: any = await sk.paymentLinks.create({
                 line_items: [{ price: price.id, quantity: 1 }],
@@ -918,7 +918,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         customFieldsByKey: ghlCustomFields,
       },
       opportunity: {
-        name: `NOV-${String(booking.booking_number).padStart(5, '0')} — ${booking.first_name} ${booking.last_name}`,
+        name: `NVC-${String(booking.booking_number).padStart(4, '0')} — ${booking.first_name} ${booking.last_name}`,
         status: booking.status === 'cancelled' ? 'lost' : booking.status === 'completed' ? 'won' : 'open',
         monetaryValue: Math.round(totalChargedCentsForGhl / 100),
         source: "Novara Booking",
@@ -1026,7 +1026,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         cleaners: teamCleaners,
         // Opportunity intent
         opportunity: {
-          name: `NOV-${String(booking.booking_number).padStart(5, "0")} — ${booking.first_name} ${booking.last_name}`,
+          name: `NVC-${String(booking.booking_number).padStart(4, "0")} — ${booking.first_name} ${booking.last_name}`,
           status: booking.status === "cancelled" ? "lost"
             : booking.status === "completed" ? "won"
             : "open",

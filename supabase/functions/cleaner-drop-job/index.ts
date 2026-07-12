@@ -120,7 +120,7 @@ serve(async (req) => {
       .then(() => undefined, () => undefined);
 
     const bookingRef = booking.booking_number
-      ? `NOV-${String(booking.booking_number).padStart(5, "0")}`
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : bookingId.slice(0, 8);
     const customer = `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || "Customer";
     const when = `${booking.service_date || "TBD"}${booking.time_slot ? ` · ${booking.time_slot}` : ""}`;
