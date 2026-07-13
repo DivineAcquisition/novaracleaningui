@@ -109,17 +109,23 @@ BEGIN
 END $do$;
 
 -- ─── 6. Cron: compute scores every 6 hours ───────────────────────────────────
+-- Auth: app_secrets has no service-role key in this project, so reuse the
+-- bearer token an existing function-invoking cron job already carries (the
+-- established pattern for edge-function crons here).
 DO $do$
 DECLARE
   v_job_id bigint;
-  v_supabase_url text;
-  v_service_role text;
+  v_token text;
 BEGIN
-  SELECT value INTO v_supabase_url FROM public.app_secrets WHERE key = 'SUPABASE_URL';
-  IF v_supabase_url IS NULL OR length(v_supabase_url) = 0 THEN
-    v_supabase_url := 'https://sxdraeptzuamsgjcvfeg.supabase.co';
+  SELECT substring(command from 'Bearer ([A-Za-z0-9._-]+)') INTO v_token
+  FROM cron.job
+  WHERE command LIKE '%functions/v1/%' AND command LIKE '%Bearer %'
+  ORDER BY jobid
+  LIMIT 1;
+  IF v_token IS NULL OR length(v_token) < 20 THEN
+    RAISE NOTICE 'No function bearer token found — skipping compute-cleaner-scores cron';
+    RETURN;
   END IF;
-  SELECT value INTO v_service_role FROM public.app_secrets WHERE key = 'SUPABASE_SERVICE_ROLE_KEY';
 
   SELECT jobid INTO v_job_id FROM cron.job WHERE jobname = 'compute-cleaner-scores';
   IF v_job_id IS NOT NULL THEN PERFORM cron.unschedule('compute-cleaner-scores'); END IF;
@@ -127,18 +133,8 @@ BEGIN
     'compute-cleaner-scores',
     '15 */6 * * *',
     format(
-      $cron$
-        SELECT net.http_post(
-          url := '%s/functions/v1/compute-cleaner-scores',
-          headers := jsonb_build_object(
-            'Content-Type', 'application/json',
-            'Authorization', 'Bearer ' || coalesce(%L::text, '')
-          ),
-          body := jsonb_build_object('source', 'pg_cron')
-        );
-      $cron$,
-      v_supabase_url,
-      v_service_role
+      $cron$SELECT net.http_post(url := 'https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/compute-cleaner-scores', headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer %s'), body := '{"source":"pg_cron"}'::jsonb, timeout_milliseconds := 120000);$cron$,
+      v_token
     )
   );
 EXCEPTION WHEN OTHERS THEN
