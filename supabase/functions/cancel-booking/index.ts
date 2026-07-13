@@ -397,27 +397,15 @@ Deno.serve(async (req) => {
       logStep("customer SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
     }
 
-    // ─── Cleaner SMS — the WHOLE crew, not just the lead ────────────
-    // Support cleaners live on job_assignments; missing them here is how
-    // a second cleaner shows up to a cancelled house.
+    // ─── Cleaner SMS ───────────────────────────────────────────────
     try {
-      const crewIds = new Set<string>();
-      if (booking.job_id) {
-        const { data: assigns } = await supabase
-          .from("job_assignments")
-          .select("cleaner_id, status")
-          .eq("job_id", booking.job_id)
-          .in("status", ["Confirmed", "Accepted", "In Progress", "Assigned"]);
-        for (const a of assigns || []) if (a.cleaner_id) crewIds.add(a.cleaner_id);
-      }
-      if (booking.cleaner_id) crewIds.add(booking.cleaner_id);
-      if (crewIds.size > 0) {
-        const { data: crew } = await supabase
+      if (booking.cleaner_id) {
+        const { data: cleaner } = await supabase
           .from("cleaners")
-          .select("id, phone, first_name")
-          .in("id", [...crewIds]);
-        for (const cleaner of crew || []) {
-          if (!cleaner.phone) continue;
+          .select("phone, first_name")
+          .eq("id", booking.cleaner_id)
+          .maybeSingle();
+        if (cleaner?.phone) {
           await sendSms(supabase, {
             toPhone: cleaner.phone,
             message:

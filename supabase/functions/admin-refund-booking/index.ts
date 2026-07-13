@@ -162,27 +162,18 @@ serve(async (req) => {
         .eq("id", booking.id as string);
       logStep("Booking row flipped to cancelled", { bookingId: booking.id });
 
-      // This path used to cancel SILENTLY for the crew — the plain
-      // cancel-booking flow texts the cleaner, but refund+cancel (the more
-      // common admin path) never did. Notify every assigned cleaner.
+      // Tell the LEAD cleaner directly (the plain cancel-booking path texts
+      // the lead inline; this refund path never did — cleaners kept showing
+      // up to refunded houses). Support crew is notified by the bookings
+      // status→cancelled DB trigger → notify-crew-change.
       try {
-        const crewIds = new Set<string>();
-        if (booking.job_id) {
-          const { data: assigns } = await supabase
-            .from("job_assignments")
-            .select("cleaner_id, status")
-            .eq("job_id", booking.job_id as string)
-            .in("status", ["Confirmed", "Accepted", "In Progress", "Assigned"]);
-          for (const a of assigns || []) if (a.cleaner_id) crewIds.add(a.cleaner_id as string);
-        }
-        if (booking.cleaner_id) crewIds.add(booking.cleaner_id as string);
-        if (crewIds.size > 0) {
-          const { data: crew } = await supabase
+        if (booking.cleaner_id) {
+          const { data: cleaner } = await supabase
             .from("cleaners")
-            .select("id, phone, first_name")
-            .in("id", [...crewIds]);
-          for (const cleaner of crew || []) {
-            if (!cleaner.phone) continue;
+            .select("phone, first_name")
+            .eq("id", booking.cleaner_id as string)
+            .maybeSingle();
+          if (cleaner?.phone) {
             await supabase.functions.invoke("send-ghl-sms", {
               body: {
                 phone: cleaner.phone,
@@ -193,12 +184,12 @@ serve(async (req) => {
                   ` has been cancelled and refunded. No action needed. Reply STOP to opt out.`,
                 type: "job_offer",
               },
-            }).catch(() => undefined);
+            });
+            logStep("Lead cleaner notified of refund-cancel");
           }
-          logStep("Crew notified of refund-cancel", { count: crewIds.size });
         }
       } catch (smsErr) {
-        logStep("Crew cancel SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
+        logStep("Lead cancel SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
       }
     }
 

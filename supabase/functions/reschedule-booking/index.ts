@@ -538,27 +538,15 @@ serve(async (req) => {
       console.error('[reschedule-booking] Customer SMS failed (non-blocking):', smsErr);
     }
 
-    // Notify EVERY assigned cleaner about the new date/time — not just the
-    // lead on bookings.cleaner_id. Support crew live on job_assignments and
-    // used to get no reschedule notice at all.
+    // Notify the assigned cleaner about the new date/time if one exists.
     try {
-      const crewIds = new Set<string>();
-      if (booking.job_id) {
-        const { data: assigns } = await supabase
-          .from('job_assignments')
-          .select('cleaner_id, status')
-          .eq('job_id', booking.job_id)
-          .in('status', ['Confirmed', 'Accepted', 'In Progress', 'Assigned']);
-        for (const a of assigns || []) if (a.cleaner_id) crewIds.add(a.cleaner_id);
-      }
-      if (booking.cleaner_id) crewIds.add(booking.cleaner_id);
-      if (crewIds.size > 0) {
-        const { data: crew } = await supabase
+      if (booking.cleaner_id) {
+        const { data: cleaner } = await supabase
           .from('cleaners')
-          .select('id, phone, first_name')
-          .in('id', [...crewIds]);
-        for (const cleaner of crew || []) {
-          if (!cleaner.phone) continue;
+          .select('phone, first_name')
+          .eq('id', booking.cleaner_id)
+          .maybeSingle();
+        if (cleaner?.phone) {
           await sendSms(supabase, {
             toPhone: cleaner.phone,
             message:
@@ -568,8 +556,8 @@ serve(async (req) => {
               `. Check the Cleaner app for the updated schedule.`,
             type: "job_offer",
           });
+          console.log('[reschedule-booking] Cleaner reschedule SMS sent');
         }
-        console.log(`[reschedule-booking] Cleaner reschedule SMS sent to ${crewIds.size} crew member(s)`);
       }
     } catch (smsErr) {
       console.error('[reschedule-booking] Cleaner SMS failed (non-blocking):', smsErr);
