@@ -299,6 +299,16 @@ interface CleanerScores {
   overall: number | null;
 }
 
+interface TipEntry {
+  bookingId: string | null;
+  bookingRef: string | null;
+  amountCents: number;
+  totalTipCents: number;
+  crewSize: number;
+  allocation: "split" | "directed";
+  receivedAt: string | null;
+}
+
 const LOOKUP_STORAGE_KEY = "novara_contractor_lookup";
 
 export default function ContractorJobs() {
@@ -310,6 +320,7 @@ export default function ContractorJobs() {
   const [cleanerName, setCleanerName] = useState("");
   const [cleanerId, setCleanerId] = useState("");
   const [scores, setScores] = useState<CleanerScores | null>(null);
+  const [tips, setTips] = useState<TipEntry[]>([]);
   const [summary, setSummary] = useState<{ lifetimePaidCents: number; pendingCents: number; paidJobs: number; lifetimeTipsCents?: number } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [crewMembers, setCrewMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
@@ -337,11 +348,12 @@ export default function ContractorJobs() {
         body: { cleanerId: cid },
       });
       if (error) throw error;
-      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary; cleaner?: { scores?: CleanerScores | null } };
+      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary; tips?: TipEntry[]; cleaner?: { scores?: CleanerScores | null } };
       if (!res?.ok) throw new Error("Could not load jobs");
       setJobs(res.jobs || []);
       setSummary(res.summary || null);
       setScores(res.cleaner?.scores || null);
+      setTips(res.tips || []);
       setLastSyncedAt(new Date());
     } catch (err) {
       if (!silent) toast.error("Failed to refresh jobs");
@@ -754,6 +766,44 @@ export default function ContractorJobs() {
                 {lastSyncedAt ? ` Live · synced ${lastSyncedAt.toLocaleTimeString()}` : ""}
               </p>
             </div>
+
+            {/* ── Tips preview — every tip, 100% yours, separate from job pay ── */}
+            {tips.length > 0 && (
+              <section className="rounded-3xl bg-white ring-1 ring-emerald-100 shadow-sm p-4 space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-[11px] font-bold text-emerald-700 uppercase tracking-[0.16em]">
+                    💜 Tips from customers
+                  </h2>
+                  <span className="text-xs font-bold text-emerald-700 tabular-nums">
+                    {money(tips.reduce((s, t) => s + t.amountCents, 0))} total
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {tips.slice(0, 5).map((t, i) => (
+                    <div key={i} className="flex items-start justify-between gap-2 rounded-xl bg-emerald-50/60 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 tabular-nums">{money(t.amountCents)}</p>
+                        <p className="text-[11px] text-slate-500">
+                          {t.bookingRef ? `${t.bookingRef} · ` : ""}
+                          {t.allocation === "directed"
+                            ? "the customer sent this to you directly"
+                            : t.crewSize > 1
+                              ? `your equal share of a ${money(t.totalTipCents)} crew tip (split ${t.crewSize} ways)`
+                              : "solo job — the full tip is yours"}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5">
+                        {t.receivedAt ? new Date(t.receivedAt).toLocaleDateString() : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 px-1">
+                  100% of every tip goes to the crew — Novara takes nothing, and tips never
+                  affect your scores or job pay. Tips are included with your payouts.
+                </p>
+              </section>
+            )}
 
             {/* ── Upcoming / Active ── */}
             {upcomingJobs.length > 0 && (

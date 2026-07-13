@@ -127,17 +127,22 @@ serve(async (req) => {
     const primaryIds = new Set(bookingRows.map((b) => b.id));
 
     // ── Tips: 100% pass-through gifts, shown separately from job pay (they
-    //    never touch scores, tiers, or the pay math). ──
+    //    never touch scores, tiers, or the pay math). The full list feeds
+    //    the portal's tips preview panel. ──
     const tipByBooking = new Map<string, number>();
     let lifetimeTipsCents = 0;
+    const tipRows: Row[] = [];
     try {
       const { data: tips } = await admin
         .from("cleaner_tips")
-        .select("booking_id, amount_cents")
-        .eq("cleaner_id", cleanerId);
+        .select("booking_id, amount_cents, allocation, crew_size, total_tip_cents, created_at")
+        .eq("cleaner_id", cleanerId)
+        .order("created_at", { ascending: false })
+        .limit(50);
       for (const t of tips || []) {
         lifetimeTipsCents += Number(t.amount_cents) || 0;
         if (t.booking_id) tipByBooking.set(String(t.booking_id), (tipByBooking.get(String(t.booking_id)) || 0) + (Number(t.amount_cents) || 0));
+        tipRows.push(t);
       }
     } catch { /* table may not exist yet */ }
 
@@ -388,6 +393,22 @@ serve(async (req) => {
       }
     } catch { /* columns may not exist yet */ }
 
+    // Tips preview: each tip with its job ref — the cleaner sees exactly
+    // what came in, when, and how a crew tip was split.
+    const refByBooking = new Map<string, string>();
+    for (const b of bookingRows) {
+      if (b.booking_number != null) refByBooking.set(String(b.id), `NVC-${String(b.booking_number).padStart(4, "0")}`);
+    }
+    const tips = tipRows.map((t) => ({
+      bookingId: t.booking_id || null,
+      bookingRef: t.booking_id ? refByBooking.get(String(t.booking_id)) || null : null,
+      amountCents: Number(t.amount_cents) || 0,
+      totalTipCents: Number(t.total_tip_cents) || 0,
+      crewSize: Number(t.crew_size) || 1,
+      allocation: t.allocation || "split",
+      receivedAt: t.created_at || null,
+    }));
+
     return json({
       ok: true,
       found: true,
@@ -400,6 +421,7 @@ serve(async (req) => {
         scores,
       },
       summary: { lifetimePaidCents, pendingCents, paidJobs, lifetimeTipsCents },
+      tips,
       jobs,
     });
   } catch (e) {

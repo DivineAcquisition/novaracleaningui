@@ -58,7 +58,7 @@ function normalizeE164(raw: string | null | undefined): string | null {
 
 function buildMessage(firstName: string | null, accountUrl: string, referUrl: string): string {
   const greeting = firstName ? `Hi ${firstName}! ` : "";
-  return `${greeting}Thanks for booking with Novara Cleaning ✨\n\nManage your booking, billing & membership: ${accountUrl}\n\nRefer a friend and you BOTH get $50 off: ${referUrl}\n\nReply STOP to opt out.`;
+  return `${greeting}Thanks for booking with Novara Cleaning ✨\n\nManage your booking, billing & membership: ${accountUrl}\n\n💜 Share the clean: copy & paste your personal referral link and send it to a friend — you BOTH get $50 off:\n${referUrl}\n\nReply STOP to opt out.`;
 }
 
 serve(async (req) => {

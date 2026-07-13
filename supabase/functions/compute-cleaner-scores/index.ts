@@ -18,6 +18,19 @@
 // (cleaner_score_overrides.active) PIN a field's value until cleared — the
 // computed value is still calculated and recorded in the event log.
 //
+// HISTORY, NOT COUNTERS: the cleaners.total_offers_* / completed_bookings
+// counters proved stale (0 for everyone while job_assignments and paid
+// payouts showed real work). Every run derives the inputs from the raw
+// ledgers front-to-end and BACKFILLS the counters, so the engine
+// self-heals and the directory columns stay truthful:
+//   offers    = job_assignments that reached a terminal answer
+//               (accepted: Confirmed/In Progress/Accepted/Completed;
+//                negative: Declined/Expired/Withdrawn;
+//                excluded: Offered (pending) and Broadcast_Lost (lost the
+//                race through no fault of theirs))
+//   completed = distinct completed bookings where they were the assigned
+//               cleaner OR were paid on the job (crew via manual_payouts)
+//
 // Tips are intentionally invisible to this engine (spec: a tip is a gift,
 // not a performance metric).
 
@@ -80,6 +93,59 @@ serve(async (req) => {
 
     const fleetMaxWorkload = Math.max(1, ...cleaners.map((c: Record<string, unknown>) => Number(c.workload_score) || 0));
 
+    // ── Front-to-end history: offer outcomes from job_assignments ──
+    const ACCEPTED_STATUSES = new Set(["confirmed", "in progress", "accepted", "completed"]);
+    const NEGATIVE_STATUSES = new Set(["declined", "expired", "withdrawn"]);
+    const offerStats = new Map<string, { accepted: number; negative: number }>();
+    {
+      const { data: assigns } = await supabase
+        .from("job_assignments")
+        .select("cleaner_id, status")
+        .not("cleaner_id", "is", null)
+        .limit(20000);
+      for (const a of assigns || []) {
+        const s = String(a.status || "").toLowerCase();
+        const e = offerStats.get(a.cleaner_id) || { accepted: 0, negative: 0 };
+        if (ACCEPTED_STATUSES.has(s)) e.accepted++;
+        else if (NEGATIVE_STATUSES.has(s)) e.negative++;
+        else { offerStats.set(a.cleaner_id, e); continue; } // Offered / Broadcast_Lost: no answer to score
+        offerStats.set(a.cleaner_id, e);
+      }
+    }
+
+    // ── Lifetime completed jobs: assigned-and-completed bookings ∪ paid
+    //    crew payouts (covers second/third cleaners on crew jobs) ──
+    const completedJobs = new Map<string, Set<string>>();
+    const addCompleted = (cleanerId: string, bookingId: string) => {
+      const s = completedJobs.get(cleanerId) || new Set<string>();
+      s.add(bookingId);
+      completedJobs.set(cleanerId, s);
+    };
+    {
+      const { data: doneBookings } = await supabase
+        .from("bookings")
+        .select("id, cleaner_id")
+        .eq("status", "completed")
+        .not("cleaner_id", "is", null)
+        .limit(20000);
+      for (const b of doneBookings || []) addCompleted(b.cleaner_id, b.id);
+      const { data: paidPayouts } = await supabase
+        .from("manual_payouts")
+        .select("cleaner_id, booking_id, cleaner_breakdown")
+        .eq("status", "paid")
+        .limit(20000);
+      for (const p of paidPayouts || []) {
+        if (p.cleaner_id && p.booking_id) addCompleted(p.cleaner_id, p.booking_id);
+        // Crew splits: every cleaner in the breakdown completed the job.
+        if (Array.isArray(p.cleaner_breakdown) && p.booking_id) {
+          for (const entry of p.cleaner_breakdown) {
+            const cid = String((entry as Record<string, unknown>)?.cleanerId || "");
+            if (cid) addCompleted(cid, p.booking_id);
+          }
+        }
+      }
+    }
+
     // QC cases per cleaner (last 90 days), severity-weighted.
     const since = new Date(Date.now() - 90 * 86400_000).toISOString();
     const { data: issues } = await supabase
@@ -123,20 +189,27 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     let computed = 0;
     for (const c of cleaners) {
-      // acceptance_rate is stored inconsistently (0–1 vs 0–100) — normalize.
-      // Prefer the raw counters when present.
+      // Acceptance from the raw assignment history; fall back to the
+      // legacy counters/rate only when there is no history at all.
+      const hist = offerStats.get(c.id) || { accepted: 0, negative: 0 };
+      const answered = hist.accepted + hist.negative;
       let acceptancePct: number;
-      const offered = Number(c.total_offers_received) || 0;
-      const accepted = Number(c.total_offers_accepted) || 0;
-      if (offered > 0) {
-        acceptancePct = clamp((accepted / offered) * 100);
+      if (answered > 0) {
+        acceptancePct = clamp((hist.accepted / answered) * 100);
+      } else if ((Number(c.total_offers_received) || 0) > 0) {
+        acceptancePct = clamp(((Number(c.total_offers_accepted) || 0) / Number(c.total_offers_received)) * 100);
       } else {
         const raw = Number(c.acceptance_rate) || 0;
         acceptancePct = clamp(raw <= 1 ? raw * 100 : raw);
       }
 
+      const completedCount = Math.max(
+        completedJobs.get(c.id)?.size || 0,
+        Number(c.completed_bookings) || 0,
+      );
+
       const workloadPct = clamp(((Number(c.workload_score) || 0) / fleetMaxWorkload) * 100);
-      const volumePct = clamp(((Number(c.completed_bookings) || 0) / VOLUME_FULL_MARKS) * 100);
+      const volumePct = clamp((completedCount / VOLUME_FULL_MARKS) * 100);
 
       const novaraComputed = round1(
         (acceptancePct * w.acceptance + workloadPct * w.workload + volumePct * w.volume) / relSum,
@@ -165,11 +238,24 @@ serve(async (req) => {
           ? round1((novara * w.reliability + quality * w.quality) / ovSum)
           : overallComputed);
 
+      // Backfill the counters from history so the directory (acceptance %,
+      // completed jobs) tells the same story as the scores.
+      const counterPatch: Record<string, unknown> = {};
+      if (answered > 0) {
+        counterPatch.total_offers_received = answered;
+        counterPatch.total_offers_accepted = hist.accepted;
+        counterPatch.acceptance_rate = Math.round((hist.accepted / answered) * 100) / 100; // 0–1
+      }
+      if (completedCount > (Number(c.completed_bookings) || 0)) {
+        counterPatch.completed_bookings = completedCount;
+      }
+
       await supabase.from("cleaners").update({
         novara_score: novara,
         quality_score: quality,
         overall_score: overall,
         scores_computed_at: nowIso,
+        ...counterPatch,
       }).eq("id", c.id);
       computed++;
     }
