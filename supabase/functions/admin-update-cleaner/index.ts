@@ -83,6 +83,17 @@ serve(async (req) => {
       const n = parseInt(String(fields.max_travel_miles ?? ""), 10);
       patch.max_travel_miles = Number.isFinite(n) && n > 0 ? n : null;
     }
+    // Stated constraints ({ no_work_after, no_work_before, notes }) — feed
+    // the risk layer as mismatch flags, never auto-restriction.
+    if ("constraints" in fields) {
+      const c = (fields.constraints || {}) as Record<string, unknown>;
+      const cleanC: Record<string, string> = {};
+      for (const k of ["no_work_after", "no_work_before", "notes"]) {
+        const v = String(c[k] ?? "").trim().slice(0, 500);
+        if (v) cleanC[k] = v;
+      }
+      patch.constraints = Object.keys(cleanC).length > 0 ? cleanC : null;
+    }
     if (Object.keys(patch).length === 0) return json({ ok: false, error: "No editable fields provided." }, 400);
 
     if (patch.email && !/.+@.+\..+/.test(String(patch.email))) {

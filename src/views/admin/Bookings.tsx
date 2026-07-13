@@ -374,6 +374,14 @@ interface SuggestedCleaner {
   reason?: string;
 }
 
+// AI/ops risk layer — advisory flags per cleaner for THIS job (score trends,
+// QC history, stated-constraint mismatches). Flags + suggests only; assigning
+// a flagged cleaner is always allowed — the human decides.
+interface RiskInfo {
+  overall: number | null;
+  flags: string[];
+}
+
 function BookingAssignBlock({
   booking,
   working,
@@ -391,12 +399,13 @@ function BookingAssignBlock({
   const [loadingCleaners, setLoadingCleaners] = useState(true);
   const [loadingSuggest, setLoadingSuggest] = useState(true);
   const [depositBlocked, setDepositBlocked] = useState(false);
+  const [risk, setRisk] = useState<Map<string, RiskInfo>>(new Map());
 
   useEffect(() => {
     void (async () => {
       setLoadingCleaners(true);
       setLoadingSuggest(true);
-      const [dir, sug] = await Promise.all([
+      const [dir, sug, rsk] = await Promise.all([
         supabase
           .from("cleaners")
           .select("id, first_name, last_name, phone, status")
@@ -405,6 +414,9 @@ function BookingAssignBlock({
           .order("last_name"),
         supabase.functions.invoke("admin-booking-assign", {
           body: { action: "suggest_cleaners", bookingId: booking.id, limit: 8 },
+        }),
+        supabase.functions.invoke("cleaner-scores-admin", {
+          body: { action: "risk_flags", bookingId: booking.id },
         }),
       ]);
       setCleaners((dir.data || []) as CleanerOption[]);
@@ -415,6 +427,10 @@ function BookingAssignBlock({
         setSuggestions([]);
       }
       setLoadingSuggest(false);
+      const riskRows = (rsk.data as { cleaners?: Array<{ cleanerId: string; overall: number | null; flags: string[] }> })?.cleaners;
+      if (!rsk.error && riskRows) {
+        setRisk(new Map(riskRows.map((r) => [r.cleanerId, { overall: r.overall, flags: r.flags || [] }])));
+      }
     })();
   }, [booking.id]);
 
@@ -575,19 +591,26 @@ function BookingAssignBlock({
             <div className="flex flex-wrap gap-1.5">
               {suggestions.slice(0, 6).map((s) => {
                 const on = selectedIds.includes(s.id);
+                const r = risk.get(s.id);
+                const flagged = (r?.flags.length || 0) > 0;
                 return (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => toggle(s.id)}
+                    title={flagged ? r!.flags.join("\n") : undefined}
                     className={cn(
                       "text-xs px-2 py-1 rounded-full border transition-colors",
                       on
                         ? "bg-indigo-600 text-white border-indigo-600"
-                        : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
+                        : flagged
+                          ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                          : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
                     )}
                   >
+                    {flagged ? "⚠ " : ""}
                     {s.first_name} {s.last_name?.[0]}.
+                    {r?.overall != null ? ` · ${Math.round(r.overall)}` : ""}
                     {s.distance_miles != null ? ` · ${s.distance_miles} mi` : ""}
                   </button>
                 );
@@ -595,6 +618,23 @@ function BookingAssignBlock({
             </div>
           </div>
         ) : null}
+        {/* Risk layer: advisory only — flags + reasons, human decides. */}
+        {selectedIds.some((id) => (risk.get(id)?.flags.length || 0) > 0) && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1">
+            <p className="font-semibold">Risk flags on your selection (advisory — you decide):</p>
+            {selectedIds.map((id) => {
+              const r = risk.get(id);
+              if (!r || r.flags.length === 0) return null;
+              const c = cleaners.find((x) => x.id === id);
+              return (
+                <div key={id}>
+                  <span className="font-medium">{c ? `${c.first_name} ${c.last_name}` : "Cleaner"}:</span>{" "}
+                  {r.flags.join(" · ")}
+                </div>
+              );
+            })}
+          </div>
+        )}
         {loadingCleaners ? (
           <Skeleton className="h-24 w-full" />
         ) : (

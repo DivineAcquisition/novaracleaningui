@@ -99,6 +99,11 @@ interface CleanerRow {
   average_rating: number | null;
   weighted_score: number | null;
   workload_score: number | null;
+  novara_score: number | null;
+  quality_score: number | null;
+  overall_score: number | null;
+  scores_computed_at: string | null;
+  constraints: { no_work_after?: string; no_work_before?: string; notes?: string } | null;
   jobs_assigned_last_7d: number | null;
   onboarding_complete: boolean | null;
   phone_verified: boolean | null;
@@ -181,7 +186,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -327,6 +332,7 @@ export default function AdminCleaners() {
               <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
             </span>
           </div>
+          <ScoreEngineDialog onChanged={() => void load({ silent: true })} />
           <Button
             onClick={() => setAddOpen(true)}
             className="bg-violet-600 hover:bg-violet-700 text-white"
@@ -461,9 +467,26 @@ export default function AdminCleaners() {
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell">
-                        <div className="text-xs text-slate-700">
-                          ⭐ {c.average_rating ? Number(c.average_rating).toFixed(2) : "—"} ·{" "}
-                          {c.completed_bookings || 0} done
+                        <div className="text-xs text-slate-700 flex items-center gap-1.5">
+                          {c.overall_score != null && (
+                            <span
+                              className={cn(
+                                "inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold",
+                                Number(c.overall_score) >= 70
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : Number(c.overall_score) >= 45
+                                    ? "bg-amber-50 text-amber-700"
+                                    : "bg-rose-50 text-rose-700",
+                              )}
+                              title={`Novara ${c.novara_score != null ? Math.round(Number(c.novara_score)) : "—"} · Rating ${c.quality_score != null ? Math.round(Number(c.quality_score)) : "—"}`}
+                            >
+                              {Math.round(Number(c.overall_score))}
+                            </span>
+                          )}
+                          <span>
+                            ⭐ {c.average_rating ? Number(c.average_rating).toFixed(2) : "—"} ·{" "}
+                            {c.completed_bookings || 0} done
+                          </span>
                         </div>
                         <div className="text-[11px] text-slate-500">
                           {c.jobs_assigned_last_7d ?? 0} jobs / 7d
@@ -579,7 +602,7 @@ function CleanerSheet({
                   <OnboardingChecklist cleaner={cleaner} />
                 </TabsContent>
                 <TabsContent value="performance" className="pt-3">
-                  <PerformanceBlock cleaner={cleaner} />
+                  <PerformanceBlock cleaner={cleaner} onRefresh={onRefresh} />
                 </TabsContent>
                 <TabsContent value="ghl" className="pt-3">
                   <GhlBlock cleaner={cleaner} onResync={onResyncGhl} actioning={actioning} />
@@ -1037,19 +1060,204 @@ function IntroProfileSection({ cleaner }: { cleaner: CleanerRow }) {
   );
 }
 
-function PerformanceBlock({ cleaner }: { cleaner: CleanerRow }) {
+// ─── Novara scoring: two signals + one overall, admin override (logged) ─────
+
+const SCORE_FIELDS = [
+  { id: "novara_score", label: "Novara Score", hint: "Reliability — acceptance, workload, jobs completed" },
+  { id: "quality_score", label: "Rating", hint: "Quality — QC cases per job + customer ratings" },
+  { id: "overall_score", label: "Overall", hint: "Derived — reliability/quality split" },
+] as const;
+
+interface OverrideEntry {
+  id: string;
+  field: string;
+  old_value: number | null;
+  new_value: number | null;
+  reason: string;
+  active: boolean;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+function scoreTone(v: number | null) {
+  if (v == null) return "bg-slate-100 text-slate-500";
+  if (v >= 70) return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  if (v >= 45) return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+}
+
+function PerformanceBlock({ cleaner, onRefresh }: { cleaner: CleanerRow; onRefresh: () => void }) {
   const num = (v: number | null, suffix = "") => (v == null ? "—" : `${v}${suffix}`);
+  const [overrideField, setOverrideField] = useState<string | null>(null);
+  const [overrideValue, setOverrideValue] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [working, setWorking] = useState(false);
+  const [history, setHistory] = useState<OverrideEntry[] | null>(null);
+
+  const loadHistory = async () => {
+    const { data } = await supabase.functions.invoke("cleaner-scores-admin", {
+      body: { action: "history", cleanerId: cleaner.id },
+    });
+    setHistory(((data as { history?: OverrideEntry[] })?.history || []) as OverrideEntry[]);
+  };
+  useEffect(() => { void loadHistory(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [cleaner.id]);
+
+  const activeOverrides = new Set((history || []).filter((h) => h.active).map((h) => h.field));
+
+  const submitOverride = async (clear = false) => {
+    if (!overrideField) return;
+    if (!overrideReason.trim()) { toast.error("A reason is required — overrides are logged, never silent."); return; }
+    if (!clear && (overrideValue === "" || Number(overrideValue) < 0 || Number(overrideValue) > 100)) {
+      toast.error("Value must be 0–100."); return;
+    }
+    setWorking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-scores-admin", {
+        body: {
+          action: clear ? "clear_override" : "override",
+          cleanerId: cleaner.id,
+          field: overrideField,
+          value: clear ? undefined : Number(overrideValue),
+          reason: overrideReason.trim(),
+        },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) throw new Error((data as { error?: string }).error || "Failed");
+      toast.success(clear ? "Override cleared — back to computed." : "Score overridden (logged).");
+      setOverrideField(null);
+      setOverrideValue("");
+      setOverrideReason("");
+      await loadHistory();
+      onRefresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save override");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const scoreOf = (field: string): number | null => {
+    const v = (cleaner as unknown as Record<string, unknown>)[field];
+    return v != null ? Number(v) : null;
+  };
+
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-      <Cell label="Avg rating" value={cleaner.average_rating ? Number(cleaner.average_rating).toFixed(2) : "—"} />
-      <Cell label="On-time" value={cleaner.on_time_rate != null ? `${(Number(cleaner.on_time_rate) * 100).toFixed(0)}%` : "—"} />
-      <Cell label="Acceptance" value={cleaner.acceptance_rate != null ? `${(Number(cleaner.acceptance_rate) * 100).toFixed(0)}%` : "—"} />
-      <Cell label="Completed jobs" value={num(cleaner.completed_bookings, "")} />
-      <Cell label="Total bookings" value={num(cleaner.total_bookings, "")} />
-      <Cell label="Last 7d jobs" value={num(cleaner.jobs_assigned_last_7d, "")} />
-      <Cell label="Weighted score" value={cleaner.weighted_score != null ? Number(cleaner.weighted_score).toFixed(2) : "—"} />
-      <Cell label="Workload score" value={cleaner.workload_score != null ? Number(cleaner.workload_score).toFixed(2) : "—"} />
-    </dl>
+    <div className="space-y-4">
+      {/* Two scores + one overall — separate signals, never collapsed. */}
+      <div className="grid grid-cols-3 gap-2">
+        {SCORE_FIELDS.map((f) => {
+          const v = scoreOf(f.id);
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => { setOverrideField(f.id); setOverrideValue(v != null ? String(Math.round(v)) : ""); setOverrideReason(""); }}
+              className={cn("rounded-xl px-3 py-2.5 text-left transition hover:opacity-80", scoreTone(v))}
+              title={`${f.hint} — click to override (logged)`}
+            >
+              <p className="text-[10px] uppercase tracking-wide font-semibold opacity-80">{f.label}</p>
+              <p className="text-xl font-bold tabular-nums leading-tight">
+                {v != null ? Math.round(v) : "—"}
+                {activeOverrides.has(f.id) && <span className="text-[10px] font-semibold ml-1 align-middle" title="Admin override active">✎ pinned</span>}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-slate-500 -mt-2">
+        Computed from real data{cleaner.scores_computed_at ? ` · last run ${new Date(cleaner.scores_computed_at).toLocaleString()}` : " · not computed yet"}.
+        Tips never affect any score. Click a score to override it (reason required, logged).
+      </p>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <Cell label="Avg rating" value={cleaner.average_rating ? Number(cleaner.average_rating).toFixed(2) : "—"} />
+        <Cell label="On-time" value={cleaner.on_time_rate != null ? `${(Number(cleaner.on_time_rate) * 100).toFixed(0)}%` : "—"} />
+        <Cell label="Acceptance" value={cleaner.acceptance_rate != null ? `${(Number(cleaner.acceptance_rate) * 100).toFixed(0)}%` : "—"} />
+        <Cell label="Completed jobs" value={num(cleaner.completed_bookings, "")} />
+        <Cell label="Total bookings" value={num(cleaner.total_bookings, "")} />
+        <Cell label="Last 7d jobs" value={num(cleaner.jobs_assigned_last_7d, "")} />
+        <Cell label="Workload score" value={cleaner.workload_score != null ? Number(cleaner.workload_score).toFixed(2) : "—"} />
+        <Cell
+          label="Constraints"
+          value={
+            cleaner.constraints
+              ? [
+                  cleaner.constraints.no_work_after ? `No work after ${cleaner.constraints.no_work_after}` : null,
+                  cleaner.constraints.no_work_before ? `No work before ${cleaner.constraints.no_work_before}` : null,
+                  cleaner.constraints.notes || null,
+                ].filter(Boolean).join(" · ") || "—"
+              : "—"
+          }
+        />
+      </dl>
+
+      {/* Override audit trail — who, when, why, old → new. */}
+      {history && history.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Score override history</p>
+          {history.map((h) => (
+            <div key={h.id} className="text-xs rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+              <span className="font-semibold text-slate-800">
+                {SCORE_FIELDS.find((f) => f.id === h.field)?.label || h.field}
+              </span>{" "}
+              {h.new_value == null
+                ? <>override cleared (was {h.old_value ?? "—"})</>
+                : <>{h.old_value ?? "—"} → <span className="font-semibold">{h.new_value}</span></>}
+              {h.active && h.new_value != null && <Badge variant="outline" className="ml-1.5 text-[9px] py-0 border-violet-300 text-violet-700">active</Badge>}
+              <span className="text-slate-500"> — “{h.reason}”</span>
+              <div className="text-[10px] text-slate-400">
+                {h.created_by_name || "Admin"} · {new Date(h.created_at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!overrideField} onOpenChange={(o) => { if (!o) setOverrideField(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Override {SCORE_FIELDS.find((f) => f.id === overrideField)?.label || "score"}
+            </DialogTitle>
+            <DialogDescription>
+              The data won’t always tell the whole story — but every override is
+              logged (who, when, why, old → new) and visible in the history. Never silent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>New value (0–100)</Label>
+              <Input
+                type="number" min={0} max={100}
+                value={overrideValue}
+                onChange={(e) => setOverrideValue(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Reason (required)</Label>
+              <Input
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder="e.g. Family emergency caused the declines — verified"
+                className="mt-1"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => void submitOverride(false)} disabled={working}>
+                {working ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Pin score
+              </Button>
+              {overrideField && activeOverrides.has(overrideField) && (
+                <Button variant="outline" className="flex-1" onClick={() => void submitOverride(true)} disabled={working}>
+                  Clear override
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -1716,6 +1924,114 @@ function AddCleanerDialog({
 // Name, contact, home address, service area, travel radius, skills — routed
 // through admin-update-cleaner (allow-listed fields only; lifecycle/status/
 // pay stay with their dedicated flows). GHL re-syncs automatically on save.
+// Admin-configurable composite weights + on-demand recompute for the
+// Novara scoring engine (acceptance/workload/volume → Novara Score;
+// reliability/quality → Overall).
+function ScoreEngineDialog({ onChanged }: { onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [w, setW] = useState({ acceptance: 40, workload: 30, volume: 30, reliability: 60, quality: 40 });
+
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      const { data } = await (supabase.from as any)("app_settings")
+        .select("value").eq("key", "scoring_weights").maybeSingle();
+      if (data?.value) setW((prev) => ({ ...prev, ...data.value }));
+    })();
+  }, [open]);
+
+  const setKey = (k: keyof typeof w) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setW((prev) => ({ ...prev, [k]: Number(e.target.value) }));
+
+  const save = async () => {
+    setWorking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-scores-admin", {
+        body: { action: "set_weights", weights: w },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) throw new Error((data as { error?: string }).error || "Failed");
+      toast.success("Weights saved — scores recomputing.");
+      setOpen(false);
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save weights");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const recompute = async () => {
+    setWorking(true);
+    try {
+      const { error } = await supabase.functions.invoke("cleaner-scores-admin", { body: { action: "recompute" } });
+      if (error) throw error;
+      toast.success("Scores recomputed from live data.");
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Recompute failed");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const relSum = w.acceptance + w.workload + w.volume;
+  const ovSum = w.reliability + w.quality;
+
+  return (
+    <>
+      <Button variant="outline" className="border-slate-200 text-slate-700" onClick={() => setOpen(true)}>
+        Score engine
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novara scoring — weights</DialogTitle>
+            <DialogDescription>
+              Novara Score (reliability) blends acceptance, workload consistency,
+              and completed volume. Overall blends reliability and quality (the
+              Rating from QC cases + customer ratings). Tips never touch any score.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-2">
+                Novara Score composite{" "}
+                <span className={relSum === 100 ? "text-emerald-600" : "text-amber-600"}>({relSum}/100)</span>
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-[11px]">Acceptance</Label><Input type="number" min={0} max={100} value={w.acceptance} onChange={setKey("acceptance")} className="mt-1" /></div>
+                <div><Label className="text-[11px]">Workload</Label><Input type="number" min={0} max={100} value={w.workload} onChange={setKey("workload")} className="mt-1" /></div>
+                <div><Label className="text-[11px]">Jobs done</Label><Input type="number" min={0} max={100} value={w.volume} onChange={setKey("volume")} className="mt-1" /></div>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-2">
+                Overall split{" "}
+                <span className={ovSum === 100 ? "text-emerald-600" : "text-amber-600"}>({ovSum}/100)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[11px]">Reliability</Label><Input type="number" min={0} max={100} value={w.reliability} onChange={setKey("reliability")} className="mt-1" /></div>
+                <div><Label className="text-[11px]">Quality</Label><Input type="number" min={0} max={100} value={w.quality} onChange={setKey("quality")} className="mt-1" /></div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => void save()} disabled={working}>
+                {working ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Save & recompute
+              </Button>
+              <Button variant="outline" onClick={() => void recompute()} disabled={working}>
+                Recompute only
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1732,6 +2048,9 @@ function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; o
     max_travel_miles: cleaner.max_travel_miles != null ? String(cleaner.max_travel_miles) : "",
     skillset: (cleaner.skillset || []).join(", "),
     preferred_work_days: (cleaner.preferred_work_days || []).join(", "),
+    no_work_after: cleaner.constraints?.no_work_after || "",
+    no_work_before: cleaner.constraints?.no_work_before || "",
+    constraints_notes: cleaner.constraints?.notes || "",
   });
 
   // Re-seed the form each time the dialog opens for a (possibly different) cleaner.
@@ -1750,6 +2069,9 @@ function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; o
       max_travel_miles: cleaner.max_travel_miles != null ? String(cleaner.max_travel_miles) : "",
       skillset: (cleaner.skillset || []).join(", "),
       preferred_work_days: (cleaner.preferred_work_days || []).join(", "),
+      no_work_after: cleaner.constraints?.no_work_after || "",
+      no_work_before: cleaner.constraints?.no_work_before || "",
+      constraints_notes: cleaner.constraints?.notes || "",
     });
   }, [open, cleaner]);
 
@@ -1760,8 +2082,15 @@ function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; o
     if (!f.first_name.trim()) { toast.error("First name is required"); return; }
     setSaving(true);
     try {
+      const { no_work_after, no_work_before, constraints_notes, ...rest } = f;
       const { data, error } = await supabase.functions.invoke("admin-update-cleaner", {
-        body: { cleanerId: cleaner.id, fields: f },
+        body: {
+          cleanerId: cleaner.id,
+          fields: {
+            ...rest,
+            constraints: { no_work_after, no_work_before, notes: constraints_notes },
+          },
+        },
       });
       if (error) throw error;
       if ((data as { ok?: boolean; error?: string })?.ok === false) {
@@ -1822,6 +2151,19 @@ function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; o
             <div>
               <Label>Preferred work days</Label>
               <Input value={f.preferred_work_days} onChange={set("preferred_work_days")} placeholder="Monday, Tuesday…" className="mt-1" />
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                Stated constraints — surface as dispatch risk flags, never auto-restriction
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>No work after</Label><Input value={f.no_work_after} onChange={set("no_work_after")} placeholder="3pm" className="mt-1" /></div>
+                <div><Label>No work before</Label><Input value={f.no_work_before} onChange={set("no_work_before")} placeholder="9am" className="mt-1" /></div>
+              </div>
+              <div>
+                <Label>Constraint notes</Label>
+                <Input value={f.constraints_notes} onChange={set("constraints_notes")} placeholder="No pets · school pickup Fridays…" className="mt-1" />
+              </div>
             </div>
             <Button className="w-full" onClick={() => void save()} disabled={saving}>
               {saving ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-2" />}
