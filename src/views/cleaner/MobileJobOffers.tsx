@@ -27,6 +27,8 @@ interface JobOffer {
   role: string;
   status: string;
   assigned_at: string;
+  expires_at: string | null;
+  response_token: string | null;
   estimated_pay_cents: number;
   distance_miles: number;
   jobs: {
@@ -62,6 +64,9 @@ export default function MobileJobOffers() {
 
       if (!cleanerData) return;
 
+      // Dispatch writes "Offered" (and "Broadcast" for race offers) — the
+      // old "pending" literal matched nothing, so the native app showed an
+      // empty offers list forever.
       const { data: offersData, error } = await supabase
         .from("job_assignments")
         .select(`
@@ -76,11 +81,15 @@ export default function MobileJobOffers() {
           )
         `)
         .eq("cleaner_id", cleanerData.id)
-        .eq("status", "pending")
+        .in("status", ["Offered", "Broadcast", "offered"])
         .order("assigned_at", { ascending: false });
 
       if (error) throw error;
-      setOffers(offersData || []);
+      setOffers(
+        (offersData || []).filter(
+          (o: JobOffer) => !o.expires_at || new Date(o.expires_at).getTime() > Date.now(),
+        ),
+      );
     } catch (error) {
       console.error("Error fetching offers:", error);
       toast({
@@ -116,16 +125,22 @@ export default function MobileJobOffers() {
     };
   }, []);
 
-  const handleResponse = async (assignmentId: string, accepted: boolean) => {
-    setRespondingTo(assignmentId);
+  const handleResponse = async (offer: JobOffer, accepted: boolean) => {
+    setRespondingTo(offer.id);
     impact('medium');
 
     try {
-      const { error } = await supabase.functions.invoke("respond-to-offer", {
-        body: { assignmentId, accepted },
+      if (!offer.response_token) throw new Error("This offer link is no longer valid.");
+      // Canonical accept flow — same function as the tokenized offer page,
+      // so overlap checks, booking assignment, and checklist provisioning
+      // all run (the legacy respond-to-offer endpoint bypassed them).
+      const { data, error } = await supabase.functions.invoke("accept-job-offer", {
+        body: { token: offer.response_token, action: accepted ? "accept" : "decline" },
       });
 
       if (error) throw error;
+      const res = data as { ok?: boolean; error?: string; state?: string };
+      if (res?.ok === false) throw new Error(res?.error || "Could not respond to the offer");
 
       notification(accepted ? 'success' : 'warning');
       toast({
@@ -183,7 +198,9 @@ export default function MobileJobOffers() {
           ) : (
             offers.map((offer) => {
               const expiresIn = formatDistanceToNow(
-                new Date(new Date(offer.assigned_at).getTime() + 15 * 60000),
+                offer.expires_at
+                  ? new Date(offer.expires_at)
+                  : new Date(new Date(offer.assigned_at).getTime() + 15 * 60000),
                 { addSuffix: true }
               );
 
@@ -233,14 +250,14 @@ export default function MobileJobOffers() {
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={() => handleResponse(offer.id, false)}
+                      onClick={() => handleResponse(offer, false)}
                       disabled={respondingTo === offer.id}
                     >
                       Decline
                     </Button>
                     <Button
                       className="flex-1"
-                      onClick={() => handleResponse(offer.id, true)}
+                      onClick={() => handleResponse(offer, true)}
                       disabled={respondingTo === offer.id}
                     >
                       Accept Job

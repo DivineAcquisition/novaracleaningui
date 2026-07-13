@@ -161,6 +161,45 @@ serve(async (req) => {
         })
         .eq("id", booking.id as string);
       logStep("Booking row flipped to cancelled", { bookingId: booking.id });
+
+      // This path used to cancel SILENTLY for the crew — the plain
+      // cancel-booking flow texts the cleaner, but refund+cancel (the more
+      // common admin path) never did. Notify every assigned cleaner.
+      try {
+        const crewIds = new Set<string>();
+        if (booking.job_id) {
+          const { data: assigns } = await supabase
+            .from("job_assignments")
+            .select("cleaner_id, status")
+            .eq("job_id", booking.job_id as string)
+            .in("status", ["Confirmed", "Accepted", "In Progress", "Assigned"]);
+          for (const a of assigns || []) if (a.cleaner_id) crewIds.add(a.cleaner_id as string);
+        }
+        if (booking.cleaner_id) crewIds.add(booking.cleaner_id as string);
+        if (crewIds.size > 0) {
+          const { data: crew } = await supabase
+            .from("cleaners")
+            .select("id, phone, first_name")
+            .in("id", [...crewIds]);
+          for (const cleaner of crew || []) {
+            if (!cleaner.phone) continue;
+            await supabase.functions.invoke("send-ghl-sms", {
+              body: {
+                phone: cleaner.phone,
+                firstName: cleaner.first_name || undefined,
+                message:
+                  `Novara Cleaning: A job you were assigned to` +
+                  (booking.service_date ? ` on ${booking.service_date}` : "") +
+                  ` has been cancelled and refunded. No action needed. Reply STOP to opt out.`,
+                type: "job_offer",
+              },
+            }).catch(() => undefined);
+          }
+          logStep("Crew notified of refund-cancel", { count: crewIds.size });
+        }
+      } catch (smsErr) {
+        logStep("Crew cancel SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
+      }
     }
 
     return new Response(

@@ -521,7 +521,7 @@ async function markPaid(supabase: ReturnType<typeof getAdminSupabase>, body: Rec
     .from("manual_payouts")
     .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", id)
-    .select("id, booking_id, amount_cents, cleaner_breakdown")
+    .select("id, booking_id, amount_cents, cleaner_breakdown, cleaner_id, cleaner_phone, cleaner_name")
     .single();
   if (error) throw error;
 
@@ -532,6 +532,34 @@ async function markPaid(supabase: ReturnType<typeof getAdminSupabase>, body: Rec
     } catch {
       /* non-blocking */
     }
+  }
+
+  // Tell each cleaner their money actually MOVED — the "pending" SMS at
+  // creation time was the only notification this ledger ever sent.
+  try {
+    const breakdown = Array.isArray(row.cleaner_breakdown) ? row.cleaner_breakdown : [];
+    const recipients: Array<{ phone: string | null; name: string; amountCents: number }> = [];
+    if (breakdown.length > 0) {
+      const ids = breakdown.map((b: Record<string, unknown>) => String(b.cleanerId || "")).filter(Boolean);
+      const { data: crew } = await supabase.from("cleaners").select("id, phone, first_name").in("id", ids);
+      for (const b of breakdown) {
+        const c = (crew || []).find((x) => x.id === b.cleanerId);
+        recipients.push({ phone: c?.phone || null, name: c?.first_name || "there", amountCents: Number(b.amountCents) || 0 });
+      }
+    } else if (row.cleaner_phone) {
+      recipients.push({ phone: row.cleaner_phone, name: String(row.cleaner_name || "there").split(" ")[0], amountCents: Number(row.amount_cents) || 0 });
+    }
+    for (const r of recipients) {
+      if (!r.phone || r.amountCents <= 0) continue;
+      await notify(supabase, "send-ghl-sms", {
+        phone: r.phone,
+        firstName: r.name,
+        message: `💸 Novara: Your payout of $${(r.amountCents / 100).toFixed(2)} has been SENT. Thanks for the great work! Reply STOP to opt out.`,
+        type: "cleaner_payout_paid",
+      });
+    }
+  } catch {
+    /* non-blocking */
   }
   return { ok: true };
 }

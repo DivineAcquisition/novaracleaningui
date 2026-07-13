@@ -252,6 +252,24 @@ serve(async (req) => {
         summary: `Extra pay ${usd(Number(row.total_cents) || 0)} marked paid (sent via alternative payout method)`,
         data: { extra_pay_id: id, by: actor },
       }).then(() => undefined, () => undefined);
+
+      // The money moment: cleaners were told when the extra pay was
+      // RECORDED but never when it was actually PAID. Close the loop.
+      try {
+        const { data: paidCleaner } = await admin
+          .from("cleaners").select("phone, first_name").eq("id", row.cleaner_id).maybeSingle();
+        if (paidCleaner?.phone) {
+          await admin.functions.invoke("send-ghl-sms", {
+            body: {
+              phone: paidCleaner.phone,
+              firstName: paidCleaner.first_name || undefined,
+              message: `💸 Novara: Your extra pay of $${((Number(row.total_cents) || 0) / 100).toFixed(2)} has been SENT. Thanks for the great work! Reply STOP to opt out.`,
+              type: "cleaner_extra_pay",
+            },
+          });
+        }
+      } catch (_) { /* non-blocking */ }
+
       return json({ ok: true, status: "paid" });
     }
 

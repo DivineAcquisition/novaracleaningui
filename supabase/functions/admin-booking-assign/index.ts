@@ -314,12 +314,48 @@ serve(async (req) => {
       booking.job_id = jobId;
     }
 
+    // Reassignment must never be silent for the cleaner being removed: a
+    // cleaner who accepted/confirmed a job and is quietly withdrawn will
+    // drive to the house. Capture who's being displaced BEFORE withdrawing
+    // so we can text them after the new crew is saved.
+    let removedCleaners: Array<{ id: string; first_name: string | null; phone: string | null }> = [];
     if (mode === "replace") {
+      const { data: prevAssigns } = await admin
+        .from("job_assignments")
+        .select("cleaner_id, status")
+        .eq("job_id", jobId)
+        .in("status", ["Offered", "Broadcast", "Accepted", "Confirmed", "In Progress"]);
+      const removedIds = [...new Set(
+        (prevAssigns || [])
+          .filter((a: { cleaner_id: string; status: string }) =>
+            ["Accepted", "Confirmed", "In Progress"].includes(a.status) &&
+            !cleanerIds.includes(a.cleaner_id))
+          .map((a: { cleaner_id: string }) => a.cleaner_id),
+      )];
+      if (removedIds.length > 0) {
+        const { data: removedRows } = await admin
+          .from("cleaners")
+          .select("id, first_name, phone")
+          .in("id", removedIds);
+        removedCleaners = removedRows || [];
+      }
+
+      // Withdraw pending offers for everyone, and accepted/confirmed rows
+      // for cleaners who are NOT staying on the job (staying cleaners get
+      // their row re-upserted to Confirmed below).
       await admin
         .from("job_assignments")
         .update({ status: "Withdrawn" })
         .eq("job_id", jobId)
         .in("status", ["Offered", "Broadcast", "Accepted"]);
+      if (removedIds.length > 0) {
+        await admin
+          .from("job_assignments")
+          .update({ status: "Withdrawn" })
+          .eq("job_id", jobId)
+          .in("status", ["Confirmed", "In Progress"])
+          .in("cleaner_id", removedIds);
+      }
     }
 
     const now = new Date().toISOString();
@@ -377,9 +413,33 @@ serve(async (req) => {
       booking_id: bookingId,
       job_id: jobId,
       source: "admin-booking-assign",
-      summary: `Manual assign: ${cleaners.map((c: { first_name: string; last_name: string }) => `${c.first_name} ${c.last_name}`).join(", ")}`,
-      data: { cleanerIds, mode, by: callerId },
+      summary: `Manual assign: ${cleaners.map((c: { first_name: string; last_name: string }) => `${c.first_name} ${c.last_name}`).join(", ")}${removedCleaners.length > 0 ? ` (removed: ${removedCleaners.map((r) => r.first_name || "cleaner").join(", ")} — notified)` : ""}`,
+      data: { cleanerIds, mode, by: callerId, removed: removedCleaners.map((r) => r.id) },
     });
+
+    // Tell every displaced cleaner they're off the job (best-effort) —
+    // silence here is how cleaners end up driving to houses they were
+    // reassigned away from.
+    for (const removed of removedCleaners) {
+      if (!removed.phone) continue;
+      const when = booking.service_date
+        ? ` on ${booking.service_date}${booking.time_slot ? ` (${booking.time_slot})` : ""}`
+        : "";
+      const ref = booking.booking_number
+        ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
+        : "your assigned job";
+      await admin.functions.invoke("send-ghl-sms", {
+        body: {
+          phone: removed.phone,
+          firstName: removed.first_name || undefined,
+          message:
+            `Novara: You've been taken off ${ref}${when} — the office reassigned it. ` +
+            `No action needed and this doesn't affect your standing. ` +
+            `Questions? Text the office. Reply STOP to opt out.`,
+          type: "job_offer",
+        },
+      }).catch(() => undefined);
+    }
 
     // Non-critical sync — must NEVER fail the assignment (cleaners are already
     // saved at this point). A GHL outage previously 500'd the whole request.

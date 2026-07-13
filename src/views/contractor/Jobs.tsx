@@ -111,6 +111,9 @@ interface Job {
   zip: string;
   checkInTime?: string | null;
   cancelledAt?: string | null;
+  rescheduledAt?: string | null;
+  rescheduledFromDate?: string | null;
+  rescheduledFromTimeSlot?: string | null;
   qcToken?: string | null;
   tipCents?: number;
   photoUploadToken?: string | null;
@@ -309,6 +312,25 @@ interface TipEntry {
   receivedAt: string | null;
 }
 
+interface JobOfferEntry {
+  assignmentId: string;
+  token: string;
+  role: string | null;
+  status: string;
+  expiresAt: string | null;
+  serviceType: string;
+  serviceDate: string | null;
+  timeSlot: string | null;
+  city: string | null;
+  state: string | null;
+  estimatedPayCents: number | null;
+}
+
+interface QcSummary {
+  last90Days: number;
+  bySeverity: Record<string, number>;
+}
+
 const LOOKUP_STORAGE_KEY = "novara_contractor_lookup";
 
 export default function ContractorJobs() {
@@ -320,6 +342,8 @@ export default function ContractorJobs() {
   const [cleanerName, setCleanerName] = useState("");
   const [cleanerId, setCleanerId] = useState("");
   const [scores, setScores] = useState<CleanerScores | null>(null);
+  const [qcSummary, setQcSummary] = useState<QcSummary | null>(null);
+  const [offers, setOffers] = useState<JobOfferEntry[]>([]);
   const [tips, setTips] = useState<TipEntry[]>([]);
   const [summary, setSummary] = useState<{ lifetimePaidCents: number; pendingCents: number; paidJobs: number; lifetimeTipsCents?: number } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -348,11 +372,13 @@ export default function ContractorJobs() {
         body: { cleanerId: cid },
       });
       if (error) throw error;
-      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary; tips?: TipEntry[]; cleaner?: { scores?: CleanerScores | null } };
+      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary; tips?: TipEntry[]; offers?: JobOfferEntry[]; cleaner?: { scores?: CleanerScores | null; qcSummary?: QcSummary | null } };
       if (!res?.ok) throw new Error("Could not load jobs");
       setJobs(res.jobs || []);
       setSummary(res.summary || null);
       setScores(res.cleaner?.scores || null);
+      setQcSummary(res.cleaner?.qcSummary || null);
+      setOffers(res.offers || []);
       setTips(res.tips || []);
       setLastSyncedAt(new Date());
     } catch (err) {
@@ -476,19 +502,14 @@ export default function ContractorJobs() {
             .maybeSingle()
         : { data: null };
 
-      if (assignment?.id) {
-        const response = await supabase.functions.invoke("job-check-in", {
-          body: { jobAssignmentId: assignment.id, action: "check_in", cleanerId },
-        });
-        if (response.error) throw response.error;
-      } else {
-        const { error } = await supabase
-          .from("bookings")
-          .update({ status: "in_progress", check_in_at: new Date().toISOString() } as any)
-          .eq("id", job.bookingId)
-          .eq("cleaner_id", cleanerId);
-        if (error) throw error;
-      }
+      // Both paths run through job-check-in so the BEFORE-photos SMS and
+      // on-time tracking fire — the old raw-bookings fallback skipped both.
+      const response = await supabase.functions.invoke("job-check-in", {
+        body: assignment?.id
+          ? { jobAssignmentId: assignment.id, action: "check_in", cleanerId }
+          : { bookingId: job.bookingId, action: "check_in", cleanerId },
+      });
+      if (response.error) throw response.error;
       toast.success("Checked in successfully!");
       setJobs((prev) =>
         prev.map((j) => (j.id === job.id ? { ...j, checkInTime: new Date().toISOString(), status: "in_progress" } : j)),
@@ -599,12 +620,21 @@ export default function ContractorJobs() {
     setHandoffTarget("");
   };
 
+  // Every non-terminal job lives in Upcoming & Active — including PAST-dated
+  // jobs that never got a check-in. Those used to fall through all three
+  // buckets and silently disappear, exactly when the office most needed the
+  // cleaner to still see them ("yesterday's job is still open").
   const upcomingJobs = jobs.filter(
-    (j) => j.status !== "cancelled" && j.status !== "completed" && j.status !== "pending_review" &&
-      (isFuture(new Date(j.serviceDate)) || j.status === "in_progress" || j.checkInTime),
+    (j) => j.status !== "cancelled" && j.status !== "completed" && j.status !== "pending_review",
   );
   const completedJobs = jobs.filter((j) => j.status === "completed" || j.status === "pending_review");
   const cancelledJobs = jobs.filter((j) => j.status === "cancelled");
+
+  const isOverdue = (j: Job) =>
+    !j.checkInTime &&
+    j.status !== "in_progress" &&
+    !!j.serviceDate &&
+    !isFuture(new Date(`${String(j.serviceDate).slice(0, 10)}T23:59:59`));
 
   const initials = cleanerName
     .split(/\s+/)
@@ -761,11 +791,54 @@ export default function ContractorJobs() {
                   )}
                 </div>
               )}
+              {/* Score transparency: when QC cases are dragging the Rating,
+                  say so — a score change should never be unexplainable. */}
+              {qcSummary && qcSummary.last90Days > 0 && (
+                <p className="mt-1.5 text-[10px] text-amber-200/90">
+                  ⚠ {qcSummary.last90Days} QC case{qcSummary.last90Days === 1 ? "" : "s"} in the last 90 days affect{qcSummary.last90Days === 1 ? "s" : ""} your Rating
+                  {" "}({Object.entries(qcSummary.bySeverity).map(([s, n]) => `${n} ${s}`).join(", ")}). Ask the office if you have questions.
+                </p>
+              )}
               <p className="mt-2.5 text-[10px] text-violet-100/70">
                 Amounts reflect your actual payouts (base pay + extras like supplies & mileage).
                 {lastSyncedAt ? ` Live · synced ${lastSyncedAt.toLocaleTimeString()}` : ""}
               </p>
             </div>
+
+            {/* ── New job OFFERS — missed the SMS? They're here too. ── */}
+            {offers.length > 0 && (
+              <section className="rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-600 p-4 text-white shadow-lg space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-[11px] font-bold uppercase tracking-[0.16em]">
+                    🔔 New job offer{offers.length === 1 ? "" : "s"} — respond before they expire
+                  </h2>
+                  <span className="text-[11px] font-bold bg-white/20 rounded-full px-2 py-0.5">{offers.length}</span>
+                </div>
+                {offers.map((o) => (
+                  <div key={o.assignmentId} className="rounded-2xl bg-white/10 ring-1 ring-white/20 backdrop-blur px-3.5 py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate">
+                        {titleCase(o.serviceType)}
+                        {o.city ? ` · ${o.city}${o.state ? `, ${o.state}` : ""}` : ""}
+                      </p>
+                      <p className="text-[11px] text-blue-100">
+                        {o.serviceDate ? format(new Date(`${String(o.serviceDate).slice(0, 10)}T12:00:00`), "EEE, MMM d") : "Date TBD"}
+                        {o.timeSlot ? ` · ${o.timeSlot}` : ""}
+                        {o.estimatedPayCents != null ? ` · est. ${money(o.estimatedPayCents)}` : ""}
+                        {o.expiresAt ? ` · expires ${new Date(o.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-9 shrink-0 bg-white text-blue-700 hover:bg-blue-50 font-bold rounded-xl"
+                      onClick={() => window.open(`/cleaner/job-offer/${o.token}`, "_blank")}
+                    >
+                      Review & respond
+                    </Button>
+                  </div>
+                ))}
+              </section>
+            )}
 
             {/* ── Tips preview — every tip, 100% yours, separate from job pay ── */}
             {tips.length > 0 && (
@@ -840,9 +913,22 @@ export default function ContractorJobs() {
                             <Badge variant="outline" className={cn("text-[10px]", sc.class)}>
                               <span className={cn("w-1.5 h-1.5 rounded-full mr-1", sc.dot)} />{sc.label}
                             </Badge>
+                            {isOverdue(job) && (
+                              <Badge variant="outline" className="text-[10px] bg-rose-50 text-rose-700 border-rose-300">
+                                ⚠ Overdue — check in or contact the office
+                              </Badge>
+                            )}
                             <PayChip pay={job.pay} />
                           </div>
                         </div>
+
+                        {job.rescheduledAt && (
+                          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-[11px] text-amber-900">
+                            📅 Rescheduled{job.rescheduledFromDate ? (
+                              <> — was {format(new Date(`${String(job.rescheduledFromDate).slice(0, 10)}T12:00:00`), "EEE, MMM d")}{job.rescheduledFromTimeSlot ? ` (${job.rescheduledFromTimeSlot})` : ""}</>
+                            ) : ""}. New date above.
+                          </div>
+                        )}
 
                         <a
                           href={getMapsUrl(job)}
@@ -874,6 +960,19 @@ export default function ContractorJobs() {
 
                         {/* Utilities */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {/* The qcToken IS the assignment response_token — the
+                              same credential the checklist page accepts. The
+                              portal never linked the checklist before. */}
+                          {job.qcToken && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 text-xs rounded-xl border-violet-200 text-violet-700"
+                              onClick={() => window.open(`/cleaner/job-checklist/${job.qcToken}`, "_blank")}
+                            >
+                              <RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1" />Checklist
+                            </Button>
+                          )}
                           <Button variant="outline" size="sm" className="h-9 text-xs rounded-xl" onClick={() => window.open(getMapsUrl(job), "_blank")}>
                             <RiNavigationLine className="w-3.5 h-3.5 mr-1" />Directions
                           </Button>

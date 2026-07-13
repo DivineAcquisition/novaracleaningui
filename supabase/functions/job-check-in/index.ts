@@ -26,6 +26,35 @@ async function sendBeforePhotosLink(supabase: any, jobId: string, cleanerId: str
       .limit(1)
       .maybeSingle();
     if (!booking || booking.before_photo_link_sent_at) return;
+    await deliverBeforePhotosSms(supabase, booking, cleanerId);
+  } catch (err) {
+    logStep("Warning: before-photos SMS failed (non-blocking)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// Same cadence for bookings that have no jobs row (booking-only check-in).
+// deno-lint-ignore no-explicit-any
+async function sendBeforePhotosLinkForBooking(supabase: any, bookingId: string, cleanerId: string): Promise<void> {
+  try {
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("id, first_name, photo_upload_token, before_photo_link_sent_at")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (!booking || booking.before_photo_link_sent_at) return;
+    await deliverBeforePhotosSms(supabase, booking, cleanerId);
+  } catch (err) {
+    logStep("Warning: before-photos SMS failed (non-blocking)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function deliverBeforePhotosSms(supabase: any, booking: any, cleanerId: string): Promise<void> {
+  {
 
     let token = booking.photo_upload_token as string | null;
     if (!token) {
@@ -55,10 +84,6 @@ async function sendBeforePhotosLink(supabase: any, jobId: string, cleanerId: str
         .is("before_photo_link_sent_at", null);
       logStep("BEFORE-photos link sent after check-in", { bookingId: booking.id });
     }
-  } catch (err) {
-    logStep("Warning: before-photos SMS failed (non-blocking)", {
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 }
 
@@ -71,11 +96,11 @@ serve(async (req) => {
   }
 
   try {
-    const { jobAssignmentId, action, cleanerId, lat, lng } = await req.json();
-    logStep("Processing check-in/out", { jobAssignmentId, action, cleanerId });
+    const { jobAssignmentId, bookingId, action, cleanerId, lat, lng } = await req.json();
+    logStep("Processing check-in/out", { jobAssignmentId, bookingId, action, cleanerId });
 
-    if (!jobAssignmentId || !action || !cleanerId) {
-      throw new Error("Missing required fields: jobAssignmentId, action, cleanerId");
+    if ((!jobAssignmentId && !bookingId) || !action || !cleanerId) {
+      throw new Error("Missing required fields: jobAssignmentId (or bookingId), action, cleanerId");
     }
 
     if (!["check_in", "check_out"].includes(action)) {
@@ -86,6 +111,39 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    // ── Booking-only fallback ────────────────────────────────────────────
+    // Some manually-created bookings have no job_assignments row. The
+    // contractor portal used to work around this with a raw bookings
+    // update, which silently skipped the BEFORE-photos SMS. Handle it
+    // here instead so every check-in follows the same cadence.
+    if (!jobAssignmentId && bookingId && action === "check_in") {
+      const { data: booking } = await supabase
+        .from("bookings")
+        .select("id, cleaner_id, status, check_in_time, job_id")
+        .eq("id", bookingId)
+        .maybeSingle();
+      if (!booking) throw new Error("Booking not found");
+      if (booking.cleaner_id !== cleanerId) throw new Error("Booking not assigned to this cleaner");
+      if (booking.check_in_time) {
+        return new Response(
+          JSON.stringify({ success: true, message: "Job already checked in", alreadyCheckedIn: true, checkInTime: booking.check_in_time }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const nowIso = new Date().toISOString();
+      const { error: bookErr } = await supabase
+        .from("bookings")
+        .update({ status: "in_progress", check_in_time: nowIso })
+        .eq("id", bookingId);
+      if (bookErr) throw new Error(`Failed to update booking: ${bookErr.message}`);
+      await sendBeforePhotosLinkForBooking(supabase, bookingId, cleanerId);
+      return new Response(
+        JSON.stringify({ success: true, message: "Checked in successfully", checkInTime: nowIso, viaBooking: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!jobAssignmentId) throw new Error("jobAssignmentId required for this action");
 
     // Fetch job assignment with job details
     const { data: assignment, error: assignmentError } = await supabase

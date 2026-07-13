@@ -117,7 +117,8 @@ serve(async (req) => {
         "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
         "dispatch_notes, team_notes, issues_flag, issues_notes, " +
         "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
-        "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id",
+        "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id, " +
+        "rescheduled_at, rescheduled_from_date, rescheduled_from_time_slot",
       )
       .eq("cleaner_id", cleanerId)
       .order("service_date", { ascending: false })
@@ -236,7 +237,8 @@ serve(async (req) => {
           "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
           "dispatch_notes, team_notes, issues_flag, issues_notes, " +
           "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
-          "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id",
+          "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id, " +
+          "rescheduled_at, rescheduled_from_date, rescheduled_from_time_slot",
         )
         .in("id", crewIds);
       for (const cb of crewBookings || []) bookingRows.push(cb);
@@ -332,6 +334,11 @@ serve(async (req) => {
           zip: cancelled ? "" : (b.zip_code || ""),
           checkInTime: b.check_in_time || null,
           cancelledAt: b.cancelled_at || null,
+          // Reschedule signal: the portal used to just swap the date with no
+          // cue — a cleaner who memorized the old day had no idea it moved.
+          rescheduledAt: b.rescheduled_at || null,
+          rescheduledFromDate: b.rescheduled_from_date || null,
+          rescheduledFromTimeSlot: b.rescheduled_from_time_slot || null,
           qcToken: cancelled ? null : (b.job_id ? qcTokenByJob.get(String(b.job_id)) || null : null),
           tipCents: tipByBooking.get(String(b.id)) || 0,
           photoUploadToken: b.photo_upload_token || null,
@@ -376,8 +383,59 @@ serve(async (req) => {
         };
       });
 
-    // Transparency: a cleaner sees their OWN scores (never others').
+    // ── Pending job OFFERS ────────────────────────────────────────────────
+    // The lookup portal never showed offers, so a missed SMS meant an
+    // invisible expiry (which then dents the acceptance rate). Surface open
+    // Offered/Broadcast assignments with the token for the accept page.
+    // deno-lint-ignore no-explicit-any
+    const offers: any[] = [];
+    try {
+      const { data: openAssigns } = await admin
+        .from("job_assignments")
+        .select("id, job_id, status, response_token, expires_at, estimated_pay_cents, role, assigned_at")
+        .eq("cleaner_id", cleanerId)
+        .in("status", ["Offered", "Broadcast"])
+        .order("assigned_at", { ascending: false })
+        .limit(10);
+      const open = (openAssigns || []).filter((a: Row) =>
+        a.response_token && (!a.expires_at || new Date(a.expires_at).getTime() > Date.now()));
+      if (open.length > 0) {
+        const offerJobIds = open.map((a: Row) => a.job_id).filter(Boolean);
+        const { data: offerBookings } = await admin
+          .from("bookings")
+          .select("job_id, service_type, service_date, time_slot, arrival_window, city, state, total_estimate_cents, home_size_id")
+          .in("job_id", offerJobIds);
+        const byJob = new Map<string, Row>();
+        for (const ob of offerBookings || []) byJob.set(String(ob.job_id), ob);
+        for (const a of open) {
+          const ob = byJob.get(String(a.job_id)) || {};
+          const estPay = a.estimated_pay_cents != null
+            ? Number(a.estimated_pay_cents)
+            : ob.total_estimate_cents != null
+              ? Math.floor(Number(ob.total_estimate_cents) * payPct / 100)
+              : null;
+          offers.push({
+            assignmentId: a.id,
+            token: a.response_token,
+            role: a.role || null,
+            status: a.status,
+            expiresAt: a.expires_at || null,
+            serviceType: ob.service_type || "Cleaning",
+            serviceDate: ob.service_date || null,
+            timeSlot: ob.time_slot || ob.arrival_window || null,
+            city: ob.city || null,
+            state: ob.state || null,
+            estimatedPayCents: estPay,
+          });
+        }
+      }
+    } catch { /* offers are additive — never break the portal */ }
+
+    // Transparency: a cleaner sees their OWN scores (never others'), plus a
+    // summary of the QC cases feeding their Rating — so a score change is
+    // never unexplainable. Counts only; no customer identities or details.
     let scores: { novara: number | null; quality: number | null; overall: number | null } | null = null;
+    let qcSummary: { last90Days: number; bySeverity: Record<string, number> } | null = null;
     try {
       const { data: sc } = await admin
         .from("cleaners")
@@ -390,6 +448,20 @@ serve(async (req) => {
           quality: sc.quality_score != null ? Number(sc.quality_score) : null,
           overall: sc.overall_score != null ? Number(sc.overall_score) : null,
         };
+      }
+      const { data: qcRows } = await admin
+        .from("qc_issues")
+        .select("severity")
+        .eq("cleaner_id", cleanerId)
+        .gte("created_at", new Date(Date.now() - 90 * 86400_000).toISOString())
+        .limit(200);
+      if (qcRows && qcRows.length > 0) {
+        const bySeverity: Record<string, number> = {};
+        for (const r of qcRows) {
+          const s = String(r.severity || "medium");
+          bySeverity[s] = (bySeverity[s] || 0) + 1;
+        }
+        qcSummary = { last90Days: qcRows.length, bySeverity };
       }
     } catch { /* columns may not exist yet */ }
 
@@ -419,9 +491,11 @@ serve(async (req) => {
         name: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
         payPercentage: payPct,
         scores,
+        qcSummary,
       },
       summary: { lifetimePaidCents, pendingCents, paidJobs, lifetimeTipsCents },
       tips,
+      offers,
       jobs,
     });
   } catch (e) {

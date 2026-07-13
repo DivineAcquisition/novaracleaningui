@@ -20,6 +20,7 @@ import {
   RiSearch2Line,
   RiMoneyDollarCircleLine,
   RiUserSmileLine,
+  RiArrowGoBackLine,
   RiCheckLine,
   RiArrowRightLine,
   RiInformationLine,
@@ -1577,12 +1578,12 @@ function BookingSheet({
                     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                       Cleaner marked this complete — awaiting your review. Check the
                       uploaded photos, then finalize to charge the balance and release
-                      the payout.
+                      the payout — or send it back if something's missing.
                     </div>
                   )}
                   <Button
                     onClick={markCompleted}
-                    disabled={working === "complete"}
+                    disabled={working === "complete" || working === "send_back"}
                     className="w-full bg-violet-600 hover:bg-violet-700 text-white"
                   >
                     {working === "complete" ? (
@@ -1597,6 +1598,38 @@ function BookingSheet({
                       </>
                     )}
                   </Button>
+                  {booking.status === "pending_review" && (
+                    <Button
+                      variant="outline"
+                      disabled={working === "complete" || working === "send_back"}
+                      className="w-full mt-2 border-amber-300 text-amber-800 hover:bg-amber-50"
+                      onClick={async () => {
+                        const reason = window.prompt(
+                          "What needs fixing? The cleaner gets this exact message and the job returns to their Active list.",
+                        );
+                        if (!reason || !reason.trim()) return;
+                        setWorking("send_back");
+                        try {
+                          const { data, error } = await supabase.functions.invoke("admin-review-completion", {
+                            body: { bookingId: booking.id, action: "send_back", reason: reason.trim() },
+                          });
+                          if (error) throw error;
+                          if ((data as { ok?: boolean; error?: string })?.ok === false) {
+                            throw new Error((data as { error?: string })?.error || "Failed");
+                          }
+                          toast.success("Sent back to the cleaner — they've been texted the reason.");
+                          onMutated();
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : "Failed to send back");
+                        } finally {
+                          setWorking(null);
+                        }
+                      }}
+                    >
+                      <RiArrowGoBackLine className="w-4 h-4 mr-2" />
+                      Send back to cleaner (needs another pass)
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             )}
