@@ -19,6 +19,8 @@ interface RatingDialogProps {
   onRatingSubmitted: () => void;
 }
 
+const TIP_PRESETS = [500, 1000, 2000];
+
 export const RatingDialog = ({
   open,
   onOpenChange,
@@ -30,6 +32,10 @@ export const RatingDialog = ({
   const [hoveredRating, setHoveredRating] = useState(0);
   const [review, setReview] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTip, setShowTip] = useState(false);
+  const [tipCents, setTipCents] = useState<number | null>(null);
+  const [customTip, setCustomTip] = useState("");
+  const [tipLoading, setTipLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (rating === 0) {
@@ -52,11 +58,8 @@ export const RatingDialog = ({
 
       toast.success("Thank you for your rating!");
       onRatingSubmitted();
-      onOpenChange(false);
-      
-      // Reset form
-      setRating(0);
-      setReview("");
+      // Offer a tip after the rating (100% goes to the crew).
+      setShowTip(true);
     } catch (error: any) {
       console.error("Error submitting rating:", error);
       toast.error(error.message || "Failed to submit rating");
@@ -64,6 +67,88 @@ export const RatingDialog = ({
       setIsSubmitting(false);
     }
   };
+
+  const startTip = async () => {
+    const amount = tipCents ?? Math.round((parseFloat(customTip) || 0) * 100);
+    if (!amount || amount < 100) {
+      toast.error("Pick a tip amount (minimum $1).");
+      return;
+    }
+    setTipLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("tip-cleaner", {
+        body: { action: "checkout", bookingId, amountCents: amount },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; url?: string; error?: string };
+      if (!d?.ok || !d.url) throw new Error(d?.error || "Couldn't start the tip");
+      window.location.href = d.url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't start the tip");
+      setTipLoading(false);
+    }
+  };
+
+  const closeAll = () => {
+    onOpenChange(false);
+    setShowTip(false);
+    setRating(0);
+    setReview("");
+    setTipCents(null);
+    setCustomTip("");
+  };
+
+  if (showTip) {
+    return (
+      <Dialog open={open} onOpenChange={(o) => { if (!o) closeAll(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Leave a tip for {cleanerName}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              100% of your tip goes to your cleaning crew — Novara takes nothing.
+              If more than one cleaner worked your home, the tip splits equally
+              between them.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {TIP_PRESETS.map((cents) => (
+                <Button
+                  key={cents}
+                  type="button"
+                  variant={tipCents === cents ? "default" : "outline"}
+                  onClick={() => { setTipCents(cents); setCustomTip(""); }}
+                >
+                  ${cents / 100}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Custom: $</span>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                step="1"
+                value={customTip}
+                onChange={(e) => { setCustomTip(e.target.value); setTipCents(null); }}
+                className="w-24 rounded-md border px-2 py-1.5 text-sm"
+                placeholder="15"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={closeAll} disabled={tipLoading}>
+                No thanks
+              </Button>
+              <Button className="flex-1" onClick={startTip} disabled={tipLoading}>
+                {tipLoading ? "Opening checkout…" : "Tip the crew"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
