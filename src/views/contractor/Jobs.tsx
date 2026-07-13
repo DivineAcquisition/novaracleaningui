@@ -8,7 +8,7 @@
 // crew-split jobs — never a guessed percentage. Customer phone/email are never
 // present in the payload.
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -112,6 +112,7 @@ interface Job {
   checkInTime?: string | null;
   cancelledAt?: string | null;
   qcToken?: string | null;
+  tipCents?: number;
   photoUploadToken?: string | null;
   photoViewToken?: string | null;
   beforePhotos?: string[] | null;
@@ -292,6 +293,14 @@ function JobDetails({ job }: { job: Job }) {
   );
 }
 
+interface CleanerScores {
+  novara: number | null;
+  quality: number | null;
+  overall: number | null;
+}
+
+const LOOKUP_STORAGE_KEY = "novara_contractor_lookup";
+
 export default function ContractorJobs() {
   const [lookupType, setLookupType] = useState<"email" | "phone">("email");
   const [lookupValue, setLookupValue] = useState("");
@@ -300,32 +309,103 @@ export default function ContractorJobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [cleanerName, setCleanerName] = useState("");
   const [cleanerId, setCleanerId] = useState("");
-  const [summary, setSummary] = useState<{ lifetimePaidCents: number; pendingCents: number; paidJobs: number } | null>(null);
+  const [scores, setScores] = useState<CleanerScores | null>(null);
+  const [summary, setSummary] = useState<{ lifetimePaidCents: number; pendingCents: number; paidJobs: number; lifetimeTipsCents?: number } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [crewMembers, setCrewMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [handoffJobId, setHandoffJobId] = useState<string | null>(null);
   const [handoffTarget, setHandoffTarget] = useState<string>("");
   const [dropJob, setDropJob] = useState<Job | null>(null);
   const [dropReason, setDropReason] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!lookupValue.trim()) {
-      toast.error("Please enter your email or phone number");
-      return;
+  // ── TRUE LIVE SYNC ─────────────────────────────────────────────────────
+  // The portal is the cleaner's source of truth for pay and job status, so
+  // it must never go stale:
+  //   1. Realtime: any change to this cleaner's bookings, assignments, pay
+  //      ledgers (manual_payouts / job_extra_pay), or tips triggers a
+  //      server refetch (debounced).
+  //   2. 45s poll backstops environments where the socket can't connect.
+  //   3. Refetch on tab focus/visibility so returning to the tab is fresh.
+  //   4. Every action (check-in, complete, handoff, drop) refetches from
+  //      the server after its optimistic update — no more local-only state.
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadJobs = useCallback(async (cid: string, silent = true) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("get-cleaner-portal", {
+        body: { cleanerId: cid },
+      });
+      if (error) throw error;
+      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary; cleaner?: { scores?: CleanerScores | null } };
+      if (!res?.ok) throw new Error("Could not load jobs");
+      setJobs(res.jobs || []);
+      setSummary(res.summary || null);
+      setScores(res.cleaner?.scores || null);
+      setLastSyncedAt(new Date());
+    } catch (err) {
+      if (!silent) toast.error("Failed to refresh jobs");
+      console.error("Portal refresh error:", err);
     }
+  }, []);
 
+  const scheduleRefetch = useCallback((cid: string) => {
+    if (refetchTimer.current) clearTimeout(refetchTimer.current);
+    refetchTimer.current = setTimeout(() => void loadJobs(cid), 800);
+  }, [loadJobs]);
+
+  useEffect(() => {
+    if (!cleanerId) return;
+    const refresh = () => scheduleRefetch(cleanerId);
+    const channel = supabase
+      .channel(`contractor-portal-live-${cleanerId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `cleaner_id=eq.${cleanerId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_assignments", filter: `cleaner_id=eq.${cleanerId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "manual_payouts", filter: `cleaner_id=eq.${cleanerId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_extra_pay", filter: `cleaner_id=eq.${cleanerId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cleaner_tips", filter: `cleaner_id=eq.${cleanerId}` }, refresh)
+      .subscribe();
+    const poll = setInterval(() => void loadJobs(cleanerId), 45_000);
+    const onFocus = () => void loadJobs(cleanerId);
+    const onVisible = () => { if (document.visibilityState === "visible") void loadJobs(cleanerId); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (refetchTimer.current) clearTimeout(refetchTimer.current);
+    };
+  }, [cleanerId, loadJobs, scheduleRefetch]);
+
+  // Remembered lookup → auto-reload the portal on return visits.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LOOKUP_STORAGE_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as { type: "email" | "phone"; value: string };
+      if (parsed?.value) {
+        setLookupType(parsed.type || "email");
+        setLookupValue(parsed.value);
+        void runLookup(parsed.type || "email", parsed.value);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runLookup = async (type: "email" | "phone", value: string) => {
     setIsSearching(true);
     setSearched(false);
     try {
-      const filterColumn = lookupType === "email" ? "email" : "phone";
-      const cleanValue = lookupType === "phone"
-        ? lookupValue.replace(/\D/g, "").replace(/^1/, "")
-        : lookupValue.trim().toLowerCase();
+      const filterColumn = type === "email" ? "email" : "phone";
+      const cleanValue = type === "phone"
+        ? value.replace(/\D/g, "").replace(/^1/, "")
+        : value.trim().toLowerCase();
 
       const { data: cleaner, error: cleanerErr } = await (supabase.from as any)("cleaners")
         .select("id, first_name, last_name, crew_id")
-        .ilike(filterColumn, lookupType === "phone" ? `%${cleanValue.slice(-10)}%` : cleanValue)
+        .ilike(filterColumn, type === "phone" ? `%${cleanValue.slice(-10)}%` : cleanValue)
         .maybeSingle();
       if (cleanerErr) throw cleanerErr;
 
@@ -338,6 +418,7 @@ export default function ContractorJobs() {
 
       setCleanerName(`${cleaner.first_name} ${cleaner.last_name}`.trim());
       setCleanerId(cleaner.id);
+      try { localStorage.setItem(LOOKUP_STORAGE_KEY, JSON.stringify({ type, value })); } catch { /* ignore */ }
 
       if ((cleaner as { crew_id?: string | null }).crew_id) {
         const { data: mates } = await (supabase.from as any)("cleaners")
@@ -351,14 +432,7 @@ export default function ContractorJobs() {
         setCrewMembers([]);
       }
 
-      const { data, error } = await supabase.functions.invoke("get-cleaner-portal", {
-        body: { cleanerId: cleaner.id },
-      });
-      if (error) throw error;
-      const res = data as { ok?: boolean; jobs?: Job[]; summary?: typeof summary };
-      if (!res?.ok) throw new Error("Could not load jobs");
-      setJobs(res.jobs || []);
-      setSummary(res.summary || null);
+      await loadJobs(cleaner.id, false);
       setSearched(true);
     } catch (error: any) {
       console.error("Search error:", error);
@@ -367,6 +441,15 @@ export default function ContractorJobs() {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lookupValue.trim()) {
+      toast.error("Please enter your email or phone number");
+      return;
+    }
+    await runLookup(lookupType, lookupValue);
   };
 
   const handleCheckIn = async (job: Job) => {
@@ -418,6 +501,7 @@ export default function ContractorJobs() {
       setJobs((prev) =>
         prev.map((j) => (j.id === job.id ? { ...j, status: "pending_review", photoUploadToken: uploadToken ?? j.photoUploadToken } : j)),
       );
+      if (cleanerId) scheduleRefetch(cleanerId);
     } catch (error: any) {
       toast.error(error.message || "Failed to complete job");
     } finally {
@@ -440,6 +524,7 @@ export default function ContractorJobs() {
       const mate = crewMembers.find((m) => m.id === handoffTarget);
       toast.success(`Clean handed off to ${mate ? `${mate.first_name} ${mate.last_name}` : "your crewmate"}.`);
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      if (cleanerId) scheduleRefetch(cleanerId);
       setHandoffJobId(null);
       setHandoffTarget("");
     } catch (error: any) {
@@ -460,6 +545,7 @@ export default function ContractorJobs() {
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success("Job dropped. The office has been alerted to reassign it.");
       setJobs((prev) => prev.filter((j) => j.id !== dropJob.id));
+      if (cleanerId) scheduleRefetch(cleanerId);
       setDropJob(null);
       setDropReason("");
     } catch (error: any) {
@@ -637,8 +723,35 @@ export default function ContractorJobs() {
                   </div>
                 </div>
               )}
+
+              {/* Your scores — yours only, never other cleaners'. */}
+              {scores && (scores.novara != null || scores.quality != null || scores.overall != null) && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  {scores.overall != null && (
+                    <span className="text-[10px] font-bold bg-white/20 ring-1 ring-white/25 rounded-full px-2 py-0.5">
+                      Overall {Math.round(scores.overall)}
+                    </span>
+                  )}
+                  {scores.novara != null && (
+                    <span className="text-[10px] font-semibold bg-white/12 ring-1 ring-white/15 rounded-full px-2 py-0.5">
+                      Novara Score {Math.round(scores.novara)}
+                    </span>
+                  )}
+                  {scores.quality != null && (
+                    <span className="text-[10px] font-semibold bg-white/12 ring-1 ring-white/15 rounded-full px-2 py-0.5">
+                      Rating {Math.round(scores.quality)}
+                    </span>
+                  )}
+                  {(summary?.lifetimeTipsCents || 0) > 0 && (
+                    <span className="text-[10px] font-semibold bg-emerald-400/25 ring-1 ring-emerald-200/40 rounded-full px-2 py-0.5">
+                      💜 {money(summary!.lifetimeTipsCents!)} in tips
+                    </span>
+                  )}
+                </div>
+              )}
               <p className="mt-2.5 text-[10px] text-violet-100/70">
                 Amounts reflect your actual payouts (base pay + extras like supplies & mileage).
+                {lastSyncedAt ? ` Live · synced ${lastSyncedAt.toLocaleTimeString()}` : ""}
               </p>
             </div>
 

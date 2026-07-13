@@ -126,6 +126,21 @@ serve(async (req) => {
     const bookingRows: Row[] = bookings || [];
     const primaryIds = new Set(bookingRows.map((b) => b.id));
 
+    // ── Tips: 100% pass-through gifts, shown separately from job pay (they
+    //    never touch scores, tiers, or the pay math). ──
+    const tipByBooking = new Map<string, number>();
+    let lifetimeTipsCents = 0;
+    try {
+      const { data: tips } = await admin
+        .from("cleaner_tips")
+        .select("booking_id, amount_cents")
+        .eq("cleaner_id", cleanerId);
+      for (const t of tips || []) {
+        lifetimeTipsCents += Number(t.amount_cents) || 0;
+        if (t.booking_id) tipByBooking.set(String(t.booking_id), (tipByBooking.get(String(t.booking_id)) || 0) + (Number(t.amount_cents) || 0));
+      }
+    } catch { /* table may not exist yet */ }
+
     // ── Per-job QC token: the cleaner's assignment response_token doubles as
     //    the credential for field QC reports (same model as the job
     //    checklist). Map job_id → this cleaner's token. ──
@@ -313,6 +328,7 @@ serve(async (req) => {
           checkInTime: b.check_in_time || null,
           cancelledAt: b.cancelled_at || null,
           qcToken: cancelled ? null : (b.job_id ? qcTokenByJob.get(String(b.job_id)) || null : null),
+          tipCents: tipByBooking.get(String(b.id)) || 0,
           photoUploadToken: b.photo_upload_token || null,
           photoViewToken: b.photo_view_token || null,
           beforePhotos: b.before_photos || null,
@@ -355,6 +371,23 @@ serve(async (req) => {
         };
       });
 
+    // Transparency: a cleaner sees their OWN scores (never others').
+    let scores: { novara: number | null; quality: number | null; overall: number | null } | null = null;
+    try {
+      const { data: sc } = await admin
+        .from("cleaners")
+        .select("novara_score, quality_score, overall_score")
+        .eq("id", cleanerId)
+        .maybeSingle();
+      if (sc) {
+        scores = {
+          novara: sc.novara_score != null ? Number(sc.novara_score) : null,
+          quality: sc.quality_score != null ? Number(sc.quality_score) : null,
+          overall: sc.overall_score != null ? Number(sc.overall_score) : null,
+        };
+      }
+    } catch { /* columns may not exist yet */ }
+
     return json({
       ok: true,
       found: true,
@@ -364,8 +397,9 @@ serve(async (req) => {
         lastName: cleaner.last_name || "",
         name: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
         payPercentage: payPct,
+        scores,
       },
-      summary: { lifetimePaidCents, pendingCents, paidJobs },
+      summary: { lifetimePaidCents, pendingCents, paidJobs, lifetimeTipsCents },
       jobs,
     });
   } catch (e) {
