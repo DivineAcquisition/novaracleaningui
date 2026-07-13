@@ -442,6 +442,11 @@ export default function CleanerDashboard() {
       .channel(`cleaner-portal-live-${profile.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "job_assignments", filter: `cleaner_id=eq.${profile.id}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `cleaner_id=eq.${profile.id}` }, refresh)
+      // Pay ledgers + tips: payouts marked paid, extras added, tips received
+      // must reflect immediately — the "no true live sync for pay" gap.
+      .on("postgres_changes", { event: "*", schema: "public", table: "manual_payouts", filter: `cleaner_id=eq.${profile.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_extra_pay", filter: `cleaner_id=eq.${profile.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cleaner_tips", filter: `cleaner_id=eq.${profile.id}` }, refresh)
       .subscribe();
     const poll = setInterval(() => fetchJobs(profile.id, profile.pay_percentage), 60_000);
     return () => {
