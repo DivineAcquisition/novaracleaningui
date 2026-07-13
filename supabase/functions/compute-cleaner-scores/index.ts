@@ -94,8 +94,10 @@ serve(async (req) => {
     const fleetMaxWorkload = Math.max(1, ...cleaners.map((c: Record<string, unknown>) => Number(c.workload_score) || 0));
 
     // ── Front-to-end history: offer outcomes from job_assignments ──
+    // needs_reassignment = the cleaner DROPPED an accepted job (cleaner-drop-
+    // job flow) — a reliability failure, counted with declines.
     const ACCEPTED_STATUSES = new Set(["confirmed", "in progress", "accepted", "completed"]);
-    const NEGATIVE_STATUSES = new Set(["declined", "expired", "withdrawn"]);
+    const NEGATIVE_STATUSES = new Set(["declined", "expired", "withdrawn", "needs_reassignment"]);
     const offerStats = new Map<string, { accepted: number; negative: number }>();
     {
       const { data: assigns } = await supabase
