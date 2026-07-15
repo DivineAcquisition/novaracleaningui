@@ -254,6 +254,7 @@ export default function VaBooking() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const leadIdParam = searchParams.get("lead_id");
+  const quoteIdParam = searchParams.get("quoteId");
 
   // Lead lookup (collapsed by default)
   const [leadLookupOpen, setLeadLookupOpen] = useState(false);
@@ -352,6 +353,64 @@ export default function VaBooking() {
   // Quote saving
   const [savingQuote, setSavingQuote] = useState(false);
   const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
+
+  // Prefill from Quotes → "Open in Internal Booking"
+  useEffect(() => {
+    if (!quoteIdParam) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from("va_quotes")
+          .select("*")
+          .eq("id", quoteIdParam)
+          .maybeSingle();
+        if (cancelled || error || !data) {
+          if (!cancelled && error) toast.error("Could not load quote");
+          return;
+        }
+        setSavedQuoteId(data.id);
+        setFirstName(data.first_name || "");
+        setLastName(data.last_name || "");
+        setEmail(data.email || "");
+        setPhone(data.phone || "");
+        setAddress(data.address || "");
+        setCity(data.city || "");
+        setState(data.state || "");
+        setZipCode(data.zip_code || "");
+        if (data.home_size_id) setHomeSizeId(data.home_size_id);
+        if (data.service_type) setServiceType(data.service_type as ServiceType);
+        if (Array.isArray(data.add_ons)) setAddOns(data.add_ons);
+        if (data.frequency) setFrequency(data.frequency);
+        if (data.service_date) {
+          try {
+            setSelectedDate(new Date(`${data.service_date}T12:00:00`));
+          } catch {
+            /* ignore */
+          }
+        }
+        if (data.time_slot) setSelectedTime(data.time_slot);
+        if (data.team_notes) setTeamNotes(data.team_notes);
+        if (data.access_notes) setAccessNotes(data.access_notes);
+        if (data.bedrooms != null) setBedrooms(String(data.bedrooms));
+        if (data.bathrooms != null) setBathrooms(String(data.bathrooms));
+        if (data.dwelling_type) setDwellingType(data.dwelling_type);
+        if (data.pets) setPets(data.pets);
+        if (data.csr_name) setCsrName(data.csr_name);
+        if (data.total_estimate_cents != null) {
+          setOverrideTotal((data.total_estimate_cents / 100).toFixed(2));
+        }
+        toast.success("Quote loaded into the booking form");
+      } catch (err: unknown) {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : "Could not load quote");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [quoteIdParam]);
 
   // Wallet credit
   const [walletCreditCents, setWalletCreditCents] = useState(0);
@@ -771,7 +830,7 @@ export default function VaBooking() {
         .single();
       if (error) throw error;
       setSavedQuoteId(data.id);
-      toast.success("Quote saved — you can retrieve it later from this form.");
+      toast.success("Quote saved — find it anytime under Quotes.");
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to save quote: ${m}`);

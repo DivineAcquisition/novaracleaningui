@@ -24,12 +24,28 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendSms } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+/** Public customer-facing checklist page for a given service type. */
+function checklistViewUrl(serviceType: string): string {
+  const base = "https://try.novaracleaning.com/checklist";
+  const kind = resolveChecklistType(serviceType);
+  switch (kind) {
+    case "deep":
+    case "combo":
+      return `${base}/deep-clean`;
+    case "moveinout":
+      return `${base}/move-in-out`;
+    default:
+      return `${base}/standard-clean`;
+  }
+}
 
 // ─── SERVICE-TYPE-AWARE CHECKLIST DATA ───────────────────────────────
 //
@@ -329,6 +345,7 @@ function renderHtml(opts: {
   timeSlot?: string | null;
   serviceAddress?: string | null;
   content: ChecklistContent;
+  viewUrl?: string;
 }): string {
   const { content } = opts;
   const sectionHtml = content.sections.map(
@@ -343,6 +360,13 @@ function renderHtml(opts: {
     <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
       ${content.extras.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`;
+
+  const viewCta = opts.viewUrl
+    ? `<div style="text-align:center;margin:28px 0 8px">
+        <a href="${opts.viewUrl}" style="display:inline-block;background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">View checklist online</a>
+      </div>
+      <p style="margin:0 0 16px;font-size:12px;color:#9CA3AF;text-align:center">Or open: ${opts.viewUrl}</p>`
+    : "";
 
   const bookingMetaRows: string[] = [];
   if (opts.bookingNumber) {
@@ -397,6 +421,8 @@ function renderHtml(opts: {
           <p style="margin:0 0 8px;font-size:13px;color:#6B7280">Want any of these on your next visit? Just reply to this email or text us — we'll add them and send an updated total.</p>
           ${extrasHtml}
 
+          ${viewCta}
+
           <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
 
           <p style="margin:0 0 8px;font-size:13px;color:#6B7280;line-height:1.6"><strong style="color:#111827">Day-of prep tips:</strong> tidy small valuables, secure pets, and flag any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.</p>
@@ -412,7 +438,7 @@ function renderHtml(opts: {
 </body></html>`;
 }
 
-function plainText(opts: { firstName: string; content: ChecklistContent }): string {
+function plainText(opts: { firstName: string; content: ChecklistContent; viewUrl?: string }): string {
   const { content } = opts;
   const lines = [
     `Hi ${opts.firstName || "there"},`,
@@ -427,6 +453,7 @@ function plainText(opts: { firstName: string; content: ChecklistContent }): stri
     "--- EXTRAS (additional charges apply) ---",
     ...content.extras.map((t) => `  • ${t}`),
     "",
+    ...(opts.viewUrl ? [`View online: ${opts.viewUrl}`, ""] : []),
     "Reply to this email or text us at +1 (844) 735-2070 to add an extra.",
     "",
     "— The Novara team",
@@ -444,13 +471,24 @@ serve(async (req) => {
     const {
       bookingId,
       email: directEmail,
+      phone: directPhone,
       firstName: directFirstName,
       serviceType: directServiceType,
+      sendEmail: wantEmail = true,
+      sendSms: wantSms = false,
+      force = false,
     } = payload as {
       bookingId?: string;
       email?: string;
+      phone?: string;
       firstName?: string;
       serviceType?: string;
+      /** Email the full checklist HTML (default true). */
+      sendEmail?: boolean;
+      /** Text the public customer checklist page link (default false). */
+      sendSms?: boolean;
+      /** Bypass booking_emails_sent idempotency when resending from admin. */
+      force?: boolean;
     };
 
     const supabase = createClient(
@@ -461,6 +499,7 @@ serve(async (req) => {
 
     // Resolve recipient + booking-level personalization.
     let email = directEmail || "";
+    let phone = directPhone || "";
     let firstName = directFirstName || "";
     let serviceType = (directServiceType || "standard").toLowerCase();
     let bookingNumber: number | null = null;
@@ -473,7 +512,7 @@ serve(async (req) => {
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .select(
-          "id, booking_number, email, first_name, service_type, service_date, time_slot, address, city, state, zip_code",
+          "id, booking_number, email, phone, first_name, service_type, service_date, time_slot, address, city, state, zip_code",
         )
         .eq("id", bookingId)
         .maybeSingle();
@@ -482,6 +521,7 @@ serve(async (req) => {
       }
       if (booking) {
         email = email || booking.email || "";
+        phone = phone || booking.phone || "";
         firstName = firstName || booking.first_name || "";
         serviceType = (booking.service_type || serviceType || "standard").toLowerCase();
         bookingNumber = booking.booking_number ?? null;
@@ -501,8 +541,22 @@ serve(async (req) => {
       }
     }
 
-    if (!email) {
-      return new Response(JSON.stringify({ error: "email required (pass email or bookingId)" }), {
+    const doEmail = wantEmail !== false;
+    const doSms = wantSms === true;
+    if (!doEmail && !doSms) {
+      return new Response(JSON.stringify({ error: "sendEmail and/or sendSms required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+    if (doEmail && !email) {
+      return new Response(JSON.stringify({ error: "email required when sendEmail is true" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+    if (doSms && !phone) {
+      return new Response(JSON.stringify({ error: "phone required when sendSms is true" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
       });
@@ -511,9 +565,11 @@ serve(async (req) => {
     // Resolve service-type-aware checklist content
     const checklistType = resolveChecklistType(serviceType);
     const content = CHECKLIST_BY_TYPE[checklistType] ?? CHECKLIST_BY_TYPE.standard;
+    const viewUrl = checklistViewUrl(serviceType);
 
     // Idempotency: skip if we already sent this checklist kind for this booking.
-    if (resolvedBookingId) {
+    // Admin "force" resends bypass this (Quotes / CSR tooling).
+    if (resolvedBookingId && !force && doEmail) {
       const { data: prior } = await supabase
         .from("booking_emails_sent")
         .select("id, sent_at")
@@ -527,7 +583,7 @@ serve(async (req) => {
           priorSentAt: prior.sent_at,
         });
         return new Response(
-          JSON.stringify({ skipped: true, reason: "already-sent", priorSentAt: prior.sent_at }),
+          JSON.stringify({ skipped: true, reason: "already-sent", priorSentAt: prior.sent_at, viewUrl }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200,
@@ -536,55 +592,99 @@ serve(async (req) => {
       }
     }
 
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY") || "");
-    const html = renderHtml({
-      firstName,
-      bookingNumber,
-      serviceDate,
-      timeSlot,
-      serviceAddress,
-      content,
-    });
-    const text = plainText({ firstName, content });
+    let messageId: string | null = null;
+    let emailed = false;
+    if (doEmail) {
+      const resend = new Resend(Deno.env.get("RESEND_API_KEY") || "");
+      const html = renderHtml({
+        firstName,
+        bookingNumber,
+        serviceDate,
+        timeSlot,
+        serviceAddress,
+        content,
+        viewUrl,
+      });
+      const text = plainText({ firstName, content, viewUrl });
 
-    const result = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
-      to: [email],
-      subject: content.subject,
-      html,
-      text,
-    });
+      const result = await resend.emails.send({
+        from: "Novara Cleaning <hello@novaracleaning.com>",
+        to: [email],
+        subject: content.subject,
+        html,
+        text,
+      });
 
-    if (result?.error) {
-      console.error("[send-cleaning-checklist] resend error", result.error);
-      return new Response(
-        JSON.stringify({ error: "resend send failed", detail: result.error }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 502,
-        },
-      );
+      if (result?.error) {
+        console.error("[send-cleaning-checklist] resend error", result.error);
+        return new Response(
+          JSON.stringify({ error: "resend send failed", detail: result.error }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 502,
+          },
+        );
+      }
+      messageId = (result?.data?.id as string | undefined) || null;
+      emailed = true;
+
+      // Idempotency stamp — best-effort, doesn't block the response.
+      if (resolvedBookingId) {
+        try {
+          await supabase.from("booking_emails_sent").insert({
+            booking_id: resolvedBookingId,
+            kind: content.emailKind,
+            recipient_email: email,
+            provider_message_id: messageId,
+          });
+        } catch (logErr) {
+          console.warn("[send-cleaning-checklist] booking_emails_sent insert failed", logErr);
+        }
+      }
     }
 
-    // Idempotency stamp — best-effort, doesn't block the response.
-    if (resolvedBookingId) {
-      try {
-        await supabase.from("booking_emails_sent").insert({
+    let smsSent = false;
+    if (doSms) {
+      const label = content.heading.replace(/\s+Checklist$/i, "") || "cleaning";
+      smsSent = await sendSms(supabase, {
+        toPhone: phone,
+        message:
+          `NovaraCleaning: Here's your ${label} checklist (what's included): ${viewUrl} ` +
+          `Questions? Reply or call (844) 735-2070`,
+        type: "confirmation",
+      });
+    }
+
+    try {
+      await supabase.from("events").insert({
+        event_type: "checklist.sent",
+        source: "send-cleaning-checklist",
+        summary: `Checklist sent (${checklistType}) via ${[emailed && "email", smsSent && "sms"].filter(Boolean).join("+") || "none"}`,
+        data: {
           booking_id: resolvedBookingId,
-          kind: content.emailKind,
-          recipient_email: email,
-          provider_message_id: (result?.data?.id as string | undefined) || null,
-        });
-      } catch (logErr) {
-        console.warn("[send-cleaning-checklist] booking_emails_sent insert failed", logErr);
-      }
+          email: email || null,
+          phone: phone || null,
+          service_type: serviceType,
+          checklist_type: checklistType,
+          view_url: viewUrl,
+          emailed,
+          sms_sent: smsSent,
+          force: Boolean(force),
+        },
+      });
+    } catch {
+      /* best-effort */
     }
 
     return new Response(
       JSON.stringify({
         success: true,
         bookingId: resolvedBookingId,
-        messageId: (result?.data?.id as string | undefined) || null,
+        messageId,
+        emailed,
+        smsSent,
+        viewUrl,
+        checklistType,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

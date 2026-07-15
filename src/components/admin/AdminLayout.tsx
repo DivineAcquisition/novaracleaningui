@@ -38,6 +38,7 @@ import {
   RiMoneyDollarCircleLine,
   RiShieldCheckLine,
   RiFileChartLine,
+  RiFileList3Line,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -88,6 +89,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/csr",
     icon: RiFileEditLine,
     description: "VA booking submission",
+  },
+  {
+    title: "Quotes",
+    url: "/admin/quotes",
+    icon: RiFileList3Line,
+    description: "Saved quotes · send checklists",
   },
   {
     title: "Partnerships",
