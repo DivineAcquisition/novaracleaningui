@@ -11,6 +11,7 @@
 //       * Booking history + refund + cancel
 //       * Customer credit wallet + grant credit
 //       * Stripe customer portal link (auto-creates portal session)
+//       * Send billing portal link to customer (email + SMS)
 //       * Sync to GHL (force)
 //   - Create-customer dialog (calls public.customers insert via service
 //     role through book-as-va helper, OR direct insert + send-auth-email
@@ -430,6 +431,49 @@ function CustomerSheet({
     }
   };
 
+  const sendBillingPortalLink = async () => {
+    if (!customer) return;
+    setActioning("send-portal");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-customer-action", {
+        body: { action: "send_billing_portal", customerId: customer.id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const emailedTo = (data as { emailedTo?: string })?.emailedTo || customer.email;
+      const smsSent = Boolean((data as { smsSent?: boolean })?.smsSent);
+      toast.success(
+        smsSent
+          ? `Billing portal link emailed to ${emailedTo} and texted`
+          : `Billing portal link emailed to ${emailedTo}`,
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send billing portal link");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const copyBillingPortalLink = async () => {
+    if (!customer) return;
+    setActioning("copy-portal");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-customer-action", {
+        body: { action: "stripe_billing_portal", customerId: customer.id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const url = (data as { url?: string })?.url;
+      if (!url) throw new Error("No portal URL returned");
+      await navigator.clipboard.writeText(url);
+      toast.success("Billing portal link copied");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to copy billing portal link");
+    } finally {
+      setActioning(null);
+    }
+  };
+
   const deleteCustomer = async () => {
     if (!customer) return;
     setActioning("delete");
@@ -542,6 +586,32 @@ function CustomerSheet({
                 </Button>
                 <Button
                   variant="outline"
+                  className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+                  onClick={sendBillingPortalLink}
+                  disabled={actioning === "send-portal"}
+                >
+                  {actioning === "send-portal" ? (
+                    <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <RiMailLine className="w-4 h-4 mr-1.5" />
+                  )}
+                  Send billing portal link
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-slate-200 text-slate-700"
+                  onClick={copyBillingPortalLink}
+                  disabled={actioning === "copy-portal"}
+                >
+                  {actioning === "copy-portal" ? (
+                    <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <RiFileCopyLine className="w-4 h-4 mr-1.5" />
+                  )}
+                  Copy portal link
+                </Button>
+                <Button
+                  variant="outline"
                   className="border-slate-200 text-slate-700"
                   onClick={openStripePortal}
                   disabled={actioning === "stripe"}
@@ -551,7 +621,7 @@ function CustomerSheet({
                   ) : (
                     <RiBankCardLine className="w-4 h-4 mr-1.5" />
                   )}
-                  Stripe billing portal
+                  Open Stripe portal
                 </Button>
                 <Button
                   variant="outline"
