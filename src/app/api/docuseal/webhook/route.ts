@@ -7,6 +7,10 @@
 //
 // Handles event types: form.completed / submission.completed (signed),
 // form.declined / submission.expired (declined), form.viewed (opened).
+//
+// Membership agree→pay: when a completed membership submission has
+// metadata.hold_payment + metadata.payment_url, email/SMS the Stripe
+// payment link so the customer pays only after signing.
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
@@ -21,6 +25,92 @@ function pickDocumentUrl(data: any): string | null {
     return docs[0]?.url || docs[0]?.download_url || null;
   }
   return data?.audit_log_url || null;
+}
+
+async function releaseHeldMembershipPayment(
+  supabase: any,
+  row: {
+    submission_id?: string | null;
+    email?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+) {
+  const meta = (row.metadata || {}) as Record<string, unknown>;
+  if (!meta.hold_payment || !meta.payment_url) return { released: false };
+  if (meta.payment_released_at) return { released: false, already: true };
+
+  const paymentUrl = String(meta.payment_url);
+  const email = String(row.email || meta.email || "").trim().toLowerCase();
+  const phone = meta.phone ? String(meta.phone) : "";
+  const plan = meta.plan ? String(meta.plan) : "membership";
+  const firstName = String(meta.first_name || meta.name || "there").split(/\s+/)[0] || "there";
+
+  let emailed = false;
+  let smsSent = false;
+
+  if (email) {
+    try {
+      await supabase.functions.invoke("send-membership-email", {
+        body: {
+          type: "checkout_link",
+          email,
+          data: {
+            name: firstName,
+            plan,
+            url: paymentUrl,
+            monthlyAmount: meta.membership_rate_cents || 0,
+            depositAmount: 0,
+            firstServiceDate: meta.first_service_date || "",
+          },
+        },
+      });
+      emailed = true;
+    } catch (err) {
+      console.error("[docuseal/webhook] membership pay email failed", err);
+    }
+  }
+
+  if (phone) {
+    try {
+      const { error } = await supabase.functions.invoke("send-ghl-sms", {
+        body: {
+          phone,
+          type: "confirmation",
+          message:
+            `Hi ${firstName}! Your Novara membership agreement is signed. ` +
+            `Complete payment to activate: ${paymentUrl}`,
+        },
+      });
+      smsSent = !error;
+    } catch (err) {
+      console.error("[docuseal/webhook] membership pay SMS failed", err);
+    }
+  }
+
+  if (row.submission_id) {
+    await supabase
+      .from("docuseal_submissions")
+      .update({
+        metadata: {
+          ...meta,
+          payment_released_at: new Date().toISOString(),
+          payment_released_email: emailed,
+          payment_released_sms: smsSent,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("submission_id", row.submission_id)
+      .then(() => undefined, () => undefined);
+  }
+
+  await supabase.from("events").insert({
+    event_type: "membership.payment_link_released",
+    source: "docuseal-webhook",
+    summary: `Membership payment link released after agreement signed (${email || "unknown"})`,
+    data: { email, payment_url: paymentUrl, emailed, sms_sent: smsSent, plan },
+  }).then(() => undefined, () => undefined);
+
+  return { released: true, emailed, smsSent };
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -66,6 +156,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (status) patch.status = status;
 
+  let paymentRelease: unknown = null;
   try {
     const supabase = getAdminSupabase();
     // Match on the DocuSeal submission id; submission_id is stored as text.
@@ -73,11 +164,22 @@ export async function POST(req: Request): Promise<NextResponse> {
       .from("docuseal_submissions")
       .update(patch)
       .eq("submission_id", submissionId);
+
+    if (status === "completed") {
+      const { data: row } = await supabase
+        .from("docuseal_submissions")
+        .select("submission_id, email, audience, metadata")
+        .eq("submission_id", submissionId)
+        .maybeSingle();
+      if (row && (row.audience === "membership" || (row.metadata as any)?.kind === "membership_agree_then_pay")) {
+        paymentRelease = await releaseHeldMembershipPayment(supabase, row);
+      }
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[docuseal/webhook]", (err as Error).message);
     // Still 200 so DocuSeal doesn't hammer retries on a transient DB blip.
   }
 
-  return NextResponse.json({ ok: true, type, submissionId, status });
+  return NextResponse.json({ ok: true, type, submissionId, status, paymentRelease });
 }

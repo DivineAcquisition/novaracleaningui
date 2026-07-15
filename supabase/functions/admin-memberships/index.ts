@@ -15,6 +15,8 @@
 //   { action:'pause',  subscriptionId, resumeAt? } → pause Stripe billing
 //   { action:'resume', subscriptionId }            → resume Stripe billing
 //   { action:'cancel', subscriptionId }            → cancel at period end
+//   { action:'adjust_price', subscriptionId, monthlyPriceCents }
+//                                      → set Glow monthly price on Stripe + membership_credits
 //
 // All actions are audited to public.events (internal Discord routing
 // ignores unknown event types unless routed).
@@ -69,7 +71,7 @@ serve(async (req) => {
     const action = String(body?.action || "list").toLowerCase();
 
     // ─── Stripe subscription controls ────────────────────────────────────
-    if (action === "pause" || action === "resume" || action === "cancel") {
+    if (action === "pause" || action === "resume" || action === "cancel" || action === "adjust_price") {
       const subscriptionId = String(body?.subscriptionId || "");
       if (!subscriptionId) return json({ error: "subscriptionId required" }, 400);
 
@@ -78,7 +80,57 @@ serve(async (req) => {
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
       let summary = "";
-      if (action === "pause") {
+      let responseExtra: Record<string, unknown> = {};
+
+      if (action === "adjust_price") {
+        const monthlyPriceCents = Math.round(Number(body?.monthlyPriceCents));
+        if (!Number.isFinite(monthlyPriceCents) || monthlyPriceCents < 100) {
+          return json({ error: "monthlyPriceCents must be at least 100 ($1.00)" }, 400);
+        }
+
+        const sub = await stripe.subscriptions.retrieve(subscriptionId);
+        const item = sub.items?.data?.[0];
+        if (!item?.id || !item.price?.product) {
+          return json({ error: "Subscription has no billable item to reprice" }, 400);
+        }
+        const productId = typeof item.price.product === "string"
+          ? item.price.product
+          : item.price.product.id;
+
+        const newPrice = await stripe.prices.create({
+          product: productId,
+          unit_amount: monthlyPriceCents,
+          currency: item.price.currency || "usd",
+          recurring: {
+            interval: item.price.recurring?.interval || "month",
+            interval_count: item.price.recurring?.interval_count || 1,
+          },
+          nickname: `Novara Glow override $${(monthlyPriceCents / 100).toFixed(2)}/mo`,
+          metadata: {
+            source: "admin-memberships.adjust_price",
+            previous_price: item.price.id,
+            subscription_id: subscriptionId,
+          },
+        });
+
+        await stripe.subscriptions.update(subscriptionId, {
+          items: [{ id: item.id, price: newPrice.id }],
+          proration_behavior: body?.prorate === false ? "none" : "create_prorations",
+          metadata: {
+            ...(sub.metadata || {}),
+            monthly_price_cents: String(monthlyPriceCents),
+            price_override_applied: "true",
+          },
+        });
+
+        await admin
+          .from("membership_credits")
+          .update({ monthly_price_cents: monthlyPriceCents })
+          .eq("subscription_id", subscriptionId);
+
+        summary = `Membership ${subscriptionId} monthly price set to $${(monthlyPriceCents / 100).toFixed(2)} by admin`;
+        responseExtra = { monthlyPriceCents, priceId: newPrice.id };
+      } else if (action === "pause") {
         // deno-lint-ignore no-explicit-any
         const pauseConfig: any = { behavior: "mark_uncollectible" };
         if (body?.resumeAt) {
@@ -98,10 +150,15 @@ serve(async (req) => {
         event_type: "membership.admin_action",
         source: "admin-memberships",
         summary,
-        data: { action, subscription_id: subscriptionId, by: callerId },
+        data: {
+          action,
+          subscription_id: subscriptionId,
+          by: callerId,
+          ...responseExtra,
+        },
       }).then(() => undefined, () => undefined);
 
-      return json({ ok: true, action, subscriptionId });
+      return json({ ok: true, action, subscriptionId, ...responseExtra });
     }
 
     // ─── List members (union of every recurring-client signal) ───────────

@@ -120,6 +120,11 @@ serve(async (req) => {
         depositPercent,
         csrName,
         promoCode,
+        // When true (default), text/email the Stripe payment link immediately.
+        // Set false for agree→pay: DocuSeal agreement holds the link until signed.
+        notifyCustomer,
+        // Email the service checklist on confirmation (membership signup).
+        sendChecklistEmail,
       } = body;
       const wantsDeepClean = includeDeepClean !== false;
       
@@ -447,7 +452,7 @@ serve(async (req) => {
       // default (caller can opt out with notifyCustomer:false). Best-effort —
       // a delivery hiccup never blocks returning the link to the admin.
       const notify: { sms: boolean; email: boolean } = { sms: false, email: false };
-      const wantNotify = body.notifyCustomer !== false;
+      const wantNotify = notifyCustomer !== false;
       if (wantNotify && session.url) {
         const firstNm = bodyFirstName ? String(bodyFirstName) : "there";
         const planNm = MEMBERSHIP_PLAN_LABELS[membershipPlan] || planLabel;
@@ -490,8 +495,38 @@ serve(async (req) => {
         }
       }
 
+      // Optional: send the customer-facing cleaning checklist at signup.
+      let checklistSent = false;
+      if (sendChecklistEmail !== false && email) {
+        try {
+          const { error: clErr } = await supabase.functions.invoke("send-cleaning-checklist", {
+            body: {
+              email,
+              phone: bodyPhone ? String(bodyPhone) : undefined,
+              firstName: bodyFirstName ? String(bodyFirstName) : undefined,
+              serviceType: wantsDeepClean ? "deep" : "standard",
+              sendEmail: true,
+              sendSms: Boolean(bodyPhone),
+              force: true,
+            },
+          });
+          checklistSent = !clErr;
+        } catch (clErr) {
+          logStep("Membership checklist send failed (non-blocking)", {
+            error: clErr instanceof Error ? clErr.message : String(clErr),
+          });
+        }
+      }
+
       return new Response(
-        JSON.stringify({ url: session.url, sessionId: session.id, notify }),
+        JSON.stringify({
+          url: session.url,
+          sessionId: session.id,
+          notify,
+          checklistSent,
+          monthlyPriceCents,
+          holdPaymentNotify: !wantNotify,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }

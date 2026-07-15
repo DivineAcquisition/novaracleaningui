@@ -617,6 +617,10 @@ export default function VaBooking() {
       const depositPercentFraction =
         Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
 
+      // Agree → pay for membership: create the Stripe payment link but do NOT
+      // notify the customer yet. DocuSeal membership agreement is emailed
+      // first; the DocuSeal webhook releases the pay link after they sign.
+      const agreeThenPay = true;
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
           mode: "subscription",
@@ -641,11 +645,44 @@ export default function VaBooking() {
           depositPercent: depositPercentFraction,
           csrName: csrName.trim() || undefined,
           promoCode: promoCode.trim().toLowerCase() || undefined,
+          notifyCustomer: !agreeThenPay,
+          sendChecklistEmail,
         },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (!data?.url) throw new Error("No subscription checkout URL returned");
+
+      const serviceAddress = [address, city, state, zipCode].filter(Boolean).join(", ");
+      let agreementSent = false;
+      let signingUrl: string | null = null;
+      try {
+        const { sendMembershipAgreement } = await import("@/lib/membership-admin");
+        const ag = await sendMembershipAgreement({
+          email: email.trim().toLowerCase(),
+          name: `${firstName.trim()} ${lastName.trim()}`.trim() || undefined,
+          phone: phone || undefined,
+          plan: `Glow ${membershipPlan}`,
+          serviceAddress: serviceAddress || undefined,
+          firstServiceDate: serviceDate,
+          membershipRateCents: priceOverride.total ?? pricing.membershipMonthlyCents,
+          oneTimeRateCents: pricing.totalCents,
+          initialDeepClean: deepClean.includeDeepClean ? "Yes" : "No",
+          homeSizeId,
+          paymentUrl: data.url,
+          holdPayment: true,
+          sendEmail: true,
+        });
+        agreementSent = true;
+        signingUrl = ag.signingUrl || null;
+      } catch (agErr) {
+        console.error("[VaBooking] membership agreement failed", agErr);
+        toast.warning(
+          `Payment link ready, but membership agreement failed to send: ${
+            agErr instanceof Error ? agErr.message : String(agErr)
+          }. You can resend from Recurring.`,
+        );
+      }
 
       const notify = (data?.notify || {}) as { sms?: boolean; email?: boolean };
       setResult({
@@ -653,18 +690,23 @@ export default function VaBooking() {
         url: data.url,
         sessionId: data.sessionId,
         membershipPlan,
-        monthlyEstimateCents: pricing.totalCents,
+        monthlyEstimateCents: priceOverride.total ?? pricing.membershipMonthlyCents,
         depositCents: priceOverride.deposit ?? 0,
         overrideApplied: priceOverride.total != null,
         notifySms: !!notify.sms,
         notifyEmail: !!notify.email,
+        agreementSent,
+        signingUrl,
+        agreeThenPay,
+        checklistSent: !!data?.checklistSent,
       });
-      const channels = [notify.sms ? "text" : null, notify.email ? "email" : null].filter(Boolean);
-      toast.success(
-        channels.length
-          ? `Membership link sent to the customer by ${channels.join(" & ")}.`
-          : "Subscription link ready — send it to the customer to start their membership.",
-      );
+      if (agreementSent) {
+        toast.success(
+          "Membership agreement emailed — payment link will release automatically once they sign.",
+        );
+      } else {
+        toast.success("Subscription link ready — send agreement from Recurring if needed.");
+      }
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to create subscription link: ${m}`);
@@ -855,13 +897,22 @@ export default function VaBooking() {
               <RiSparklingLine className="w-7 h-7 text-violet-600" />
             </div>
             <Badge className="mx-auto mt-3 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-50 font-medium">
-              Membership subscription link ready
+              {result.agreeThenPay && result.agreementSent
+                ? "Agreement sent — pay after sign"
+                : "Membership subscription link ready"}
             </Badge>
             <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
               {planLabel} — {`${firstName} ${lastName}`.trim() || email}
             </CardTitle>
             <CardDescription className="mt-1">
-              {result.notifySms || result.notifyEmail ? (
+              {result.agreeThenPay && result.agreementSent ? (
+                <>
+                  We emailed the <strong>membership agreement</strong> for e-sign.
+                  After they sign, the payment link releases automatically by email/SMS.
+                  {result.checklistSent ? " Checklist also sent." : ""}
+                  You can still copy the pay link below if you need to send it manually.
+                </>
+              ) : result.notifySms || result.notifyEmail ? (
                 <>We sent the secure signup link to the customer by{" "}
                   {[result.notifySms ? "text" : null, result.notifyEmail ? "email" : null].filter(Boolean).join(" & ")}.
                   Their first clean auto-books once they subscribe. You can resend below if needed.</>
@@ -1862,7 +1913,11 @@ export default function VaBooking() {
                 <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-lg border border-primary/20 bg-primary/[0.03] p-3 mt-3">
                   <Checkbox checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
                   <span>
-                    I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy &amp; One-Time Service Agreement over the phone.{" "}
+                    I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy
+                    {frequency !== "one-time"
+                      ? " & Membership / Recurring Service Agreement"
+                      : " & One-Time Service Agreement"}{" "}
+                    over the phone.{" "}
                     {invoiceMode === "deposit_plus_preauth"
                       ? "They'll review, check each policy, and e-sign on their payment link before the deposit — their copy is delivered after signing."
                       : "A signed copy will be emailed to them with their details."}
