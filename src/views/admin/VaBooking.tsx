@@ -858,11 +858,68 @@ export default function VaBooking() {
         }
       }
 
-      // 5) Membership agreement (DocuSeal). Sent when the VA asked for it or
-      // whenever a pay link exists (so the customer signs before paying).
+      // 5) Sign-then-pay. When a Glow subscription link exists, hand the
+      // customer a hosted membership-pay page (same pattern as the one-time
+      // /pay page): they review + e-sign the Membership / Recurring Service
+      // Agreement inline, and only then is the Stripe subscription pay link
+      // revealed. We store the pay token + held URL on the schedule and text/
+      // email the link. Without a pay link we fall back to the DocuSeal
+      // agreement (agree → pay by released link).
       let agreementSent = false;
       let signingUrl: string | null = null;
-      if (sendAgreement || (createGlowLink && paymentUrl)) {
+      let hostedPayUrl: string | null = null;
+      if (createGlowLink && paymentUrl && scheduleId) {
+        try {
+          const payToken = (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+          const { error: tokErr } = await (supabase.from as any)("customer_recurring_schedules")
+            .update({ pay_token: payToken, pay_url: paymentUrl, updated_at: new Date().toISOString() })
+            .eq("id", scheduleId);
+          if (tokErr) throw tokErr;
+          hostedPayUrl = `https://try.novaracleaning.com/membership-pay/${payToken}`;
+
+          // Email the sign-then-pay link.
+          try {
+            await supabase.functions.invoke("send-membership-email", {
+              body: {
+                type: "checkout_link",
+                email: email.trim().toLowerCase(),
+                data: {
+                  name: firstName.trim() || "there",
+                  plan: CADENCE_PLAN_LABEL[cadence],
+                  url: hostedPayUrl,
+                  monthlyAmount: pricing.monthlyGlowCents,
+                  depositAmount: 0,
+                  firstServiceDate,
+                },
+              },
+            });
+          } catch (e) {
+            console.error("[VaBooking] membership-pay email failed", e);
+          }
+
+          // Text the sign-then-pay link.
+          if (phone) {
+            try {
+              await supabase.functions.invoke("send-ghl-sms", {
+                body: {
+                  phone,
+                  type: "confirmation",
+                  message:
+                    `Hi ${firstName.trim() || "there"}! Review, sign & activate your Novara ` +
+                    `${CADENCE_PLAN_LABEL[cadence]} membership here: ${hostedPayUrl}`,
+                },
+              });
+            } catch (e) {
+              console.error("[VaBooking] membership-pay SMS failed", e);
+            }
+          }
+          agreementSent = true; // the hosted page captures the signed agreement
+        } catch (e) {
+          toast.warning(`Sign-and-pay link failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      if (!hostedPayUrl && sendAgreement) {
         try {
           const ag = await sendMembershipAgreement({
             email: email.trim().toLowerCase(),
@@ -914,6 +971,7 @@ export default function VaBooking() {
         firstCleanStatus,
         checklistSent,
         paymentUrl,
+        hostedPayUrl,
         agreementSent,
         signingUrl,
         manageLinkTexted,
@@ -1098,7 +1156,8 @@ export default function VaBooking() {
   // ─── Recurring plan created screen ──────────────────────────────────
   if (result?.recurringCreated) {
     const planLabel = CADENCE_PLAN_LABEL[result.cadence as Cadence] || "Recurring plan";
-    const payUrl: string | undefined = result.paymentUrl;
+    const hostedUrl: string | undefined = result.hostedPayUrl;
+    const payUrl: string | undefined = hostedUrl || result.paymentUrl;
     const upcoming = previewRecurringDates(result.firstServiceDate, result.cadence as Cadence, 4);
     const firstCleanBooked =
       result.firstCleanStatus === "created" || result.firstCleanStatus === "existing";
@@ -1165,7 +1224,11 @@ export default function VaBooking() {
                       : "First clean generation skipped"
                   } />
                 <ResultLine ok={result.checklistSent} label="Cleaning checklist sent" muted={!result.checklistSent} />
-                <ResultLine ok={result.agreementSent} label="Membership agreement emailed" muted={!result.agreementSent} />
+                <ResultLine
+                  ok={result.agreementSent}
+                  label={result.hostedPayUrl ? "Sign-and-pay link sent (email/SMS)" : "Membership agreement emailed"}
+                  muted={!result.agreementSent}
+                />
                 <ResultLine ok={result.manageLinkTexted} label="Manage link texted to customer" muted={!result.manageLinkTexted} />
               </ul>
             </div>
@@ -1173,7 +1236,9 @@ export default function VaBooking() {
             {payUrl && (
               <div className="rounded-xl bg-slate-50 p-4 space-y-2 text-sm border border-slate-100">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Glow subscription payment link {result.agreementSent ? "(released after they sign)" : ""}
+                  {hostedUrl
+                    ? "Sign-and-pay link (customer signs, then pays)"
+                    : `Glow subscription payment link ${result.agreementSent ? "(released after they sign)" : ""}`}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Input value={payUrl} readOnly className="font-mono text-xs bg-white min-w-0 flex-1" />

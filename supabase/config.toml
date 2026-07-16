@@ -255,6 +255,12 @@ verify_jwt = false
 [functions.booking-pay-page]
 verify_jwt = false
 
+# Membership sign-then-pay hosted page (try.novaracleaning.com/membership-pay/
+# <token>). Token in the URL is the credential; the agreement gate that unlocks
+# the Stripe subscription pay link is enforced server-side inside the function.
+[functions.membership-pay-page]
+verify_jwt = false
+
 # Weekly payroll auto-draft (pg_cron, service-role). No admin JWT.
 [functions.payroll-draft]
 verify_jwt = false

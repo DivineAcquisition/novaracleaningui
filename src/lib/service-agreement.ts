@@ -14,6 +14,12 @@ export interface AgreementFields {
   balanceCents?: number;
   signatureDataUrl?: string; // PNG data URL from SignaturePad (customer e-sign)
   verbalNote?: string; // used when agreed over the phone (no signature)
+  // Membership variant — recurring / Glow enrollment rather than a one-time
+  // clean. Renders a standalone membership acceptance record (no one-time
+  // source PDF) with recurring-billing wording.
+  variant?: "one-time" | "membership";
+  planLabel?: string;
+  perCleanCents?: number;
 }
 
 const SOURCE_PDF_URL = "/agreements/one-time-service-agreement.pdf";
@@ -26,12 +32,18 @@ function money(cents?: number): string {
 export async function buildSignedAgreementBase64(fields: AgreementFields): Promise<string> {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
 
-  const srcBytes = await fetch(SOURCE_PDF_URL).then((r) => {
-    if (!r.ok) throw new Error("Could not load the service agreement document.");
-    return r.arrayBuffer();
-  });
+  const isMembership = fields.variant === "membership";
 
-  const pdf = await PDFDocument.load(srcBytes);
+  // One-time stamps the executed page onto the source agreement PDF;
+  // membership produces a standalone acceptance record.
+  const pdf = isMembership
+    ? await PDFDocument.create()
+    : await PDFDocument.load(
+        await fetch(SOURCE_PDF_URL).then((r) => {
+          if (!r.ok) throw new Error("Could not load the service agreement document.");
+          return r.arrayBuffer();
+        }),
+      );
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
@@ -47,7 +59,12 @@ export async function buildSignedAgreementBase64(fields: AgreementFields): Promi
     y -= opts.dy ?? size + 8;
   };
 
-  line("One-Time Service Agreement", { size: 20, f: bold, color: purple, dy: 14 });
+  line(isMembership ? "Membership / Recurring Service Agreement" : "One-Time Service Agreement", {
+    size: 18,
+    f: bold,
+    color: purple,
+    dy: 14,
+  });
   line("Executed by Client — signed acceptance record", { size: 11, color: gray, dy: 24 });
 
   const field = (label: string, value: string) => {
@@ -58,16 +75,26 @@ export async function buildSignedAgreementBase64(fields: AgreementFields): Promi
 
   field("CLIENT NAME", fields.name);
   field("EMAIL", fields.email);
-  field("SERVICE", (fields.serviceType || "Cleaning").toString());
-  field("SERVICE DATE", fields.serviceDate || "As scheduled at checkout");
-  field("TOTAL SERVICE FEE", money(fields.totalCents));
-  field("DEPOSIT AMOUNT", money(fields.depositCents));
-  field("BALANCE DUE", money(fields.balanceCents));
-  field("DATE SIGNED", new Date().toLocaleString());
-
-  y -= 4;
-  line("By signing below, Client agrees to the One-Time Service Agreement, Terms of Service,", { size: 9, color: gray, dy: 12 });
-  line("Disclaimer, and Refund Policy, and authorizes the deposit + post-service balance charge.", { size: 9, color: gray, dy: 24 });
+  if (isMembership) {
+    field("MEMBERSHIP PLAN", fields.planLabel || fields.serviceType || "Recurring membership");
+    field("FIRST SERVICE DATE", fields.serviceDate || "As scheduled");
+    field("PRICE PER CLEAN", money(fields.perCleanCents));
+    field("DATE SIGNED", new Date().toLocaleString());
+    y -= 4;
+    line("By signing below, Client enrolls in the recurring membership and agrees to the", { size: 9, color: gray, dy: 12 });
+    line("Membership / Recurring Service Agreement, Terms of Service, Disclaimer, and Refund", { size: 9, color: gray, dy: 12 });
+    line("Policy, and authorizes recurring charges each billing cycle until the plan is cancelled.", { size: 9, color: gray, dy: 24 });
+  } else {
+    field("SERVICE", (fields.serviceType || "Cleaning").toString());
+    field("SERVICE DATE", fields.serviceDate || "As scheduled at checkout");
+    field("TOTAL SERVICE FEE", money(fields.totalCents));
+    field("DEPOSIT AMOUNT", money(fields.depositCents));
+    field("BALANCE DUE", money(fields.balanceCents));
+    field("DATE SIGNED", new Date().toLocaleString());
+    y -= 4;
+    line("By signing below, Client agrees to the One-Time Service Agreement, Terms of Service,", { size: 9, color: gray, dy: 12 });
+    line("Disclaimer, and Refund Policy, and authorizes the deposit + post-service balance charge.", { size: 9, color: gray, dy: 24 });
+  }
 
   page.drawText("Client Acceptance", { x: 56, y, size: 9, font: bold, color: gray });
   y -= 8;

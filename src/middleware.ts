@@ -105,6 +105,11 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // card. Lives on try.* so the link works without any login.
   ["/pay", "try"],
 
+  // Membership sign-then-pay hosted page (tokenized link). Review + e-sign the
+  // Membership / Recurring Service Agreement → the Stripe subscription pay link
+  // unlocks. Lives on try.* so the link works without any login.
+  ["/membership-pay", "try"],
+
   // VA onboarding (team.novaracleaning.com): agreement signing + onboarding
   // form + pending status. Access provisioning happens only in the admin
   // workspace after approval.
