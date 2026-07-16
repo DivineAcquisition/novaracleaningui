@@ -28,6 +28,7 @@ import {
   RiLoader4Line, RiRepeatLine, RiAddLine, RiPlayLine, RiPauseLine, RiFlashlightLine,
   RiVipCrownLine, RiUserHeartLine, RiStopCircleLine, RiCalendarScheduleLine, RiChat3Line,
   RiSearchLine, RiLinkM, RiMailLine, RiFileList3Line, RiMoneyDollarCircleLine,
+  RiCloseCircleLine, RiDeleteBin6Line,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -244,10 +245,9 @@ export default function AdminRecurringSchedules() {
     toast.success("Manage link copied.");
   };
 
-  const memberAction = async (m: Member, action: "pause" | "resume" | "cancel") => {
+  const memberAction = async (m: Member, action: "pause" | "resume") => {
     if (!m.subscription_id) { toast.error("No Stripe subscription on this client — billing controls don't apply."); return; }
-    const verb = action === "cancel" ? "cancel at period end" : action;
-    if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} the ${PLAN_LABELS[m.membership_plan] || m.membership_plan} membership for ${m.email}?`)) return;
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} the ${PLAN_LABELS[m.membership_plan] || m.membership_plan} membership for ${m.email}?`)) return;
     setWorking(m.id);
     try {
       const { data, error } = await supabase.functions.invoke("admin-memberships", {
@@ -255,11 +255,74 @@ export default function AdminRecurringSchedules() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(
-        action === "pause" ? "Membership billing paused." :
-        action === "resume" ? "Membership billing resumed." :
-        "Membership will cancel at the end of the current period.",
-      );
+      toast.success(action === "pause" ? "Membership billing paused." : "Membership billing resumed.");
+      load();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  // Cancel = stop the plan + NOTIFY the customer (email/SMS). Stripe billing
+  // cancels at period end. Mirrors the booking-tab cancel control.
+  const cancelMember = async (m: Member) => {
+    const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim();
+    const label = PLAN_LABELS[m.membership_plan] || m.membership_plan;
+    if (!confirm(
+      `Cancel ${name || m.email}'s ${label} membership?\n\n` +
+      `• Recurring cleans stop\n` +
+      `• Customer is notified by email${m.customer?.phone ? " & SMS" : ""}\n` +
+      `${m.subscription_id ? "• Stripe billing cancels at the end of the current period" : "• No Stripe subscription to bill"}`,
+    )) return;
+    setWorking(m.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: {
+          action: "cancel",
+          subscriptionId: m.subscription_id || undefined,
+          email: m.email,
+          phone: m.customer?.phone || undefined,
+          name: name || undefined,
+          plan: label,
+          scheduleIds: m.schedules.map((s) => s.id).filter((id) => !String(id).startsWith("local-")),
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Membership cancelled — customer notified.");
+      load();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  // Delete = remove the plan entirely with NO customer notification. Cancels
+  // Stripe now and purges schedules + credit ledger.
+  const deleteMember = async (m: Member) => {
+    const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim();
+    if (!confirm(
+      `DELETE ${name || m.email}'s membership entirely?\n\n` +
+      `• Removes their recurring schedule\n` +
+      `${m.subscription_id ? "• Cancels Stripe billing immediately\n" : ""}` +
+      `• NO customer notification is sent\n\n` +
+      `This cannot be undone.`,
+    )) return;
+    setWorking(m.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: {
+          action: "delete",
+          subscriptionId: m.subscription_id || undefined,
+          email: m.email,
+          scheduleIds: m.schedules.map((s) => s.id).filter((id) => !String(id).startsWith("local-")),
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Membership deleted.");
       load();
     } catch (e) {
       toast.error(errMsg(e));
@@ -499,12 +562,16 @@ export default function AdminRecurringSchedules() {
                             title="Resume Stripe billing" onClick={() => memberAction(m, "resume")}>
                             <RiPlayLine className="w-3.5 h-3.5" />
                           </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-rose-200 text-rose-700" disabled={working === m.id}
-                            title="Cancel at period end" onClick={() => memberAction(m, "cancel")}>
-                            {working === m.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <RiStopCircleLine className="w-3.5 h-3.5" />}
-                          </Button>
                         </>
                       )}
+                      <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800" disabled={working === m.id}
+                        title="Cancel membership — stops cleans and notifies the customer" onClick={() => cancelMember(m)}>
+                        {working === m.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiCloseCircleLine className="w-3.5 h-3.5 mr-1" />Cancel</>}
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs border-rose-200 text-rose-700" disabled={working === m.id}
+                        title="Delete membership — removes it with no customer notification" onClick={() => deleteMember(m)}>
+                        <RiDeleteBin6Line className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </div>
                   {isStripe && (

@@ -70,8 +70,152 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "list").toLowerCase();
 
+    // ─── Cancel (notify customer) / Delete (silent) ─────────────────────
+    // Cancel  → stop the recurring plan, cancel Stripe billing at period end,
+    //           and NOTIFY the customer (email + SMS).
+    // Delete  → remove the plan entirely (schedules + Stripe now + credit
+    //           ledger) with NO customer notification. Mirrors the
+    //           adjust/control actions on the bookings tab.
+    if (action === "cancel" || action === "delete") {
+      const email = String(body?.email || "").toLowerCase().trim();
+      const subscriptionId = String(body?.subscriptionId || "");
+      const scheduleIds: string[] = Array.isArray(body?.scheduleIds)
+        ? (body.scheduleIds as unknown[]).map((s) => String(s))
+        : [];
+      if (!email && !subscriptionId && scheduleIds.length === 0) {
+        return json({ error: "email, subscriptionId, or scheduleIds required" }, 400);
+      }
+      const notify = action === "cancel";
+      const phone = body?.phone ? String(body.phone) : "";
+      const name = body?.name ? String(body.name) : "";
+      const plan = body?.plan ? String(body.plan) : "membership";
+
+      // Stripe: cancel-at-period-end for a notified cancel; cancel-now for delete.
+      let stripeResult: string | null = null;
+      if (subscriptionId) {
+        const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+        if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
+        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+        try {
+          if (action === "delete") {
+            await stripe.subscriptions.cancel(subscriptionId);
+            stripeResult = "cancelled_now";
+          } else {
+            await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+            stripeResult = "cancel_at_period_end";
+          }
+        } catch (e) {
+          console.error("[admin-memberships] stripe cancel failed", e);
+          stripeResult = "stripe_error";
+        }
+      }
+
+      // Recurring schedules: deactivate (cancel) or hard-delete (delete).
+      let schedulesAffected = 0;
+      const applyToSchedules = async (builder: any) => {
+        if (scheduleIds.length > 0) return builder.in("id", scheduleIds);
+        if (email) return builder.eq("email", email);
+        return null;
+      };
+      if (email || scheduleIds.length > 0) {
+        if (action === "delete") {
+          const q = await applyToSchedules(
+            admin.from("customer_recurring_schedules").delete(),
+          );
+          if (q) {
+            const { data: del } = await q.select("id");
+            schedulesAffected = (del || []).length;
+          }
+        } else {
+          const q = await applyToSchedules(
+            admin.from("customer_recurring_schedules").update({
+              active: false,
+              next_service_date: null,
+              updated_at: new Date().toISOString(),
+            }),
+          );
+          if (q) {
+            const { data: upd } = await q.select("id");
+            schedulesAffected = (upd || []).length;
+          }
+        }
+      }
+
+      // Delete also purges the Stripe credit ledger so the member fully
+      // disappears from the hub. Cancel keeps history intact.
+      if (action === "delete") {
+        if (subscriptionId) {
+          await admin.from("membership_credits").delete().eq("subscription_id", subscriptionId);
+        }
+        if (email) {
+          await admin.from("membership_credits").delete().eq("email", email);
+        }
+      }
+
+      // Notify the customer on Cancel only.
+      let emailed = false;
+      let smsSent = false;
+      if (notify && email) {
+        try {
+          await admin.functions.invoke("send-membership-email", {
+            body: { type: "subscription_cancelled", email, data: { name: name || "there", plan } },
+          });
+          emailed = true;
+        } catch (e) {
+          console.error("[admin-memberships] cancel email failed", e);
+        }
+        if (phone) {
+          try {
+            const firstName = name ? name.split(/\s+/)[0] : "there";
+            const { error } = await admin.functions.invoke("send-ghl-sms", {
+              body: {
+                phone,
+                type: "confirmation",
+                message:
+                  `Hi ${firstName}, your Novara ${plan} membership has been cancelled and no further ` +
+                  `recurring cleans will be scheduled. Questions? Call (844) 735-2070.`,
+              },
+            });
+            smsSent = !error;
+          } catch (e) {
+            console.error("[admin-memberships] cancel sms failed", e);
+          }
+        }
+      }
+
+      await admin.from("events").insert({
+        event_type: action === "delete" ? "membership.deleted" : "membership.cancelled",
+        source: "admin-memberships",
+        summary:
+          action === "delete"
+            ? `Membership deleted (silent) for ${email || subscriptionId} by admin`
+            : `Membership cancelled + customer notified for ${email || subscriptionId} by admin`,
+        data: {
+          action,
+          email: email || null,
+          subscription_id: subscriptionId || null,
+          by: callerId,
+          stripe_result: stripeResult,
+          schedules_affected: schedulesAffected,
+          emailed,
+          sms_sent: smsSent,
+        },
+      }).then(() => undefined, () => undefined);
+
+      return json({
+        ok: true,
+        action,
+        email: email || null,
+        subscriptionId: subscriptionId || null,
+        stripeResult,
+        schedulesAffected,
+        emailed,
+        smsSent,
+      });
+    }
+
     // ─── Stripe subscription controls ────────────────────────────────────
-    if (action === "pause" || action === "resume" || action === "cancel" || action === "adjust_price") {
+    if (action === "pause" || action === "resume" || action === "adjust_price") {
       const subscriptionId = String(body?.subscriptionId || "");
       if (!subscriptionId) return json({ error: "subscriptionId required" }, 400);
 
@@ -138,12 +282,10 @@ serve(async (req) => {
         }
         await stripe.subscriptions.update(subscriptionId, { pause_collection: pauseConfig });
         summary = `Membership ${subscriptionId} paused by admin${body?.resumeAt ? ` until ${body.resumeAt}` : ""}`;
-      } else if (action === "resume") {
+      } else {
+        // resume
         await stripe.subscriptions.update(subscriptionId, { pause_collection: null });
         summary = `Membership ${subscriptionId} resumed by admin`;
-      } else {
-        await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
-        summary = `Membership ${subscriptionId} set to cancel at period end by admin`;
       }
 
       await admin.from("events").insert({
