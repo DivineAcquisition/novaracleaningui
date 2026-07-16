@@ -253,10 +253,14 @@ interface Cleaner {
 type BookingType = "one-time" | "recurring";
 type Cadence = "weekly" | "biweekly" | "monthly";
 
-const CADENCE_OPTIONS: { id: Cadence; label: string; sub: string }[] = [
-  { id: "weekly", label: "Weekly", sub: "Every 7 days" },
-  { id: "biweekly", label: "Bi-weekly", sub: "Every 14 days" },
-  { id: "monthly", label: "Monthly", sub: "Same day / month" },
+// Recurring plans map 1:1 to Glow memberships. A recurring plan is always a
+// STANDARD clean — Deep, Move-In/Out and the Deep+Standard combo are one-time
+// only — so the recurring picker offers these membership frequencies instead
+// of service tiers.
+const MEMBERSHIP_CADENCE_OPTIONS: { id: Cadence; label: string; subline: string }[] = [
+  { id: "weekly", label: "Glow Weekly", subline: "4 cleans / mo · every 7 days" },
+  { id: "biweekly", label: "Glow Bi-Weekly", subline: "2 cleans / mo · every 14 days" },
+  { id: "monthly", label: "Glow Monthly", subline: "1 clean / mo · same day" },
 ];
 
 const CADENCE_PLAN_LABEL: Record<Cadence, string> = {
@@ -617,7 +621,7 @@ export default function VaBooking() {
     // customer pays the per-clean rate each visit.
     const perCleanCalc = calculatePrice(
       homeSizeId,
-      serviceType,
+      "standard", // recurring plans are always standard cleans
       addOns,
       "none",
       usesCredit,
@@ -757,7 +761,7 @@ export default function VaBooking() {
           state: state || null,
           zip_code: zipCode || null,
           home_size_id: homeSizeId,
-          service_type: serviceType,
+          service_type: "standard", // recurring plans are always standard cleans
           add_ons: addOns,
           cadence,
           preferred_time_slot: selectedTime || null,
@@ -801,7 +805,7 @@ export default function VaBooking() {
             email: email.trim().toLowerCase(),
             phone: phone || undefined,
             firstName: firstName.trim() || undefined,
-            serviceType,
+            serviceType: "standard",
             sendEmail: true,
             sendSms: Boolean(phone),
           });
@@ -1378,6 +1382,8 @@ export default function VaBooking() {
                 type="button"
                 onClick={() => {
                   setBookingType(opt.id);
+                  // Recurring plans are always standard cleans.
+                  if (opt.id === "recurring") setServiceType("standard");
                   setResult(null);
                 }}
                 className={cn(
@@ -1600,56 +1606,115 @@ export default function VaBooking() {
               </Select>
             </Field>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Service type
-              </Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                {SERVICE_TYPE_OPTIONS.map((opt) => {
-                  const active = serviceType === opt.id;
-                  const previewCents =
-                    getServicePrice(homeSizeId, opt.id, "B") * 100;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setServiceType(opt.id)}
-                      className={cn(
-                        "group relative text-left rounded-xl border p-3 transition-all",
-                        active
-                          ? "border-violet-500 bg-violet-50 shadow-[0_0_0_3px_rgba(16,163,74,0.12)]"
-                          : "border-slate-200 bg-white hover:border-violet-300 hover:bg-slate-50",
-                      )}
-                    >
-                      {active && (
-                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-violet-600 text-white inline-flex items-center justify-center">
-                          <RiCheckLine className="w-2.5 h-2.5" />
-                        </span>
-                      )}
-                      <p
+            {/* One-time: pick the service tier. Recurring: pick the membership
+                frequency — a recurring plan is always a STANDARD clean, so Deep,
+                Move-In/Out, and the Deep+Standard combo aren't offered here. */}
+            {!isRecurring ? (
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Service type
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                  {SERVICE_TYPE_OPTIONS.map((opt) => {
+                    const active = serviceType === opt.id;
+                    const previewCents =
+                      getServicePrice(homeSizeId, opt.id, "B") * 100;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setServiceType(opt.id)}
                         className={cn(
-                          "text-sm font-semibold leading-tight",
-                          active ? "text-violet-900" : "text-slate-900",
+                          "group relative text-left rounded-xl border p-3 transition-all",
+                          active
+                            ? "border-violet-500 bg-violet-50 shadow-[0_0_0_3px_rgba(16,163,74,0.12)]"
+                            : "border-slate-200 bg-white hover:border-violet-300 hover:bg-slate-50",
                         )}
                       >
-                        {opt.label}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {opt.subline}
-                      </p>
-                      <p
-                        className={cn(
-                          "text-sm font-bold tabular-nums mt-2",
-                          active ? "text-violet-700" : "text-slate-700",
+                        {active && (
+                          <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-violet-600 text-white inline-flex items-center justify-center">
+                            <RiCheckLine className="w-2.5 h-2.5" />
+                          </span>
                         )}
-                      >
-                        {fmtMoney(previewCents)}
-                      </p>
-                    </button>
-                  );
-                })}
+                        <p
+                          className={cn(
+                            "text-sm font-semibold leading-tight",
+                            active ? "text-violet-900" : "text-slate-900",
+                          )}
+                        >
+                          {opt.label}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {opt.subline}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-sm font-bold tabular-nums mt-2",
+                            active ? "text-violet-700" : "text-slate-700",
+                          )}
+                        >
+                          {fmtMoney(previewCents)}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Membership frequency
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {MEMBERSHIP_CADENCE_OPTIONS.map((opt) => {
+                    const active = cadence === opt.id;
+                    const monthly = MEMBERSHIP_PRICES[homeSizeId]?.[opt.id];
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setCadence(opt.id)}
+                        className={cn(
+                          "group relative text-left rounded-xl border p-3 transition-all",
+                          active
+                            ? "border-violet-500 bg-violet-50 shadow-[0_0_0_3px_rgba(16,163,74,0.12)]"
+                            : "border-slate-200 bg-white hover:border-violet-300 hover:bg-slate-50",
+                        )}
+                      >
+                        {active && (
+                          <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-violet-600 text-white inline-flex items-center justify-center">
+                            <RiCheckLine className="w-2.5 h-2.5" />
+                          </span>
+                        )}
+                        <p
+                          className={cn(
+                            "text-sm font-semibold leading-tight",
+                            active ? "text-violet-900" : "text-slate-900",
+                          )}
+                        >
+                          {opt.label}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {opt.subline}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-sm font-bold tabular-nums mt-2",
+                            active ? "text-violet-700" : "text-slate-700",
+                          )}
+                        >
+                          {monthly ? `$${monthly}/mo` : "Custom"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Recurring plans are standard cleans. Need a first-visit deep clean?
+                  Add it in the summary (initial deep clean).
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
@@ -1696,7 +1761,7 @@ export default function VaBooking() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className={cn("grid grid-cols-1 gap-4", isRecurring ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
               <Field label="Bedrooms">
                 <Input
                   value={bedrooms}
@@ -1713,22 +1778,7 @@ export default function VaBooking() {
                   placeholder="2.5"
                 />
               </Field>
-              {isRecurring ? (
-                <Field label="Cadence" hint="How often the clean repeats.">
-                  <Select value={cadence} onValueChange={(v) => setCadence(v as Cadence)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CADENCE_OPTIONS.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.label} · {c.sub}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              ) : (
+              {!isRecurring && (
                 <Field label="Frequency">
                   <div className="h-10 flex items-center px-3 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-500">
                     One-time · switch to Recurring above
