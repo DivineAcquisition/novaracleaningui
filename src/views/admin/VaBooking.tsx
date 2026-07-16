@@ -45,6 +45,12 @@ import {
   RiSunFoggyLine,
   RiSunLine,
   RiMoonLine,
+  RiRepeatLine,
+  RiFlashlightLine,
+  RiChat3Line,
+  RiMailLine,
+  RiFileList3Line,
+  RiCalendarScheduleLine,
 } from "@remixicon/react";
 import {
   addDays,
@@ -79,6 +85,7 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
+import { sendCustomerChecklist, sendMembershipAgreement } from "@/lib/membership-admin";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -145,12 +152,6 @@ const SERVICE_TYPE_OPTIONS: {
     multiplier: SERVICE_TIER_PRICING.combo.multiplier,
   },
 ];
-
-const MEMBERSHIP_PLAN_RAIL_LABEL: Record<string, string> = {
-  weekly: "Glow Weekly",
-  biweekly: "Glow Bi-Weekly",
-  monthly: "Glow Monthly",
-};
 
 const ADD_ON_LIST = (Object.keys(ADD_ON_DEFS) as Array<keyof typeof ADD_ON_DEFS>).map(
   (id) => ({
@@ -243,10 +244,48 @@ type LeadHydration = LeadRow & {
   special_requests?: string;
 };
 
+interface Cleaner {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
+type BookingType = "one-time" | "recurring";
+type Cadence = "weekly" | "biweekly" | "monthly";
+
+const CADENCE_OPTIONS: { id: Cadence; label: string; sub: string }[] = [
+  { id: "weekly", label: "Weekly", sub: "Every 7 days" },
+  { id: "biweekly", label: "Bi-weekly", sub: "Every 14 days" },
+  { id: "monthly", label: "Monthly", sub: "Same day / month" },
+];
+
+const CADENCE_PLAN_LABEL: Record<Cadence, string> = {
+  weekly: "Glow Weekly",
+  biweekly: "Glow Bi-Weekly",
+  monthly: "Glow Monthly",
+};
+
 const fmtMoney = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const digitsOnly = (s: string) => s.replace(/\D/g, "");
 const isValidEmail = (s: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+
+/** Cadence-aware upcoming dates from a start date (yyyy-MM-dd). */
+function previewRecurringDates(start: string, cadence: Cadence, count = 4): string[] {
+  if (!start) return [];
+  const out: string[] = [];
+  let d = new Date(`${start}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return [];
+  for (let i = 0; i < count; i++) {
+    out.push(d.toISOString().slice(0, 10));
+    const n = new Date(d);
+    if (cadence === "weekly") n.setDate(n.getDate() + 7);
+    else if (cadence === "monthly") n.setMonth(n.getMonth() + 1);
+    else n.setDate(n.getDate() + 14);
+    d = n;
+  }
+  return out;
+}
 
 // ─── Page ──────────────────────────────────────────────────────────────
 
@@ -312,14 +351,42 @@ export default function VaBooking() {
   const [state, setState] = useState("");
   const [zipCode, setZipCode] = useState("");
 
+  // Booking type — one-time vs recurring (the two flows share every component
+  // below; only the submit path and a few rail/controls differ).
+  const [bookingType, setBookingType] = useState<BookingType>(
+    searchParams.get("type") === "recurring" ? "recurring" : "one-time",
+  );
+  const [cadence, setCadence] = useState<Cadence>(
+    ((): Cadence => {
+      const c = searchParams.get("cadence");
+      return c === "weekly" || c === "biweekly" || c === "monthly" ? c : "biweekly";
+    })(),
+  );
+  const isRecurring = bookingType === "recurring";
+  // Legacy alias kept so the shared pricing/agreement code reads one value.
+  const frequency = isRecurring ? cadence : "one-time";
+
   // Service
   const [homeSizeId, setHomeSizeId] = useState("1501_2000");
   const [serviceType, setServiceType] = useState<ServiceType>("standard");
   const [addOns, setAddOns] = useState<string[]>([]);
-  const [frequency, setFrequency] = useState("one-time");
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
+
+  // Recurring engine controls (mirror the standalone recurring create form,
+  // but wired into the premium internal-booking UI). Selecting Recurring
+  // creates a customer_recurring_schedules row — the engine that auto-books
+  // every cycle — plus the optional membership / billing artifacts.
+  const [cleaners, setCleaners] = useState<Cleaner[]>([]);
+  const [preferredCleanerId, setPreferredCleanerId] = useState("auto");
+  const [usesCredit, setUsesCredit] = useState(false);
+  const [overridePerClean, setOverridePerClean] = useState("");
+  const [generateFirstClean, setGenerateFirstClean] = useState(true);
+  const [textManageLink, setTextManageLink] = useState(true);
+  const [sendAgreement, setSendAgreement] = useState(true);
+  const [createGlowLink, setCreateGlowLink] = useState(false);
+  const [monthlyGlowOverride, setMonthlyGlowOverride] = useState("");
 
   // Property
   const [propertyOpen, setPropertyOpen] = useState(false);
@@ -381,7 +448,12 @@ export default function VaBooking() {
         if (data.home_size_id) setHomeSizeId(data.home_size_id);
         if (data.service_type) setServiceType(data.service_type as ServiceType);
         if (Array.isArray(data.add_ons)) setAddOns(data.add_ons);
-        if (data.frequency) setFrequency(data.frequency);
+        if (data.frequency && data.frequency !== "one-time") {
+          setBookingType("recurring");
+          if (["weekly", "biweekly", "monthly"].includes(data.frequency)) {
+            setCadence(data.frequency as Cadence);
+          }
+        }
         if (data.service_date) {
           try {
             setSelectedDate(new Date(`${data.service_date}T12:00:00`));
@@ -443,6 +515,38 @@ export default function VaBooking() {
     };
   }, [email]);
 
+  // Active cleaners for the recurring "preferred cleaner" picker.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await (supabase.from as any)("cleaners")
+        .select("id, first_name, last_name")
+        .eq("status", "active")
+        .order("first_name");
+      if (!cancelled && Array.isArray(data)) setCleaners(data as Cleaner[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Prefill from a deep link (e.g. Recurring hub → "Set up schedule").
+  useEffect(() => {
+    const pf = {
+      email: searchParams.get("email"),
+      first_name: searchParams.get("first_name"),
+      last_name: searchParams.get("last_name"),
+      phone: searchParams.get("phone"),
+      uses_credit: searchParams.get("uses_credit"),
+    };
+    if (pf.email) setEmail(pf.email);
+    if (pf.first_name) setFirstName(pf.first_name);
+    if (pf.last_name) setLastName(pf.last_name);
+    if (pf.phone) setPhone(pf.phone);
+    if (pf.uses_credit === "1" || pf.uses_credit === "true") setUsesCredit(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Hydrate from ?lead_id=…
   useEffect(() => {
     if (!leadIdParam) return;
@@ -492,6 +596,8 @@ export default function VaBooking() {
   // monthly rate, and the deposit (when a deposit invoice mode is selected)
   // is a one-time first-clean charge collected on the same Stripe signup.
   const pricing = useMemo(() => {
+    // One-time clean math (list price for the rail line item + final discounted
+    // total). `membershipPlan: "none"` keeps the acquisition discount in play.
     const calc = calculatePrice(
       homeSizeId,
       serviceType,
@@ -506,22 +612,46 @@ export default function VaBooking() {
     const subtotalCents = Math.round(calc.subtotal * 100);
     const oneTimeComputedCents = Math.round(calc.total * 100);
 
-    const isRecurring = frequency !== "one-time";
-    const membershipPlan = frequency as "weekly" | "biweekly" | "monthly";
-    const membershipMonthlyCents = isRecurring
-      ? Math.round((MEMBERSHIP_PRICES[homeSizeId]?.[membershipPlan] ?? 0) * 100)
-      : 0;
+    // Recurring per-clean math. When the clean is covered by a membership
+    // credit we drop the deposit and honor the credit coverage; otherwise the
+    // customer pays the per-clean rate each visit.
+    const perCleanCalc = calculatePrice(
+      homeSizeId,
+      serviceType,
+      addOns,
+      "none",
+      usesCredit,
+      false,
+      0,
+    );
+    const perCleanCatalogCents = Math.round(perCleanCalc.total * 100);
+    const overridePerCleanCents = overridePerClean.trim()
+      ? Math.round(parseFloat(overridePerClean) * 100)
+      : null;
+    const perCleanCents =
+      overridePerCleanCents !== null && overridePerCleanCents >= 0
+        ? overridePerCleanCents
+        : perCleanCatalogCents;
 
-    // Baseline the override compares against: the membership monthly rate
-    // for recurring, otherwise the one-time clean total.
-    const computedCents = isRecurring ? membershipMonthlyCents : oneTimeComputedCents;
+    // Monthly Glow (membership subscription) catalog + override — only used
+    // when the VA also generates a Stripe subscription link.
+    const monthlyGlowCatalogCents = Math.round(
+      (MEMBERSHIP_PRICES[homeSizeId]?.[cadence] ?? 0) * 100,
+    );
+    const monthlyGlowOverrideCents = monthlyGlowOverride.trim()
+      ? Math.round(parseFloat(monthlyGlowOverride) * 100)
+      : null;
+    const monthlyGlowCents =
+      monthlyGlowOverrideCents !== null && monthlyGlowOverrideCents >= 100
+        ? monthlyGlowOverrideCents
+        : monthlyGlowCatalogCents;
 
+    // One-time deposit posture.
     const overrideCents = overrideTotal.trim()
       ? Math.round(parseFloat(overrideTotal) * 100)
       : null;
     const totalCents =
-      overrideCents !== null && overrideCents >= 0 ? overrideCents : computedCents;
-
+      overrideCents !== null && overrideCents >= 0 ? overrideCents : oneTimeComputedCents;
     const pct =
       Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
     const depositCents =
@@ -533,17 +663,35 @@ export default function VaBooking() {
     const remainingCents = totalCents - depositCents;
 
     return {
+      // one-time
       serviceCents,
       addOnsCents,
       subtotalCents,
-      computedCents,
+      computedCents: oneTimeComputedCents,
       totalCents,
       depositCents,
       remainingCents,
+      // recurring
       isRecurring,
-      membershipMonthlyCents,
+      perCleanCatalogCents,
+      perCleanCents,
+      monthlyGlowCatalogCents,
+      monthlyGlowCents,
+      overrideApplied: overridePerCleanCents !== null && overridePerCleanCents >= 0,
     };
-  }, [homeSizeId, serviceType, addOns, overrideTotal, depositPercent, invoiceMode, frequency]);
+  }, [
+    homeSizeId,
+    serviceType,
+    addOns,
+    overrideTotal,
+    depositPercent,
+    invoiceMode,
+    isRecurring,
+    cadence,
+    usesCredit,
+    overridePerClean,
+    monthlyGlowOverride,
+  ]);
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -558,23 +706,26 @@ export default function VaBooking() {
     if (!isValidEmail(email)) list.push("Valid email");
     if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
     if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
-    if (!selectedDate) list.push("Service date");
-    if (!selectedTime) list.push("Time slot");
-    if (!vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
+    if (!selectedDate) list.push(isRecurring ? "First service date" : "Service date");
+    if (!selectedTime) list.push(isRecurring ? "Preferred time window" : "Time slot");
+    // The verbal-agreement attestation is a one-time compliance artifact.
+    // Recurring plans send the membership agreement for e-sign instead.
+    if (!isRecurring && !vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
     return list;
-  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone]);
+  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring]);
 
   const canSubmit = requirements.length === 0;
 
-  // ─── Recurring membership signup ────────────────────────────────────
-  // When the VA selects a recurring frequency, this is a MEMBERSHIP, not
-  // a one-time booking. We generate a hosted Stripe subscription Checkout
-  // link (same path the public /membership flow uses) for the VA to send
-  // to the customer. Once the customer completes it, the stripe-webhook
-  // provisions their credits and auto-books the first clean on the exact
-  // date the VA picked — so we deliberately do NOT create a duplicate
-  // booking or invoice here.
-  const handleMembershipSubscribe = async () => {
+  // ─── Recurring plan creation ────────────────────────────────────────
+  // Selecting Recurring creates a `customer_recurring_schedules` row — the
+  // engine that auto-books a confirmed clean every cycle and assigns the
+  // preferred/previous cleaner. On top of that we optionally: generate +
+  // assign the first clean immediately, email/text the cleaning checklist,
+  // create a Stripe subscription (Glow membership) link, email the DocuSeal
+  // membership agreement (agree → pay), and text the customer their
+  // self-service manage link. This is the same set of controls the standalone
+  // Recurring hub had — now wired into the premium internal-booking UI.
+  const handleRecurringCreate = async () => {
     if (!canSubmit) {
       toast.error("Fill out all required fields before submitting.");
       return;
@@ -582,142 +733,201 @@ export default function VaBooking() {
     setSubmitting(true);
     setResult(null);
     try {
-      const planMap: Record<string, string> = {
-        weekly: "weekly",
-        biweekly: "biweekly",
-        monthly: "monthly",
-      };
-      const membershipPlan = planMap[frequency];
-      if (!membershipPlan) {
-        throw new Error(`Unsupported recurring frequency: ${frequency}`);
-      }
-      const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
-      const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-      const preferredDayOfWeek = selectedDate ? days[selectedDate.getDay()] : undefined;
+      const firstServiceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : "";
+      if (!firstServiceDate) throw new Error("Pick a first service date.");
+      const membershipPlan = cadence; // weekly | biweekly | monthly
+      const overrideNote =
+        overridePerClean.trim() && pricing.perCleanCents >= 0
+          ? `Admin price override $${(pricing.perCleanCents / 100).toFixed(2)}/clean`
+          : null;
 
-      // Admin price override + deposit posture. The override replaces the
-      // monthly recurring membership rate in the Stripe subscription; the
-      // deposit (when a deposit invoice mode is selected) is added as a
-      // one-time first-clean charge on the same hosted Checkout so it's
-      // collected during the membership signup. Both were previously
-      // dropped on the recurring path, so neither reached Stripe.
-      const overrideCents = overrideTotal.trim()
-        ? Math.round(parseFloat(overrideTotal) * 100)
-        : null;
-      const wantsDeposit =
-        invoiceMode === "deposit_plus_remaining" ||
-        invoiceMode === "deposit_plus_preauth";
-      const priceOverride: { total?: number; deposit?: number } = {};
-      if (overrideCents !== null && overrideCents >= 0) {
-        priceOverride.total = overrideCents;
-      }
-      if (wantsDeposit && pricing.depositCents > 0) {
-        priceOverride.deposit = pricing.depositCents;
-      }
-      const depositPercentFraction =
-        Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
-
-      // Agree → pay for membership: create the Stripe payment link but do NOT
-      // notify the customer yet. DocuSeal membership agreement is emailed
-      // first; the DocuSeal webhook releases the pay link after they sign.
-      const agreeThenPay = true;
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          mode: "subscription",
-          membershipPlan,
-          homeSizeId,
+      // 1) The recurring schedule (the engine). Stamp membership_plan when the
+      // clean is credit-covered or a Glow subscription is being created so the
+      // hub badges it correctly.
+      const { data: created, error: insErr } = await (supabase.from as any)(
+        "customer_recurring_schedules",
+      )
+        .insert({
           email: email.trim().toLowerCase(),
-          firstName: firstName.trim() || undefined,
-          lastName: lastName.trim() || undefined,
-          phone: phone || undefined,
-          address: address || undefined,
-          city: city || undefined,
-          state: state || undefined,
-          zipCode: zipCode || undefined,
-          preferredDayOfWeek,
-          preferredTimeWindow: selectedTime || undefined,
-          firstServiceDate: serviceDate,
-          firstTimeSlot: selectedTime || undefined,
-          includeDeepClean: deepClean.includeDeepClean,
-          deepCleanedBefore: deepClean.deepCleanedBefore,
-          priceOverride: Object.keys(priceOverride).length ? priceOverride : undefined,
-          invoiceMode,
-          depositPercent: depositPercentFraction,
-          csrName: csrName.trim() || undefined,
-          promoCode: promoCode.trim().toLowerCase() || undefined,
-          notifyCustomer: !agreeThenPay,
-          sendChecklistEmail,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (!data?.url) throw new Error("No subscription checkout URL returned");
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          phone: phone || null,
+          address: address || null,
+          city: city || null,
+          state: state || null,
+          zip_code: zipCode || null,
+          home_size_id: homeSizeId,
+          service_type: serviceType,
+          add_ons: addOns,
+          cadence,
+          preferred_time_slot: selectedTime || null,
+          preferred_cleaner_id: preferredCleanerId === "auto" ? null : preferredCleanerId,
+          price_cents: pricing.perCleanCents,
+          uses_credit: usesCredit,
+          membership_plan: usesCredit || createGlowLink ? membershipPlan : null,
+          next_service_date: firstServiceDate,
+          active: true,
+          notes: [teamNotes.trim() || null, overrideNote].filter(Boolean).join(" · ") || null,
+        })
+        .select("id")
+        .single();
+      if (insErr) throw insErr;
+      const scheduleId = created?.id as string | undefined;
 
-      const serviceAddress = [address, city, state, zipCode].filter(Boolean).join(", ");
+      // 2) Generate + assign the first clean now (best-effort).
+      let firstCleanStatus: string | null = null;
+      if (scheduleId && generateFirstClean) {
+        try {
+          const { data, error } = await supabase.functions.invoke(
+            "customer-recurring-generate",
+            { body: { scheduleId, force: true } },
+          );
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          firstCleanStatus = (data as any)?.results?.[0]?.status || "done";
+        } catch (e) {
+          firstCleanStatus = "error";
+          toast.warning(
+            `Plan saved, but first-clean generation failed: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+
+      // 3) Cleaning checklist (email + optional SMS).
+      let checklistSent = false;
+      if (sendChecklistEmail) {
+        try {
+          await sendCustomerChecklist({
+            email: email.trim().toLowerCase(),
+            phone: phone || undefined,
+            firstName: firstName.trim() || undefined,
+            serviceType,
+            sendEmail: true,
+            sendSms: Boolean(phone),
+          });
+          checklistSent = true;
+        } catch (e) {
+          toast.warning(`Checklist send failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      // 4) Glow subscription payment link (agree → pay). Held until the
+      // membership agreement is signed.
+      let paymentUrl: string | undefined;
+      if (createGlowLink) {
+        try {
+          const priceOverride: { total?: number } = {};
+          if (
+            monthlyGlowOverride.trim() &&
+            pricing.monthlyGlowCents >= 100
+          ) {
+            priceOverride.total = pricing.monthlyGlowCents;
+          }
+          const { data, error } = await supabase.functions.invoke("create-checkout", {
+            body: {
+              mode: "subscription",
+              membershipPlan,
+              homeSizeId,
+              email: email.trim().toLowerCase(),
+              firstName: firstName.trim() || undefined,
+              lastName: lastName.trim() || undefined,
+              phone: phone || undefined,
+              address: address || undefined,
+              city: city || undefined,
+              state: state || undefined,
+              zipCode: zipCode || undefined,
+              firstServiceDate,
+              firstTimeSlot: selectedTime || undefined,
+              includeDeepClean: deepClean.includeDeepClean,
+              deepCleanedBefore: deepClean.deepCleanedBefore,
+              priceOverride: Object.keys(priceOverride).length ? priceOverride : undefined,
+              csrName: csrName.trim() || undefined,
+              notifyCustomer: false,
+              sendChecklistEmail: false,
+            },
+          });
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          paymentUrl = (data as any)?.url;
+        } catch (e) {
+          toast.warning(`Glow payment link failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      // 5) Membership agreement (DocuSeal). Sent when the VA asked for it or
+      // whenever a pay link exists (so the customer signs before paying).
       let agreementSent = false;
       let signingUrl: string | null = null;
-      try {
-        const { sendMembershipAgreement } = await import("@/lib/membership-admin");
-        const ag = await sendMembershipAgreement({
-          email: email.trim().toLowerCase(),
-          name: `${firstName.trim()} ${lastName.trim()}`.trim() || undefined,
-          phone: phone || undefined,
-          plan: `Glow ${membershipPlan}`,
-          serviceAddress: serviceAddress || undefined,
-          firstServiceDate: serviceDate,
-          membershipRateCents: priceOverride.total ?? pricing.membershipMonthlyCents,
-          oneTimeRateCents: pricing.totalCents,
-          initialDeepClean: deepClean.includeDeepClean ? "Yes" : "No",
-          homeSizeId,
-          paymentUrl: data.url,
-          holdPayment: true,
-          sendEmail: true,
-        });
-        agreementSent = true;
-        signingUrl = ag.signingUrl || null;
-      } catch (agErr) {
-        console.error("[VaBooking] membership agreement failed", agErr);
-        toast.warning(
-          `Payment link ready, but membership agreement failed to send: ${
-            agErr instanceof Error ? agErr.message : String(agErr)
-          }. You can resend from Recurring.`,
-        );
+      if (sendAgreement || (createGlowLink && paymentUrl)) {
+        try {
+          const ag = await sendMembershipAgreement({
+            email: email.trim().toLowerCase(),
+            name: `${firstName.trim()} ${lastName.trim()}`.trim() || undefined,
+            phone: phone || undefined,
+            plan: CADENCE_PLAN_LABEL[cadence],
+            serviceAddress:
+              [address, city, state, zipCode].filter(Boolean).join(", ") || undefined,
+            firstServiceDate,
+            membershipRateCents: createGlowLink ? pricing.monthlyGlowCents : undefined,
+            oneTimeRateCents: pricing.perCleanCents,
+            initialDeepClean: deepClean.includeDeepClean ? "Yes" : "No",
+            homeSizeId,
+            scheduleId,
+            paymentUrl,
+            holdPayment: Boolean(paymentUrl),
+            sendEmail: true,
+          });
+          agreementSent = true;
+          signingUrl = ag.signingUrl || null;
+        } catch (e) {
+          toast.warning(`Agreement send failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
 
-      const notify = (data?.notify || {}) as { sms?: boolean; email?: boolean };
+      // 6) Text the customer their self-service manage link.
+      let manageLinkTexted = false;
+      if (scheduleId && textManageLink && phone) {
+        try {
+          const { data, error } = await supabase.functions.invoke(
+            "send-recurring-manage-link",
+            { body: { scheduleId, context: "created" } },
+          );
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          manageLinkTexted = true;
+        } catch (e) {
+          toast.warning(`Manage-link SMS failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
       setResult({
-        membershipCheckout: true,
-        url: data.url,
-        sessionId: data.sessionId,
-        membershipPlan,
-        monthlyEstimateCents: priceOverride.total ?? pricing.membershipMonthlyCents,
-        depositCents: priceOverride.deposit ?? 0,
-        overrideApplied: priceOverride.total != null,
-        notifySms: !!notify.sms,
-        notifyEmail: !!notify.email,
+        recurringCreated: true,
+        scheduleId,
+        cadence,
+        perCleanCents: pricing.perCleanCents,
+        usesCredit,
+        firstServiceDate,
+        firstCleanStatus,
+        checklistSent,
+        paymentUrl,
         agreementSent,
         signingUrl,
-        agreeThenPay,
-        checklistSent: !!data?.checklistSent,
+        manageLinkTexted,
+        createGlowLink,
+        monthlyGlowCents: pricing.monthlyGlowCents,
       });
-      if (agreementSent) {
-        toast.success(
-          "Membership agreement emailed — payment link will release automatically once they sign.",
-        );
-      } else {
-        toast.success("Subscription link ready — send agreement from Recurring if needed.");
-      }
+      toast.success("Recurring plan created.");
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to create subscription link: ${m}`);
+      toast.error(`Failed to create recurring plan: ${m}`);
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (frequency !== "one-time") {
-      await handleMembershipSubscribe();
+    if (isRecurring) {
+      await handleRecurringCreate();
       return;
     }
     if (!canSubmit) {
@@ -881,12 +1091,13 @@ export default function VaBooking() {
     }
   };
 
-  // ─── Membership subscription link screen ────────────────────────────
-  if (result?.membershipCheckout) {
-    const planLabel = result.membershipPlan
-      ? `Glow ${result.membershipPlan.charAt(0).toUpperCase()}${result.membershipPlan.slice(1)}`
-      : "Membership";
-    const subUrl: string = result.url;
+  // ─── Recurring plan created screen ──────────────────────────────────
+  if (result?.recurringCreated) {
+    const planLabel = CADENCE_PLAN_LABEL[result.cadence as Cadence] || "Recurring plan";
+    const payUrl: string | undefined = result.paymentUrl;
+    const upcoming = previewRecurringDates(result.firstServiceDate, result.cadence as Cadence, 4);
+    const firstCleanBooked =
+      result.firstCleanStatus === "created" || result.firstCleanStatus === "existing";
     return (
       <div className="max-w-2xl mx-auto">
         <SEO title="Novara Internal Booking" noindex />
@@ -894,32 +1105,17 @@ export default function VaBooking() {
           <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-teal-400" />
           <CardHeader className="text-center pt-10">
             <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center ring-1 ring-violet-200">
-              <RiSparklingLine className="w-7 h-7 text-violet-600" />
+              <RiRepeatLine className="w-7 h-7 text-violet-600" />
             </div>
             <Badge className="mx-auto mt-3 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-50 font-medium">
-              {result.agreeThenPay && result.agreementSent
-                ? "Agreement sent — pay after sign"
-                : "Membership subscription link ready"}
+              Recurring plan created
             </Badge>
             <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
               {planLabel} — {`${firstName} ${lastName}`.trim() || email}
             </CardTitle>
             <CardDescription className="mt-1">
-              {result.agreeThenPay && result.agreementSent ? (
-                <>
-                  We emailed the <strong>membership agreement</strong> for e-sign.
-                  After they sign, the payment link releases automatically by email/SMS.
-                  {result.checklistSent ? " Checklist also sent." : ""}
-                  You can still copy the pay link below if you need to send it manually.
-                </>
-              ) : result.notifySms || result.notifyEmail ? (
-                <>We sent the secure signup link to the customer by{" "}
-                  {[result.notifySms ? "text" : null, result.notifyEmail ? "email" : null].filter(Boolean).join(" & ")}.
-                  Their first clean auto-books once they subscribe. You can resend below if needed.</>
-              ) : (
-                <>Send this secure link to the customer to start their recurring
-                  membership. Their first clean auto-books once they subscribe.</>
-              )}
+              The recurring engine will auto-book a confirmed clean each cycle and
+              assign the preferred/previous cleaner.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pb-8">
@@ -927,75 +1123,84 @@ export default function VaBooking() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                    Monthly {result.overrideApplied ? "(custom)" : ""}
+                    Per clean {result.usesCredit ? "(credit)" : ""}
                   </p>
                   <p className="text-sm font-bold text-slate-900 tabular-nums">
-                    {fmtMoney(result.monthlyEstimateCents || 0)}/mo
+                    {fmtMoney(result.perCleanCents || 0)}
                   </p>
                 </div>
                 <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                    Deposit at signup
+                    {result.createGlowLink ? "Glow monthly" : "First clean"}
                   </p>
                   <p className="text-sm font-bold text-slate-900 tabular-nums">
-                    {result.depositCents > 0 ? fmtMoney(result.depositCents) : "—"}
+                    {result.createGlowLink
+                      ? `${fmtMoney(result.monthlyGlowCents || 0)}/mo`
+                      : firstCleanBooked
+                        ? "Booked"
+                        : "Scheduled"}
                   </p>
                 </div>
               </div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 pt-1">
-                Subscription payment link
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Input value={subUrl} readOnly className="font-mono text-xs bg-white min-w-0 flex-1" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(subUrl);
-                    toast.success("Link copied");
-                  }}
-                >
-                  Copy
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <a href={subUrl} target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" variant="outline">
-                    Open link
-                    <RiArrowRightLine className="w-3.5 h-3.5 ml-1.5" />
-                  </Button>
-                </a>
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              {result.depositCents > 0 ? (
-                <>
-                  The customer enters their card on Stripe's hosted page. Their
-                  first invoice charges the{" "}
-                  <strong>{fmtMoney(result.depositCents)} first-clean deposit</strong>
-                  {" "}plus the {fmtMoney(result.monthlyEstimateCents || 0)} monthly
-                  membership. Once subscribed, Novara provisions their monthly
-                  credits and books the first clean on{" "}
-                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "their preferred day"}
-                  {selectedTime ? ` (${selectedTime})` : ""}.
-                </>
-              ) : (
-                <>
-                  We don't charge anything here — the customer enters their card
-                  on Stripe's hosted page. Once subscribed, Novara provisions
-                  their monthly credits and books the first clean on{" "}
-                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "their preferred day"}
-                  {selectedTime ? ` (${selectedTime})` : ""}.
-                </>
+              {upcoming.length > 0 && (
+                <div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-900">
+                  <span className="font-semibold">Upcoming ({result.cadence}):</span>{" "}
+                  {upcoming
+                    .map((d) => format(new Date(`${d}T12:00:00`), "EEE MMM d"))
+                    .join("  →  ")}{" "}
+                  …
+                </div>
               )}
-            </p>
+              <ul className="space-y-1.5 pt-1">
+                <ResultLine ok={firstCleanBooked || !result.firstCleanStatus}
+                  label={
+                    result.firstCleanStatus
+                      ? firstCleanBooked
+                        ? "First clean booked & cleaner assigned"
+                        : `First clean: ${result.firstCleanStatus}`
+                      : "First clean generation skipped"
+                  } />
+                <ResultLine ok={result.checklistSent} label="Cleaning checklist sent" muted={!result.checklistSent} />
+                <ResultLine ok={result.agreementSent} label="Membership agreement emailed" muted={!result.agreementSent} />
+                <ResultLine ok={result.manageLinkTexted} label="Manage link texted to customer" muted={!result.manageLinkTexted} />
+              </ul>
+            </div>
+
+            {payUrl && (
+              <div className="rounded-xl bg-slate-50 p-4 space-y-2 text-sm border border-slate-100">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Glow subscription payment link {result.agreementSent ? "(released after they sign)" : ""}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input value={payUrl} readOnly className="font-mono text-xs bg-white min-w-0 flex-1" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(payUrl);
+                      toast.success("Link copied");
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
               <Button
                 variant="outline"
                 className="flex-1"
                 onClick={() => setResult(null)}
               >
-                Back to form
+                Create another
+              </Button>
+              <Button
+                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
+                onClick={() => router.push("/admin/recurring")}
+              >
+                Open Recurring hub
+                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
               </Button>
             </div>
           </CardContent>
@@ -1132,8 +1337,9 @@ export default function VaBooking() {
               Novara Internal Booking
             </h1>
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-              Build a booking on behalf of a customer — quote, schedule, dispatch,
-              and bill in a single flow.
+              {isRecurring
+                ? "Set up a recurring plan on behalf of a customer — the engine auto-books every cycle and assigns the preferred cleaner."
+                : "Build a booking on behalf of a customer — quote, schedule, dispatch, and bill in a single flow."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -1155,6 +1361,58 @@ export default function VaBooking() {
           </div>
         </div>
       </header>
+
+      {/* Booking type — one-time vs recurring. Both flows reuse every section
+          below; only the submit path and a few controls differ. */}
+      <div className="mb-6">
+        <div className="inline-flex w-full sm:w-auto rounded-2xl border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]">
+          {[
+            { id: "one-time" as BookingType, label: "One-time clean", icon: RiSparklingLine, sub: "Single booking + invoice" },
+            { id: "recurring" as BookingType, label: "Recurring plan", icon: RiRepeatLine, sub: "Auto-books every cycle" },
+          ].map((opt) => {
+            const activeTab = bookingType === opt.id;
+            const Icon = opt.icon;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  setBookingType(opt.id);
+                  setResult(null);
+                }}
+                className={cn(
+                  "flex-1 sm:flex-none flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-left transition-all",
+                  activeTab
+                    ? "bg-white shadow-[0_2px_8px_-2px_rgba(15,23,42,0.15)] ring-1 ring-slate-200"
+                    : "hover:bg-white/60",
+                )}
+              >
+                <span
+                  className={cn(
+                    "w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0",
+                    activeTab ? "bg-violet-600 text-white" : "bg-slate-200 text-slate-500",
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      "block text-sm font-semibold leading-tight",
+                      activeTab ? "text-slate-900" : "text-slate-600",
+                    )}
+                  >
+                    {opt.label}
+                  </span>
+                  <span className="block text-[11px] text-slate-400 leading-tight">
+                    {opt.sub}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Optional inline lead lookup */}
       {leadLookupOpen && (
@@ -1455,19 +1713,28 @@ export default function VaBooking() {
                   placeholder="2.5"
                 />
               </Field>
-              <Field label="Frequency">
-                <Select value={frequency} onValueChange={setFrequency}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="one-time">One-time</SelectItem>
-                    <SelectItem value="weekly">Weekly · Membership</SelectItem>
-                    <SelectItem value="biweekly">Bi-weekly · Membership</SelectItem>
-                    <SelectItem value="monthly">Monthly · Membership</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
+              {isRecurring ? (
+                <Field label="Cadence" hint="How often the clean repeats.">
+                  <Select value={cadence} onValueChange={(v) => setCadence(v as Cadence)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CADENCE_OPTIONS.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label} · {c.sub}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : (
+                <Field label="Frequency">
+                  <div className="h-10 flex items-center px-3 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-500">
+                    One-time · switch to Recurring above
+                  </div>
+                </Field>
+              )}
             </div>
 
             {/* Property details — collapsible */}
@@ -1615,8 +1882,12 @@ export default function VaBooking() {
           {/* 3 — Schedule (custom violet-themed inline picker) */}
           <FormSection
             number={3}
-            title="Schedule"
-            description="Pick a date and time slot — same availability customers see."
+            title={isRecurring ? "First clean & cadence" : "Schedule"}
+            description={
+              isRecurring
+                ? "Pick the first service date + preferred time window — every following clean repeats on the chosen cadence."
+                : "Pick a date and time slot — same availability customers see."
+            }
             icon={<RiCalendarLine className="w-4 h-4" />}
           >
             <InlineSchedulePicker
@@ -1650,140 +1921,183 @@ export default function VaBooking() {
             </div>
           </FormSection>
 
-          {/* 4 — Payment */}
+          {/* 4 — Payment / Billing */}
           <FormSection
             number={4}
-            title="Payment"
-            description="Invoice posture, promo, and comm preferences."
+            title={isRecurring ? "Billing & cleaner" : "Payment"}
+            description={
+              isRecurring
+                ? "Per-clean rate, membership billing, and who cleans each visit."
+                : "Invoice posture, promo, and comm preferences."
+            }
             icon={<RiMoneyDollarCircleLine className="w-4 h-4" />}
           >
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Invoice mode
-              </Label>
-              <RadioGroup
-                value={invoiceMode}
-                onValueChange={(v) => setInvoiceMode(v as InvoiceMode)}
-                className="grid grid-cols-1 md:grid-cols-3 gap-2"
-              >
-                {INVOICE_MODES.map((m) => (
-                  <label
-                    key={m.id}
-                    className={cn(
-                      "flex items-start gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors",
-                      invoiceMode === m.id
-                        ? "border-violet-500 bg-violet-50"
-                        : "border-slate-200 bg-white hover:border-violet-300",
-                    )}
+            {!isRecurring && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Invoice mode
+                  </Label>
+                  <RadioGroup
+                    value={invoiceMode}
+                    onValueChange={(v) => setInvoiceMode(v as InvoiceMode)}
+                    className="grid grid-cols-1 md:grid-cols-3 gap-2"
                   >
-                    <RadioGroupItem value={m.id} className="mt-0.5" />
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 leading-tight">
-                        {m.label}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                        {m.desc}
-                      </p>
-                    </div>
-                  </label>
-                ))}
-              </RadioGroup>
-            </div>
+                    {INVOICE_MODES.map((m) => (
+                      <label
+                        key={m.id}
+                        className={cn(
+                          "flex items-start gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors",
+                          invoiceMode === m.id
+                            ? "border-violet-500 bg-violet-50"
+                            : "border-slate-200 bg-white hover:border-violet-300",
+                        )}
+                      >
+                        <RadioGroupItem value={m.id} className="mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 leading-tight">
+                            {m.label}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                            {m.desc}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </div>
 
-            {frequency !== "one-time" ? (
-              // Recurring membership: the override sets the MONTHLY
-              // subscription price (always available), and a deposit invoice
-              // mode adds a one-time first-clean deposit to the first invoice.
-              <div className="grid grid-cols-2 gap-4">
-                <Field
-                  label="Override monthly ($)"
-                  hint="Replaces the catalog membership rate on the Stripe subscription."
-                >
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={overrideTotal}
-                    onChange={(e) => setOverrideTotal(e.target.value)}
-                    placeholder={(pricing.computedCents / 100).toFixed(2)}
-                  />
-                </Field>
                 {(invoiceMode === "deposit_plus_remaining" ||
                   invoiceMode === "deposit_plus_preauth") && (
-                  <Field
-                    label="Deposit % of monthly"
-                    hint="One-time first-clean deposit charged at signup."
-                  >
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={depositPercent}
-                      onChange={(e) => setDepositPercent(e.target.value)}
-                    />
-                  </Field>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Deposit % of total">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={depositPercent}
+                        onChange={(e) => setDepositPercent(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Override total ($)">
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={overrideTotal}
+                        onChange={(e) => setOverrideTotal(e.target.value)}
+                        placeholder={(pricing.computedCents / 100).toFixed(2)}
+                      />
+                    </Field>
+                    {invoiceMode === "deposit_plus_preauth" && (
+                      <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
+                        A hosted Stripe Checkout link will be sent to the customer
+                        that collects the deposit AND saves their card off-session.
+                        A pre-auth hold for the remaining balance is placed a few
+                        days before service (existing prepare-completion-hold
+                        cron) and captured automatically when admin marks the
+                        booking complete.
+                      </div>
+                    )}
+                  </div>
                 )}
-                <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
-                  {invoiceMode === "deposit_plus_remaining" ||
-                  invoiceMode === "deposit_plus_preauth"
-                    ? "The override sets the monthly subscription price on Stripe, and the deposit is added as a one-time charge on the customer's first invoice."
-                    : "The override sets the monthly subscription price on Stripe. Pick a deposit invoice mode above to also collect a one-time first-clean deposit at signup."}
-                </div>
-              </div>
-            ) : (
-              (invoiceMode === "deposit_plus_remaining" ||
-                invoiceMode === "deposit_plus_preauth") && (
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Deposit % of total">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={depositPercent}
-                      onChange={(e) => setDepositPercent(e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Override total ($)">
+              </>
+            )}
+
+            {isRecurring && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field
+                    label="Price / clean override ($)"
+                    hint={`Catalog ${fmtMoney(pricing.perCleanCatalogCents)}. Blank = catalog.`}
+                  >
                     <Input
                       type="number"
                       min={0}
                       step={0.01}
-                      value={overrideTotal}
-                      onChange={(e) => setOverrideTotal(e.target.value)}
-                      placeholder={(pricing.computedCents / 100).toFixed(2)}
+                      value={overridePerClean}
+                      onChange={(e) => setOverridePerClean(e.target.value)}
+                      placeholder={(pricing.perCleanCatalogCents / 100).toFixed(2)}
                     />
                   </Field>
-                  {invoiceMode === "deposit_plus_preauth" && (
-                    <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
-                      A hosted Stripe Checkout link will be sent to the customer
-                      that collects the deposit AND saves their card off-session.
-                      A pre-auth hold for the remaining balance is placed a few
-                      days before service (existing prepare-completion-hold
-                      cron) and captured automatically when admin marks the
-                      booking complete.
-                    </div>
+                  <Field label="Preferred cleaner" hint="Auto = the customer's previous cleaner.">
+                    <Select value={preferredCleanerId} onValueChange={setPreferredCleanerId}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto (previous cleaner)</SelectItem>
+                        {cleaners.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {`${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+
+                <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-xl border border-slate-200 bg-white p-3">
+                  <Checkbox checked={usesCredit} onCheckedChange={(v) => setUsesCredit(v === true)} className="mt-0.5" />
+                  <span>
+                    <span className="font-medium text-slate-900">Covered by membership credit</span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Each generated clean is billed against the customer's Glow credit
+                      (no per-clean invoice). Leave off for pay-per-clean.
+                    </span>
+                  </span>
+                </label>
+
+                <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-2.5">
+                  <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+                    <Checkbox checked={createGlowLink} onCheckedChange={(v) => setCreateGlowLink(v === true)} className="mt-0.5" />
+                    <span>
+                      <span className="font-medium text-violet-900">Create Glow subscription link (agree → pay)</span>
+                      <span className="block text-[11px] text-violet-800/80 mt-0.5">
+                        Generates a hosted Stripe subscription. Held until the customer
+                        signs the membership agreement.
+                      </span>
+                    </span>
+                  </label>
+                  {createGlowLink && (
+                    <Field
+                      label="Monthly Glow override ($)"
+                      hint={`Catalog ${fmtMoney(pricing.monthlyGlowCatalogCents)}/mo. Blank = catalog.`}
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={monthlyGlowOverride}
+                        onChange={(e) => setMonthlyGlowOverride(e.target.value)}
+                        placeholder={(pricing.monthlyGlowCatalogCents / 100).toFixed(0)}
+                        className="bg-white"
+                      />
+                    </Field>
                   )}
                 </div>
-              )
+              </>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field
-                label={
-                  <span className="flex items-center gap-1.5">
-                    <RiPriceTag3Line className="w-3.5 h-3.5 text-violet-600" />
-                    Promo code
-                  </span>
-                }
-              >
-                <Input
-                  value={promoCode}
-                  onChange={(e) =>
-                    setPromoCode(e.target.value.trim().toLowerCase())
+              {!isRecurring && (
+                <Field
+                  label={
+                    <span className="flex items-center gap-1.5">
+                      <RiPriceTag3Line className="w-3.5 h-3.5 text-violet-600" />
+                      Promo code
+                    </span>
                   }
-                  placeholder="welcome10"
-                />
-              </Field>
+                >
+                  <Input
+                    value={promoCode}
+                    onChange={(e) =>
+                      setPromoCode(e.target.value.trim().toLowerCase())
+                    }
+                    placeholder="welcome10"
+                  />
+                </Field>
+              )}
               <Field label="Booker / VA name">
                 <Input
                   value={csrName}
@@ -1795,27 +2109,62 @@ export default function VaBooking() {
 
             <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Notifications
+                {isRecurring ? "On create" : "Notifications"}
               </p>
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <Checkbox
-                  checked={sendConfirmationSms}
-                  onCheckedChange={(v) => setSendConfirmationSms(v === true)}
-                />
-                Send confirmation SMS via GHL
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <Checkbox
-                  checked={sendChecklistEmail}
-                  onCheckedChange={(v) => setSendChecklistEmail(v === true)}
-                />
-                Send {
-                  serviceType === "deep" ? "Deep Clean"
-                  : serviceType === "moveInOut" ? "Move In/Out"
-                  : serviceType === "combo" ? "Combo Clean"
-                  : "Standard Clean"
-                } checklist email
-              </label>
+              {isRecurring ? (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={generateFirstClean}
+                      onCheckedChange={(v) => setGenerateFirstClean(v === true)}
+                    />
+                    Book &amp; assign the first clean now
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={textManageLink}
+                      onCheckedChange={(v) => setTextManageLink(v === true)}
+                    />
+                    Text customer their self-service manage link
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={sendChecklistEmail}
+                      onCheckedChange={(v) => setSendChecklistEmail(v === true)}
+                    />
+                    Send cleaning checklist (email/SMS)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={sendAgreement}
+                      onCheckedChange={(v) => setSendAgreement(v === true)}
+                    />
+                    Send membership agreement (DocuSeal)
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={sendConfirmationSms}
+                      onCheckedChange={(v) => setSendConfirmationSms(v === true)}
+                    />
+                    Send confirmation SMS via GHL
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <Checkbox
+                      checked={sendChecklistEmail}
+                      onCheckedChange={(v) => setSendChecklistEmail(v === true)}
+                    />
+                    Send {
+                      serviceType === "deep" ? "Deep Clean"
+                      : serviceType === "moveInOut" ? "Move In/Out"
+                      : serviceType === "combo" ? "Combo Clean"
+                      : "Standard Clean"
+                    } checklist email
+                  </label>
+                </>
+              )}
             </div>
           </FormSection>
         </div>
@@ -1839,8 +2188,8 @@ export default function VaBooking() {
               <CardContent className="space-y-2.5 pt-5 pb-5">
                 {pricing.isRecurring ? (
                   <SummaryRow
-                    label={`${MEMBERSHIP_PLAN_RAIL_LABEL[frequency] || "Membership"} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
-                    value={`${fmtMoney(pricing.membershipMonthlyCents)}/mo`}
+                    label={`${CADENCE_PLAN_LABEL[cadence]} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
+                    value={`${fmtMoney(pricing.perCleanCents)}/clean`}
                   />
                 ) : (
                   <SummaryRow
@@ -1848,35 +2197,54 @@ export default function VaBooking() {
                     value={fmtMoney(pricing.serviceCents)}
                   />
                 )}
-                {!pricing.isRecurring && pricing.addOnsCents > 0 && (
+                {pricing.addOnsCents > 0 && (
                   <SummaryRow
-                    label={`Add-ons (${addOns.length})`}
-                    value={`+${fmtMoney(pricing.addOnsCents)}`}
+                    label={`Add-ons (${addOns.length})${pricing.isRecurring ? " · each visit" : ""}`}
+                    value={pricing.isRecurring ? "included" : `+${fmtMoney(pricing.addOnsCents)}`}
                   />
                 )}
                 <Separator className="my-1.5" />
                 <div className="flex items-center justify-between">
                   <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                    {pricing.isRecurring ? "Monthly" : "Total"}
+                    {pricing.isRecurring ? "Per clean" : "Total"}
                   </span>
                   <span className="font-jakarta text-2xl font-bold text-slate-900 tabular-nums">
-                    {fmtMoney(pricing.totalCents)}
+                    {fmtMoney(pricing.isRecurring ? pricing.perCleanCents : pricing.totalCents)}
                     {pricing.isRecurring && (
-                      <span className="text-sm font-semibold text-slate-500">/mo</span>
+                      <span className="text-sm font-semibold text-slate-500">/clean</span>
                     )}
                   </span>
                 </div>
                 {pricing.isRecurring ? (
-                  <div className="grid grid-cols-1 gap-2 pt-1">
-                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                        Deposit at signup
-                      </p>
-                      <p className="text-sm font-bold text-slate-900 tabular-nums">
-                        {pricing.depositCents > 0
-                          ? `${fmtMoney(pricing.depositCents)} (one-time, first clean)`
-                          : "None — recurring only"}
-                      </p>
+                  <div className="space-y-2 pt-1">
+                    {selectedDate && (
+                      <div className="rounded-lg bg-violet-50 border border-violet-100 px-2.5 py-2 text-[11px] text-violet-900">
+                        <p className="font-semibold uppercase tracking-wide text-[10px] text-violet-700 mb-0.5 flex items-center gap-1">
+                          <RiCalendarScheduleLine className="w-3 h-3" /> Schedule preview
+                        </p>
+                        {previewRecurringDates(format(selectedDate, "yyyy-MM-dd"), cadence, 4)
+                          .map((d) => format(new Date(`${d}T12:00:00`), "MMM d"))
+                          .join("  →  ")}{" "}
+                        …
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                          Billing
+                        </p>
+                        <p className="text-sm font-bold text-slate-900">
+                          {usesCredit ? "Membership credit" : "Pay per clean"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                          Glow monthly
+                        </p>
+                        <p className="text-sm font-bold text-slate-900 tabular-nums">
+                          {createGlowLink ? `${fmtMoney(pricing.monthlyGlowCents)}/mo` : "—"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -1900,7 +2268,7 @@ export default function VaBooking() {
                   </div>
                 )}
 
-                {walletCreditCents > 0 && (
+                {!pricing.isRecurring && walletCreditCents > 0 && (
                   <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-800 flex items-center gap-1.5 mt-2">
                     <RiWalletLine className="w-3.5 h-3.5 shrink-0" />
                     <span>
@@ -1910,34 +2278,33 @@ export default function VaBooking() {
                   </div>
                 )}
 
-                <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-lg border border-primary/20 bg-primary/[0.03] p-3 mt-3">
-                  <Checkbox checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
-                  <span>
-                    I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy
-                    {frequency !== "one-time"
-                      ? " & Membership / Recurring Service Agreement"
-                      : " & One-Time Service Agreement"}{" "}
-                    over the phone.{" "}
-                    {invoiceMode === "deposit_plus_preauth"
-                      ? "They'll review, check each policy, and e-sign on their payment link before the deposit — their copy is delivered after signing."
-                      : "A signed copy will be emailed to them with their details."}
-                  </span>
-                </label>
-
-                {frequency !== "one-time" && (
-                  <div className="rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-[11px] text-violet-900 mt-3 flex items-start gap-1.5">
-                    <RiSparklingLine className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                {!isRecurring && (
+                  <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-lg border border-primary/20 bg-primary/[0.03] p-3 mt-3">
+                    <Checkbox checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
                     <span>
-                      Recurring frequency selected — this creates a{" "}
-                      <strong>{frequency} membership</strong>. We'll generate a
-                      Stripe subscription link to send the customer instead of a
-                      one-time invoice. Their first clean auto-books once they
-                      subscribe.
+                      I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy
+                      {" & One-Time Service Agreement"}{" "}
+                      over the phone.{" "}
+                      {invoiceMode === "deposit_plus_preauth"
+                        ? "They'll review, check each policy, and e-sign on their payment link before the deposit — their copy is delivered after signing."
+                        : "A signed copy will be emailed to them with their details."}
+                    </span>
+                  </label>
+                )}
+
+                {isRecurring && (
+                  <div className="rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-[11px] text-violet-900 mt-3 flex items-start gap-1.5">
+                    <RiRepeatLine className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Creates a <strong>{cadence} recurring plan</strong>. The engine
+                      auto-books a confirmed clean each cycle and assigns the
+                      preferred/previous cleaner. The membership agreement is emailed
+                      for e-sign.
                     </span>
                   </div>
                 )}
 
-                {frequency !== "one-time" && (
+                {isRecurring && (
                   <div className="mt-3">
                     <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
                   </div>
@@ -1953,11 +2320,11 @@ export default function VaBooking() {
                   {submitting ? (
                     <>
                       <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                      {frequency !== "one-time" ? "Creating link…" : "Creating booking…"}
+                      {isRecurring ? "Creating plan…" : "Creating booking…"}
                     </>
                   ) : (
                     <>
-                      {frequency !== "one-time" ? "Create membership link" : "Create booking"}
+                      {isRecurring ? "Create recurring plan" : "Create booking"}
                       <RiArrowRightLine className="w-4 h-4 ml-2" />
                     </>
                   )}
@@ -2013,8 +2380,9 @@ export default function VaBooking() {
                   </span>
                 </p>
                 <p className="leading-relaxed">
-                  This form bypasses the customer-facing checkout. Stripe
-                  invoices are sent based on the invoice mode you select above.
+                  {isRecurring
+                    ? "Creating a plan saves a recurring schedule — the engine auto-books each cycle. Optional actions (first clean, checklist, agreement, Glow link, manage-link SMS) run on create."
+                    : "This form bypasses the customer-facing checkout. Stripe invoices are sent based on the invoice mode you select above."}
                 </p>
               </CardContent>
             </Card>
@@ -2301,6 +2669,27 @@ function Field({
       {children}
       {hint && <p className="text-[11px] text-slate-500">{hint}</p>}
     </div>
+  );
+}
+
+function ResultLine({
+  ok,
+  label,
+  muted = false,
+}: {
+  ok: boolean;
+  label: string;
+  muted?: boolean;
+}) {
+  return (
+    <li className="flex items-center gap-2 text-xs">
+      {ok ? (
+        <RiCheckboxCircleLine className="w-4 h-4 text-emerald-500 shrink-0" />
+      ) : (
+        <RiInformationLine className={cn("w-4 h-4 shrink-0", muted ? "text-slate-300" : "text-slate-400")} />
+      )}
+      <span className={cn(muted ? "text-slate-400" : "text-slate-600")}>{label}</span>
+    </li>
   );
 }
 

@@ -21,10 +21,11 @@
 // customer_recurring_schedules so the page never errors out.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
-  RiLoader4Line, RiRepeatLine, RiAddLine, RiPlayLine, RiPauseLine, RiFlashlightLine, RiCloseLine,
+  RiLoader4Line, RiRepeatLine, RiAddLine, RiPlayLine, RiPauseLine, RiFlashlightLine,
   RiVipCrownLine, RiUserHeartLine, RiStopCircleLine, RiCalendarScheduleLine, RiChat3Line,
   RiSearchLine, RiLinkM, RiMailLine, RiFileList3Line, RiMoneyDollarCircleLine,
 } from "@remixicon/react";
@@ -38,7 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
-import { calculatePrice, SERVICE_TIER_PRICING, HOME_SIZE_RANGES, ADD_ONS, MEMBERSHIP_PRICES, type AddOnId } from "@/lib/pricing";
+import { MEMBERSHIP_PRICES } from "@/lib/pricing";
 import { sendCustomerChecklist, sendMembershipAgreement } from "@/lib/membership-admin";
 import { cn } from "@/lib/utils";
 
@@ -120,14 +121,13 @@ function previewDates(start: string, cadence: string, count = 4): string[] {
 }
 
 export default function AdminRecurringSchedules() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [membersNotice, setMembersNotice] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [prefill, setPrefill] = useState<Partial<Schedule> | null>(null);
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
@@ -340,17 +340,17 @@ export default function AdminRecurringSchedules() {
   };
 
   const startScheduleForMember = (m: Member) => {
-    setPrefill({
-      email: m.email,
-      first_name: m.customer?.first_name || "",
-      last_name: m.customer?.last_name || "",
-      phone: m.customer?.phone || "",
-      cadence: PLAN_CADENCE[m.membership_plan] || "biweekly",
-      uses_credit: !!m.subscription_id,
-      membership_plan: PLAN_CADENCE[m.membership_plan] ? m.membership_plan : null,
-    } as Partial<Schedule>);
-    setShowCreate(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Recurring plan creation now lives in the Internal Booking flow (toggle →
+    // Recurring). Deep-link there with the member prefilled.
+    const params = new URLSearchParams({ type: "recurring" });
+    if (m.email) params.set("email", m.email);
+    if (m.customer?.first_name) params.set("first_name", m.customer.first_name);
+    if (m.customer?.last_name) params.set("last_name", m.customer.last_name);
+    if (m.customer?.phone) params.set("phone", m.customer.phone);
+    const cad = PLAN_CADENCE[m.membership_plan];
+    if (cad) params.set("cadence", cad);
+    if (m.subscription_id) params.set("uses_credit", "1");
+    router.push(`/admin/csr?${params.toString()}`);
   };
 
   const q = search.trim().toLowerCase();
@@ -387,18 +387,10 @@ export default function AdminRecurringSchedules() {
             self-service manage link.
           </p>
         </div>
-        <Button className="shrink-0" onClick={() => { setPrefill(null); setShowCreate((v) => !v); }}>
-          {showCreate ? <><RiCloseLine className="w-4 h-4 mr-1.5" /> Close</> : <><RiAddLine className="w-4 h-4 mr-1.5" /> New recurring plan</>}
+        <Button className="shrink-0" onClick={() => router.push("/admin/csr?type=recurring")}>
+          <RiAddLine className="w-4 h-4 mr-1.5" /> New recurring plan
         </Button>
       </div>
-
-      {showCreate && (
-        <CreateForm
-          cleaners={cleaners}
-          prefill={prefill}
-          onCreated={() => { setShowCreate(false); setPrefill(null); load(); }}
-        />
-      )}
 
       {membersNeedingSchedule.length > 0 && (
         <Card className="border-amber-300 bg-amber-50/50">
@@ -815,372 +807,3 @@ function ScheduleRow({
     </Card>
   );
 }
-
-// ─── Create flow (modeled on the internal booking form, recurring-aware) ───
-function CreateForm({ cleaners, prefill, onCreated }: { cleaners: Cleaner[]; prefill: Partial<Schedule> | null; onCreated: () => void }) {
-  const [f, setF] = useState({
-    email: prefill?.email || "", first_name: prefill?.first_name || "", last_name: prefill?.last_name || "", phone: prefill?.phone || "",
-    address: prefill?.address || "", city: prefill?.city || "", state: prefill?.state || "MD", zip_code: prefill?.zip_code || "",
-    home_size_id: "1000_1500", service_type: "standard", preferred_time_slot: "9:00 AM - 10:00 AM",
-    cadence: prefill?.cadence || "biweekly", preferred_cleaner_id: "auto", next_service_date: "",
-    uses_credit: prefill?.uses_credit ?? false,
-  });
-  const [addOns, setAddOns] = useState<string[]>([]);
-  const [priceOverrideDollars, setPriceOverrideDollars] = useState("");
-  const [generateNow, setGenerateNow] = useState(true);
-  const [textLink, setTextLink] = useState(true);
-  const [sendChecklist, setSendChecklist] = useState(true);
-  const [sendAgreement, setSendAgreement] = useState(true);
-  const [createGlowLink, setCreateGlowLink] = useState(false);
-  const [monthlyOverrideDollars, setMonthlyOverrideDollars] = useState("");
-  const [saving, setSaving] = useState(false);
-  const set = (k: string, v: unknown) => setF((p) => ({ ...p, [k]: v }));
-
-  const pricing = useMemo(
-    () => calculatePrice(f.home_size_id, f.service_type, addOns, "none", f.uses_credit, "B"),
-    [f.home_size_id, f.service_type, addOns, f.uses_credit],
-  );
-  const catalogPriceCents = Math.round((pricing.total || 0) * 100);
-  const overrideCleanCents = priceOverrideDollars.trim()
-    ? Math.round(parseFloat(priceOverrideDollars) * 100)
-    : null;
-  const priceCents =
-    overrideCleanCents != null && Number.isFinite(overrideCleanCents) && overrideCleanCents >= 0
-      ? overrideCleanCents
-      : catalogPriceCents;
-  const catalogMonthlyCents = Math.round(
-    (MEMBERSHIP_PRICES[f.home_size_id]?.[
-      (f.cadence === "weekly" || f.cadence === "monthly" ? f.cadence : "biweekly") as "weekly" | "biweekly" | "monthly"
-    ] || 0) * 100,
-  );
-  const monthlyOverrideCents = monthlyOverrideDollars.trim()
-    ? Math.round(parseFloat(monthlyOverrideDollars) * 100)
-    : null;
-  const upcoming = useMemo(
-    () => previewDates(f.next_service_date, f.cadence, 4),
-    [f.next_service_date, f.cadence],
-  );
-
-  const toggleAddOn = (id: string) =>
-    setAddOns((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
-
-  const create = async () => {
-    if (!f.email || !f.next_service_date) { toast.error("Email and first service date are required."); return; }
-    if (textLink && !f.phone) { toast.error("Add a phone number to text the manage link (or untick it)."); return; }
-    setSaving(true);
-    try {
-      const { data: created, error } = await (supabase.from as any)("customer_recurring_schedules").insert({
-        email: f.email.trim().toLowerCase(), first_name: f.first_name || null, last_name: f.last_name || null, phone: f.phone || null,
-        address: f.address || null, city: f.city || null, state: f.state || null, zip_code: f.zip_code || null,
-        home_size_id: f.home_size_id, service_type: f.service_type, add_ons: addOns,
-        preferred_time_slot: f.preferred_time_slot,
-        cadence: f.cadence, preferred_cleaner_id: f.preferred_cleaner_id === "auto" ? null : f.preferred_cleaner_id,
-        price_cents: priceCents, uses_credit: f.uses_credit, next_service_date: f.next_service_date, active: true,
-        membership_plan: prefill?.membership_plan || (createGlowLink ? f.cadence : null),
-        notes: overrideCleanCents != null ? `Admin price override $${(priceCents / 100).toFixed(2)}/clean` : null,
-      }).select("id").single();
-      if (error) throw error;
-      const scheduleId = created?.id as string | undefined;
-      toast.success("Recurring plan created.");
-
-      if (scheduleId && generateNow) {
-        try {
-          const { data, error: genErr } = await supabase.functions.invoke("customer-recurring-generate", {
-            body: { scheduleId, force: true },
-          });
-          if (genErr) throw genErr;
-          if ((data as any)?.error) throw new Error((data as any).error);
-          const r = (data as any)?.results?.[0];
-          toast.success(r?.status === "created" ? "First clean booked & cleaner assigned." : `Generator: ${r?.status || "done"}`);
-        } catch (e) {
-          toast.warning(`Plan saved, but first-clean generation failed: ${errMsg(e)}`);
-        }
-      }
-
-      if (sendChecklist) {
-        try {
-          await sendCustomerChecklist({
-            email: f.email.trim().toLowerCase(),
-            phone: f.phone || undefined,
-            firstName: f.first_name || undefined,
-            serviceType: f.service_type,
-            sendEmail: true,
-            sendSms: Boolean(f.phone),
-          });
-          toast.success("Checklist sent to customer");
-        } catch (e) {
-          toast.warning(`Checklist send failed: ${errMsg(e)}`);
-        }
-      }
-
-      let paymentUrl: string | undefined;
-      if (createGlowLink) {
-        try {
-          const membershipPlan = f.cadence === "weekly" || f.cadence === "monthly" ? f.cadence : "biweekly";
-          const priceOverride: { total?: number } = {};
-          if (monthlyOverrideCents != null && Number.isFinite(monthlyOverrideCents) && monthlyOverrideCents >= 100) {
-            priceOverride.total = monthlyOverrideCents;
-          }
-          const { data, error: coErr } = await supabase.functions.invoke("create-checkout", {
-            body: {
-              mode: "subscription",
-              membershipPlan,
-              homeSizeId: f.home_size_id,
-              email: f.email.trim().toLowerCase(),
-              firstName: f.first_name || undefined,
-              lastName: f.last_name || undefined,
-              phone: f.phone || undefined,
-              address: f.address || undefined,
-              city: f.city || undefined,
-              state: f.state || undefined,
-              zipCode: f.zip_code || undefined,
-              firstServiceDate: f.next_service_date,
-              firstTimeSlot: f.preferred_time_slot,
-              priceOverride: Object.keys(priceOverride).length ? priceOverride : undefined,
-              notifyCustomer: false,
-              sendChecklistEmail: false,
-            },
-          });
-          if (coErr) throw coErr;
-          if ((data as any)?.error) throw new Error((data as any).error);
-          paymentUrl = (data as any)?.url;
-          toast.success("Glow payment link created (held until agreement is signed)");
-        } catch (e) {
-          toast.warning(`Glow payment link failed: ${errMsg(e)}`);
-        }
-      }
-
-      if (sendAgreement || (createGlowLink && paymentUrl)) {
-        try {
-          const membershipPlan = f.cadence === "weekly" || f.cadence === "monthly" ? f.cadence : "biweekly";
-          await sendMembershipAgreement({
-            email: f.email.trim().toLowerCase(),
-            name: `${f.first_name} ${f.last_name}`.trim() || undefined,
-            phone: f.phone || undefined,
-            plan: PLAN_LABELS[membershipPlan] || membershipPlan,
-            serviceAddress: [f.address, f.city, f.state, f.zip_code].filter(Boolean).join(", ") || undefined,
-            firstServiceDate: f.next_service_date,
-            membershipRateCents:
-              monthlyOverrideCents != null && Number.isFinite(monthlyOverrideCents)
-                ? monthlyOverrideCents
-                : catalogMonthlyCents || undefined,
-            oneTimeRateCents: priceCents,
-            homeSizeId: f.home_size_id,
-            scheduleId,
-            paymentUrl,
-            holdPayment: Boolean(paymentUrl),
-            sendEmail: true,
-          });
-          toast.success(
-            paymentUrl
-              ? "Membership agreement emailed — pay link releases after they sign"
-              : "Membership agreement emailed for e-sign",
-          );
-        } catch (e) {
-          toast.warning(`Agreement send failed: ${errMsg(e)}`);
-        }
-      }
-
-      if (scheduleId && textLink && f.phone) {
-        try {
-          const { data, error: smsErr } = await supabase.functions.invoke("send-recurring-manage-link", {
-            body: { scheduleId, context: "created" },
-          });
-          if (smsErr) throw smsErr;
-          if ((data as any)?.error) throw new Error((data as any).error);
-          toast.success("Customer texted their manage link.");
-        } catch (e) {
-          toast.warning(`Plan saved, but the manage-link SMS failed: ${errMsg(e)}`);
-        }
-      }
-      onCreated();
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Card className="border-violet-200">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">
-          New recurring plan{prefill?.email ? ` — ${prefill.email}` : ""}
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Price override, checklist, and membership agreement (agree → pay) — same controls as Internal Booking for Glow.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          <Input placeholder="Email *" value={f.email} onChange={(e) => set("email", e.target.value)} />
-          <Input placeholder="First name" value={f.first_name} onChange={(e) => set("first_name", e.target.value)} />
-          <Input placeholder="Last name" value={f.last_name} onChange={(e) => set("last_name", e.target.value)} />
-          <Input placeholder="Phone (for SMS link)" value={f.phone} onChange={(e) => set("phone", e.target.value)} />
-        </div>
-        <AddressAutocomplete
-          label="Service address"
-          placeholder="Start typing the customer's address…"
-          initialValue={f.address}
-          onAddressSelect={(a) => setF((p) => ({ ...p, address: a.street, city: a.city, state: a.state || p.state, zip_code: a.zipCode }))}
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <Input placeholder="City" value={f.city} onChange={(e) => set("city", e.target.value)} />
-          <Input placeholder="State" value={f.state} onChange={(e) => set("state", e.target.value)} />
-          <Input placeholder="ZIP" value={f.zip_code} onChange={(e) => set("zip_code", e.target.value)} />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          <div>
-            <Label className="text-xs">Home size</Label>
-            <Select value={f.home_size_id} onValueChange={(v) => set("home_size_id", v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>{HOME_SIZE_RANGES.map((h) => <SelectItem key={h.id} value={h.id}>{h.label}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Service</Label>
-            <Select value={f.service_type} onValueChange={(v) => set("service_type", v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>{Object.entries(SERVICE_TIER_PRICING).map(([id, v]) => <SelectItem key={id} value={id}>{v.label}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Cadence</Label>
-            <Select value={f.cadence} onValueChange={(v) => set("cadence", v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="weekly">Weekly (every 7 days)</SelectItem>
-                <SelectItem value="biweekly">Bi-weekly (every 14 days)</SelectItem>
-                <SelectItem value="monthly">Monthly (same day each month)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Time window</Label>
-            <Select value={f.preferred_time_slot} onValueChange={(v) => set("preferred_time_slot", v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>{TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-xs">Add-ons each visit ({addOns.length} selected{pricing.addOnsTotal ? ` · +$${pricing.addOnsTotal}` : ""})</Label>
-          <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-44 overflow-y-auto pr-1">
-            {Object.entries(ADD_ONS).map(([id, a]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => toggleAddOn(id)}
-                className={cn(
-                  "rounded-lg border px-2.5 py-1.5 text-left text-xs transition-all",
-                  addOns.includes(id as AddOnId)
-                    ? "border-violet-500 bg-violet-50 text-violet-900 ring-1 ring-violet-200"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-violet-300",
-                )}
-              >
-                <span className="font-medium">{a.label}</span> · ${a.price}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
-          <div>
-            <Label className="text-xs">Preferred cleaner</Label>
-            <Select value={f.preferred_cleaner_id} onValueChange={(v) => set("preferred_cleaner_id", v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto (previous cleaner)</SelectItem>
-                {cleaners.map((c) => <SelectItem key={c.id} value={c.id}>{`${c.first_name || ""} ${c.last_name || ""}`.trim()}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">First service date *</Label>
-            <Input type="date" className="h-9" value={f.next_service_date} onChange={(e) => set("next_service_date", e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-xs">Price / clean override ($)</Label>
-            <Input
-              type="number"
-              min={0}
-              step="1"
-              className="h-9"
-              placeholder={(catalogPriceCents / 100).toFixed(0)}
-              value={priceOverrideDollars}
-              onChange={(e) => setPriceOverrideDollars(e.target.value)}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm h-9">
-            <input type="checkbox" checked={f.uses_credit} onChange={(e) => set("uses_credit", e.target.checked)} />
-            Membership credit
-          </label>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-          <span className="font-semibold text-slate-900">{fmtMoney(priceCents)}/clean</span>
-          <span className="text-xs text-slate-500 ml-2">
-            catalog {fmtMoney(catalogPriceCents)}
-            {overrideCleanCents != null ? " · override applied" : ""}
-            {catalogMonthlyCents > 0 ? ` · Glow catalog ${fmtMoney(catalogMonthlyCents)}/mo` : ""}
-          </span>
-        </div>
-
-        {upcoming.length > 0 && (
-          <div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-900">
-            <span className="font-semibold">Schedule preview ({f.cadence}):</span>{" "}
-            {upcoming.map((d) => format(new Date(`${d}T12:00:00`), "EEE MMM d")).join("  →  ")} …
-          </div>
-        )}
-
-        <div className="rounded-lg border border-violet-200 bg-violet-50/40 px-3 py-3 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">Confirmation &amp; membership controls</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={generateNow} onChange={(e) => setGenerateNow(e.target.checked)} />
-              Book &amp; assign the first clean now
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={textLink} onChange={(e) => setTextLink(e.target.checked)} />
-              Text customer their manage link
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={sendChecklist} onChange={(e) => setSendChecklist(e.target.checked)} />
-              Send cleaning checklist (email/SMS)
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={sendAgreement} onChange={(e) => setSendAgreement(e.target.checked)} />
-              Send membership agreement (DocuSeal)
-            </label>
-            <label className="flex items-center gap-2 sm:col-span-2">
-              <input type="checkbox" checked={createGlowLink} onChange={(e) => setCreateGlowLink(e.target.checked)} />
-              Create Glow payment link (held until they sign — agree then pay)
-            </label>
-          </div>
-          {createGlowLink && (
-            <div className="max-w-xs">
-              <Label className="text-xs">Monthly Glow override ($)</Label>
-              <Input
-                type="number"
-                min={1}
-                step="1"
-                className="h-9 bg-white"
-                placeholder={(catalogMonthlyCents / 100).toFixed(0)}
-                value={monthlyOverrideDollars}
-                onChange={(e) => setMonthlyOverrideDollars(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end pt-1">
-          <Button onClick={create} disabled={saving} className="shrink-0">
-            {saving ? <><RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> Creating…</> : "Create recurring plan"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
