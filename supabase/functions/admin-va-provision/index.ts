@@ -292,6 +292,42 @@ serve(async (req) => {
     const name = `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email;
     const resendKey = Deno.env.get("RESEND_API_KEY");
 
+    // ── reprovision_ghl: (re)create the GHL seat for an already-onboarded VA ──
+    // Used to retry a CRM seat that failed at approval time (approval itself is
+    // no longer blocked by GHL, so a VA can be approved with the seat pending).
+    if (action === "reprovision_ghl") {
+      const roleKey = String(row.va_role || "operations").toUpperCase();
+      const templateEmail =
+        (await secret(admin, `GHL_VA_TEMPLATE_${roleKey}`)) ||
+        (await secret(admin, "GHL_USER_TEMPLATE_EMAIL")) ||
+        undefined;
+      const ghlPassword = tempPassword();
+      let ghl: { ghlUserId: string | null; created: boolean; error?: string; skipped?: string } = { ghlUserId: null, created: false };
+      try {
+        ghl = await provisionGhlUserFromTemplate(admin, {
+          email: row.email,
+          firstName: row.first_name || "VA",
+          lastName: row.last_name || "",
+          phone: row.phone || null,
+          password: ghlPassword,
+          templateEmail,
+        });
+      } catch (e) {
+        ghl = { ghlUserId: null, created: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      if (ghl.ghlUserId) {
+        await admin.from("va_onboarding").update({ ghl_user_id: ghl.ghlUserId, updated_at: new Date().toISOString() }).eq("id", row.id);
+      }
+      return json({
+        ok: !ghl.error,
+        action,
+        ghlUserId: ghl.ghlUserId,
+        ghlUserCreated: ghl.created,
+        ghlError: ghl.error || ghl.skipped || null,
+        ghlPassword: ghl.created ? ghlPassword : null,
+      });
+    }
+
     // ── approve: BOTH gates enforced, then provision ────────────────────
     if (action === "approve") {
       if (!row.agreement_signed_at) return json({ error: "Agreement is not signed — cannot provision access." }, 403);

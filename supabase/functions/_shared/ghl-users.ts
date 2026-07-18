@@ -6,7 +6,7 @@
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
-const DEFAULT_TEMPLATE_EMAIL = "maliksannie7@gmail.com";
+const DEFAULT_TEMPLATE_EMAIL = "andrea@novaracleaning.com";
 
 type Json = Record<string, unknown>;
 
@@ -225,8 +225,9 @@ export async function provisionGhlUserFromTemplate(
 
   const body: Json = {
     companyId,
-    firstName: input.firstName,
-    lastName: input.lastName,
+    firstName: input.firstName || "VA",
+    // GHL requires a non-empty last name (422 "lastName is required").
+    lastName: input.lastName || "VA",
     email,
     password: input.password,
     phone: input.phone || undefined,
