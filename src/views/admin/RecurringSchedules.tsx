@@ -29,7 +29,8 @@ import {
   RiVipCrownLine, RiUserHeartLine, RiStopCircleLine, RiCalendarScheduleLine, RiChat3Line,
   RiSearchLine, RiLinkM, RiMailLine, RiFileList3Line, RiMoneyDollarCircleLine,
   RiCloseCircleLine, RiDeleteBin6Line, RiPhoneLine, RiFileCopyLine,
-  RiLineChartLine, RiAlertLine,
+  RiLineChartLine, RiAlertLine, RiShieldCheckLine, RiUserSmileLine,
+  RiExternalLinkLine, RiRefreshLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,27 @@ interface Member {
   membership_cleans?: number | null;
   first_service_date?: string | null;
   last_completed_date?: string | null;
+  last_cleaner?: {
+    cleaner_id?: string | null;
+    cleaner_name?: string | null;
+    booking_id?: string | null;
+    booking_number?: number | null;
+    service_date?: string | null;
+    completed_at?: string | null;
+  } | null;
+  latest_qc?: {
+    id: string;
+    issue_number?: number | null;
+    booking_id?: string | null;
+    issue_type?: string | null;
+    severity?: string | null;
+    status?: string | null;
+    title?: string | null;
+    cleaner_name?: string | null;
+    booking_ref?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  } | null;
 }
 
 const TIME_SLOTS = [
@@ -207,6 +229,22 @@ function avgCleanCents(m: Member): number | null {
   return Math.round(rev / cleans);
 }
 
+function qcStatusClass(status: string | null | undefined): string {
+  const s = (status || "").toLowerCase();
+  if (s === "resolved") return "bg-emerald-100 text-emerald-700";
+  if (s === "escalated") return "bg-rose-100 text-rose-700";
+  if (s === "investigating" || s === "awaiting_customer") return "bg-amber-100 text-amber-800";
+  return "bg-sky-100 text-sky-700";
+}
+
+function qcSeverityClass(severity: string | null | undefined): string {
+  const s = (severity || "").toLowerCase();
+  if (s === "critical") return "bg-rose-100 text-rose-800";
+  if (s === "high") return "bg-orange-100 text-orange-800";
+  if (s === "low") return "bg-slate-100 text-slate-600";
+  return "bg-amber-100 text-amber-800";
+}
+
 /** Cadence-aware upcoming dates from a start date. */
 function previewDates(start: string, cadence: string, count = 4): string[] {
   if (!start) return [];
@@ -224,7 +262,7 @@ function previewDates(start: string, cadence: string, count = 4): string[] {
   return out;
 }
 
-async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
+async function attachMemberLiveInsights(list: Member[]): Promise<Member[]> {
   const emails = Array.from(new Set(list.map((m) => m.email).filter(Boolean)));
   if (emails.length === 0) return list;
 
@@ -235,17 +273,27 @@ async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
     membership_cleans: number;
     first_service_date: string | null;
     last_completed_date: string | null;
+    last_cleaner: Member["last_cleaner"];
   };
   const byEmail = new Map<string, Agg>();
+  const latestQcByEmail = new Map<string, NonNullable<Member["latest_qc"]>>();
 
   for (let i = 0; i < emails.length; i += 80) {
     const chunk = emails.slice(i, i + 80);
-    const { data } = await (supabase.from as any)("bookings")
-      .select("email, status, final_charge_cents, total_estimate_cents, membership_plan, uses_credit, service_date")
-      .in("email", chunk)
-      .eq("status", "completed")
-      .limit(3000);
-    for (const b of (data || []) as Array<Record<string, unknown>>) {
+    const [{ data: bookingRows }, { data: qcRows }] = await Promise.all([
+      (supabase.from as any)("bookings")
+        .select("id, email, status, final_charge_cents, total_estimate_cents, membership_plan, uses_credit, service_date, completed_at, booking_number, cleaner_id, cleaners(first_name, last_name)")
+        .in("email", chunk)
+        .order("service_date", { ascending: false })
+        .limit(3000),
+      (supabase.from as any)("qc_issues")
+        .select("id, issue_number, booking_id, client_email, issue_type, severity, status, title, cleaner_name, booking_ref, created_at, updated_at")
+        .in("client_email", chunk)
+        .order("created_at", { ascending: false })
+        .limit(1000),
+    ]);
+
+    for (const b of (bookingRows || []) as Array<Record<string, unknown>>) {
       const key = String(b.email || "").toLowerCase().trim();
       if (!key) continue;
       let agg = byEmail.get(key);
@@ -257,9 +305,28 @@ async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
           membership_cleans: 0,
           first_service_date: null,
           last_completed_date: null,
+          last_cleaner: null,
         };
         byEmail.set(key, agg);
       }
+      const status = String(b.status || "");
+      if (status !== "completed") continue;
+
+      if (!agg.last_cleaner) {
+        const cleanerJoin = b.cleaners as { first_name?: string | null; last_name?: string | null } | null;
+        const cleanerName = cleanerJoin
+          ? `${cleanerJoin.first_name || ""} ${cleanerJoin.last_name || ""}`.trim() || null
+          : null;
+        agg.last_cleaner = {
+          cleaner_id: (b.cleaner_id as string | null) || null,
+          cleaner_name: cleanerName,
+          booking_id: (b.id as string | null) || null,
+          booking_number: (b.booking_number as number | null) ?? null,
+          service_date: b.service_date ? String(b.service_date) : null,
+          completed_at: b.completed_at ? String(b.completed_at) : null,
+        };
+      }
+
       const charged = Number(b.final_charge_cents ?? b.total_estimate_cents ?? 0) || 0;
       const plan = b.membership_plan == null ? "" : String(b.membership_plan);
       const isMembership = (plan !== "" && plan !== "none") || b.uses_credit === true;
@@ -275,10 +342,67 @@ async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
         if (!agg.first_service_date || sd < agg.first_service_date) agg.first_service_date = sd;
       }
     }
+
+    for (const q of (qcRows || []) as Array<Record<string, unknown>>) {
+      const key = String(q.client_email || "").toLowerCase().trim();
+      if (!key || latestQcByEmail.has(key)) continue;
+      latestQcByEmail.set(key, {
+        id: String(q.id),
+        issue_number: (q.issue_number as number | null) ?? null,
+        booking_id: (q.booking_id as string | null) || null,
+        issue_type: q.issue_type ? String(q.issue_type) : null,
+        severity: q.severity ? String(q.severity) : null,
+        status: q.status ? String(q.status) : null,
+        title: q.title ? String(q.title) : null,
+        cleaner_name: q.cleaner_name ? String(q.cleaner_name) : null,
+        booking_ref: q.booking_ref ? String(q.booking_ref) : null,
+        created_at: q.created_at ? String(q.created_at) : null,
+        updated_at: q.updated_at ? String(q.updated_at) : null,
+      });
+    }
+
+    // Booking-id fallback for QC rows whose client_email casing missed the .in()
+    const missing = chunk.filter((e) => !latestQcByEmail.has(e.toLowerCase()));
+    if (missing.length > 0) {
+      const bookingIds = ((bookingRows || []) as Array<Record<string, unknown>>)
+        .filter((b) => missing.includes(String(b.email || "").toLowerCase().trim()))
+        .map((b) => b.id)
+        .filter(Boolean) as string[];
+      if (bookingIds.length > 0) {
+        const { data: qcByBooking } = await (supabase.from as any)("qc_issues")
+          .select("id, issue_number, booking_id, client_email, issue_type, severity, status, title, cleaner_name, booking_ref, created_at, updated_at")
+          .in("booking_id", bookingIds.slice(0, 200))
+          .order("created_at", { ascending: false })
+          .limit(500);
+        const bookingEmail = new Map<string, string>();
+        for (const b of (bookingRows || []) as Array<Record<string, unknown>>) {
+          if (b.id) bookingEmail.set(String(b.id), String(b.email || "").toLowerCase().trim());
+        }
+        for (const q of (qcByBooking || []) as Array<Record<string, unknown>>) {
+          const key = bookingEmail.get(String(q.booking_id)) || String(q.client_email || "").toLowerCase().trim();
+          if (!key || latestQcByEmail.has(key)) continue;
+          latestQcByEmail.set(key, {
+            id: String(q.id),
+            issue_number: (q.issue_number as number | null) ?? null,
+            booking_id: (q.booking_id as string | null) || null,
+            issue_type: q.issue_type ? String(q.issue_type) : null,
+            severity: q.severity ? String(q.severity) : null,
+            status: q.status ? String(q.status) : null,
+            title: q.title ? String(q.title) : null,
+            cleaner_name: q.cleaner_name ? String(q.cleaner_name) : null,
+            booking_ref: q.booking_ref ? String(q.booking_ref) : null,
+            created_at: q.created_at ? String(q.created_at) : null,
+            updated_at: q.updated_at ? String(q.updated_at) : null,
+          });
+        }
+      }
+    }
   }
 
   return list.map((m) => {
-    const agg = byEmail.get(m.email.toLowerCase());
+    const key = m.email.toLowerCase();
+    const agg = byEmail.get(key);
+    const qc = latestQcByEmail.get(key) || m.latest_qc || null;
     if (!agg) {
       return {
         ...m,
@@ -286,6 +410,8 @@ async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
         membership_revenue_cents: m.membership_revenue_cents ?? 0,
         completed_cleans: m.completed_cleans ?? 0,
         membership_cleans: m.membership_cleans ?? 0,
+        last_cleaner: m.last_cleaner || null,
+        latest_qc: qc,
       };
     }
     return {
@@ -297,6 +423,8 @@ async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
       first_service_date: agg.first_service_date || m.first_service_date || null,
       last_completed_date: agg.last_completed_date || m.last_completed_date || null,
       member_since: m.member_since || m.created_at || agg.first_service_date || null,
+      last_cleaner: agg.last_cleaner || m.last_cleaner || null,
+      latest_qc: qc,
     };
   });
 }
@@ -311,16 +439,18 @@ export default function AdminRecurringSchedules() {
   const [working, setWorking] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [liveTick, setLiveTick] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMembersNotice(null);
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true);
+    if (!opts.silent) setMembersNotice(null);
     const [{ data: s, error: sErr }, { data: c }, membersRes] = await Promise.all([
       (supabase.from as any)("customer_recurring_schedules").select("*").order("created_at", { ascending: false }),
       (supabase.from as any)("cleaners").select("id, first_name, last_name").eq("status", "active").order("first_name"),
       supabase.functions.invoke("admin-memberships", { body: {} }).catch((e) => ({ data: null, error: e })),
     ]);
-    if (sErr) toast.error(`Schedules: ${sErr.message}`);
+    if (sErr && !opts.silent) toast.error(`Schedules: ${sErr.message}`);
     const schedRows = (s as Schedule[]) || [];
     setSchedules(schedRows);
     setCleaners((c as Cleaner[]) || []);
@@ -376,12 +506,39 @@ export default function AdminRecurringSchedules() {
       }));
     }
 
-    // Attach / refresh LTV from completed bookings (works even if API omitted it).
-    nextMembers = await attachBookingRevenue(nextMembers);
+    // Attach / refresh LTV, last cleaner, and latest QC (works even if API omitted them).
+    nextMembers = await attachMemberLiveInsights(nextMembers);
     setMembers(nextMembers);
-    setLoading(false);
+    setLastUpdatedAt(new Date());
+    if (!opts.silent) setLoading(false);
   }, []);
+
   useEffect(() => { void load(); }, [load]);
+
+  // Live 24/7: realtime on bookings/QC/schedules + 30s polling safety net.
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const softReload = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => void load({ silent: true }), 700);
+    };
+    const channel = supabase
+      .channel("admin-recurring-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, softReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "qc_issues" }, softReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_recurring_schedules" }, softReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "membership_credits" }, softReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_assignments" }, softReload)
+      .subscribe();
+    const poll = setInterval(() => void load({ silent: true }), 30_000);
+    const tick = setInterval(() => setLiveTick((n) => n + 1), 15_000);
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      clearInterval(poll);
+      clearInterval(tick);
+      void supabase.removeChannel(channel);
+    };
+  }, [load]);
 
   const cleanerName = (id: string | null) => {
     if (!id) return "Auto (previous cleaner)";
@@ -518,9 +675,35 @@ export default function AdminRecurringSchedules() {
             self-service manage link.
           </p>
         </div>
-        <Button className="shrink-0" onClick={() => router.push("/admin/csr?type=recurring")}>
-          <RiAddLine className="w-4 h-4 mr-1.5" /> New recurring plan
-        </Button>
+        <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+          <Button onClick={() => router.push("/admin/csr?type=recurring")}>
+            <RiAddLine className="w-4 h-4 mr-1.5" /> New recurring plan
+          </Button>
+          <div className="flex items-center gap-2 text-[11px] text-slate-500 justify-end">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              Live
+            </span>
+            <span suppressHydrationWarning>
+              {lastUpdatedAt
+                ? `Updated ${format(lastUpdatedAt, "h:mm:ss a")}`
+                : "Connecting…"}
+            </span>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 hover:text-violet-700"
+              onClick={() => void load({ silent: true })}
+              title="Refresh now"
+            >
+              <RiRefreshLine className="w-3.5 h-3.5" />
+            </button>
+            {/* keep tick referenced so the stamp re-renders while idle */}
+            <span className="sr-only">{liveTick}</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
@@ -599,8 +782,8 @@ export default function AdminRecurringSchedules() {
                     <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell">Plan</th>
                     <th className="text-left px-4 py-3 font-semibold">Status</th>
                     <th className="text-right px-4 py-3 font-semibold hidden md:table-cell">LTV</th>
-                    <th className="text-right px-4 py-3 font-semibold hidden lg:table-cell">Projected</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden xl:table-cell">Next clean</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell">Last cleaner</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden xl:table-cell">QC case</th>
                     <th className="w-10 px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -613,7 +796,6 @@ export default function AdminRecurringSchedules() {
                     </tr>
                   ) : (
                     filteredMembers.map((m) => {
-                      const activeSchedule = m.schedules.find((s) => s.active);
                       const isStripe = !!m.subscription_id;
                       const ltv = memberLtvCents(m);
                       const projMo = projectedMonthlyCents(m);
@@ -642,18 +824,30 @@ export default function AdminRecurringSchedules() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right text-slate-900 font-semibold tabular-nums hidden md:table-cell">
-                            {fmtMoney(ltv)}
+                            <div>{fmtMoney(ltv)}</div>
+                            {projMo != null && (
+                              <div className="text-[10px] font-normal text-slate-400">{fmtMoney(projMo)}/mo</div>
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-right text-slate-700 tabular-nums hidden lg:table-cell text-xs">
-                            {projMo != null ? (
-                              <span>
-                                {fmtMoney(projMo)}
-                                <span className="text-slate-400">/mo</span>
-                              </span>
-                            ) : "—"}
+                          <td className="px-4 py-3 text-slate-700 hidden lg:table-cell text-xs">
+                            {m.last_cleaner?.cleaner_name || "—"}
+                            {m.last_cleaner?.service_date && (
+                              <div className="text-[10px] text-slate-400">{fmtShortDate(m.last_cleaner.service_date)}</div>
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-slate-600 hidden xl:table-cell">
-                            {fmtShortDate(activeSchedule?.next_service_date)}
+                          <td className="px-4 py-3 hidden xl:table-cell">
+                            {m.latest_qc ? (
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <Badge className={cn("text-[10px]", qcStatusClass(m.latest_qc.status))}>
+                                    #{m.latest_qc.issue_number ?? "—"} · {m.latest_qc.status || "open"}
+                                  </Badge>
+                                </div>
+                                <p className="text-[11px] text-slate-600 truncate max-w-[180px]">{m.latest_qc.title || m.latest_qc.issue_type}</p>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">None</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <Button size="sm" variant="ghost" className="text-violet-700">
@@ -992,6 +1186,68 @@ function MemberSheet({
             <FactCell label="Next clean" value={fmtShortDate(activeSchedule?.next_service_date)} />
             <FactCell label="Last clean" value={fmtShortDate(member.last_completed_date || member.last_booking?.service_date)} />
           </div>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <RiUserSmileLine className="w-3.5 h-3.5" /> Last cleaner
+            </h3>
+            {member.last_cleaner?.cleaner_name || member.last_cleaner?.cleaner_id ? (
+              <div className="rounded-lg border border-slate-200 px-3 py-2.5 space-y-1">
+                <p className="text-sm font-medium text-slate-900">
+                  {member.last_cleaner.cleaner_name || "Cleaner"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Last cleaned {fmtShortDate(member.last_cleaner.service_date || member.last_completed_date)}
+                  {member.last_cleaner.booking_number != null
+                    ? ` · Booking #${member.last_cleaner.booking_number}`
+                    : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No completed clean with an assigned cleaner yet.</p>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <RiShieldCheckLine className="w-3.5 h-3.5" /> Latest QC case
+            </h3>
+            {member.latest_qc ? (
+              <div className="rounded-lg border border-slate-200 px-3 py-2.5 space-y-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge className={cn("text-[11px]", qcStatusClass(member.latest_qc.status))}>
+                    #{member.latest_qc.issue_number ?? "—"} · {member.latest_qc.status || "open"}
+                  </Badge>
+                  {member.latest_qc.severity && (
+                    <Badge className={cn("text-[11px]", qcSeverityClass(member.latest_qc.severity))}>
+                      {member.latest_qc.severity}
+                    </Badge>
+                  )}
+                  {member.latest_qc.issue_type && (
+                    <Badge className="text-[11px] bg-slate-100 text-slate-600">
+                      {member.latest_qc.issue_type.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm font-medium text-slate-900">{member.latest_qc.title || "QC case"}</p>
+                <p className="text-xs text-slate-500">
+                  Opened {fmtShortDate(member.latest_qc.created_at)}
+                  {member.latest_qc.cleaner_name ? ` · Cleaner ${member.latest_qc.cleaner_name}` : ""}
+                  {member.latest_qc.booking_ref ? ` · ${member.latest_qc.booking_ref}` : ""}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() => window.open(`/admin/qc?issue=${member.latest_qc!.id}`, "_blank", "noopener")}
+                >
+                  <RiExternalLinkLine className="w-3.5 h-3.5 mr-1.5" /> Open QC case
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No QC cases linked to this client.</p>
+            )}
+          </section>
 
           <section className="space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">

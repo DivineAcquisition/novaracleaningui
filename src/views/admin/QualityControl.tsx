@@ -15,6 +15,7 @@
 // documentation compliance (undocumented completed jobs surfaced loudly).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   RiAlertLine,
   RiAddLine,
@@ -175,6 +176,7 @@ const fmtD = (iso?: string | null) => (iso ? format(new Date(`${iso}`.slice(0, 1
 // ─── Page ───────────────────────────────────────────────────────────────
 
 export default function QualityControl() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<"issues" | "docs" | "cleaners">("issues");
   const [loading, setLoading] = useState(true);
   const [allIssues, setAllIssues] = useState<IssueRow[]>([]);
@@ -182,6 +184,7 @@ export default function QualityControl() {
   // One hub, three sources — the client-type dimension filters every view.
   const [clientType, setClientType] = useState("all");
   const [completed30, setCompleted30] = useState(0);
+  const deepLinkIssueId = searchParams.get("issue");
   const issues = useMemo(
     () => (clientType === "all" ? allIssues : allIssues.filter((i) => (i.client_type || "residential") === clientType)),
     [allIssues, clientType],
@@ -217,6 +220,10 @@ export default function QualityControl() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (deepLinkIssueId) setTab("issues");
+  }, [deepLinkIssueId]);
 
   // ─── Dashboard metrics ────────────────────────────────────────────────
   const openIssues = useMemo(() => issues.filter((i) => i.status !== "resolved"), [issues]);
@@ -368,7 +375,7 @@ export default function QualityControl() {
       {loading ? (
         <div className="space-y-2">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : tab === "issues" ? (
-        <IssuesTab issues={issues} docs={docs} reload={load} />
+        <IssuesTab issues={issues} docs={docs} reload={load} deepLinkIssueId={deepLinkIssueId} />
       ) : tab === "docs" ? (
         <DocsTab docs={docs} reload={load} />
       ) : (
@@ -380,13 +387,32 @@ export default function QualityControl() {
 
 // ─── Issues tab ─────────────────────────────────────────────────────────
 
-function IssuesTab({ issues, docs, reload }: { issues: IssueRow[]; docs: DocRow[]; reload: () => Promise<void> }) {
+function IssuesTab({
+  issues,
+  docs,
+  reload,
+  deepLinkIssueId,
+}: {
+  issues: IssueRow[];
+  docs: DocRow[];
+  reload: () => Promise<void>;
+  deepLinkIssueId?: string | null;
+}) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<IssueRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+
+  useEffect(() => {
+    if (!deepLinkIssueId || issues.length === 0) return;
+    const match = issues.find((i) => i.id === deepLinkIssueId);
+    if (match) {
+      setStatusFilter("all");
+      setSelected(match);
+    }
+  }, [deepLinkIssueId, issues]);
 
   const filtered = useMemo(() => issues.filter((i) => {
     if (statusFilter === "active" && i.status === "resolved") return false;

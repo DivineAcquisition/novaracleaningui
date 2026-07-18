@@ -443,15 +443,28 @@ serve(async (req) => {
       last_completed_date: string | null;
     };
     const revenueByEmail = new Map<string, RevenueAgg>();
+    const lastCleanerByEmail = new Map<string, Record<string, unknown>>();
+    const latestQcByEmail = new Map<string, Record<string, unknown>>();
     if (emails.length > 0) {
-      const { data: recentBookings } = await admin
-        .from("bookings")
-        .select(
-          "email, service_date, status, final_charge_cents, total_estimate_cents, membership_plan, uses_credit",
-        )
-        .in("email", emails)
-        .order("service_date", { ascending: false })
-        .limit(5000);
+      const [{ data: recentBookings }, { data: qcRows }] = await Promise.all([
+        admin
+          .from("bookings")
+          .select(
+            "id, email, service_date, completed_at, status, booking_number, cleaner_id, final_charge_cents, total_estimate_cents, membership_plan, uses_credit, cleaners(first_name, last_name)",
+          )
+          .in("email", emails)
+          .order("service_date", { ascending: false })
+          .limit(5000),
+        admin
+          .from("qc_issues")
+          .select(
+            "id, issue_number, booking_id, client_email, issue_type, severity, status, title, cleaner_name, booking_ref, created_at, updated_at",
+          )
+          .in("client_email", emails)
+          .order("created_at", { ascending: false })
+          .limit(2000),
+      ]);
+
       for (const b of recentBookings || []) {
         const key = keyOf(b.email);
         if (!lastBookingByEmail.has(key)) {
@@ -463,6 +476,22 @@ serve(async (req) => {
         }
         const status = String(b.status || "");
         if (status !== "completed") continue;
+
+        if (!lastCleanerByEmail.has(key)) {
+          const cleanerJoin = b.cleaners as { first_name?: string | null; last_name?: string | null } | null;
+          const cleanerName = cleanerJoin
+            ? `${cleanerJoin.first_name || ""} ${cleanerJoin.last_name || ""}`.trim() || null
+            : null;
+          lastCleanerByEmail.set(key, {
+            cleaner_id: b.cleaner_id || null,
+            cleaner_name: cleanerName,
+            booking_id: b.id,
+            booking_number: b.booking_number ?? null,
+            service_date: b.service_date || null,
+            completed_at: b.completed_at || null,
+          });
+        }
+
         const charged = Number(b.final_charge_cents ?? b.total_estimate_cents ?? 0) || 0;
         const plan = b.membership_plan == null ? "" : String(b.membership_plan);
         const isMembership = (plan !== "" && plan !== "none") || b.uses_credit === true;
@@ -490,6 +519,65 @@ serve(async (req) => {
           if (!agg.first_service_date || sd < agg.first_service_date) agg.first_service_date = sd;
         }
       }
+
+      for (const q of qcRows || []) {
+        const key = keyOf(q.client_email);
+        if (!key || latestQcByEmail.has(key)) continue;
+        latestQcByEmail.set(key, {
+          id: q.id,
+          issue_number: q.issue_number,
+          booking_id: q.booking_id,
+          issue_type: q.issue_type,
+          severity: q.severity,
+          status: q.status,
+          title: q.title,
+          cleaner_name: q.cleaner_name,
+          booking_ref: q.booking_ref,
+          created_at: q.created_at,
+          updated_at: q.updated_at,
+        });
+      }
+
+      // Fallback: QC rows whose client_email casing/miss didn't match — match via
+      // booking emails we already loaded.
+      const missingQc = emails.filter((e) => !latestQcByEmail.has(e));
+      if (missingQc.length > 0) {
+        const bookingIds = (recentBookings || [])
+          .filter((b) => missingQc.includes(keyOf(b.email)))
+          .map((b) => b.id)
+          .filter(Boolean);
+        if (bookingIds.length > 0) {
+          const { data: qcByBooking } = await admin
+            .from("qc_issues")
+            .select(
+              "id, issue_number, booking_id, client_email, issue_type, severity, status, title, cleaner_name, booking_ref, created_at, updated_at",
+            )
+            .in("booking_id", bookingIds.slice(0, 500))
+            .order("created_at", { ascending: false })
+            .limit(2000);
+          const bookingEmail = new Map<string, string>();
+          for (const b of recentBookings || []) {
+            if (b.id) bookingEmail.set(String(b.id), keyOf(b.email));
+          }
+          for (const q of qcByBooking || []) {
+            const key = bookingEmail.get(String(q.booking_id)) || keyOf(q.client_email);
+            if (!key || latestQcByEmail.has(key)) continue;
+            latestQcByEmail.set(key, {
+              id: q.id,
+              issue_number: q.issue_number,
+              booking_id: q.booking_id,
+              issue_type: q.issue_type,
+              severity: q.severity,
+              status: q.status,
+              title: q.title,
+              cleaner_name: q.cleaner_name,
+              booking_ref: q.booking_ref,
+              created_at: q.created_at,
+              updated_at: q.updated_at,
+            });
+          }
+        }
+      }
     }
 
     const members = Array.from(byEmail.values())
@@ -509,6 +597,8 @@ serve(async (req) => {
           membership_cleans: rev?.membership_cleans ?? 0,
           first_service_date: rev?.first_service_date ?? null,
           last_completed_date: rev?.last_completed_date ?? null,
+          last_cleaner: lastCleanerByEmail.get(entry.email) || null,
+          latest_qc: latestQcByEmail.get(entry.email) || null,
           customer: customersByEmail.get(entry.email) || {
             first_name: entry.schedule_first_name || null,
             last_name: entry.schedule_last_name || null,
