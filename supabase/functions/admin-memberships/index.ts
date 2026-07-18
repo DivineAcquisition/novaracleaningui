@@ -141,14 +141,22 @@ serve(async (req) => {
         }
       }
 
-      // Delete also purges the Stripe credit ledger so the member fully
-      // disappears from the hub. Cancel keeps history intact.
+      // Delete also purges the Stripe credit ledger AND clears the membership
+      // tag on the customer's bookings so the member fully disappears from the
+      // hub. The member list unions plan-stamped bookings, so without this a
+      // "deleted" member kept reappearing. Booking history is preserved — only
+      // the membership_plan tag is cleared. Cancel keeps history intact.
       if (action === "delete") {
         if (subscriptionId) {
           await admin.from("membership_credits").delete().eq("subscription_id", subscriptionId);
         }
         if (email) {
           await admin.from("membership_credits").delete().eq("email", email);
+          await admin
+            .from("bookings")
+            .update({ membership_plan: null })
+            .eq("email", email)
+            .not("membership_plan", "is", null);
         }
       }
 
