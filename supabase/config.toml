@@ -296,6 +296,11 @@ verify_jwt = true
 [functions.admin-customer-action]
 verify_jwt = true
 
+# Admin-only: mint a one-time magic link to sign in as a customer (app portal).
+# Admin JWT + admin-role check enforced inside the function.
+[functions.admin-impersonate-customer]
+verify_jwt = false
+
 [functions.admin-list-bookings]
 verify_jwt = true
 

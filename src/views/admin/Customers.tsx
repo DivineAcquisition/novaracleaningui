@@ -38,6 +38,7 @@ import {
   RiFileCopyLine,
   RiEditLine,
   RiBankCardLine,
+  RiLoginBoxLine,
 } from "@remixicon/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -499,6 +500,27 @@ function CustomerSheet({
     }
   };
 
+  const loginAsCustomer = async () => {
+    if (!customer) return;
+    if (!confirm(`Open ${fullName(customer)}'s account portal as them? You'll be able to view and act in their account. This is logged.`)) return;
+    setActioning("impersonate");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-impersonate-customer", {
+        body: { customerId: customer.id },
+      });
+      if (error) throw error;
+      const d = data as { url?: string; error?: string };
+      if (d?.error) throw new Error(d.error);
+      if (!d?.url) throw new Error("No session link returned");
+      window.open(d.url, "_blank", "noopener");
+      toast.success("Opening customer portal in a new tab…");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not start session");
+    } finally {
+      setActioning(null);
+    }
+  };
+
   const resyncToGhl = async () => {
     if (!customer) return;
     setActioning("ghl");
@@ -635,6 +657,20 @@ function CustomerSheet({
                     <RiKey2Line className="w-4 h-4 mr-1.5" />
                   )}
                   Send password reset
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-violet-300 text-violet-800"
+                  onClick={loginAsCustomer}
+                  disabled={actioning === "impersonate"}
+                  title="Open this customer's portal as them (one-time secure link — logged)"
+                >
+                  {actioning === "impersonate" ? (
+                    <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <RiLoginBoxLine className="w-4 h-4 mr-1.5" />
+                  )}
+                  Log in as customer
                 </Button>
                 <Button
                   variant="outline"

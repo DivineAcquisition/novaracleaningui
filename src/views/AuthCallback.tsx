@@ -16,7 +16,7 @@
 
 import { RiLoader4Line } from "@remixicon/react";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,10 +24,39 @@ import { SEO } from "@/components/SEO";
 
 export default function AuthCallback() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        // Admin impersonation / magic-link token_hash: verify it FIRST so it
+        // becomes the active session on this device. The
+        // admin-impersonate-customer function mints a magic-link token_hash so
+        // the flow never depends on the Supabase redirect allow-list.
+        const tokenHash = searchParams?.get("token_hash");
+        if (tokenHash) {
+          let otpError: { message: string } | null = null;
+          for (const type of ["email", "magiclink"] as const) {
+            const { error: vErr } = await supabase.auth.verifyOtp({
+              type,
+              token_hash: tokenHash,
+            });
+            otpError = vErr;
+            if (!vErr) break;
+          }
+          if (otpError) {
+            const { data: { session: existing } } = await supabase.auth.getSession();
+            if (!existing?.user) {
+              toast.error(`Sign-in link invalid or expired: ${otpError.message}`);
+              router.push("/auth");
+              return;
+            }
+          }
+          if (searchParams?.get("impersonated") === "1") {
+            toast.success("Signed in as this customer (admin session — actions are logged).");
+          }
+        }
+
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
@@ -99,6 +128,7 @@ export default function AuthCallback() {
     };
 
     handleAuthCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   return (
