@@ -28,16 +28,18 @@ import {
   RiLoader4Line, RiRepeatLine, RiAddLine, RiPlayLine, RiPauseLine, RiFlashlightLine,
   RiVipCrownLine, RiUserHeartLine, RiStopCircleLine, RiCalendarScheduleLine, RiChat3Line,
   RiSearchLine, RiLinkM, RiMailLine, RiFileList3Line, RiMoneyDollarCircleLine,
-  RiCloseCircleLine, RiDeleteBin6Line,
+  RiCloseCircleLine, RiDeleteBin6Line, RiPhoneLine, RiFileCopyLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing";
@@ -104,6 +106,17 @@ const PLAN_LABELS: Record<string, string> = {
 };
 const PLAN_CADENCE: Record<string, string> = { weekly: "weekly", biweekly: "biweekly", monthly: "monthly" };
 
+function memberName(m: Member): string {
+  return `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim() || m.email;
+}
+
+function fmtShortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return format(d, "MMM d");
+}
+
 /** Cadence-aware upcoming dates from a start date. */
 function previewDates(start: string, cadence: string, count = 4): string[] {
   if (!start) return [];
@@ -130,6 +143,7 @@ export default function AdminRecurringSchedules() {
   const [membersNotice, setMembersNotice] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -245,163 +259,6 @@ export default function AdminRecurringSchedules() {
     toast.success("Manage link copied.");
   };
 
-  const memberAction = async (m: Member, action: "pause" | "resume") => {
-    if (!m.subscription_id) { toast.error("No Stripe subscription on this client — billing controls don't apply."); return; }
-    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} the ${PLAN_LABELS[m.membership_plan] || m.membership_plan} membership for ${m.email}?`)) return;
-    setWorking(m.id);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-memberships", {
-        body: { action, subscriptionId: m.subscription_id },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(action === "pause" ? "Membership billing paused." : "Membership billing resumed.");
-      load();
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setWorking(null);
-    }
-  };
-
-  // Cancel = stop the plan + NOTIFY the customer (email/SMS). Stripe billing
-  // cancels at period end. Mirrors the booking-tab cancel control.
-  const cancelMember = async (m: Member) => {
-    const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim();
-    const label = PLAN_LABELS[m.membership_plan] || m.membership_plan;
-    if (!confirm(
-      `Cancel ${name || m.email}'s ${label} membership?\n\n` +
-      `• Recurring cleans stop\n` +
-      `• Customer is notified by email${m.customer?.phone ? " & SMS" : ""}\n` +
-      `${m.subscription_id ? "• Stripe billing cancels at the end of the current period" : "• No Stripe subscription to bill"}`,
-    )) return;
-    setWorking(m.id);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-memberships", {
-        body: {
-          action: "cancel",
-          subscriptionId: m.subscription_id || undefined,
-          email: m.email,
-          phone: m.customer?.phone || undefined,
-          name: name || undefined,
-          plan: label,
-          scheduleIds: m.schedules.map((s) => s.id).filter((id) => !String(id).startsWith("local-")),
-        },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Membership cancelled — customer notified.");
-      load();
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setWorking(null);
-    }
-  };
-
-  // Delete = remove the plan entirely with NO customer notification. Cancels
-  // Stripe now and purges schedules + credit ledger.
-  const deleteMember = async (m: Member) => {
-    const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim();
-    if (!confirm(
-      `DELETE ${name || m.email}'s membership entirely?\n\n` +
-      `• Removes their recurring schedule\n` +
-      `${m.subscription_id ? "• Cancels Stripe billing immediately\n" : ""}` +
-      `• NO customer notification is sent\n\n` +
-      `This cannot be undone.`,
-    )) return;
-    setWorking(m.id);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-memberships", {
-        body: {
-          action: "delete",
-          subscriptionId: m.subscription_id || undefined,
-          email: m.email,
-          scheduleIds: m.schedules.map((s) => s.id).filter((id) => !String(id).startsWith("local-")),
-        },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Membership deleted.");
-      load();
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setWorking(null);
-    }
-  };
-
-  const adjustMemberPrice = async (m: Member, dollars: string) => {
-    if (!m.subscription_id) { toast.error("No Stripe subscription on this member."); return; }
-    const cents = Math.round(parseFloat(dollars) * 100);
-    if (!Number.isFinite(cents) || cents < 100) { toast.error("Enter a valid monthly price ($1+)."); return; }
-    if (!confirm(`Set ${m.email}'s Glow monthly rate to $${(cents / 100).toFixed(2)}? This updates Stripe (with proration).`)) return;
-    setWorking(`price-${m.id}`);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-memberships", {
-        body: { action: "adjust_price", subscriptionId: m.subscription_id, monthlyPriceCents: cents },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(`Monthly price updated to $${(cents / 100).toFixed(2)}`);
-      load();
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setWorking(null);
-    }
-  };
-
-  const sendMemberChecklist = async (m: Member) => {
-    setWorking(`cl-${m.id}`);
-    try {
-      const data = await sendCustomerChecklist({
-        email: m.email,
-        phone: m.customer?.phone,
-        firstName: m.customer?.first_name,
-        serviceType: "standard",
-        sendEmail: true,
-        sendSms: Boolean(m.customer?.phone),
-      });
-      toast.success(data.smsSent ? "Checklist emailed and texted" : "Checklist emailed");
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setWorking(null);
-    }
-  };
-
-  const sendMemberAgreement = async (m: Member) => {
-    setWorking(`ag-${m.id}`);
-    try {
-      const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim() || undefined;
-      const planKey =
-        m.membership_plan === "weekly" || m.membership_plan === "biweekly" || m.membership_plan === "monthly"
-          ? m.membership_plan
-          : "biweekly";
-      const rate =
-        m.monthly_price_cents ??
-        (m.home_size_id && MEMBERSHIP_PRICES[m.home_size_id]
-          ? Math.round((MEMBERSHIP_PRICES[m.home_size_id][planKey] || 0) * 100)
-          : undefined);
-      await sendMembershipAgreement({
-        email: m.email,
-        name,
-        phone: m.customer?.phone || undefined,
-        plan: PLAN_LABELS[m.membership_plan] || m.membership_plan,
-        membershipRateCents: rate,
-        homeSizeId: m.home_size_id || undefined,
-        holdPayment: false,
-        sendEmail: true,
-      });
-      toast.success("Membership agreement emailed for e-sign");
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setWorking(null);
-    }
-  };
-
   const startScheduleForMember = (m: Member) => {
     // Recurring plan creation now lives in the Internal Booking flow (toggle →
     // Recurring). Deep-link there with the member prefilled.
@@ -430,6 +287,15 @@ export default function AdminRecurringSchedules() {
   const filteredSchedules = schedules.filter(matchSchedule);
   const active = filteredSchedules.filter((s) => s.active);
   const paused = filteredSchedules.filter((s) => !s.active);
+  const selectedMember = useMemo(
+    () => members.find((m) => m.id === selectedMemberId) || null,
+    [members, selectedMemberId],
+  );
+  const selectedMemberSchedules = useMemo(() => {
+    if (!selectedMember) return [] as Schedule[];
+    const email = selectedMember.email.toLowerCase();
+    return schedules.filter((s) => s.email.toLowerCase() === email);
+  }, [schedules, selectedMember]);
   const membersNeedingSchedule = useMemo(
     () => members.filter((m) => m.period_active && !m.schedules.some((s) => s.active)),
     [members],
@@ -486,135 +352,96 @@ export default function AdminRecurringSchedules() {
         </TabsList>
 
         {/* ─── Members ─────────────────────────────────────────────────── */}
-        <TabsContent value="members" className="mt-4 space-y-2">
+        <TabsContent value="members" className="mt-4 space-y-3">
           {membersNotice && (
             <Card className="border-amber-200 bg-amber-50/50">
               <CardContent className="py-3 text-xs text-amber-900">{membersNotice}</CardContent>
             </Card>
           )}
-          {filteredMembers.length === 0 && (
-            <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
-              {q ? "No members match your search." : "No recurring clients yet."}
-            </CardContent></Card>
-          )}
-          {filteredMembers.map((m) => {
-            const name = `${m.customer?.first_name || ""} ${m.customer?.last_name || ""}`.trim() || m.email;
-            const activeSchedule = m.schedules.find((s) => s.active);
-            const isStripe = !!m.subscription_id;
-            const schedulePrice = activeSchedule?.price_cents ?? m.schedules[0]?.price_cents;
-            const initials = name.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
-            const busy = working === m.id;
-            return (
-              <Card key={m.id} className={cn("border rounded-xl overflow-hidden", m.period_active ? "border-slate-200" : "border-slate-200 bg-slate-50/50")}>
-                <CardContent className="p-4 space-y-3">
-                  {/* Identity + status */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                        m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-500")}>
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm text-slate-900 truncate">{name}</p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {m.email}{m.customer?.phone ? ` · ${m.customer.phone}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
-                      <Badge className={cn("text-[11px]", m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-600")}>
-                        {m.period_active ? (isStripe ? "Active member" : "Active recurring") : "Inactive"}
-                      </Badge>
-                      {activeSchedule
-                        ? <Badge className="text-[11px] bg-emerald-100 text-emerald-700">Schedule set</Badge>
-                        : <Badge className="text-[11px] bg-amber-100 text-amber-800">No schedule</Badge>}
-                      {isStripe
-                        ? <Badge className="text-[11px] bg-sky-100 text-sky-700">Stripe</Badge>
-                        : <Badge className="text-[11px] bg-slate-100 text-slate-500">No Stripe</Badge>}
-                    </div>
-                  </div>
 
-                  {/* Detail chips */}
-                  <div className="flex flex-wrap gap-1.5">
-                    <InfoChip label="Plan" value={PLAN_LABELS[m.membership_plan] || m.membership_plan} />
-                    {isStripe && m.monthly_price_cents != null && <InfoChip label="Monthly" value={`${fmtMoney(m.monthly_price_cents)}/mo`} />}
-                    {schedulePrice != null && <InfoChip label="Per clean" value={fmtMoney(schedulePrice)} />}
-                    {isStripe && m.credits_per_month != null && (
-                      <InfoChip label="Credits" value={`${m.credits_remaining ?? 0}/${m.credits_per_month} left`} />
-                    )}
-                    {isStripe && m.current_period_end && (
-                      <InfoChip label="Renews" value={format(new Date(m.current_period_end), "MMM d")} />
-                    )}
-                    {activeSchedule?.next_service_date && (
-                      <InfoChip label="Next clean" value={format(new Date(`${activeSchedule.next_service_date}T12:00:00`), "MMM d")} />
-                    )}
-                    {m.last_booking?.service_date && (
-                      <InfoChip label="Last clean" value={format(new Date(`${m.last_booking.service_date}T12:00:00`), "MMM d")} />
-                    )}
-                  </div>
-
-                  {/* Stripe billing controls */}
-                  {isStripe && (
-                    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-violet-50/70 border border-violet-100 px-2.5 py-2">
-                      <div className="min-w-[130px]">
-                        <Label className="text-[10px] uppercase tracking-wide text-violet-700">Monthly Glow price ($)</Label>
-                        <Input type="number" min={1} step="1" className="h-8 bg-white"
-                          defaultValue={m.monthly_price_cents != null ? (m.monthly_price_cents / 100).toFixed(0) : ""}
-                          id={`price-${m.id}`} placeholder="e.g. 199" />
-                      </div>
-                      <Button size="sm" className="h-8 bg-violet-600 hover:bg-violet-700 text-white" disabled={working === `price-${m.id}`}
-                        onClick={() => {
-                          const el = document.getElementById(`price-${m.id}`) as HTMLInputElement | null;
-                          void adjustMemberPrice(m, el?.value || "");
-                        }}>
-                        {working === `price-${m.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiMoneyDollarCircleLine className="w-3.5 h-3.5 mr-1" />Update price</>}
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-8" disabled={busy} title="Pause Stripe billing" onClick={() => memberAction(m, "pause")}>
-                        <RiPauseLine className="w-4 h-4" />
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-8" disabled={busy} title="Resume Stripe billing" onClick={() => memberAction(m, "resume")}>
-                        <RiPlayLine className="w-4 h-4" />
-                      </Button>
-                    </div>
+          <Card className="border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold">Name</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell">Plan</th>
+                    <th className="text-left px-4 py-3 font-semibold">Status</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">Next clean</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell">Billing</th>
+                    <th className="w-10 px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-12 text-slate-500">
+                        {q ? "No members match your search." : "No recurring clients yet."}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMembers.map((m) => {
+                      const activeSchedule = m.schedules.find((s) => s.active);
+                      const isStripe = !!m.subscription_id;
+                      const schedulePrice = activeSchedule?.price_cents ?? m.schedules[0]?.price_cents;
+                      return (
+                        <tr
+                          key={m.id}
+                          onClick={() => setSelectedMemberId(m.id)}
+                          className="cursor-pointer hover:bg-slate-50"
+                        >
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-900">{memberName(m)}</p>
+                            <p className="text-xs text-slate-500 truncate max-w-[220px]">{m.email}</p>
+                          </td>
+                          <td className="px-4 py-3 text-slate-700 hidden sm:table-cell">
+                            {PLAN_LABELS[m.membership_plan] || m.membership_plan}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn("text-[11px]", m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-600")}>
+                                {m.period_active ? (isStripe ? "Active" : "Recurring") : "Inactive"}
+                              </Badge>
+                              {!activeSchedule && m.period_active && (
+                                <Badge className="text-[11px] bg-amber-100 text-amber-800">No schedule</Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 hidden md:table-cell">
+                            {fmtShortDate(activeSchedule?.next_service_date)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 hidden lg:table-cell text-xs">
+                            {isStripe && m.monthly_price_cents != null
+                              ? `${fmtMoney(m.monthly_price_cents)}/mo`
+                              : schedulePrice != null
+                                ? `${fmtMoney(schedulePrice)}/clean`
+                                : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button size="sm" variant="ghost" className="text-violet-700">
+                              Open
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-                  {/* Actions: comms/schedule (left) + danger (right) */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {activeSchedule ? (
-                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === `sms-${activeSchedule.id}`}
-                          title="Text the customer their self-service manage link" onClick={() => textManageLink(activeSchedule.id)}>
-                          {working === `sms-${activeSchedule.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiChat3Line className="w-3.5 h-3.5 mr-1" /> Manage link</>}
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800" onClick={() => startScheduleForMember(m)}>
-                          <RiCalendarScheduleLine className="w-3.5 h-3.5 mr-1" /> Set up schedule
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === `cl-${m.id}`}
-                        title="Email/SMS customer checklist" onClick={() => void sendMemberChecklist(m)}>
-                        {working === `cl-${m.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiFileList3Line className="w-3.5 h-3.5 mr-1" />Checklist</>}
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs border-violet-200 text-violet-800" disabled={working === `ag-${m.id}`}
-                        title="Email DocuSeal membership agreement" onClick={() => void sendMemberAgreement(m)}>
-                        {working === `ag-${m.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiMailLine className="w-3.5 h-3.5 mr-1" />Agreement</>}
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800" disabled={busy}
-                        title="Cancel membership — stops cleans and notifies the customer" onClick={() => cancelMember(m)}>
-                        {busy ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiCloseCircleLine className="w-3.5 h-3.5 mr-1" />Cancel</>}
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs border-rose-200 text-rose-700" disabled={busy}
-                        title="Delete membership — removes it with no customer notification" onClick={() => deleteMember(m)}>
-                        <RiDeleteBin6Line className="w-3.5 h-3.5 mr-1" />Delete
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          <MemberSheet
+            member={selectedMember}
+            schedules={selectedMemberSchedules}
+            working={working}
+            onClose={() => setSelectedMemberId(null)}
+            onChange={load}
+            onStartSchedule={startScheduleForMember}
+            onTextManageLink={textManageLink}
+            onCopyManageLink={copyManageLink}
+            setWorking={setWorking}
+          />
         </TabsContent>
 
         {/* ─── Schedules ───────────────────────────────────────────────── */}
@@ -652,13 +479,457 @@ export default function AdminRecurringSchedules() {
   );
 }
 
-/** Small labeled detail chip for the member cards. */
-function InfoChip({ label, value }: { label: string; value: string }) {
+// ─── Member profile side sheet (mirrors Customers sheet pattern) ─────────
+
+function MemberSheet({
+  member,
+  schedules,
+  working,
+  onClose,
+  onChange,
+  onStartSchedule,
+  onTextManageLink,
+  onCopyManageLink,
+  setWorking,
+}: {
+  member: Member | null;
+  schedules: Schedule[];
+  working: string | null;
+  onClose: () => void;
+  onChange: () => void;
+  onStartSchedule: (m: Member) => void;
+  onTextManageLink: (scheduleId: string) => void;
+  onCopyManageLink: (token: string | null | undefined) => void;
+  setWorking: (v: string | null) => void;
+}) {
+  const [priceDollars, setPriceDollars] = useState("");
+
+  useEffect(() => {
+    if (!member) return;
+    setPriceDollars(
+      member.monthly_price_cents != null ? (member.monthly_price_cents / 100).toFixed(0) : "",
+    );
+  }, [member]);
+
+  const copyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  if (!member) {
+    return (
+      <Sheet open={false} onOpenChange={() => onClose()}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto bg-white" />
+      </Sheet>
+    );
+  }
+
+  const name = memberName(member);
+  const activeSchedule = member.schedules.find((s) => s.active) || null;
+  const isStripe = !!member.subscription_id;
+  const schedulePrice = activeSchedule?.price_cents ?? member.schedules[0]?.price_cents;
+  const busy = working === member.id;
+  const planLabel = PLAN_LABELS[member.membership_plan] || member.membership_plan;
+
+  const memberAction = async (action: "pause" | "resume") => {
+    if (!member.subscription_id) {
+      toast.error("No Stripe subscription on this client — billing controls don't apply.");
+      return;
+    }
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} the ${planLabel} membership for ${member.email}?`)) return;
+    setWorking(member.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: { action, subscriptionId: member.subscription_id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success(action === "pause" ? "Membership billing paused." : "Membership billing resumed.");
+      onChange();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const cancelMember = async () => {
+    if (!confirm(
+      `Cancel ${name}'s ${planLabel} membership?\n\n` +
+      `• Recurring cleans stop\n` +
+      `• Customer is notified by email${member.customer?.phone ? " & SMS" : ""}\n` +
+      `${member.subscription_id ? "• Stripe billing cancels at the end of the current period" : "• No Stripe subscription to bill"}`,
+    )) return;
+    setWorking(member.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: {
+          action: "cancel",
+          subscriptionId: member.subscription_id || undefined,
+          email: member.email,
+          phone: member.customer?.phone || undefined,
+          name: name || undefined,
+          plan: planLabel,
+          scheduleIds: member.schedules.map((s) => s.id).filter((id) => !String(id).startsWith("local-")),
+        },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success("Membership cancelled — customer notified.");
+      onChange();
+      onClose();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const deleteMember = async () => {
+    if (!confirm(
+      `DELETE ${name}'s membership entirely?\n\n` +
+      `• Removes their recurring schedule\n` +
+      `${member.subscription_id ? "• Cancels Stripe billing immediately\n" : ""}` +
+      `• NO customer notification is sent\n\n` +
+      `This cannot be undone.`,
+    )) return;
+    setWorking(member.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: {
+          action: "delete",
+          subscriptionId: member.subscription_id || undefined,
+          email: member.email,
+          scheduleIds: member.schedules.map((s) => s.id).filter((id) => !String(id).startsWith("local-")),
+        },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success("Membership deleted.");
+      onChange();
+      onClose();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const adjustMemberPrice = async () => {
+    if (!member.subscription_id) { toast.error("No Stripe subscription on this member."); return; }
+    const cents = Math.round(parseFloat(priceDollars) * 100);
+    if (!Number.isFinite(cents) || cents < 100) { toast.error("Enter a valid monthly price ($1+)."); return; }
+    if (!confirm(`Set ${member.email}'s Glow monthly rate to $${(cents / 100).toFixed(2)}? This updates Stripe (with proration).`)) return;
+    setWorking(`price-${member.id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-memberships", {
+        body: { action: "adjust_price", subscriptionId: member.subscription_id, monthlyPriceCents: cents },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success(`Monthly price updated to $${(cents / 100).toFixed(2)}`);
+      onChange();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const sendMemberChecklist = async () => {
+    setWorking(`cl-${member.id}`);
+    try {
+      const data = await sendCustomerChecklist({
+        email: member.email,
+        phone: member.customer?.phone,
+        firstName: member.customer?.first_name,
+        serviceType: "standard",
+        sendEmail: true,
+        sendSms: Boolean(member.customer?.phone),
+      });
+      toast.success(data.smsSent ? "Checklist emailed and texted" : "Checklist emailed");
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const sendMemberAgreement = async () => {
+    setWorking(`ag-${member.id}`);
+    try {
+      const planKey =
+        member.membership_plan === "weekly" || member.membership_plan === "biweekly" || member.membership_plan === "monthly"
+          ? member.membership_plan
+          : "biweekly";
+      const rate =
+        member.monthly_price_cents ??
+        (member.home_size_id && MEMBERSHIP_PRICES[member.home_size_id]
+          ? Math.round((MEMBERSHIP_PRICES[member.home_size_id][planKey] || 0) * 100)
+          : undefined);
+      await sendMembershipAgreement({
+        email: member.email,
+        name,
+        phone: member.customer?.phone || undefined,
+        plan: planLabel,
+        membershipRateCents: rate,
+        homeSizeId: member.home_size_id || undefined,
+        holdPayment: false,
+        sendEmail: true,
+      });
+      toast.success("Membership agreement emailed for e-sign");
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[11px]">
-      <span className="text-slate-400 uppercase tracking-wide text-[9px] font-semibold">{label}</span>
-      <span className="text-slate-700 font-medium">{value}</span>
-    </span>
+    <Sheet open={Boolean(member)} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto bg-white">
+        <SheetHeader className="pb-4 border-b border-slate-100">
+          <div className="flex items-start justify-between gap-3 pr-6">
+            <div className="min-w-0">
+              <SheetTitle className="text-lg text-slate-900 truncate">{name}</SheetTitle>
+              <SheetDescription className="text-slate-500">
+                {planLabel}
+                {member.customer?.city || member.customer?.state
+                  ? ` · ${[member.customer?.city, member.customer?.state].filter(Boolean).join(", ")}`
+                  : ""}
+              </SheetDescription>
+            </div>
+            <div className="flex flex-wrap gap-1 justify-end shrink-0">
+              <Badge className={cn("text-[11px]", member.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-600")}>
+                {member.period_active ? (isStripe ? "Active member" : "Active recurring") : "Inactive"}
+              </Badge>
+              {isStripe
+                ? <Badge className="text-[11px] bg-sky-100 text-sky-700">Stripe</Badge>
+                : <Badge className="text-[11px] bg-slate-100 text-slate-500">No Stripe</Badge>}
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="py-4 space-y-5">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <ContactRow
+              icon={RiMailLine}
+              value={member.email}
+              href={`mailto:${member.email}`}
+              onCopy={() => copyText("Email", member.email)}
+            />
+            <ContactRow
+              icon={RiPhoneLine}
+              value={member.customer?.phone || "—"}
+              href={member.customer?.phone ? `tel:${member.customer.phone}` : undefined}
+              onCopy={member.customer?.phone ? () => copyText("Phone", member.customer!.phone!) : undefined}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <FactCell label="Plan" value={planLabel} />
+            {isStripe && (
+              <FactCell
+                label="Monthly"
+                value={member.monthly_price_cents != null ? `${fmtMoney(member.monthly_price_cents)}/mo` : "—"}
+              />
+            )}
+            <FactCell label="Per clean" value={fmtMoney(schedulePrice)} />
+            {isStripe && member.credits_per_month != null && (
+              <FactCell label="Credits" value={`${member.credits_remaining ?? 0}/${member.credits_per_month} left`} />
+            )}
+            {isStripe && member.current_period_end && (
+              <FactCell label="Renews" value={fmtShortDate(member.current_period_end)} />
+            )}
+            <FactCell label="Next clean" value={fmtShortDate(activeSchedule?.next_service_date)} />
+            <FactCell label="Last clean" value={fmtShortDate(member.last_booking?.service_date)} />
+          </div>
+
+          <Separator />
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule</h3>
+            {schedules.length === 0 && member.schedules.length === 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-3 space-y-2">
+                <p className="text-sm text-amber-900">No recurring schedule set — cleans won&apos;t auto-book.</p>
+                <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={() => onStartSchedule(member)}>
+                  <RiCalendarScheduleLine className="w-3.5 h-3.5 mr-1.5" /> Set up schedule
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {schedules.length > 0
+                  ? schedules.map((s) => (
+                      <div key={s.id} className="rounded-lg border border-slate-200 px-3 py-2.5 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900 capitalize">{s.cadence}</p>
+                            <p className="text-xs text-slate-500">
+                              Next {fmtShortDate(s.next_service_date)}
+                              {s.preferred_time_slot ? ` · ${s.preferred_time_slot}` : ""}
+                              {s.price_cents != null ? ` · ${fmtMoney(s.price_cents)}/clean` : ""}
+                            </p>
+                            {(s.address || s.city) && (
+                              <p className="text-xs text-slate-400 truncate">
+                                {[s.address, s.city, s.state, s.zip_code].filter(Boolean).join(", ")}
+                              </p>
+                            )}
+                          </div>
+                          <Badge className={cn("text-[11px] shrink-0", s.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600")}>
+                            {s.active ? "Active" : "Paused"}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={working === `sms-${s.id}`}
+                            onClick={() => onTextManageLink(s.id)}>
+                            {working === `sms-${s.id}`
+                              ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
+                              : <><RiChat3Line className="w-3.5 h-3.5 mr-1" />Text manage link</>}
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onCopyManageLink(s.manage_token)}>
+                            <RiLinkM className="w-3.5 h-3.5 mr-1" /> Copy link
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  : member.schedules.map((s) => (
+                      <div key={s.id} className="rounded-lg border border-slate-200 px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900 capitalize">{s.cadence}</p>
+                            <p className="text-xs text-slate-500">Next {fmtShortDate(s.next_service_date)}</p>
+                          </div>
+                          <Badge className={cn("text-[11px]", s.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600")}>
+                            {s.active ? "Active" : "Paused"}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                {!activeSchedule && (
+                  <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={() => onStartSchedule(member)}>
+                    <RiCalendarScheduleLine className="w-3.5 h-3.5 mr-1.5" /> Set up schedule
+                  </Button>
+                )}
+              </div>
+            )}
+          </section>
+
+          <Separator />
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Communications</h3>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={working === `cl-${member.id}`} onClick={() => void sendMemberChecklist()}>
+                {working === `cl-${member.id}`
+                  ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
+                  : <><RiFileList3Line className="w-3.5 h-3.5 mr-1.5" />Send checklist</>}
+              </Button>
+              <Button size="sm" variant="outline" className="border-violet-200 text-violet-800" disabled={working === `ag-${member.id}`}
+                onClick={() => void sendMemberAgreement()}>
+                {working === `ag-${member.id}`
+                  ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
+                  : <><RiMailLine className="w-3.5 h-3.5 mr-1.5" />Send agreement</>}
+              </Button>
+            </div>
+          </section>
+
+          {isStripe && (
+            <>
+              <Separator />
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Stripe billing</h3>
+                <div className="flex flex-wrap items-end gap-2 rounded-lg bg-violet-50/70 border border-violet-100 px-3 py-3">
+                  <div className="min-w-[140px] flex-1">
+                    <Label className="text-[10px] uppercase tracking-wide text-violet-700">Monthly Glow price ($)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step="1"
+                      className="h-9 bg-white mt-1"
+                      value={priceDollars}
+                      onChange={(e) => setPriceDollars(e.target.value)}
+                      placeholder="e.g. 199"
+                    />
+                  </div>
+                  <Button size="sm" className="h-9 bg-violet-600 hover:bg-violet-700 text-white" disabled={working === `price-${member.id}`}
+                    onClick={() => void adjustMemberPrice()}>
+                    {working === `price-${member.id}`
+                      ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
+                      : <><RiMoneyDollarCircleLine className="w-3.5 h-3.5 mr-1.5" />Update price</>}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void memberAction("pause")}>
+                    <RiPauseLine className="w-3.5 h-3.5 mr-1.5" /> Pause billing
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void memberAction("resume")}>
+                    <RiPlayLine className="w-3.5 h-3.5 mr-1.5" /> Resume billing
+                  </Button>
+                </div>
+              </section>
+            </>
+          )}
+
+          <Separator />
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Danger zone</h3>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" className="border-amber-300 text-amber-800" disabled={busy} onClick={() => void cancelMember()}>
+                {busy ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiCloseCircleLine className="w-3.5 h-3.5 mr-1.5" />Cancel membership</>}
+              </Button>
+              <Button size="sm" variant="outline" className="border-rose-200 text-rose-700" disabled={busy} onClick={() => void deleteMember()}>
+                <RiDeleteBin6Line className="w-3.5 h-3.5 mr-1.5" />Delete membership
+              </Button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Cancel notifies the customer. Delete removes the plan with no notification.
+            </p>
+          </section>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function FactCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{label}</p>
+      <p className="text-sm font-medium text-slate-800 mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
+function ContactRow({
+  icon: Icon,
+  value,
+  href,
+  onCopy,
+}: {
+  icon: typeof RiMailLine;
+  value: string;
+  href?: string;
+  onCopy?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2">
+      <Icon className="w-4 h-4 text-slate-400 shrink-0" />
+      {href ? (
+        <a className="truncate hover:text-violet-700 flex-1" href={href}>{value}</a>
+      ) : (
+        <span className="truncate flex-1">{value}</span>
+      )}
+      {onCopy ? (
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onCopy}>
+          <RiFileCopyLine className="w-3.5 h-3.5 text-slate-500" />
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
