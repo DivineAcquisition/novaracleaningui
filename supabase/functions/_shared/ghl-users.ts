@@ -121,6 +121,32 @@ async function findUserByEmail(
   return null;
 }
 
+// Location-scoped lookup — a location Private Integration Token can list its
+// own users even when the companyId-scoped search returns nothing (the usual
+// cause of "template user not found").
+async function findUserByLocation(
+  token: string,
+  locationId: string,
+  email: string,
+): Promise<Json | null> {
+  const target = email.trim().toLowerCase();
+  const attempts = [
+    `/users/?locationId=${encodeURIComponent(locationId)}`,
+    `/users/search?locationId=${encodeURIComponent(locationId)}&query=${encodeURIComponent(email)}`,
+    `/users/search?locationId=${encodeURIComponent(locationId)}&email=${encodeURIComponent(email)}`,
+  ];
+  for (const path of attempts) {
+    const res = await ghlFetch(token, path, { method: "GET" });
+    if (!res.ok) continue;
+    const users = res.json?.users as Json[] | undefined;
+    if (Array.isArray(users)) {
+      const match = users.find((u) => String(u.email || "").trim().toLowerCase() === target);
+      if (match?.id) return match;
+    }
+  }
+  return null;
+}
+
 async function fetchUserById(token: string, userId: string): Promise<Json | null> {
   const res = await ghlFetch(token, `/users/${encodeURIComponent(userId)}`, { method: "GET" });
   if (!res.ok) return null;
@@ -165,7 +191,9 @@ export async function provisionGhlUserFromTemplate(
     return { ghlUserId: null, created: false, error: "GHL companyId not resolved" };
   }
 
-  const existing = await findUserByEmail(token, companyId, email);
+  const existing =
+    (await findUserByEmail(token, companyId, email)) ||
+    (await findUserByLocation(token, locationId, email));
   if (existing?.id) {
     log("user already exists", { email, ghlUserId: existing.id });
     return { ghlUserId: String(existing.id), created: false };
@@ -177,23 +205,20 @@ export async function provisionGhlUserFromTemplate(
     DEFAULT_TEMPLATE_EMAIL
   ).trim().toLowerCase();
 
-  let template = await findUserByEmail(token, companyId, templateEmail);
+  let template =
+    (await findUserByEmail(token, companyId, templateEmail)) ||
+    (await findUserByLocation(token, locationId, templateEmail));
   if (template?.id) {
     const full = await fetchUserById(token, String(template.id));
     if (full) template = full;
   }
 
-  if (!template?.id) {
-    return {
-      ghlUserId: null,
-      created: false,
-      error: `GHL template user not found: ${templateEmail}`,
-    };
-  }
-
-  const roles = (template.roles as Json | undefined) ?? {};
+  // Clone the template when found; otherwise fall back to a sensible default
+  // location-scoped user so a missing/unlistable template no longer blocks
+  // seat creation.
+  const roles = (template?.roles as Json | undefined) ?? {};
   const locationIds = (
-    (template.locationIds as string[] | undefined) ||
+    (template?.locationIds as string[] | undefined) ||
     (roles.locationIds as string[] | undefined) ||
     [locationId]
   ).filter(Boolean);
@@ -205,13 +230,15 @@ export async function provisionGhlUserFromTemplate(
     email,
     password: input.password,
     phone: input.phone || undefined,
-    type: (template.type as string) || (roles.type as string) || "account",
-    role: (template.role as string) || (roles.role as string) || "user",
+    type: (template?.type as string) || (roles.type as string) || "account",
+    role: (template?.role as string) || (roles.role as string) || "user",
     locationIds,
-    permissions: template.permissions || undefined,
-    scopes: normalizeScopes(template.scopes),
-    scopesAssignedToOnly: normalizeScopes(template.scopesAssignedToOnly),
   };
+  if (template?.permissions) body.permissions = template.permissions;
+  const scopes = normalizeScopes(template?.scopes);
+  if (scopes) body.scopes = scopes;
+  const scopesAO = normalizeScopes(template?.scopesAssignedToOnly);
+  if (scopesAO) body.scopesAssignedToOnly = scopesAO;
 
   const createRes = await ghlFetch(token, "/users/", {
     method: "POST",
@@ -221,17 +248,19 @@ export async function provisionGhlUserFromTemplate(
   if (!createRes.ok) {
     const msg = createRes.text.slice(0, 300);
     if (createRes.status === 422 || msg.toLowerCase().includes("already")) {
-      const again = await findUserByEmail(token, companyId, email);
+      const again =
+        (await findUserByEmail(token, companyId, email)) ||
+        (await findUserByLocation(token, locationId, email));
       if (again?.id) {
         return { ghlUserId: String(again.id), created: false };
       }
     }
-    log("create user failed", { status: createRes.status, msg });
-    return { ghlUserId: null, created: false, error: msg };
+    log("create user failed", { status: createRes.status, msg, usedTemplate: !!template?.id });
+    return { ghlUserId: null, created: false, error: `${template?.id ? "" : "(no template) "}${msg}` };
   }
 
   const created = extractUserRecord(createRes.json);
   const ghlUserId = created?.id ? String(created.id) : null;
-  log("user created", { email, ghlUserId, templateEmail });
+  log("user created", { email, ghlUserId, templateEmail, usedTemplate: !!template?.id });
   return { ghlUserId, created: true };
 }
