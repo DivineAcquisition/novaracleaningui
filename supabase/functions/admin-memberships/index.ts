@@ -111,33 +111,35 @@ serve(async (req) => {
       }
 
       // Recurring schedules: deactivate (cancel) or hard-delete (delete).
+      // NOTE: build the filter synchronously and chain .select() BEFORE the
+      // await. A previous version wrapped this in an `async` helper that
+      // returned the PostgREST builder — because the builder is thenable, the
+      // async fn auto-executed the query and returned the RESULT, so the later
+      // `.select()` call threw ("q.select is not a function") → 500.
       let schedulesAffected = 0;
-      const applyToSchedules = async (builder: any) => {
-        if (scheduleIds.length > 0) return builder.in("id", scheduleIds);
-        if (email) return builder.eq("email", email);
-        return null;
-      };
       if (email || scheduleIds.length > 0) {
-        if (action === "delete") {
-          const q = await applyToSchedules(
-            admin.from("customer_recurring_schedules").delete(),
-          );
-          if (q) {
-            const { data: del } = await q.select("id");
+        // deno-lint-ignore no-explicit-any
+        const scoped = (b: any) => (scheduleIds.length > 0 ? b.in("id", scheduleIds) : b.eq("email", email));
+        try {
+          if (action === "delete") {
+            const { data: del, error: delErr } = await scoped(
+              admin.from("customer_recurring_schedules").delete(),
+            ).select("id");
+            if (delErr) console.error("[admin-memberships] schedule delete failed", delErr);
             schedulesAffected = (del || []).length;
-          }
-        } else {
-          const q = await applyToSchedules(
-            admin.from("customer_recurring_schedules").update({
-              active: false,
-              next_service_date: null,
-              updated_at: new Date().toISOString(),
-            }),
-          );
-          if (q) {
-            const { data: upd } = await q.select("id");
+          } else {
+            const { data: upd, error: updErr } = await scoped(
+              admin.from("customer_recurring_schedules").update({
+                active: false,
+                next_service_date: null,
+                updated_at: new Date().toISOString(),
+              }),
+            ).select("id");
+            if (updErr) console.error("[admin-memberships] schedule deactivate failed", updErr);
             schedulesAffected = (upd || []).length;
           }
+        } catch (e) {
+          console.error("[admin-memberships] schedule op threw", e);
         }
       }
 
