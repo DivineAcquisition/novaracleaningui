@@ -312,7 +312,12 @@ serve(async (req) => {
         password: ghlPassword,
         templateEmail,
       });
-      if (ghl.error) return json({ error: `GHL user creation failed: ${ghl.error}` }, 502);
+      // GHL seat is best-effort — a CRM provisioning hiccup must NOT block
+      // approval. The VA is still approved + granted workspace access below;
+      // the GHL error is surfaced so an admin can fix the CRM seat separately.
+      if (ghl.error) {
+        console.warn(`[admin-va-provision] GHL provisioning failed (non-blocking): ${ghl.error}`);
+      }
 
       // 2) Internal Admin Workspace access ('va' role + invite email) via the
       //    existing team-user function — forwarding the caller's admin JWT.
@@ -408,6 +413,7 @@ serve(async (req) => {
         approved: true,
         ghlUserId: ghl.ghlUserId,
         ghlUserCreated: ghl.created,
+        ghlError: ghl.error || ghl.skipped || null,
         portalUserId,
         workspaceInviteSent,
         vaEmailSent,
