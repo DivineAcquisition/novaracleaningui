@@ -475,6 +475,29 @@ function VaOnboardingQueue() {
   const [offerPayType, setOfferPayType] = useState<"base" | "hourly">("base");
   const [offerNote, setOfferNote] = useState("");
   const [sendingOffer, setSendingOffer] = useState(false);
+  const [syncingAirtable, setSyncingAirtable] = useState(false);
+
+  // Backlog every VA into the Airtable "VAs" table (idempotent). Also fired
+  // silently after an approval so Airtable always reflects the latest state.
+  const syncVasToAirtable = async (silent = false) => {
+    if (!silent) setSyncingAirtable(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/va/airtable-sync", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || `Sync failed (${res.status})`);
+      if (!silent) {
+        toast.success(`Synced ${j.vasSynced ?? 0} VA${j.vasSynced === 1 ? "" : "s"} to Airtable${j.created ? " (table created)" : ""}.`);
+      }
+    } catch (e) {
+      if (!silent) toast.error((e as { message?: string })?.message || "Airtable sync failed");
+    } finally {
+      if (!silent) setSyncingAirtable(false);
+    }
+  };
 
   const loadRows = async () => {
     setLoading(true);
@@ -557,10 +580,15 @@ function VaOnboardingQueue() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       if (action === "approve") {
-        const d = data as { ghlUserCreated?: boolean; workspaceInviteSent?: boolean; vaEmailSent?: boolean };
+        const d = data as { ghlUserCreated?: boolean; ghlError?: string | null; workspaceInviteSent?: boolean; vaEmailSent?: boolean };
         toast.success(
-          `Approved & provisioned — GHL user ${d.ghlUserCreated ? "created" : "already existed"}, workspace ${d.workspaceInviteSent ? "invite sent" : "granted"}, VA ${d.vaEmailSent ? "emailed their access" : "email pending"}.`,
+          `Approved & provisioned — GHL user ${d.ghlError ? "skipped (needs CRM setup)" : d.ghlUserCreated ? "created" : "already existed"}, workspace ${d.workspaceInviteSent ? "invite sent" : "granted"}, VA ${d.vaEmailSent ? "emailed their access" : "email pending"}.`,
         );
+        if (d.ghlError) {
+          toast.warning(`GHL seat not created: ${d.ghlError}. The VA is approved with workspace access — set up their CRM seat manually.`);
+        }
+        // Keep Airtable in sync with the newly-approved VA (best-effort).
+        void syncVasToAirtable(true);
       } else if (action === "reject") {
         toast.success("Application rejected — nothing was provisioned.");
       } else {
@@ -660,9 +688,22 @@ function VaOnboardingQueue() {
               AND you approve here.
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => void loadRows()} disabled={loading}>
-            <RiRefreshLine className={cn("w-4 h-4", loading && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-violet-200 text-violet-800"
+              onClick={() => void syncVasToAirtable()}
+              disabled={syncingAirtable}
+              title="Backlog every VA into the Airtable VAs table"
+            >
+              {syncingAirtable ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiRefreshLine className="w-4 h-4 mr-1.5" />}
+              Sync to Airtable
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void loadRows()} disabled={loading}>
+              <RiRefreshLine className={cn("w-4 h-4", loading && "animate-spin")} />
+            </Button>
+          </div>
         </div>
 
         {/* Send an offer letter (tokenized link, expires in 30 minutes) */}
