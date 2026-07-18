@@ -382,8 +382,14 @@ serve(async (req) => {
         preferred_time_slot: s.preferred_time_slot,
         price_cents: s.price_cents,
         manage_token: s.manage_token || null,
+        created_at: s.created_at || null,
       });
       if (s.active === true) entry.period_active = true;
+      const created = s.created_at ? String(s.created_at) : null;
+      if (created) {
+        const prev = entry.member_since ? String(entry.member_since) : null;
+        if (!prev || created < prev) entry.member_since = created;
+      }
     }
 
     for (const b of (planBookings || []) as Record<string, unknown>[]) {
@@ -428,33 +434,101 @@ serve(async (req) => {
     }
 
     const lastBookingByEmail = new Map<string, Record<string, unknown>>();
+    type RevenueAgg = {
+      lifetime_revenue_cents: number;
+      membership_revenue_cents: number;
+      completed_cleans: number;
+      membership_cleans: number;
+      first_service_date: string | null;
+      last_completed_date: string | null;
+    };
+    const revenueByEmail = new Map<string, RevenueAgg>();
     if (emails.length > 0) {
       const { data: recentBookings } = await admin
         .from("bookings")
-        .select("email, service_date, status")
+        .select(
+          "email, service_date, status, final_charge_cents, total_estimate_cents, membership_plan, uses_credit",
+        )
         .in("email", emails)
         .order("service_date", { ascending: false })
-        .limit(1000);
+        .limit(5000);
       for (const b of recentBookings || []) {
         const key = keyOf(b.email);
-        if (!lastBookingByEmail.has(key)) lastBookingByEmail.set(key, b);
+        if (!lastBookingByEmail.has(key)) {
+          lastBookingByEmail.set(key, {
+            email: b.email,
+            service_date: b.service_date,
+            status: b.status,
+          });
+        }
+        const status = String(b.status || "");
+        if (status !== "completed") continue;
+        const charged = Number(b.final_charge_cents ?? b.total_estimate_cents ?? 0) || 0;
+        const plan = b.membership_plan == null ? "" : String(b.membership_plan);
+        const isMembership = (plan !== "" && plan !== "none") || b.uses_credit === true;
+        let agg = revenueByEmail.get(key);
+        if (!agg) {
+          agg = {
+            lifetime_revenue_cents: 0,
+            membership_revenue_cents: 0,
+            completed_cleans: 0,
+            membership_cleans: 0,
+            first_service_date: null,
+            last_completed_date: null,
+          };
+          revenueByEmail.set(key, agg);
+        }
+        agg.lifetime_revenue_cents += charged;
+        agg.completed_cleans += 1;
+        if (isMembership) {
+          agg.membership_revenue_cents += charged;
+          agg.membership_cleans += 1;
+        }
+        const sd = b.service_date ? String(b.service_date) : null;
+        if (sd) {
+          if (!agg.last_completed_date || sd > agg.last_completed_date) agg.last_completed_date = sd;
+          if (!agg.first_service_date || sd < agg.first_service_date) agg.first_service_date = sd;
+        }
       }
     }
 
     const members = Array.from(byEmail.values())
-      .map((entry) => ({
-        ...entry,
-        customer: customersByEmail.get(entry.email) || {
-          first_name: entry.schedule_first_name || null,
-          last_name: entry.schedule_last_name || null,
-          phone: entry.schedule_phone || null,
-        },
-        last_booking: lastBookingByEmail.get(entry.email) || null,
-      }))
+      .map((entry) => {
+        const rev = revenueByEmail.get(entry.email);
+        const memberSince =
+          entry.member_since ||
+          entry.created_at ||
+          rev?.first_service_date ||
+          null;
+        return {
+          ...entry,
+          member_since: memberSince,
+          lifetime_revenue_cents: rev?.lifetime_revenue_cents ?? 0,
+          membership_revenue_cents: rev?.membership_revenue_cents ?? 0,
+          completed_cleans: rev?.completed_cleans ?? 0,
+          membership_cleans: rev?.membership_cleans ?? 0,
+          first_service_date: rev?.first_service_date ?? null,
+          last_completed_date: rev?.last_completed_date ?? null,
+          customer: customersByEmail.get(entry.email) || {
+            first_name: entry.schedule_first_name || null,
+            last_name: entry.schedule_last_name || null,
+            phone: entry.schedule_phone || null,
+          },
+          last_booking: lastBookingByEmail.get(entry.email) || null,
+        };
+      })
       .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
         Number(b.period_active === true) - Number(a.period_active === true));
 
-    return json({ ok: true, members });
+    const activeMembers = members.filter((m) => m.period_active === true);
+    const portfolio = {
+      active_members: activeMembers.length,
+      total_members: members.length,
+      lifetime_revenue_cents: members.reduce((n, m) => n + Number(m.lifetime_revenue_cents || 0), 0),
+      membership_revenue_cents: members.reduce((n, m) => n + Number(m.membership_revenue_cents || 0), 0),
+    };
+
+    return json({ ok: true, members, portfolio });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[admin-memberships]", msg);

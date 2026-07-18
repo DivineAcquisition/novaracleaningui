@@ -29,6 +29,7 @@ import {
   RiVipCrownLine, RiUserHeartLine, RiStopCircleLine, RiCalendarScheduleLine, RiChat3Line,
   RiSearchLine, RiLinkM, RiMailLine, RiFileList3Line, RiMoneyDollarCircleLine,
   RiCloseCircleLine, RiDeleteBin6Line, RiPhoneLine, RiFileCopyLine,
+  RiLineChartLine, RiAlertLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,14 @@ interface Member {
     price_cents?: number | null;
   }[];
   last_booking: { service_date?: string | null; status?: string | null } | null;
+  created_at?: string | null;
+  member_since?: string | null;
+  lifetime_revenue_cents?: number | null;
+  membership_revenue_cents?: number | null;
+  completed_cleans?: number | null;
+  membership_cleans?: number | null;
+  first_service_date?: string | null;
+  last_completed_date?: string | null;
 }
 
 const TIME_SLOTS = [
@@ -117,6 +126,87 @@ function fmtShortDate(iso: string | null | undefined): string {
   return format(d, "MMM d");
 }
 
+/** Monthly recurring revenue projection for a member (cents). */
+function projectedMonthlyCents(m: Member): number | null {
+  if (m.subscription_id && m.monthly_price_cents != null && m.monthly_price_cents > 0) {
+    return m.monthly_price_cents;
+  }
+  const planKey =
+    m.membership_plan === "weekly" || m.membership_plan === "biweekly" || m.membership_plan === "monthly"
+      ? m.membership_plan
+      : null;
+  if (planKey && m.home_size_id && MEMBERSHIP_PRICES[m.home_size_id]?.[planKey] != null) {
+    return Math.round(MEMBERSHIP_PRICES[m.home_size_id][planKey] * 100);
+  }
+  const s = m.schedules.find((x) => x.active) || m.schedules[0];
+  if (!s?.price_cents || s.price_cents <= 0) return null;
+  if (s.cadence === "weekly") return Math.round((s.price_cents * 52) / 12);
+  if (s.cadence === "monthly") return s.price_cents;
+  return Math.round((s.price_cents * 26) / 12); // biweekly default
+}
+
+function projectedAnnualCents(m: Member): number | null {
+  const mo = projectedMonthlyCents(m);
+  return mo == null ? null : mo * 12;
+}
+
+/** Actual membership LTV from completed membership/recurring cleans. */
+function memberLtvCents(m: Member): number {
+  if (m.membership_revenue_cents != null && m.membership_revenue_cents > 0) {
+    return m.membership_revenue_cents;
+  }
+  return m.lifetime_revenue_cents ?? 0;
+}
+
+function tenureLabel(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  const months = Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24 * 30.44)));
+  if (months < 1) return "<1 mo";
+  if (months < 12) return `${months} mo`;
+  const yrs = Math.floor(months / 12);
+  const rem = months % 12;
+  return rem ? `${yrs}y ${rem}mo` : `${yrs}y`;
+}
+
+function riskFlags(m: Member): string[] {
+  const flags: string[] = [];
+  if (!m.period_active) flags.push("Inactive");
+  const hasActiveSchedule = m.schedules.some((s) => s.active);
+  if (m.period_active && !hasActiveSchedule) flags.push("No schedule");
+  const last =
+    m.last_completed_date ||
+    m.last_booking?.service_date ||
+    null;
+  if (last) {
+    const days = (Date.now() - new Date(`${last.includes("T") ? last : `${last}T12:00:00`}`).getTime()) / 86_400_000;
+    const cadence = (m.schedules.find((s) => s.active)?.cadence || m.membership_plan || "").toLowerCase();
+    const expected = cadence === "weekly" ? 14 : cadence === "monthly" ? 45 : 28;
+    if (Number.isFinite(days) && days > expected) flags.push("Overdue clean");
+  } else if (m.period_active) {
+    flags.push("No cleans yet");
+  }
+  if (
+    m.subscription_id &&
+    m.credits_remaining != null &&
+    m.credits_remaining > 0 &&
+    m.current_period_end
+  ) {
+    const daysLeft =
+      (new Date(m.current_period_end).getTime() - Date.now()) / 86_400_000;
+    if (daysLeft >= 0 && daysLeft < 7) flags.push("Unused credits");
+  }
+  return flags;
+}
+
+function avgCleanCents(m: Member): number | null {
+  const cleans = m.membership_cleans || m.completed_cleans || 0;
+  const rev = memberLtvCents(m);
+  if (!cleans || !rev) return null;
+  return Math.round(rev / cleans);
+}
+
 /** Cadence-aware upcoming dates from a start date. */
 function previewDates(start: string, cadence: string, count = 4): string[] {
   if (!start) return [];
@@ -132,6 +222,83 @@ function previewDates(start: string, cadence: string, count = 4): string[] {
     d = n;
   }
   return out;
+}
+
+async function attachBookingRevenue(list: Member[]): Promise<Member[]> {
+  const emails = Array.from(new Set(list.map((m) => m.email).filter(Boolean)));
+  if (emails.length === 0) return list;
+
+  type Agg = {
+    lifetime_revenue_cents: number;
+    membership_revenue_cents: number;
+    completed_cleans: number;
+    membership_cleans: number;
+    first_service_date: string | null;
+    last_completed_date: string | null;
+  };
+  const byEmail = new Map<string, Agg>();
+
+  for (let i = 0; i < emails.length; i += 80) {
+    const chunk = emails.slice(i, i + 80);
+    const { data } = await (supabase.from as any)("bookings")
+      .select("email, status, final_charge_cents, total_estimate_cents, membership_plan, uses_credit, service_date")
+      .in("email", chunk)
+      .eq("status", "completed")
+      .limit(3000);
+    for (const b of (data || []) as Array<Record<string, unknown>>) {
+      const key = String(b.email || "").toLowerCase().trim();
+      if (!key) continue;
+      let agg = byEmail.get(key);
+      if (!agg) {
+        agg = {
+          lifetime_revenue_cents: 0,
+          membership_revenue_cents: 0,
+          completed_cleans: 0,
+          membership_cleans: 0,
+          first_service_date: null,
+          last_completed_date: null,
+        };
+        byEmail.set(key, agg);
+      }
+      const charged = Number(b.final_charge_cents ?? b.total_estimate_cents ?? 0) || 0;
+      const plan = b.membership_plan == null ? "" : String(b.membership_plan);
+      const isMembership = (plan !== "" && plan !== "none") || b.uses_credit === true;
+      agg.lifetime_revenue_cents += charged;
+      agg.completed_cleans += 1;
+      if (isMembership) {
+        agg.membership_revenue_cents += charged;
+        agg.membership_cleans += 1;
+      }
+      const sd = b.service_date ? String(b.service_date) : null;
+      if (sd) {
+        if (!agg.last_completed_date || sd > agg.last_completed_date) agg.last_completed_date = sd;
+        if (!agg.first_service_date || sd < agg.first_service_date) agg.first_service_date = sd;
+      }
+    }
+  }
+
+  return list.map((m) => {
+    const agg = byEmail.get(m.email.toLowerCase());
+    if (!agg) {
+      return {
+        ...m,
+        lifetime_revenue_cents: m.lifetime_revenue_cents ?? 0,
+        membership_revenue_cents: m.membership_revenue_cents ?? 0,
+        completed_cleans: m.completed_cleans ?? 0,
+        membership_cleans: m.membership_cleans ?? 0,
+      };
+    }
+    return {
+      ...m,
+      lifetime_revenue_cents: agg.lifetime_revenue_cents,
+      membership_revenue_cents: agg.membership_revenue_cents,
+      completed_cleans: agg.completed_cleans,
+      membership_cleans: agg.membership_cleans,
+      first_service_date: agg.first_service_date || m.first_service_date || null,
+      last_completed_date: agg.last_completed_date || m.last_completed_date || null,
+      member_since: m.member_since || m.created_at || agg.first_service_date || null,
+    };
+  });
 }
 
 export default function AdminRecurringSchedules() {
@@ -158,6 +325,7 @@ export default function AdminRecurringSchedules() {
     setSchedules(schedRows);
     setCleaners((c as Cleaner[]) || []);
 
+    let nextMembers: Member[] = [];
     const mData = (membersRes as any)?.data;
     if ((membersRes as any)?.error || mData?.error || !Array.isArray(mData?.members)) {
       // Edge function unavailable (not deployed yet / offline): build the
@@ -181,6 +349,7 @@ export default function AdminRecurringSchedules() {
             customer: { first_name: row.first_name, last_name: row.last_name, phone: row.phone },
             schedules: [],
             last_booking: null,
+            member_since: (row as Schedule & { created_at?: string }).created_at || null,
           };
           byEmail.set(email, entry);
         }
@@ -190,18 +359,26 @@ export default function AdminRecurringSchedules() {
           price_cents: row.price_cents,
         });
         if (row.active) entry.period_active = true;
+        const created = (row as Schedule & { created_at?: string }).created_at;
+        if (created && (!entry.member_since || created < entry.member_since)) {
+          entry.member_since = created;
+        }
       }
-      setMembers(Array.from(byEmail.values()));
+      nextMembers = Array.from(byEmail.values());
       setMembersNotice(
         "Stripe billing data unavailable (admin-memberships function not reachable) — showing recurring clients from schedules. Billing controls need the function deployed.",
       );
     } else {
-      setMembers((mData.members as Member[]).map((m) => ({
+      nextMembers = (mData.members as Member[]).map((m) => ({
         ...m,
         sources: Array.isArray(m.sources) ? m.sources : ["stripe"],
         schedules: Array.isArray(m.schedules) ? m.schedules : [],
-      })));
+      }));
     }
+
+    // Attach / refresh LTV from completed bookings (works even if API omitted it).
+    nextMembers = await attachBookingRevenue(nextMembers);
+    setMembers(nextMembers);
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -301,6 +478,31 @@ export default function AdminRecurringSchedules() {
     [members],
   );
 
+  const portfolio = useMemo(() => {
+    const active = members.filter((m) => m.period_active);
+    let mrr = 0;
+    let mrrCount = 0;
+    let ltv = 0;
+    let atRisk = 0;
+    for (const m of active) {
+      const proj = projectedMonthlyCents(m);
+      if (proj != null) {
+        mrr += proj;
+        mrrCount += 1;
+      }
+      ltv += memberLtvCents(m);
+      if (riskFlags(m).length > 0) atRisk += 1;
+    }
+    return {
+      activeCount: active.length,
+      mrrCents: mrr,
+      arrCents: mrr * 12,
+      arpuCents: mrrCount > 0 ? Math.round(mrr / mrrCount) : 0,
+      ltvCents: ltv,
+      atRisk,
+    };
+  }, [members]);
+
   if (loading) return <div className="flex justify-center py-20"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
@@ -319,6 +521,35 @@ export default function AdminRecurringSchedules() {
         <Button className="shrink-0" onClick={() => router.push("/admin/csr?type=recurring")}>
           <RiAddLine className="w-4 h-4 mr-1.5" /> New recurring plan
         </Button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+        <InsightStat
+          label="Active MRR"
+          value={fmtMoney(portfolio.mrrCents)}
+          hint={`${portfolio.activeCount} active · ARPU ${fmtMoney(portfolio.arpuCents)}`}
+        />
+        <InsightStat
+          label="Active ARR"
+          value={fmtMoney(portfolio.arrCents)}
+          hint="Projected annual from active plans"
+        />
+        <InsightStat
+          label="Portfolio LTV"
+          value={fmtMoney(portfolio.ltvCents)}
+          hint="Completed membership cleans"
+        />
+        <InsightStat
+          label="Active members"
+          value={String(portfolio.activeCount)}
+          hint={`${members.length} total in hub`}
+        />
+        <InsightStat
+          label="At risk"
+          value={String(portfolio.atRisk)}
+          hint="No schedule, overdue, or unused credits"
+          warn={portfolio.atRisk > 0}
+        />
       </div>
 
       {membersNeedingSchedule.length > 0 && (
@@ -367,15 +598,16 @@ export default function AdminRecurringSchedules() {
                     <th className="text-left px-4 py-3 font-semibold">Name</th>
                     <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell">Plan</th>
                     <th className="text-left px-4 py-3 font-semibold">Status</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">Next clean</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell">Billing</th>
+                    <th className="text-right px-4 py-3 font-semibold hidden md:table-cell">LTV</th>
+                    <th className="text-right px-4 py-3 font-semibold hidden lg:table-cell">Projected</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden xl:table-cell">Next clean</th>
                     <th className="w-10 px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredMembers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-12 text-slate-500">
+                      <td colSpan={7} className="text-center py-12 text-slate-500">
                         {q ? "No members match your search." : "No recurring clients yet."}
                       </td>
                     </tr>
@@ -383,7 +615,9 @@ export default function AdminRecurringSchedules() {
                     filteredMembers.map((m) => {
                       const activeSchedule = m.schedules.find((s) => s.active);
                       const isStripe = !!m.subscription_id;
-                      const schedulePrice = activeSchedule?.price_cents ?? m.schedules[0]?.price_cents;
+                      const ltv = memberLtvCents(m);
+                      const projMo = projectedMonthlyCents(m);
+                      const risks = riskFlags(m);
                       return (
                         <tr
                           key={m.id}
@@ -402,20 +636,24 @@ export default function AdminRecurringSchedules() {
                               <Badge className={cn("text-[11px]", m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-600")}>
                                 {m.period_active ? (isStripe ? "Active" : "Recurring") : "Inactive"}
                               </Badge>
-                              {!activeSchedule && m.period_active && (
-                                <Badge className="text-[11px] bg-amber-100 text-amber-800">No schedule</Badge>
-                              )}
+                              {risks.slice(0, 1).map((r) => (
+                                <Badge key={r} className="text-[11px] bg-amber-100 text-amber-800">{r}</Badge>
+                              ))}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-slate-600 hidden md:table-cell">
-                            {fmtShortDate(activeSchedule?.next_service_date)}
+                          <td className="px-4 py-3 text-right text-slate-900 font-semibold tabular-nums hidden md:table-cell">
+                            {fmtMoney(ltv)}
                           </td>
-                          <td className="px-4 py-3 text-slate-600 hidden lg:table-cell text-xs">
-                            {isStripe && m.monthly_price_cents != null
-                              ? `${fmtMoney(m.monthly_price_cents)}/mo`
-                              : schedulePrice != null
-                                ? `${fmtMoney(schedulePrice)}/clean`
-                                : "—"}
+                          <td className="px-4 py-3 text-right text-slate-700 tabular-nums hidden lg:table-cell text-xs">
+                            {projMo != null ? (
+                              <span>
+                                {fmtMoney(projMo)}
+                                <span className="text-slate-400">/mo</span>
+                              </span>
+                            ) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 hidden xl:table-cell">
+                            {fmtShortDate(activeSchedule?.next_service_date)}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <Button size="sm" variant="ghost" className="text-violet-700">
@@ -534,6 +772,12 @@ function MemberSheet({
   const schedulePrice = activeSchedule?.price_cents ?? member.schedules[0]?.price_cents;
   const busy = working === member.id;
   const planLabel = PLAN_LABELS[member.membership_plan] || member.membership_plan;
+  const ltvCents = memberLtvCents(member);
+  const projMo = projectedMonthlyCents(member);
+  const projYr = projectedAnnualCents(member);
+  const avgClean = avgCleanCents(member);
+  const risks = riskFlags(member);
+  const cleansDone = member.membership_cleans ?? member.completed_cleans ?? 0;
 
   const memberAction = async (action: "pause" | "resume") => {
     if (!member.subscription_id) {
@@ -746,8 +990,50 @@ function MemberSheet({
               <FactCell label="Renews" value={fmtShortDate(member.current_period_end)} />
             )}
             <FactCell label="Next clean" value={fmtShortDate(activeSchedule?.next_service_date)} />
-            <FactCell label="Last clean" value={fmtShortDate(member.last_booking?.service_date)} />
+            <FactCell label="Last clean" value={fmtShortDate(member.last_completed_date || member.last_booking?.service_date)} />
           </div>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <RiLineChartLine className="w-3.5 h-3.5" /> Revenue &amp; insights
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <FactCell label="Membership LTV" value={fmtMoney(ltvCents)} />
+              <FactCell
+                label="Projected /mo"
+                value={projMo != null ? `${fmtMoney(projMo)}/mo` : "—"}
+              />
+              <FactCell
+                label="1yr projected"
+                value={projYr != null ? fmtMoney(projYr) : "—"}
+              />
+              <FactCell label="Completed cleans" value={String(cleansDone)} />
+              <FactCell
+                label="Avg / clean"
+                value={avgClean != null ? fmtMoney(avgClean) : "—"}
+              />
+              <FactCell label="Tenure" value={tenureLabel(member.member_since || member.created_at || member.first_service_date)} />
+            </div>
+            {(member.lifetime_revenue_cents || 0) > ltvCents && (
+              <p className="text-[11px] text-slate-400">
+                All-time booking revenue (incl. one-time): {fmtMoney(member.lifetime_revenue_cents)}
+              </p>
+            )}
+            {risks.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <RiAlertLine className="w-3.5 h-3.5 text-amber-600" />
+                {risks.map((r) => (
+                  <Badge key={r} className="text-[11px] bg-amber-100 text-amber-800">{r}</Badge>
+                ))}
+              </div>
+            )}
+            {isStripe && member.credits_per_month != null && (
+              <p className="text-[11px] text-slate-500">
+                Credit use this period: {member.credits_used ?? 0}/{member.credits_per_month}
+                {member.credits_remaining != null ? ` · ${member.credits_remaining} left` : ""}
+              </p>
+            )}
+          </section>
 
           <Separator />
 
@@ -893,6 +1179,30 @@ function MemberSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function InsightStat({
+  label,
+  value,
+  hint,
+  warn,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  warn?: boolean;
+}) {
+  return (
+    <Card className={cn("border-slate-200", warn && "border-amber-300 bg-amber-50/40")}>
+      <CardContent className="p-3 sm:p-4">
+        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{label}</p>
+        <p className={cn("text-xl sm:text-2xl font-semibold tabular-nums mt-1", warn ? "text-amber-900" : "text-slate-900")}>
+          {value}
+        </p>
+        {hint ? <p className="text-[11px] text-slate-500 mt-1 leading-snug">{hint}</p> : null}
+      </CardContent>
+    </Card>
   );
 }
 
