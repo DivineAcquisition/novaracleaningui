@@ -502,45 +502,92 @@ export default function AdminRecurringSchedules() {
             const activeSchedule = m.schedules.find((s) => s.active);
             const isStripe = !!m.subscription_id;
             const schedulePrice = activeSchedule?.price_cents ?? m.schedules[0]?.price_cents;
+            const initials = name.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+            const busy = working === m.id;
             return (
-              <Card key={m.id} className={cn("border", m.period_active ? "border-slate-200" : "border-slate-200 bg-slate-50/60")}>
-                <CardContent className="py-3 space-y-2">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm text-slate-900 truncate">
-                        {name}
-                        <span className="text-slate-400 font-normal"> · {m.email}</span>
-                        {m.customer?.phone ? <span className="text-slate-400 font-normal hidden sm:inline"> · {m.customer.phone}</span> : null}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {PLAN_LABELS[m.membership_plan] || m.membership_plan}
-                        {isStripe && m.monthly_price_cents != null ? ` · ${fmtMoney(m.monthly_price_cents)}/mo` : ""}
-                        {schedulePrice != null ? ` · ${fmtMoney(schedulePrice)}/clean` : ""}
-                        {isStripe && m.credits_per_month != null
-                          ? ` · ${m.credits_remaining ?? 0}/${m.credits_per_month} credit${m.credits_per_month === 1 ? "" : "s"} left · renews ${m.current_period_end ? format(new Date(m.current_period_end), "MMM d") : "—"}`
-                          : activeSchedule
-                            ? ` · ${activeSchedule.cadence} · next ${activeSchedule.next_service_date ? format(new Date(`${activeSchedule.next_service_date}T12:00:00`), "MMM d") : "—"}`
-                            : ""}
-                        {m.last_booking?.service_date ? ` · last clean ${format(new Date(`${m.last_booking.service_date}T12:00:00`), "MMM d")}` : ""}
-                      </p>
+              <Card key={m.id} className={cn("border rounded-xl overflow-hidden", m.period_active ? "border-slate-200" : "border-slate-200 bg-slate-50/50")}>
+                <CardContent className="p-4 space-y-3">
+                  {/* Identity + status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                        m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-500")}>
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-slate-900 truncate">{name}</p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {m.email}{m.customer?.phone ? ` · ${m.customer.phone}` : ""}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
                       <Badge className={cn("text-[11px]", m.period_active ? "bg-violet-100 text-violet-700" : "bg-slate-200 text-slate-600")}>
                         {m.period_active ? (isStripe ? "Active member" : "Active recurring") : "Inactive"}
                       </Badge>
-                      {!isStripe && <Badge className="text-[11px] bg-slate-100 text-slate-600">No Stripe sub</Badge>}
+                      {activeSchedule
+                        ? <Badge className="text-[11px] bg-emerald-100 text-emerald-700">Schedule set</Badge>
+                        : <Badge className="text-[11px] bg-amber-100 text-amber-800">No schedule</Badge>}
+                      {isStripe
+                        ? <Badge className="text-[11px] bg-sky-100 text-sky-700">Stripe</Badge>
+                        : <Badge className="text-[11px] bg-slate-100 text-slate-500">No Stripe</Badge>}
+                    </div>
+                  </div>
+
+                  {/* Detail chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <InfoChip label="Plan" value={PLAN_LABELS[m.membership_plan] || m.membership_plan} />
+                    {isStripe && m.monthly_price_cents != null && <InfoChip label="Monthly" value={`${fmtMoney(m.monthly_price_cents)}/mo`} />}
+                    {schedulePrice != null && <InfoChip label="Per clean" value={fmtMoney(schedulePrice)} />}
+                    {isStripe && m.credits_per_month != null && (
+                      <InfoChip label="Credits" value={`${m.credits_remaining ?? 0}/${m.credits_per_month} left`} />
+                    )}
+                    {isStripe && m.current_period_end && (
+                      <InfoChip label="Renews" value={format(new Date(m.current_period_end), "MMM d")} />
+                    )}
+                    {activeSchedule?.next_service_date && (
+                      <InfoChip label="Next clean" value={format(new Date(`${activeSchedule.next_service_date}T12:00:00`), "MMM d")} />
+                    )}
+                    {m.last_booking?.service_date && (
+                      <InfoChip label="Last clean" value={format(new Date(`${m.last_booking.service_date}T12:00:00`), "MMM d")} />
+                    )}
+                  </div>
+
+                  {/* Stripe billing controls */}
+                  {isStripe && (
+                    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-violet-50/70 border border-violet-100 px-2.5 py-2">
+                      <div className="min-w-[130px]">
+                        <Label className="text-[10px] uppercase tracking-wide text-violet-700">Monthly Glow price ($)</Label>
+                        <Input type="number" min={1} step="1" className="h-8 bg-white"
+                          defaultValue={m.monthly_price_cents != null ? (m.monthly_price_cents / 100).toFixed(0) : ""}
+                          id={`price-${m.id}`} placeholder="e.g. 199" />
+                      </div>
+                      <Button size="sm" className="h-8 bg-violet-600 hover:bg-violet-700 text-white" disabled={working === `price-${m.id}`}
+                        onClick={() => {
+                          const el = document.getElementById(`price-${m.id}`) as HTMLInputElement | null;
+                          void adjustMemberPrice(m, el?.value || "");
+                        }}>
+                        {working === `price-${m.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiMoneyDollarCircleLine className="w-3.5 h-3.5 mr-1" />Update price</>}
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8" disabled={busy} title="Pause Stripe billing" onClick={() => memberAction(m, "pause")}>
+                        <RiPauseLine className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8" disabled={busy} title="Resume Stripe billing" onClick={() => memberAction(m, "resume")}>
+                        <RiPlayLine className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Actions: comms/schedule (left) + danger (right) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {activeSchedule ? (
-                        <>
-                          <Badge className="text-[11px] bg-emerald-100 text-emerald-700">Schedule set</Badge>
-                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === `sms-${activeSchedule.id}`}
-                            title="Text the customer their self-service manage link"
-                            onClick={() => textManageLink(activeSchedule.id)}>
-                            {working === `sms-${activeSchedule.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiChat3Line className="w-3.5 h-3.5 mr-1" /> Text link</>}
-                          </Button>
-                        </>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === `sms-${activeSchedule.id}`}
+                          title="Text the customer their self-service manage link" onClick={() => textManageLink(activeSchedule.id)}>
+                          {working === `sms-${activeSchedule.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiChat3Line className="w-3.5 h-3.5 mr-1" /> Manage link</>}
+                        </Button>
                       ) : (
-                        <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800"
-                          onClick={() => startScheduleForMember(m)}>
+                        <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800" onClick={() => startScheduleForMember(m)}>
                           <RiCalendarScheduleLine className="w-3.5 h-3.5 mr-1" /> Set up schedule
                         </Button>
                       )}
@@ -552,60 +599,18 @@ export default function AdminRecurringSchedules() {
                         title="Email DocuSeal membership agreement" onClick={() => void sendMemberAgreement(m)}>
                         {working === `ag-${m.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiMailLine className="w-3.5 h-3.5 mr-1" />Agreement</>}
                       </Button>
-                      {isStripe && (
-                        <>
-                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === m.id}
-                            title="Pause Stripe billing" onClick={() => memberAction(m, "pause")}>
-                            <RiPauseLine className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={working === m.id}
-                            title="Resume Stripe billing" onClick={() => memberAction(m, "resume")}>
-                            <RiPlayLine className="w-3.5 h-3.5" />
-                          </Button>
-                        </>
-                      )}
-                      <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800" disabled={working === m.id}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800" disabled={busy}
                         title="Cancel membership — stops cleans and notifies the customer" onClick={() => cancelMember(m)}>
-                        {working === m.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiCloseCircleLine className="w-3.5 h-3.5 mr-1" />Cancel</>}
+                        {busy ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiCloseCircleLine className="w-3.5 h-3.5 mr-1" />Cancel</>}
                       </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs border-rose-200 text-rose-700" disabled={working === m.id}
+                      <Button size="sm" variant="outline" className="h-7 text-xs border-rose-200 text-rose-700" disabled={busy}
                         title="Delete membership — removes it with no customer notification" onClick={() => deleteMember(m)}>
-                        <RiDeleteBin6Line className="w-3.5 h-3.5" />
+                        <RiDeleteBin6Line className="w-3.5 h-3.5 mr-1" />Delete
                       </Button>
                     </div>
                   </div>
-                  {isStripe && (
-                    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-violet-50/70 border border-violet-100 px-2.5 py-2">
-                      <div className="min-w-[140px]">
-                        <Label className="text-[10px] uppercase tracking-wide text-violet-700">Monthly Glow price ($)</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          step="1"
-                          className="h-8 bg-white"
-                          defaultValue={m.monthly_price_cents != null ? (m.monthly_price_cents / 100).toFixed(0) : ""}
-                          id={`price-${m.id}`}
-                          placeholder="e.g. 199"
-                        />
-                      </div>
-                      <Button
-                        size="sm"
-                        className="h-8 bg-violet-600 hover:bg-violet-700 text-white"
-                        disabled={working === `price-${m.id}`}
-                        onClick={() => {
-                          const el = document.getElementById(`price-${m.id}`) as HTMLInputElement | null;
-                          void adjustMemberPrice(m, el?.value || "");
-                        }}
-                      >
-                        {working === `price-${m.id}`
-                          ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
-                          : <><RiMoneyDollarCircleLine className="w-3.5 h-3.5 mr-1" />Update Stripe price</>}
-                      </Button>
-                      <span className="text-[11px] text-violet-700/80 self-center">
-                        Adjusts the recurring Stripe subscription amount (prorated).
-                      </span>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             );
@@ -644,6 +649,16 @@ export default function AdminRecurringSchedules() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/** Small labeled detail chip for the member cards. */
+function InfoChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[11px]">
+      <span className="text-slate-400 uppercase tracking-wide text-[9px] font-semibold">{label}</span>
+      <span className="text-slate-700 font-medium">{value}</span>
+    </span>
   );
 }
 
