@@ -86,6 +86,12 @@ async function sendVaZapier(supabase: any, event: string, row: Record<string, an
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
 
+// Base pay → the original VA Independent Contractor Agreement; Hourly → the
+// "V2 Hourly" template. Admin picks the pay type when sending the offer.
+function vaAudience(r: Row): "va_contractor" | "va_contractor_hourly" {
+  return String(r?.pay_type || "base") === "hourly" ? "va_contractor_hourly" : "va_contractor";
+}
+
 function summarize(r: Row) {
   return {
     id: r.id,
@@ -94,6 +100,7 @@ function summarize(r: Row) {
     firstName: r.first_name,
     lastName: r.last_name,
     vaRole: r.va_role,
+    payType: r.pay_type || "base",
     agreementSigned: !!r.agreement_signed_at,
   };
 }
@@ -135,7 +142,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       }
       let agreementPreviewUrl: string | null = null;
       try {
-        agreementPreviewUrl = await getAgreementPreviewUrl("va_contractor");
+        agreementPreviewUrl = await getAgreementPreviewUrl(vaAudience(row));
       } catch { /* best-effort */ }
       const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
       return NextResponse.json({
@@ -190,7 +197,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       // Blank template preview so the VA can read the FULL agreement first.
       let agreementPreviewUrl: string | null = null;
       try {
-        agreementPreviewUrl = await getAgreementPreviewUrl("va_contractor");
+        agreementPreviewUrl = await getAgreementPreviewUrl(vaAudience(row!));
       } catch { /* preview is best-effort; signing still enforces the terms */ }
 
       const discordInviteUrl = (await getSecret(supabase, "DISCORD_INVITE_URL")) || null;
@@ -209,7 +216,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       let agreementPreviewUrl: string | null = null;
       if (!row.agreement_signed_at) {
         try {
-          agreementPreviewUrl = await getAgreementPreviewUrl("va_contractor");
+          agreementPreviewUrl = await getAgreementPreviewUrl(vaAudience(row));
         } catch { /* best-effort */ }
       }
       return NextResponse.json({
@@ -231,7 +238,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
       const fullName = `${row.first_name || ""} ${row.last_name || ""}`.trim() || legalName;
       const result = await sendAgreement({
-        audience: "va_contractor",
+        audience: vaAudience(row),
         email: row.email,
         name: fullName,
         values: buildContractorValues({
@@ -243,7 +250,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         signatureImage,
         sendEmail: true, // VA receives their completed copy by email
         createdBy: "va-onboarding",
-        metadata: { va_onboarding_id: row.id, va_role: row.va_role },
+        metadata: { va_onboarding_id: row.id, va_role: row.va_role, pay_type: row.pay_type || "base" },
       });
 
       const { data: updated, error } = await supabase

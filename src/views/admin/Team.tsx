@@ -436,6 +436,7 @@ interface VaRow {
   last_name: string | null;
   phone: string | null;
   va_role: string;
+  pay_type?: string | null;
   timezone: string | null;
   working_hours: string | null;
   experience: string | null;
@@ -471,6 +472,7 @@ function VaOnboardingQueue() {
   const [offerFirst, setOfferFirst] = useState("");
   const [offerLast, setOfferLast] = useState("");
   const [offerRole, setOfferRole] = useState("operations");
+  const [offerPayType, setOfferPayType] = useState<"base" | "hourly">("base");
   const [offerNote, setOfferNote] = useState("");
   const [sendingOffer, setSendingOffer] = useState(false);
 
@@ -486,7 +488,7 @@ function VaOnboardingQueue() {
   useEffect(() => { void loadRows(); }, []);
 
   // Send (or resend) the tokenized offer letter — 30-minute link.
-  const sendOffer = async (prefill?: { email: string; first: string; last: string; role: string }) => {
+  const sendOffer = async (prefill?: { email: string; first: string; last: string; role: string; payType?: string }) => {
     const email = (prefill?.email ?? offerEmail).trim().toLowerCase();
     const firstName = (prefill?.first ?? offerFirst).trim();
     if (!email.includes("@") || !firstName) {
@@ -508,7 +510,16 @@ function VaOnboardingQueue() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      const d = data as { offerEmailSent?: boolean; expiresAt?: string };
+      const d = data as { offerEmailSent?: boolean; expiresAt?: string; onboardingId?: string };
+      // Stamp the chosen agreement/pay type on the onboarding row so the
+      // wizard routes the signature to the matching DocuSeal template
+      // (base → va_contractor, hourly → va_contractor_hourly).
+      const payType = prefill?.payType ?? offerPayType;
+      if (d.onboardingId) {
+        await (supabase.from as any)("va_onboarding")
+          .update({ pay_type: payType })
+          .eq("id", d.onboardingId);
+      }
       toast.success(
         d.offerEmailSent
           ? `Offer letter emailed to ${email} — link expires in 30 minutes.`
@@ -584,7 +595,7 @@ function VaOnboardingQueue() {
               {r.phone ? <span className="text-slate-400 font-normal hidden sm:inline"> · {r.phone}</span> : null}
             </p>
             <p className="text-xs text-slate-500">
-              {r.va_role} VA{r.timezone ? ` · ${r.timezone}` : ""}{r.working_hours ? ` · ${r.working_hours}` : ""}
+              {r.va_role} VA{r.pay_type === "hourly" ? " · Hourly" : " · Base pay"}{r.timezone ? ` · ${r.timezone}` : ""}{r.working_hours ? ` · ${r.working_hours}` : ""}
               {r.tools ? ` · knows: ${r.tools}` : ""}
             </p>
             {r.experience && <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{r.experience}</p>}
@@ -605,7 +616,7 @@ function VaOnboardingQueue() {
             {(r.status === "invited" || r.status === "started") && (
               <Button size="sm" variant="outline" className="h-8 text-xs"
                 disabled={working !== null}
-                onClick={() => sendOffer({ email: r.email, first: r.first_name || "", last: r.last_name || "", role: r.va_role })}>
+                onClick={() => sendOffer({ email: r.email, first: r.first_name || "", last: r.last_name || "", role: r.va_role, payType: r.pay_type || "base" })}>
                 {working === `offer-${r.email}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Resend offer link"}
               </Button>
             )}
@@ -675,6 +686,19 @@ function VaOnboardingQueue() {
               <option value="recruiting">Recruiting VA</option>
               <option value="all">All-in-one VA</option>
             </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[11px] text-violet-800/80">Agreement / pay type</Label>
+              <select
+                value={offerPayType}
+                onChange={(e) => setOfferPayType(e.target.value as "base" | "hourly")}
+                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-500"
+              >
+                <option value="base">Base pay agreement</option>
+                <option value="hourly">Hourly agreement (V2 Hourly)</option>
+              </select>
+            </div>
           </div>
           <Input placeholder="Optional note included in the offer letter (rate, start date, expectations…)"
             value={offerNote} onChange={(e) => setOfferNote(e.target.value)} />

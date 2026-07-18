@@ -19,7 +19,8 @@ export type AgreementAudience =
   | "membership"
   | "str_host"
   | "contractor"
-  | "va_contractor";
+  | "va_contractor"
+  | "va_contractor_hourly";
 
 /** Default DocuSeal submitter role per audience (matches the templates). */
 export const AUDIENCE_ROLE: Record<AgreementAudience, string> = {
@@ -28,6 +29,7 @@ export const AUDIENCE_ROLE: Record<AgreementAudience, string> = {
   str_host: "Host",
   contractor: "Contractor",
   va_contractor: "Contractor",
+  va_contractor_hourly: "Contractor",
 };
 
 const AUDIENCE_TEMPLATE_SECRET: Record<AgreementAudience, string> = {
@@ -36,6 +38,8 @@ const AUDIENCE_TEMPLATE_SECRET: Record<AgreementAudience, string> = {
   str_host: "DOCUSEAL_TEMPLATE_STR_HOST",
   contractor: "DOCUSEAL_TEMPLATE_CONTRACTOR",
   va_contractor: "DOCUSEAL_TEMPLATE_VA_CONTRACTOR",
+  // The "V2 Hourly" VA agreement template.
+  va_contractor_hourly: "DOCUSEAL_TEMPLATE_VA_CONTRACTOR_HOURLY",
 };
 
 // ─── Config resolution (app_secrets → env), cached ────────────────────────────
@@ -337,6 +341,21 @@ const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
     companyValues: (c) => ({
       "Effective Date": today(),
       "Company Date": today(),
+      "Company Signature": c.rep,
+    }),
+  },
+  // VA Independent Contractor Agreement — "V2 Hourly" (template 5081719).
+  //   Contractor: "Contractor Name", "Authorized Representative", "Effective
+  //               Date", "Date", "Contractor Signature"
+  //   Company:    "Company Full Name", "Company Signature"
+  va_contractor_hourly: {
+    signerRole: "Contractor",
+    signerSignatures: ["Contractor Signature"],
+    signerDateField: "Date",
+    signerCompanyValues: (c) => ({ "Authorized Representative": c.rep, "Effective Date": today() }),
+    companyRole: "Company",
+    companyValues: (c) => ({
+      "Company Full Name": c.name,
       "Company Signature": c.rep,
     }),
   },
