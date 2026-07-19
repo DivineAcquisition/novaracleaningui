@@ -211,6 +211,15 @@ serve(async (req) => {
     const positiveMin = await feedbackPositiveMinRating(admin);
 
     if (action === "get") {
+      // First page load = the customer clicked the link. Stamp it once so
+      // the follow-up sweep knows the link was opened and stops nudging.
+      if (!feedback.opened_at) {
+        await admin
+          .from("job_feedback")
+          .update({ opened_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq("id", feedback.id)
+          .is("opened_at", null);
+      }
       return json({
         ok: true,
         feedback: {

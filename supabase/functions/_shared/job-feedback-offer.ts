@@ -62,6 +62,20 @@ export async function feedbackTtlDays(supabase: SupabaseClient): Promise<number>
   return Number.isFinite(n) && n >= 1 && n <= 90 ? n : 14;
 }
 
+/** Hours to wait after the previous send before a follow-up nudge (default 24). */
+export async function feedbackReminderDelayHours(supabase: SupabaseClient): Promise<number> {
+  const raw = await secret(supabase, "FEEDBACK_REMINDER_DELAY_HOURS", "24");
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n >= 1 && n <= 336 ? n : 24;
+}
+
+/** Max FOLLOW-UP nudges beyond the first send (default 2, 0 disables). */
+export async function feedbackMaxReminders(supabase: SupabaseClient): Promise<number> {
+  const raw = await secret(supabase, "FEEDBACK_MAX_REMINDERS", "2");
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n >= 0 && n <= 5 ? n : 2;
+}
+
 export function feedbackUrl(token: string): string {
   return `${SITE_BASE}/feedback/${token}`;
 }
@@ -111,6 +125,16 @@ export function buildFeedbackSms(firstName: string | null, url: string): string 
   return (
     `Hi ${name}! Your Novara clean is done — how did we do? ` +
     `3 quick questions (under a minute): ${url} ` +
+    `Reply STOP to opt out.`
+  );
+}
+
+/** Softer copy for the follow-up nudge (link still unopened). */
+export function buildFeedbackReminderSms(firstName: string | null, url: string): string {
+  const name = firstName?.trim() || "there";
+  return (
+    `Hi ${name}, just checking in from Novara Cleaning — we'd still love your quick ` +
+    `feedback on your recent clean. 3 questions, under a minute: ${url} ` +
     `Reply STOP to opt out.`
   );
 }
