@@ -51,7 +51,6 @@ import { BookingFooter } from "@/components/booking/BookingFooter";
 import {
   CHECKLIST_INDEX_PATH,
   CHECKOUT_PREMIUM_FEATURES,
-  VALUE_STACK_PATH,
   checklistPathForServiceType,
 } from "@/lib/value-stack";
 import { PageTransition } from "@/components/booking/PageTransition";
@@ -985,14 +984,6 @@ export default function BookingCheckout() {
                     className="text-primary font-medium underline underline-offset-2"
                   >
                     Full cleaning checklist
-                  </a>
-                  <a
-                    href={VALUE_STACK_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-medium underline underline-offset-2"
-                  >
-                    See all that&apos;s included
                   </a>
                   <a
                     href={CHECKLIST_INDEX_PATH}

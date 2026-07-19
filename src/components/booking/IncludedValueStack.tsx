@@ -5,7 +5,6 @@ import { RiCheckLine, RiExternalLinkLine, RiSparklingLine } from "@remixicon/rea
 import {
   CHECKLIST_INDEX_PATH,
   VALUE_STACK_HEADLINES,
-  VALUE_STACK_PATH,
   checklistPathForServiceType,
 } from "@/lib/value-stack";
 import { cn } from "@/lib/utils";
@@ -19,8 +18,8 @@ type Props = {
 };
 
 /**
- * "All that's included" block for sign/pay pages — headlines + links to
- * the cleaning checklist and the full value stacker.
+ * "All that's included" block for sign/pay pages — headlines + link to
+ * the cleaning checklist.
  */
 export function IncludedValueStack({ serviceType, className, compact }: Props) {
   const checklistHref = checklistPathForServiceType(serviceType);
@@ -62,15 +61,6 @@ export function IncludedValueStack({ serviceType, className, compact }: Props) {
           className="inline-flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2.5 text-xs font-medium text-violet-800 hover:bg-violet-100 transition-colors"
         >
           <span>See the cleaning checklist</span>
-          <RiExternalLinkLine className="w-3.5 h-3.5 shrink-0" />
-        </Link>
-        <Link
-          href={VALUE_STACK_PATH}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-medium text-slate-800 hover:bg-slate-100 transition-colors"
-        >
-          <span>Open the full value stacker</span>
           <RiExternalLinkLine className="w-3.5 h-3.5 shrink-0" />
         </Link>
         <Link

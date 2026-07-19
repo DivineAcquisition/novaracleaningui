@@ -27,7 +27,6 @@ import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
 import {
   VALUE_STACK_HEADLINES,
-  VALUE_STACK_PATH,
   checklistPathForServiceType,
 } from "@/lib/value-stack";
 import { format } from "date-fns";
@@ -872,14 +871,6 @@ export default function PropertyDetails() {
                     className="text-primary font-medium underline underline-offset-2"
                   >
                     Cleaning checklist
-                  </a>
-                  <a
-                    href={VALUE_STACK_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-medium underline underline-offset-2"
-                  >
-                    Full value stacker
                   </a>
                 </div>
               </div>
