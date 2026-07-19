@@ -1,12 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { sendSms } from "../_shared/sms.ts";
 import {
-  buildFeedbackReminderSms,
-  ensureJobFeedback,
   feedbackMaxReminders,
   feedbackReminderDelayHours,
-  feedbackUrl,
+  sendFeedbackReminder,
+  sendJobFeedbackOffer,
 } from "../_shared/job-feedback-offer.ts";
 
 const corsHeaders = {
@@ -26,13 +24,13 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
 type SB = any;
 
 /**
- * Phase A — first feedback link.
+ * Phase A — first feedback link (personalized SMS + email).
  *
  * Completed bookings with a cleaner + phone that were never sent a rating
  * reminder get the tokenized feedback link ~2h after completion. Keyed on
  * bookings.rating_reminder_sent_at so this fires exactly once per booking.
- * We also stamp job_feedback.sent_at so Phase B can measure "sent X hours
- * ago" for the follow-up nudge.
+ * sendJobFeedbackOffer mints the token, sends the personalized SMS + email
+ * (name + booking summary + crew), and stamps job_feedback.sent_at.
  */
 async function firstSendSweep(supabase: SB, now: number) {
   const eligibleBefore = new Date(now - REMINDER_DELAY_MS).toISOString();
@@ -42,9 +40,7 @@ async function firstSendSweep(supabase: SB, now: number) {
 
   const { data: bookings, error: fetchError } = await supabase
     .from("bookings")
-    .select(
-      "id, phone, first_name, completed_at, rating_submitted, rating_reminder_sent_at, cleaner_id, cleaners(first_name)",
-    )
+    .select("id, phone, rating_submitted, rating_reminder_sent_at")
     .eq("status", "completed")
     .is("rating_reminder_sent_at", null)
     .eq("rating_submitted", false)
@@ -81,58 +77,35 @@ async function firstSendSweep(supabase: SB, now: number) {
       continue;
     }
 
-    // Mint (or reuse) the job-specific feedback token — the SMS link
-    // resolves the job, crew, and customer with no manual entry.
-    let token: string;
-    let feedbackId: string;
+    // Mint token + send personalized SMS + email in one step.
+    let sentOk = false;
     try {
-      const fb = await ensureJobFeedback(supabase, booking.id);
-      token = fb.token;
-      feedbackId = fb.id;
+      const res = await sendJobFeedbackOffer(supabase, booking.id);
+      sentOk = res.smsSent || res.emailSent;
     } catch (e) {
-      logStep("feedback token mint failed", {
+      logStep("feedback offer failed", {
         bookingId: booking.id,
         error: e instanceof Error ? e.message : String(e),
       });
+    }
+
+    if (!sentOk) {
       results.failed++;
+      logStep("First send failed — will retry next sweep", { bookingId: booking.id });
       continue;
     }
 
-    const url = feedbackUrl(token);
-    const cleanerName =
-      (booking as { cleaners?: { first_name?: string | null } | null })
-        .cleaners?.first_name?.trim() || "your cleaner";
-    const greeting = booking.first_name?.trim() ? `Hi ${booking.first_name.trim()},` : "Hi,";
-
-    const message =
-      `${greeting} thanks again for choosing Novara Cleaning! ` +
-      `How did ${cleanerName} do? 3 quick questions (under a minute): ${url}\n\n` +
-      `Reply STOP to opt out.`;
-
-    const sent = await sendSms(supabase, {
-      toPhone: booking.phone,
-      message,
-      type: "confirmation",
-    });
-
-    if (!sent) {
-      results.failed++;
-      logStep("SMS failed", { bookingId: booking.id });
-      continue;
-    }
-
-    // Stamp both the one-shot booking marker AND the job_feedback baseline
-    // the follow-up sweep measures against.
-    await supabase
+    const { error: stampError } = await supabase
       .from("bookings")
       .update({ rating_reminder_sent_at: new Date().toISOString() })
       .eq("id", booking.id)
       .is("rating_reminder_sent_at", null);
-    await supabase
-      .from("job_feedback")
-      .update({ sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq("id", feedbackId)
-      .is("sent_at", null);
+
+    if (stampError) {
+      results.failed++;
+      logStep("Failed to stamp reminder sent", { bookingId: booking.id, error: stampError.message });
+      continue;
+    }
 
     results.sent++;
     logStep("First feedback link sent", { bookingId: booking.id });
@@ -147,9 +120,9 @@ async function firstSendSweep(supabase: SB, now: number) {
  * Pulls job_feedback rows that are still pending, whose link has NOT been
  * opened (opened_at IS NULL), whose previous send is older than the
  * configured delay, and that haven't hit the reminder cap. Re-sends the
- * SAME link with softer copy and bumps reminder_count. Once the customer
- * opens the link (opened_at set) or answers (status advances), they drop
- * out of this sweep automatically.
+ * SAME link (personalized reminder SMS + email) and bumps reminder_count.
+ * Once the customer opens the link (opened_at set) or answers (status
+ * advances), they drop out of this sweep automatically.
  */
 async function followUpSweep(supabase: SB, now: number) {
   const delayHours = await feedbackReminderDelayHours(supabase);
@@ -171,7 +144,7 @@ async function followUpSweep(supabase: SB, now: number) {
     .from("job_feedback")
     .select(
       "id, token, reminder_count, sent_at, booking_id, " +
-        "bookings(phone, first_name, status, rating_submitted)",
+        "bookings(phone, status, rating_submitted)",
     )
     .eq("status", "pending")
     .is("opened_at", null)
@@ -199,21 +172,19 @@ async function followUpSweep(supabase: SB, now: number) {
       continue;
     }
 
-    const url = feedbackUrl(row.token);
-    const message = buildFeedbackReminderSms(
-      (booking.first_name as string | null) || null,
-      url,
-    );
+    let sentOk = false;
+    try {
+      const res = await sendFeedbackReminder(supabase, row.booking_id, row.token);
+      sentOk = res.smsSent || res.emailSent;
+    } catch (e) {
+      logStep("Follow-up send failed", {
+        feedbackId: row.id,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
 
-    const sent = await sendSms(supabase, {
-      toPhone: booking.phone as string,
-      message,
-      type: "confirmation",
-    });
-
-    if (!sent) {
+    if (!sentOk) {
       results.failed++;
-      logStep("Follow-up SMS failed", { feedbackId: row.id });
       continue;
     }
 
@@ -270,12 +241,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        results: firstSend,
-        followUp,
-        timestamp: new Date().toISOString(),
-      }),
+      JSON.stringify({ success: true, results: firstSend, followUp, timestamp: new Date().toISOString() }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
   } catch (error) {
