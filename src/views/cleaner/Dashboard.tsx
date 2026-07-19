@@ -188,6 +188,15 @@ export default function CleanerDashboard() {
           "Confirmed",
           "In Progress",
         ];
+        // Booking is the live source of truth. Assignment/job status often
+        // lagged behind complete-booking / reassignment, which left finished
+        // or withdrawn work on Upcoming.
+        const notUpcomingBooking = new Set([
+          "completed",
+          "cancelled",
+          "canceled",
+          "pending_review",
+        ]);
 
         const { data: assignments, error: assignmentsError } = await supabase
           .from("job_assignments")
@@ -216,8 +225,38 @@ export default function CleanerDashboard() {
           .order("assigned_at", { ascending: true });
 
         if (!assignmentsError && assignments?.length) {
+          const jobIds = assignments
+            .map((a: any) => {
+              const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
+              return job?.id as string | undefined;
+            })
+            .filter(Boolean) as string[];
+          const bookingByJob: Record<string, { status: string; id: string }> = {};
+          if (jobIds.length > 0) {
+            const { data: bookingRows } = await supabase
+              .from("bookings")
+              .select("id, job_id, status")
+              .in("job_id", jobIds);
+            for (const b of bookingRows || []) {
+              if (b.job_id) {
+                bookingByJob[b.job_id] = {
+                  id: b.id,
+                  status: String(b.status || ""),
+                };
+              }
+            }
+          }
+
           const formatted: UpcomingJob[] = assignments
-            .filter((a: any) => a.jobs)
+            .filter((a: any) => {
+              const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
+              if (!job) return false;
+              const bStatus = (bookingByJob[job.id]?.status || "").toLowerCase();
+              if (bStatus && notUpcomingBooking.has(bStatus)) return false;
+              const jStatus = String(job.status || "").toLowerCase();
+              if (["completed", "cancelled", "canceled"].includes(jStatus)) return false;
+              return true;
+            })
             .map((a: any) => {
               const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
               return {
@@ -276,12 +315,14 @@ export default function CleanerDashboard() {
           }
         }
 
-        const completedStatuses = ["Completed", "completed"];
+        // Completed = assignment marked Completed OR the linked booking is
+        // completed (covers historical rows that never flipped assignment status).
         const { data: completedAssignments } = await supabase
           .from("job_assignments")
           .select(
             `
             id,
+            status,
             estimated_pay_cents,
             jobs (
               id,
@@ -291,18 +332,49 @@ export default function CleanerDashboard() {
               zip,
               service_type,
               start_datetime,
-              check_out_time
+              check_out_time,
+              status
             )
           `
           )
           .eq("cleaner_id", cleanerId)
-          .in("status", completedStatuses)
+          .not("status", "in", "(Withdrawn,withdrawn,Declined,declined,Expired,expired,Cancelled,cancelled)")
           .order("assigned_at", { ascending: false })
-          .limit(10);
+          .limit(40);
 
+        let completedFormatted: CompletedJob[] = [];
         if (completedAssignments?.length) {
-          const formatted: CompletedJob[] = completedAssignments
-            .filter((a: any) => a.jobs)
+          const cJobIds = completedAssignments
+            .map((a: any) => {
+              const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
+              return job?.id as string | undefined;
+            })
+            .filter(Boolean) as string[];
+          const completedBookingJobs = new Set<string>();
+          const completedAtByJob: Record<string, string | null> = {};
+          if (cJobIds.length > 0) {
+            const { data: doneBookings } = await supabase
+              .from("bookings")
+              .select("job_id, status, completed_at")
+              .in("job_id", cJobIds)
+              .in("status", ["completed", "pending_review"]);
+            for (const b of doneBookings || []) {
+              if (b.job_id) {
+                completedBookingJobs.add(b.job_id);
+                completedAtByJob[b.job_id] = b.completed_at || null;
+              }
+            }
+          }
+          completedFormatted = completedAssignments
+            .filter((a: any) => {
+              const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
+              if (!job) return false;
+              const aStatus = String(a.status || "").toLowerCase();
+              if (aStatus === "completed") return true;
+              if (completedBookingJobs.has(job.id)) return true;
+              return String(job.status || "").toLowerCase() === "completed";
+            })
+            .slice(0, 10)
             .map((a: any) => {
               const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
               return {
@@ -314,11 +386,14 @@ export default function CleanerDashboard() {
                 state: job?.state || "",
                 zip: job?.zip || "",
                 start_datetime: job?.start_datetime,
-                completed_at: job?.check_out_time,
+                completed_at: completedAtByJob[job?.id] || job?.check_out_time,
                 estimated_pay_cents: a.estimated_pay_cents,
               };
             });
-          setCompletedJobs(formatted);
+        }
+
+        if (completedFormatted.length) {
+          setCompletedJobs(completedFormatted);
         } else {
           const { data: completedBookings } = await supabase
             .from("bookings")

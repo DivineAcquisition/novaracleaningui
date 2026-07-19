@@ -245,8 +245,39 @@ serve(async (req) => {
       bookingRows.sort((a, b) => String(b.service_date || "").localeCompare(String(a.service_date || "")));
     }
 
+    // Drop OPEN jobs this cleaner is no longer assigned to (Withdrawn /
+    // Declined / etc.). Completed / pending_review stay so pay history and
+    // "jobs you finished" remain accurate. Primary lead rows (cleaner_id
+    // match) are always kept.
+    const openStatuses = new Set(["confirmed", "assigned", "in_progress", "in progress"]);
+    const activeAssignStatuses = new Set([
+      "confirmed", "accepted", "assigned", "in progress", "in_progress", "completed",
+    ]);
+    const openJobIds = bookingRows
+      .filter((b) => openStatuses.has(String(b.status || "").toLowerCase()) && b.job_id)
+      .map((b) => String(b.job_id));
+    const activeJobIds = new Set<string>();
+    if (openJobIds.length > 0) {
+      const { data: liveAssigns } = await admin
+        .from("job_assignments")
+        .select("job_id, status")
+        .eq("cleaner_id", cleanerId)
+        .in("job_id", openJobIds);
+      for (const a of liveAssigns || []) {
+        if (activeAssignStatuses.has(String(a.status || "").toLowerCase())) {
+          activeJobIds.add(String(a.job_id));
+        }
+      }
+    }
+    const filteredBookingRows = bookingRows.filter((b) => {
+      if (!openStatuses.has(String(b.status || "").toLowerCase())) return true;
+      if (String(b.cleaner_id || "") === cleanerId) return true;
+      if (!b.job_id) return true; // no dispatch row — keep lead-less edge cases
+      return activeJobIds.has(String(b.job_id));
+    });
+
     // ── Active payout row per booking (full fields for display) ──
-    const bookingIds = bookingRows.map((b) => b.id);
+    const bookingIds = filteredBookingRows.map((b) => b.id);
     const payoutByBooking = new Map<string, Row>();
     if (bookingIds.length > 0) {
       const { data: payouts } = await admin
@@ -261,7 +292,7 @@ serve(async (req) => {
 
     // ── Shape each job ───────────────────────────────────────────────────
     const now = Date.now();
-    const jobs = bookingRows
+    const jobs = filteredBookingRows
       .filter((b) => {
         if (b.status !== "cancelled") return true;
         const ts = b.cancelled_at ? new Date(b.cancelled_at).getTime() : 0;
@@ -403,12 +434,18 @@ serve(async (req) => {
         const offerJobIds = open.map((a: Row) => a.job_id).filter(Boolean);
         const { data: offerBookings } = await admin
           .from("bookings")
-          .select("job_id, service_type, service_date, time_slot, arrival_window, city, state, total_estimate_cents, home_size_id")
+          .select("job_id, service_type, service_date, time_slot, arrival_window, city, state, total_estimate_cents, home_size_id, status")
           .in("job_id", offerJobIds);
         const byJob = new Map<string, Row>();
-        for (const ob of offerBookings || []) byJob.set(String(ob.job_id), ob);
+        for (const ob of offerBookings || []) {
+          const st = String(ob.status || "").toLowerCase();
+          // Never surface offers for jobs already finished / cancelled.
+          if (["completed", "cancelled", "canceled", "pending_review"].includes(st)) continue;
+          byJob.set(String(ob.job_id), ob);
+        }
         for (const a of open) {
-          const ob = byJob.get(String(a.job_id)) || {};
+          const ob = byJob.get(String(a.job_id));
+          if (!ob) continue;
           const estPay = a.estimated_pay_cents != null
             ? Number(a.estimated_pay_cents)
             : ob.total_estimate_cents != null

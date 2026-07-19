@@ -99,7 +99,8 @@ export default function MobileDashboard() {
               state,
               zip,
               duration_est_hours,
-              check_in_time
+              check_in_time,
+              status
             )
           `)
           .eq("cleaner_id", cleanerData.id)
@@ -114,12 +115,24 @@ export default function MobileDashboard() {
         // We also pull the canonical service_date + time_slot so the card
         // shows the real arrival window (jobs.start_datetime is stored
         // tz-naive and historically defaulted to 09:00).
+        // Booking status is the live gate: completed / cancelled /
+        // pending_review jobs must not stay on Upcoming when assignment
+        // rows lagged behind.
+        const notUpcomingBooking = new Set([
+          "completed",
+          "cancelled",
+          "canceled",
+          "pending_review",
+        ]);
         const jobIds = (jobsData || []).map((a: any) => a.jobs?.id).filter(Boolean);
-        const bookingByJob: Record<string, { id: string; service_date: string | null; time_slot: string | null }> = {};
+        const bookingByJob: Record<
+          string,
+          { id: string; service_date: string | null; time_slot: string | null; status: string }
+        > = {};
         if (jobIds.length > 0) {
           const { data: bookingRows } = await supabase
             .from("bookings")
-            .select("id, job_id, service_date, time_slot, arrival_window")
+            .select("id, job_id, service_date, time_slot, arrival_window, status")
             .in("job_id", jobIds);
           (bookingRows || []).forEach((b: any) => {
             if (b.job_id) {
@@ -127,27 +140,38 @@ export default function MobileDashboard() {
                 id: b.id,
                 service_date: b.service_date ?? null,
                 time_slot: b.time_slot ?? b.arrival_window ?? null,
+                status: String(b.status || ""),
               };
             }
           });
         }
 
         if (jobsData) {
-          const formattedJobs = jobsData.map((assignment: any) => {
-            const bk = assignment.jobs?.id ? bookingByJob[assignment.jobs.id] : undefined;
-            return {
-              id: assignment.id,
-              assignmentId: assignment.id,
-              role: assignment.role,
-              status: assignment.status,
-              estimated_pay_cents: assignment.estimated_pay_cents,
-              checklistToken: assignment.response_token || null,
-              bookingId: bk?.id,
-              booking_service_date: bk?.service_date ?? null,
-              booking_time_slot: bk?.time_slot ?? null,
-              ...assignment.jobs,
-            };
-          });
+          const formattedJobs = jobsData
+            .filter((assignment: any) => {
+              const job = assignment.jobs;
+              if (!job?.id) return false;
+              const bStatus = (bookingByJob[job.id]?.status || "").toLowerCase();
+              if (bStatus && notUpcomingBooking.has(bStatus)) return false;
+              const jStatus = String(job.status || "").toLowerCase();
+              if (["completed", "cancelled", "canceled"].includes(jStatus)) return false;
+              return true;
+            })
+            .map((assignment: any) => {
+              const bk = assignment.jobs?.id ? bookingByJob[assignment.jobs.id] : undefined;
+              return {
+                id: assignment.id,
+                assignmentId: assignment.id,
+                role: assignment.role,
+                status: assignment.status,
+                estimated_pay_cents: assignment.estimated_pay_cents,
+                checklistToken: assignment.response_token || null,
+                bookingId: bk?.id,
+                booking_service_date: bk?.service_date ?? null,
+                booking_time_slot: bk?.time_slot ?? null,
+                ...assignment.jobs,
+              };
+            });
           setUpcomingJobs(formattedJobs);
         }
 

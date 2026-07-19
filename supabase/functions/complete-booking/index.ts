@@ -182,6 +182,35 @@ serve(async (req) => {
 
     if (updateError) throw updateError;
 
+    // Keep dispatch rows in sync with bookings.status. Historically only the
+    // booking flipped to completed, so job_assignments stayed Confirmed /
+    // In Progress and cleaner dashboards kept showing the job as upcoming.
+    if (booking.job_id) {
+      try {
+        await supabase
+          .from("job_assignments")
+          .update({ status: "Completed" })
+          .eq("job_id", booking.job_id)
+          .in("status", [
+            "Confirmed",
+            "Accepted",
+            "accepted",
+            "Assigned",
+            "assigned",
+            "In Progress",
+            "in_progress",
+          ]);
+        await supabase
+          .from("jobs")
+          .update({ status: "Completed" })
+          .eq("id", booking.job_id);
+      } catch (syncErr) {
+        logStep("Assignment/job completion sync failed (non-blocking)", {
+          error: String(syncErr),
+        });
+      }
+    }
+
     logStep("Booking marked complete, charging remaining balance");
 
     // ─── Referral reward grant ────────────────────────────────────────

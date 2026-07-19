@@ -315,11 +315,25 @@ serve(async (req) => {
     }
 
     if (mode === "replace") {
+      // Withdraw EVERY prior active assignee (not just open offers). Leaving
+      // Confirmed / In Progress rows in place made unassigned cleaners keep
+      // seeing the job under Upcoming on their dashboards.
       await admin
         .from("job_assignments")
         .update({ status: "Withdrawn" })
         .eq("job_id", jobId)
-        .in("status", ["Offered", "Broadcast", "Accepted"]);
+        .not("cleaner_id", "in", `(${cleanerIds.join(",")})`)
+        .in("status", [
+          "Offered",
+          "Broadcast",
+          "Accepted",
+          "accepted",
+          "Confirmed",
+          "Assigned",
+          "assigned",
+          "In Progress",
+          "in_progress",
+        ]);
     }
 
     const now = new Date().toISOString();
