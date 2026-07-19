@@ -429,3 +429,17 @@ verify_jwt = false
 # admin can also trigger from the P&L page).
 [functions.pl-sheet-sync]
 verify_jwt = false
+
+# Tokenized post-job feedback page (public — the job_feedback token in the
+# customer's SMS/email is the only credential).
+[functions.job-feedback]
+verify_jwt = false
+
+# Customer tips (public — bookingId + Stripe session verification are the
+# credentials; called from the account page and the feedback page).
+[functions.tip-cleaner]
+verify_jwt = false
+
+# Post-completion feedback-link sweep (invoked by pg_cron with no JWT).
+[functions.send-rating-reminders]
+verify_jwt = false

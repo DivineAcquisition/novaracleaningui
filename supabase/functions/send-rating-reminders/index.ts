@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms } from "../_shared/sms.ts";
+import { ensureJobFeedback, feedbackUrl } from "../_shared/job-feedback-offer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const RATING_ACCOUNT_URL = "https://app.novaracleaning.com/account";
 const REMINDER_DELAY_MS = 2 * 60 * 60 * 1000; // 2 hours after completion
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // skip bookings completed >7 days ago
 
@@ -63,6 +63,37 @@ serve(async (req) => {
         continue;
       }
 
+      // Skip (and stamp) if they already went through the tokenized
+      // feedback flow — no point asking again.
+      const { data: fbExisting } = await supabase
+        .from("job_feedback")
+        .select("status, token")
+        .eq("booking_id", booking.id)
+        .maybeSingle();
+      if (fbExisting && ["answers_saved", "positive_complete", "qc_complete"].includes(fbExisting.status)) {
+        results.skipped++;
+        await supabase
+          .from("bookings")
+          .update({ rating_reminder_sent_at: new Date().toISOString() })
+          .eq("id", booking.id);
+        continue;
+      }
+
+      // Mint (or reuse) the job-specific feedback token — the SMS link
+      // resolves the job, crew, and customer with no manual entry.
+      let url: string;
+      try {
+        const fb = await ensureJobFeedback(supabase, booking.id);
+        url = feedbackUrl(fb.token);
+      } catch (e) {
+        logStep("feedback token mint failed", {
+          bookingId: booking.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        results.failed++;
+        continue;
+      }
+
       const cleanerName =
         (booking as { cleaners?: { first_name?: string | null } | null })
           .cleaners?.first_name?.trim() || "your cleaner";
@@ -72,14 +103,13 @@ serve(async (req) => {
 
       const message =
         `${greeting} thanks again for choosing Novara Cleaning! ` +
-        `How did ${cleanerName} do? Please take a moment to rate your cleaner in your account — ` +
-        `your feedback goes into our scoring system and helps us keep quality high: ` +
-        `${RATING_ACCOUNT_URL}\n\nReply STOP to opt out.`;
+        `How did ${cleanerName} do? 3 quick questions (under a minute): ${url}\n\n` +
+        `Reply STOP to opt out.`;
 
       const sent = await sendSms(supabase, {
         toPhone: booking.phone,
         message,
-        type: "reminder",
+        type: "confirmation",
       });
 
       if (!sent) {

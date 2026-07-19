@@ -137,6 +137,16 @@ serve(async (req) => {
 
       const origin = req.headers.get("origin") || "https://app.novaracleaning.com";
       const ref = booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : bookingId.slice(0, 8);
+      // Callers (e.g. the tokenized feedback page) may supply their own
+      // return URLs so the customer lands back where they started. The
+      // success URL must carry the Stripe session placeholder so the
+      // confirm step can verify payment.
+      const successUrl = typeof body?.successUrl === "string" && body.successUrl.includes("{CHECKOUT_SESSION_ID}")
+        ? String(body.successUrl)
+        : `${origin}/tip/success?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = typeof body?.cancelUrl === "string" && body.cancelUrl.startsWith("http")
+        ? String(body.cancelUrl)
+        : `${origin}/account`;
       const session = await stripeCall(stripeKey, "POST", "checkout/sessions", {
         mode: "payment",
         "line_items[0][price_data][currency]": "usd",
@@ -144,8 +154,8 @@ serve(async (req) => {
         "line_items[0][price_data][product_data][name]": `Tip for your cleaning crew — ${ref}`,
         "line_items[0][quantity]": "1",
         ...(booking.email ? { customer_email: booking.email } : {}),
-        success_url: `${origin}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${origin}/account`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         "metadata[kind]": "cleaner_tip",
         "metadata[booking_id]": bookingId,
         "metadata[directed_cleaner_id]": directedCleanerId,

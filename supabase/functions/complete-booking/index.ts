@@ -631,6 +631,20 @@ serve(async (req) => {
       });
     }
 
+    // Mint the tokenized feedback link now so every completed job has one
+    // immediately (single-purpose, job-specific, expiring). The SMS itself
+    // goes out via the send-rating-reminders sweep ~2h after completion so
+    // it doesn't stack on top of the completion texts above. Non-blocking.
+    try {
+      const { ensureJobFeedback, feedbackUrl } = await import("../_shared/job-feedback-offer.ts");
+      const fb = await ensureJobFeedback(supabase, bookingId);
+      logStep("Feedback link minted", { feedbackUrl: feedbackUrl(fb.token) });
+    } catch (feedbackErr) {
+      logStep("Feedback link mint failed (non-blocking)", {
+        error: feedbackErr instanceof Error ? feedbackErr.message : String(feedbackErr),
+      });
+    }
+
     // Trigger Zapier webhook for completed booking — this fans out to
     // GHL PIT (syncBookingLifecycle marks the opportunity won + updates
     // remaining_balance / deposit_paid fields), LeadConnector inbound,
