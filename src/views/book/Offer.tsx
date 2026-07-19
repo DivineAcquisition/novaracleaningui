@@ -36,6 +36,7 @@ import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { preloadStripe } from "@/lib/stripe-client";
+import { VALUE_STACK_HEADLINES } from "@/lib/value-stack";
 
 const BOOKING_STEPS = [
   { number: 1, label: "Location", path: "/book/zip" },
@@ -52,6 +53,7 @@ const MEMBERSHIP_FEATURES = [
   "Priority scheduling & member perks",
   "Cancel or pause anytime",
   "48-hour re-clean guarantee",
+  ...VALUE_STACK_HEADLINES,
 ];
 
 export default function BookingOffer() {
@@ -358,6 +360,7 @@ export default function BookingOffer() {
                         "Living areas: dust, vacuum, mop",
                         "Bedrooms: dust furniture, make beds on request",
                         "All supplies & equipment included",
+                        ...VALUE_STACK_HEADLINES,
                       ].map((line) => (
                         <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
                           <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
@@ -457,6 +460,7 @@ export default function BookingOffer() {
                           "Interior windows & sills",
                           "Eco-friendly products & HEPA vacuums",
                           "48-hour re-clean guarantee",
+                          ...VALUE_STACK_HEADLINES,
                         ].map((line) => (
                           <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
                             <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
@@ -576,6 +580,7 @@ export default function BookingOffer() {
                         "Inside cabinet cleaning & baseboards on visit 1",
                         "Eco-friendly products & HEPA vacuums",
                         "48-hour re-clean guarantee on both visits",
+                        ...VALUE_STACK_HEADLINES,
                       ].map((line) => (
                         <li
                           key={line}
@@ -796,6 +801,7 @@ export default function BookingOffer() {
                   "Cancel or pause anytime",
                   "48-hour re-clean guarantee",
                   "No long-term contracts",
+                  ...VALUE_STACK_HEADLINES,
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <RiCheckLine className="w-4 h-4 text-success flex-shrink-0" />

@@ -2,6 +2,7 @@
 import {
   RiArrowRightLine,
   RiCalendarLine,
+  RiCheckLine,
   RiCheckboxCircleLine,
   RiMapPinLine,
   RiSparklingLine
@@ -24,6 +25,11 @@ import { SEO } from "@/components/SEO";
 import { US_STATES, parseAddressString } from "@/lib/address-formatter";
 import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
+import {
+  VALUE_STACK_HEADLINES,
+  VALUE_STACK_PATH,
+  checklistPathForServiceType,
+} from "@/lib/value-stack";
 import { format } from "date-fns";
 
 // Customer-facing arrival windows. Mirrors the windows offered on
@@ -847,6 +853,35 @@ export default function PropertyDetails() {
               <div className="flex items-center gap-2">
                 <RiSparklingLine className="w-5 h-5 text-primary" />
                 <h3 className="text-base md:text-lg font-semibold">Sign Your Service Agreement</h3>
+              </div>
+              <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 space-y-2">
+                <p className="text-xs font-semibold text-foreground">All that&apos;s included</p>
+                <ul className="space-y-1">
+                  {VALUE_STACK_HEADLINES.map((line) => (
+                    <li key={line} className="flex items-start gap-2 text-xs text-foreground">
+                      <RiCheckLine className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-[11px]">
+                  <a
+                    href={checklistPathForServiceType(bookingData.serviceType)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-medium underline underline-offset-2"
+                  >
+                    Cleaning checklist
+                  </a>
+                  <a
+                    href={VALUE_STACK_PATH}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-medium underline underline-offset-2"
+                  >
+                    Full value stacker
+                  </a>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
                 By signing you agree to the{" "}

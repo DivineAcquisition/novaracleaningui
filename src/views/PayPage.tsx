@@ -41,6 +41,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
+import { IncludedValueStack } from "@/components/booking/IncludedValueStack";
 
 interface PaySummary {
   bookingId: string;
@@ -298,6 +299,8 @@ export default function PayPage() {
           </div>
         ) : !summary.agreementSigned ? (
           /* ── STEP 1: LEGAL (required before payment unlocks) ── */
+          <>
+          <IncludedValueStack serviceType={summary.serviceType} compact />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
             <div className="flex items-center gap-2">
               <RiQuillPenLine className="w-4 h-4 text-violet-700" />
@@ -373,6 +376,7 @@ export default function PayPage() {
               </p>
             )}
           </div>
+          </>
         ) : (
           /* ── STEP 2: PAYMENT (only reachable after the signed agreement) ── */
           <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">

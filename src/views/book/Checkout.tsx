@@ -48,6 +48,12 @@ import { Elements } from "@stripe/react-stripe-js";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { getStripePromise } from "@/lib/stripe-client";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import {
+  CHECKLIST_INDEX_PATH,
+  CHECKOUT_PREMIUM_FEATURES,
+  VALUE_STACK_PATH,
+  checklistPathForServiceType,
+} from "@/lib/value-stack";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
@@ -930,12 +936,7 @@ export default function BookingCheckout() {
               <div className="space-y-2.5">
                 <h3 className="font-semibold text-sm">Premium features</h3>
                 <div className="grid gap-1.5">
-                  {[
-                    "Insured & bonded 2-person team",
-                    "Eco-friendly products & HEPA vacuums",
-                    "All supplies and equipment included",
-                    "48-hour re-clean guarantee",
-                  ].map((feature) => (
+                  {CHECKOUT_PREMIUM_FEATURES.map((feature) => (
                     <div key={feature} className="flex items-start gap-2">
                       <RiCheckboxCircleLine className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                       <span>{feature}</span>
@@ -975,6 +976,32 @@ export default function BookingCheckout() {
                       <span className="text-muted-foreground">{item}</span>
                     </div>
                   ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-xs">
+                  <a
+                    href={checklistPathForServiceType(bookingData.serviceType)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-medium underline underline-offset-2"
+                  >
+                    Full cleaning checklist
+                  </a>
+                  <a
+                    href={VALUE_STACK_PATH}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-medium underline underline-offset-2"
+                  >
+                    See all that&apos;s included
+                  </a>
+                  <a
+                    href={CHECKLIST_INDEX_PATH}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground underline underline-offset-2"
+                  >
+                    All checklists
+                  </a>
                 </div>
               </div>
             </CardContent>

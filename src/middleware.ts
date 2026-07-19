@@ -92,6 +92,7 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/book", "try"],
   ["/membership", "try"], // /membership and /membership/[planId] browse
   ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
+  ["/value-stack", "try"], // public "what's included" value stacker
   ["/demo", "try"],
   ["/pricing-sheet", "try"],
 
