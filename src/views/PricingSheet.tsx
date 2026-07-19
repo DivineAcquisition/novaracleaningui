@@ -125,7 +125,7 @@ export default function PricingSheet() {
     <div className="min-h-screen bg-background">
       <SEO
         title="Pricing"
-        description="Pick your home size and see instant cleaning prices. New customers save 50% on their first clean. 50% deposit at booking — balance auto-charged after service."
+        description="Pick your home size and see instant cleaning prices. New customers save 25% on their first clean. 50% deposit at booking — balance auto-charged after service."
       />
 
       {/* Nav */}
@@ -159,7 +159,7 @@ export default function PricingSheet() {
         <div className="relative container mx-auto px-4 pt-16 pb-8 md:pt-20 md:pb-10 max-w-3xl text-center space-y-5">
           <Badge className="bg-primary/10 text-primary border border-primary/40 px-3 py-1 text-xs font-bold uppercase tracking-wider">
             <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
-            New Customer Special — 50% Off
+            New Customer Special — 25% Off
           </Badge>
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight font-jakarta leading-[1.1]">
             See your{" "}
@@ -283,7 +283,7 @@ export default function PricingSheet() {
                   <div>
                     <Badge className="bg-primary/10 text-primary border-primary/40 mb-2">
                       <RiPercentLine className="w-3 h-3 mr-1" />
-                      50% off · auto-applied
+                      25% off · auto-applied
                     </Badge>
                     <h3 className="text-xl md:text-2xl font-bold font-jakarta">
                       {serviceTab === "deep" ? "Deep Clean" : "Standard Clean"}
@@ -450,7 +450,7 @@ export default function PricingSheet() {
                 <RiGiftLine className="w-3 h-3 mr-1" />
                 New Customer
               </Badge>
-              <h3 className="font-bold font-jakarta text-lg">50% Off First Clean</h3>
+              <h3 className="font-bold font-jakarta text-lg">25% Off First Clean</h3>
               <p className="text-sm text-muted-foreground">
                 Auto-applied on Standard and Deep cleans. Stacks with no other promo needed.
               </p>
@@ -474,9 +474,9 @@ export default function PricingSheet() {
                 <RiPercentLine className="w-3 h-3 mr-1" />
                 Referral
               </Badge>
-              <h3 className="font-bold font-jakarta text-lg">50% Off When You Refer</h3>
+              <h3 className="font-bold font-jakarta text-lg">25% Off When You Refer</h3>
               <p className="text-sm text-muted-foreground">
-                Your friends get 50% off their first clean, you earn a 50%-off credit when they complete it.
+                Your friends get 25% off their first clean, you earn a 25%-off credit when they complete it.
               </p>
             </CardContent>
           </Card>

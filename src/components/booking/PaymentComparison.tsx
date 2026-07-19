@@ -80,7 +80,7 @@ export function PaymentComparison({
                 <div className="flex items-center justify-between text-green-600 font-medium">
                   <span className="flex items-center gap-1.5">
                     <RiGiftLine className="w-3.5 h-3.5" />
-                    New customer 50% off:
+                    New customer 25% off:
                   </span>
                   <span>-${depositPricing.newCustomerDiscount.toFixed(2)}</span>
                 </div>
@@ -157,7 +157,7 @@ export function PaymentComparison({
                 <div className="flex items-center justify-between text-green-600 font-medium">
                   <span className="flex items-center gap-1.5">
                     <RiGiftLine className="w-3.5 h-3.5" />
-                    New customer 50% off:
+                    New customer 25% off:
                   </span>
                   <span>-${fullPaymentPricing.newCustomerDiscount.toFixed(2)}</span>
                 </div>

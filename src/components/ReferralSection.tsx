@@ -60,8 +60,8 @@ export function ReferralSection({ email }: ReferralSectionProps) {
 
   const handleShare = async () => {
     const shareData = {
-      title: 'Get 50% off Novara Cleaning',
-      text: `Use my referral code ${referralCode} to get 50% off your first cleaning with Novara!`,
+      title: 'Get 25% off Novara Cleaning',
+      text: `Use my referral code ${referralCode} to get 25% off your first cleaning with Novara!`,
       url: referralLink,
     };
 
@@ -94,7 +94,7 @@ export function ReferralSection({ email }: ReferralSectionProps) {
             </div>
 
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Your friends get <span className="font-semibold text-foreground">50% off</span> their first booking, and you earn a <span className="font-semibold text-foreground">50%-off credit</span> when they complete it.
+              Your friends get <span className="font-semibold text-foreground">25% off</span> their first booking, and you earn a <span className="font-semibold text-foreground">25%-off credit</span> when they complete it.
             </p>
           </div>
 

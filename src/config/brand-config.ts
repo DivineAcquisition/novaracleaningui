@@ -314,7 +314,7 @@ export const FIRST_CLEAN_PROMO = {
 export const ACTIVE_PROMOS: PromoConfig[] = [
   {
     code: "NEW50",
-    description: "50% off your first booking — new customers",
+    description: "25% off your first booking — new customers",
     discountType: "percent",
     discountValue: 50,
     appliesTo: ["deep"],

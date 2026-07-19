@@ -306,7 +306,7 @@ export default function BookingZip() {
               </div>
               <div className="text-left">
                 <p className="font-semibold text-foreground text-sm">You were referred! 🎉</p>
-                <p className="text-xs text-muted-foreground">50% off your first cleaning is waiting for you.</p>
+                <p className="text-xs text-muted-foreground">25% off your first cleaning is waiting for you.</p>
               </div>
             </div>
           )}
@@ -324,7 +324,7 @@ export default function BookingZip() {
             {formMode !== 'waitlist-success' && (
               <p className="text-lg md:text-2xl font-bold font-jakarta">
                 <span className="bg-gradient-primary bg-clip-text text-transparent">
-                  50% Off
+                  25% Off
                 </span>{" "}
                 Your First Cleaning
               </p>
@@ -397,7 +397,7 @@ export default function BookingZip() {
                         Great news! We service {cityState}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Enter your details to claim 50% off your first cleaning
+                        Enter your details to claim 25% off your first cleaning
                       </p>
                     </div>
                   </div>

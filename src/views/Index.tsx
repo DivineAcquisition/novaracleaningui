@@ -242,7 +242,7 @@ const Index = () => {
                 H1, in our purple brand gradient. */}
             <p className="text-xl md:text-2xl lg:text-3xl font-bold font-jakarta">
               <span className="bg-gradient-primary bg-clip-text text-transparent">
-                50% Off
+                25% Off
               </span>{" "}
               Your First Cleaning
             </p>

@@ -132,7 +132,7 @@ export default function BookingOffer() {
       serviceType: 'standard',
       membershipPlan: 'none',
     });
-    trackViewContent(prices.standard, 'Standard Cleaning — 50% Off First Clean');
+    trackViewContent(prices.standard, 'Standard Cleaning — 25% Off First Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -144,7 +144,7 @@ export default function BookingOffer() {
       serviceType: 'deep',
       membershipPlan: 'none',
     });
-    trackViewContent(prices.deepClean, 'Deep Cleaning — 50% Off First Clean');
+    trackViewContent(prices.deepClean, 'Deep Cleaning — 25% Off First Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -156,7 +156,7 @@ export default function BookingOffer() {
       serviceType: 'combo',
       membershipPlan: 'none',
     });
-    trackViewContent(prices.combo, 'Deep + Standard Combo — 50% Off First Clean');
+    trackViewContent(prices.combo, 'Deep + Standard Combo — 25% Off First Clean');
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -243,19 +243,19 @@ export default function BookingOffer() {
         <BookingHeader currentStep={3} totalSteps={6} stepLabel="Service" />
 
         <div className="container max-w-4xl mx-auto px-4 py-6 md:py-8 space-y-6 md:space-y-8" id="offers-section">
-          {/* Header — promo-led layout: badge + "Save 50%" hero +
+          {/* Header — promo-led layout: badge + "Save 25%" hero +
               auto-applied-code line. Uses our primary purple in place
               of AlphaLux's gold. */}
           <div className="text-center space-y-3 md:space-y-4">
             <Badge className="bg-primary/10 text-primary border border-primary/40 px-3 py-1 text-xs font-bold uppercase tracking-wider">
               <RiSparklingLine className="h-3.5 w-3.5 mr-1.5" />
-              New Customer Special — 50% Off
+              New Customer Special — 25% Off
             </Badge>
 
             <h1 className="font-jakarta text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight">
               Save{" "}
               <span className="bg-gradient-primary bg-clip-text text-transparent">
-                50%
+                25%
               </span>{" "}
               On Your First Cleaning
             </h1>
@@ -265,7 +265,7 @@ export default function BookingOffer() {
             </p>
 
             <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto">
-              Pick a one-time deep clean or join the Glow membership — either way you save 50% on the first clean.
+              Pick a one-time deep clean or join the Glow membership — either way you save 25% on the first clean.
             </p>
 
             <div className="flex justify-center pt-1">
@@ -319,7 +319,7 @@ export default function BookingOffer() {
                           className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                         >
                           <RiPercentLine className="h-3 w-3 mr-1" />
-                          50% off · auto-applied
+                          25% off · auto-applied
                         </Badge>
                       </div>
                     </div>
@@ -327,7 +327,7 @@ export default function BookingOffer() {
                     <div>
                       <h3 className="text-xl md:text-2xl font-bold font-jakarta">Standard Clean</h3>
                       <p className="text-xs md:text-sm text-muted-foreground">
-                        Regular maintenance cleaning — first-time customers save 50%.
+                        Regular maintenance cleaning — first-time customers save 25%.
                       </p>
                     </div>
 
@@ -339,7 +339,7 @@ export default function BookingOffer() {
                         <span className="text-sm text-muted-foreground">total / clean</span>
                       </div>
                       <p className="text-xs text-primary font-semibold mt-1.5">
-                        50% off applied automatically
+                        25% off applied automatically
                       </p>
                       <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
                         <div className="flex items-center justify-between">
@@ -377,7 +377,7 @@ export default function BookingOffer() {
                         handleSelectStandard();
                       }}
                     >
-                      Claim Offer — Save 50%
+                      Claim Offer — Save 25%
                       <RiArrowRightSLine className="w-4 h-4 ml-1" />
                     </Button>
                   </CardContent>
@@ -419,7 +419,7 @@ export default function BookingOffer() {
                             className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                           >
                             <RiPercentLine className="h-3 w-3 mr-1" />
-                            50% off · auto-applied
+                            25% off · auto-applied
                           </Badge>
                         </div>
                       </div>
@@ -427,7 +427,7 @@ export default function BookingOffer() {
                       <div>
                         <h3 className="text-xl md:text-2xl font-bold font-jakarta">Deep Clean</h3>
                         <p className="text-xs md:text-sm text-muted-foreground">
-                          Thorough top-to-bottom reset — first-time customers save 50%.
+                          Thorough top-to-bottom reset — first-time customers save 25%.
                         </p>
                       </div>
 
@@ -439,7 +439,7 @@ export default function BookingOffer() {
                           <span className="text-sm text-muted-foreground">total / clean</span>
                         </div>
                         <p className="text-xs text-primary font-semibold mt-1.5">
-                          50% off applied automatically
+                          25% off applied automatically
                         </p>
                         <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
                           <div className="flex items-center justify-between">
@@ -477,7 +477,7 @@ export default function BookingOffer() {
                           handleSelectDeepClean();
                         }}
                       >
-                        Claim Offer — Save 50%
+                        Claim Offer — Save 25%
                         <RiArrowRightSLine className="w-4 h-4 ml-1" />
                       </Button>
                     </CardContent>
@@ -519,7 +519,7 @@ export default function BookingOffer() {
                           className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                         >
                           <RiPercentLine className="h-3 w-3 mr-1" />
-                          50% off · auto-applied
+                          25% off · auto-applied
                         </Badge>
                       </div>
                       <Badge
@@ -536,7 +536,7 @@ export default function BookingOffer() {
                       </h3>
                       <p className="text-xs md:text-sm text-muted-foreground">
                         One Deep Clean now + a Standard follow-up within 14 days.
-                        Two visits, one price — first-time customers save 50%.
+                        Two visits, one price — first-time customers save 25%.
                       </p>
                     </div>
 
@@ -550,7 +550,7 @@ export default function BookingOffer() {
                         </span>
                       </div>
                       <p className="text-xs text-primary font-semibold mt-1.5">
-                        50% off the entire bundle — applied automatically
+                        25% off the entire bundle — applied automatically
                       </p>
                       <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
                         <div className="flex items-center justify-between">
@@ -600,7 +600,7 @@ export default function BookingOffer() {
                         handleSelectCombo();
                       }}
                     >
-                      Claim Combo — Save 50%
+                      Claim Combo — Save 25%
                       <RiArrowRightSLine className="w-4 h-4 ml-1" />
                     </Button>
                   </CardContent>
@@ -660,7 +660,7 @@ export default function BookingOffer() {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Membership pricing already discounted — 50%-off promo does not stack.
+                    Membership pricing already discounted — 25%-off promo does not stack.
                   </p>
                 </div>
 
