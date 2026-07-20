@@ -62,7 +62,6 @@ import {
   isBefore,
   isSameDay,
   isSameMonth,
-  isWeekend,
   startOfDay,
   startOfMonth,
 } from "date-fns";
@@ -2521,9 +2520,14 @@ function InlineSchedulePicker({
   onDateSelect: (d: Date) => void;
   onTimeSelect: (slot: string) => void;
 }) {
-  const minDate = addDays(new Date(), 3);
+  // Internal booking can pick ANY upcoming date — the standard 3-day lead is
+  // no longer a hard block, just a "short notice" highlight so the booker
+  // knows the date is inside the normal lead window.
+  const today = startOfDay(new Date());
+  const minDate = today;
+  const recommendedDate = addDays(today, 3);
   const endDate = addDays(new Date(), 60);
-  const [currentMonth, setCurrentMonth] = useState(startOfMonth(minDate));
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(today));
   const { availability, loading } = useAvailability(minDate, endDate);
 
   const availabilityByDate = useMemo(() => {
@@ -2542,8 +2546,11 @@ function InlineSchedulePicker({
   const selectedDateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
   const slotsForDate = selectedDateStr ? availabilityByDate[selectedDateStr] || {} : {};
 
-  const isDateDisabled = (d: Date) =>
-    isWeekend(d) || isBefore(startOfDay(d), startOfDay(minDate));
+  // Only past dates are blocked — weekends and short-notice dates are allowed.
+  const isDateDisabled = (d: Date) => isBefore(startOfDay(d), today);
+  // Selectable, but inside the standard 3-day lead window → flag it.
+  const isShortNotice = (d: Date) =>
+    !isDateDisabled(d) && isBefore(startOfDay(d), recommendedDate);
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth);
@@ -2615,29 +2622,46 @@ function InlineSchedulePicker({
               const isSel = selectedDate && isSameDay(day, selectedDate);
               const isToday = isSameDay(day, new Date());
               const inMonth = isSameMonth(day, currentMonth);
+              const short = isShortNotice(day);
               return (
                 <button
                   key={day.toISOString()}
                   type="button"
                   onClick={() => !disabled && onDateSelect(day)}
                   disabled={disabled}
+                  title={short ? "Short notice — under the standard 3-day lead time" : undefined}
                   className={cn(
                     "aspect-square rounded-lg text-xs font-medium transition-all relative flex items-center justify-center",
                     disabled && "text-slate-300 cursor-not-allowed",
-                    !disabled && !isSel && "text-slate-700 hover:bg-violet-50 hover:text-violet-900",
+                    !disabled && !isSel && !short && "text-slate-700 hover:bg-violet-50 hover:text-violet-900",
+                    !disabled && !isSel && short && "text-amber-900 bg-amber-50 ring-1 ring-amber-300 hover:bg-amber-100",
                     isSel && "bg-violet-600 text-white shadow-[0_2px_8px_-2px_rgba(16,163,74,0.5)]",
-                    !inMonth && !isSel && "text-slate-300",
-                    isToday && !isSel && "ring-1 ring-violet-300",
+                    !inMonth && !isSel && !short && "text-slate-300",
+                    isToday && !isSel && !short && "ring-1 ring-violet-300",
                   )}
                 >
                   {format(day, "d")}
+                  {short && !isSel && (
+                    <span aria-hidden className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-400" />
+                  )}
                 </button>
               );
             })}
           </div>
           <p className="text-[10px] text-slate-400 mt-2 pl-1">
-            Weekends greyed out · 3-day lead required
+            Any upcoming date can be booked ·{" "}
+            <span className="text-amber-600 font-semibold">amber = short notice</span>{" "}
+            (under the standard 3-day lead)
           </p>
+          {selectedDate && isShortNotice(selectedDate) && (
+            <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
+              <RiInformationLine className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+              <p className="text-[10px] leading-tight text-amber-800">
+                <span className="font-semibold">Short notice.</span> This date is inside the
+                standard 3-day lead time — confirm a crew can cover it before booking.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Time slots */}
