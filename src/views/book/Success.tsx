@@ -57,6 +57,11 @@ export default function BookingSuccess() {
   const { user, openCustomerPortal } = useAuth();
   const sessionId = searchParams.get("session_id");
   const paymentIntent = searchParams.get("payment_intent");
+  // Pay-page handoff (`deposit=ok`) and Stripe 3DS returns
+  // (`redirect_status`) — these flows must verify the payment instead of
+  // trusting the booking status (VA bookings are `confirmed` before pay).
+  const depositParam = searchParams.get("deposit");
+  const redirectStatus = searchParams.get("redirect_status");
   const [canShare, setCanShare] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
@@ -67,6 +72,10 @@ export default function BookingSuccess() {
   const [emailSent, setEmailSent] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [bookingStatus, setBookingStatus] = useState<string>("pending_payment");
+  const [depositPaidAt, setDepositPaidAt] = useState<string | null>(null);
+  const [bookingPaymentIntentId, setBookingPaymentIntentId] = useState<string | null>(null);
+  const [paymentOption, setPaymentOption] = useState<string | null>(null);
+  const [payPageUrl, setPayPageUrl] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralLink, setReferralLink] = useState<string>('');
@@ -133,6 +142,30 @@ export default function BookingSuccess() {
         }
 
         logStep("Booking found", { booking });
+
+        // Capture the payment truth from the row so the verification
+        // effect can gate the success UI on the real deposit state.
+        // (Cast: the generated row types lag behind live columns.)
+        const bookingRow = booking as Record<string, any>;
+        setDepositPaidAt(bookingRow.payment_received_at || null);
+        setBookingPaymentIntentId(bookingRow.payment_intent_id || null);
+        setPaymentOption(bookingRow.payment_option || null);
+        const bookingPayUrl =
+          typeof bookingRow.hosted_invoice_url === "string" && bookingRow.hosted_invoice_url.includes("/pay/")
+            ? bookingRow.hosted_invoice_url
+            : null;
+        setPayPageUrl(bookingPayUrl);
+
+        // A failed 3DS/redirect confirm must never render the success
+        // page. Send the customer straight back to their pay link.
+        if (redirectStatus === "failed" && !bookingRow.payment_received_at) {
+          logStep("Redirect payment failed", { bookingId });
+          toast.error("Your payment didn't go through — please try again.");
+          if (bookingPayUrl) {
+            window.location.replace(bookingPayUrl);
+            return;
+          }
+        }
 
         // Check if booking status is valid (must be confirmed,
         // pending_payment, or pending_details).
@@ -406,19 +439,43 @@ export default function BookingSuccess() {
     const verifyPayment = async () => {
       // Only verify payment if booking has been validated first
       if (!bookingValidated) return;
-      
-      if (!paymentIntent) {
-        // No payment intent means either using credit or old booking flow
-        setPaymentVerified(true);
+
+      // A failed redirect (3DS declined/abandoned) is never a success.
+      if (redirectStatus === "failed" && !depositPaidAt) {
+        setVerificationError("Your payment was not completed. Please use your payment link to try again.");
         return;
       }
 
+      // Deposit/pay-page handoffs and pre-auth (VA) bookings are
+      // `confirmed` in the DB before any money moves — for those, require
+      // real payment evidence instead of trusting the status.
+      const mustVerifyDeposit = depositParam === "ok" || paymentOption === "preauth";
+      const intentToVerify = paymentIntent || bookingPaymentIntentId;
+
+      if (!paymentIntent) {
+        if (!mustVerifyDeposit) {
+          // No payment intent means either using credit or old booking flow
+          setPaymentVerified(true);
+          return;
+        }
+        if (depositPaidAt) {
+          // Webhook already stamped the deposit — nothing to verify.
+          setPaymentVerified(true);
+          return;
+        }
+        if (!intentToVerify) {
+          setVerificationError("We haven't received your deposit yet. Please use your payment link to finish up.");
+          return;
+        }
+        // Fall through: verify the booking's own PaymentIntent live.
+      }
+
       setIsVerifyingPayment(true);
-      logStep("Starting payment verification", { paymentIntent });
+      logStep("Starting payment verification", { intentToVerify });
 
       try {
         const { data, error } = await supabase.functions.invoke('verify-payment', {
-          body: { payment_intent_id: paymentIntent }
+          body: { payment_intent_id: intentToVerify }
         });
 
         if (error) {
@@ -457,7 +514,8 @@ export default function BookingSuccess() {
     };
 
     verifyPayment();
-  }, [paymentIntent, bookingValidated]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentIntent, bookingValidated, depositParam, paymentOption, depositPaidAt, bookingPaymentIntentId, redirectStatus]);
 
   // Confirmation email is now sent server-side by stripe-webhook — no client-side email trigger needed
 
@@ -585,20 +643,30 @@ export default function BookingSuccess() {
     return null;
   }
 
+  // Deposit/pay-page + pre-auth flows: never celebrate until the payment
+  // is actually verified (VA bookings are `confirmed` before any money
+  // moves, so booking status alone can't gate the paid state).
+  const isDepositFlow = depositParam === 'ok' || paymentOption === 'preauth' || !!redirectStatus;
+  const depositPending = isDepositFlow && !paymentVerified && !depositPaidAt;
+
   // Derive the live status pill + headline copy from `bookingStatus`.
   // We're rendering a single hero across three states:
   //   • pending_details / pending_payment + isFinalizing → "Finalizing"
   //     (animated pulse, amber dot)
   //   • confirmed → "Booking confirmed" (green dot, check icon)
   //   • completed → "Service complete" (primary dot)
-  const isConfirmed = bookingStatus === 'confirmed' || bookingStatus === 'completed';
+  const isConfirmed = (bookingStatus === 'confirmed' || bookingStatus === 'completed') && !depositPending;
   const heroTone = isConfirmed
     ? { bg: 'bg-success/10', icon: 'text-success', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Confirmed' }
-    : { bg: 'bg-amber-100', icon: 'text-amber-600', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Finalizing' };
-  const heroTitle = isConfirmed
+    : { bg: 'bg-amber-100', icon: 'text-amber-600', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 border-amber-200', label: depositPending ? 'Payment pending' : 'Finalizing' };
+  const heroTitle = depositPending
+    ? 'Deposit Not Received Yet'
+    : isConfirmed
     ? (bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!')
     : 'Locking In Your Booking…';
-  const heroSubtitle = isConfirmed
+  const heroSubtitle = depositPending
+    ? 'We haven\'t received your deposit yet — your booking isn\'t fully locked in until it\'s paid. Use your secure payment link below to finish up.'
+    : isConfirmed
     ? (bookingData.membershipPlan !== 'none'
         ? 'Your membership is active and your first credit is ready to use.'
         : bookingData.useCredit
@@ -620,6 +688,11 @@ export default function BookingSuccess() {
               <div>
                 <h3 className="font-semibold text-destructive mb-1">Payment Verification Issue</h3>
                 <p className="text-sm text-muted-foreground">{verificationError}</p>
+                {depositPending && payPageUrl && (
+                  <Button asChild size="sm" className="mt-3">
+                    <a href={payPageUrl}>Finish your deposit payment</a>
+                  </Button>
+                )}
                 <p className="text-xs text-muted-foreground mt-2">
                   If you were charged, please contact support@novaracleaning.com
                 </p>

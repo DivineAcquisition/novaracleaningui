@@ -121,17 +121,26 @@ export default function PayPage() {
   }, [token, load]);
 
   // Fallback for a 3DS redirect that lands back here instead of the
-  // confirmation page (older links): show the paid state.
+  // confirmation page (older links): show the paid state — and surface a
+  // failed redirect instead of silently re-rendering the form.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const rs = new URLSearchParams(window.location.search).get("redirect_status");
     if (rs === "succeeded") setPaidNow(true);
+    if (rs === "failed") {
+      toast.error("Your payment didn't go through. Please try again below.");
+    }
   }, []);
 
   // After a successful deposit: hand off to the booking confirmation page.
-  const goToConfirmation = useCallback(() => {
+  // Carry the PaymentIntent id so the confirmation page can verify the
+  // payment server-side instead of trusting the booking status alone.
+  const goToConfirmation = useCallback((paymentIntentId?: string) => {
     if (summary?.bookingId) {
-      router.push(`/book/confirmation?booking_id=${summary.bookingId}&deposit=ok`);
+      const piParam = paymentIntentId
+        ? `&payment_intent=${encodeURIComponent(paymentIntentId)}`
+        : "";
+      router.push(`/book/confirmation?booking_id=${summary.bookingId}&deposit=ok${piParam}`);
     } else {
       setPaidNow(true);
     }
@@ -292,7 +301,7 @@ export default function PayPage() {
             <Button
               variant="outline"
               className="mt-3 border-emerald-300 text-emerald-800"
-              onClick={goToConfirmation}
+              onClick={() => goToConfirmation()}
             >
               View your booking confirmation
             </Button>
@@ -400,13 +409,14 @@ export default function PayPage() {
                 <StripePaymentForm
                   amount={summary.depositCents}
                   customerEmail={summary.email}
+                  clientSecret={clientSecret}
                   // 3DS redirects land straight on the confirmation page;
                   // Success.tsx accepts booking_id + payment_intent params.
                   returnUrl={`/book/confirmation?deposit=ok`}
                   bookingId={summary.bookingId}
-                  onSuccess={() => {
+                  onSuccess={(paymentIntentId) => {
                     toast.success("Deposit paid — thank you!");
-                    goToConfirmation();
+                    goToConfirmation(paymentIntentId);
                   }}
                   onRetry={() => void startPayment()}
                 />

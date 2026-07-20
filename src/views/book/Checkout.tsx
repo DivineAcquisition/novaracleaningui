@@ -1212,6 +1212,7 @@ export default function BookingCheckout() {
                           onRetry={handleRetryPayment}
                           customerEmail={bookingData.email}
                           bookingId={bookingId}
+                          clientSecret={clientSecret}
                         />
                       </Elements>
 
