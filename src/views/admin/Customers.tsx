@@ -56,6 +56,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useAdminRole } from "@/hooks/use-admin-role";
 
 interface Customer {
   id: string;
@@ -298,6 +299,7 @@ function CustomerSheet({
   onClose: () => void;
   onChange: () => void;
 }) {
+  const { isAdmin } = useAdminRole();
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [wallet, setWallet] = useState<WalletRow[]>([]);
   const [balance, setBalance] = useState<CreditBalance | null>(null);
@@ -658,20 +660,23 @@ function CustomerSheet({
                   )}
                   Send password reset
                 </Button>
-                <Button
-                  variant="outline"
-                  className="border-violet-300 text-violet-800"
-                  onClick={loginAsCustomer}
-                  disabled={actioning === "impersonate"}
-                  title="Open this customer's portal as them (one-time secure link — logged)"
-                >
-                  {actioning === "impersonate" ? (
-                    <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <RiLoginBoxLine className="w-4 h-4 mr-1.5" />
-                  )}
-                  Log in as customer
-                </Button>
+                {/* Impersonation is admin-only (the edge function rejects VAs). */}
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    className="border-violet-300 text-violet-800"
+                    onClick={loginAsCustomer}
+                    disabled={actioning === "impersonate"}
+                    title="Open this customer's portal as them (one-time secure link — logged)"
+                  >
+                    {actioning === "impersonate" ? (
+                      <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <RiLoginBoxLine className="w-4 h-4 mr-1.5" />
+                    )}
+                    Log in as customer
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="border-slate-200 text-slate-700"
@@ -685,17 +690,20 @@ function CustomerSheet({
                   )}
                   Re-sync to GHL
                 </Button>
-                <Button
-                  variant="outline"
-                  className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
-                  onClick={() => {
-                    setConfirmDeleteName("");
-                    setDeleteOpen(true);
-                  }}
-                >
-                  <RiDeleteBinLine className="w-4 h-4 mr-1.5" />
-                  Delete customer
-                </Button>
+                {/* Hard delete is admin-only (admin-customer-action rejects VAs). */}
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
+                    onClick={() => {
+                      setConfirmDeleteName("");
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    <RiDeleteBinLine className="w-4 h-4 mr-1.5" />
+                    Delete customer
+                  </Button>
+                )}
               </div>
 
               <Separator />

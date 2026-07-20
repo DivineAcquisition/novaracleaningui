@@ -63,6 +63,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import { useAdminRole } from "@/hooks/use-admin-role";
 
 const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
   rehireable: { label: "Rehireable", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
@@ -873,6 +874,7 @@ function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChang
 
 // SMS workflows + admin "log in as cleaner" impersonation.
 function CleanerToolsBlock({ cleaner }: { cleaner: CleanerRow }) {
+  const { isAdmin } = useAdminRole();
   const [smsMsg, setSmsMsg] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -947,13 +949,16 @@ function CleanerToolsBlock({ cleaner }: { cleaner: CleanerRow }) {
         <p className="text-[11px] text-slate-400">Photo-submission links (before / after / combined) are sent from the Jobs tab above or from a booking (Bookings → Before &amp; after photos).</p>
       </div>
 
-      <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">
-        <p className="text-xs text-violet-900 font-medium">Log in as this contractor</p>
-        <p className="text-[11px] text-violet-800/70">Opens their contractor portal in a new tab with a one-time, short-lived secure link. You can view and submit actions as them. Every use is logged.</p>
-        <Button size="sm" variant="outline" onClick={loginAs} disabled={busy !== null || !cleaner.email} className="border-violet-300 text-violet-800">
-          {busy === "impersonate" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiLoginBoxLine className="w-4 h-4 mr-1.5" /> Log in as {cleaner.first_name || "cleaner"}</>}
-        </Button>
-      </div>
+      {/* Impersonation is admin-only (the edge function rejects VAs). */}
+      {isAdmin && (
+        <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">
+          <p className="text-xs text-violet-900 font-medium">Log in as this contractor</p>
+          <p className="text-[11px] text-violet-800/70">Opens their contractor portal in a new tab with a one-time, short-lived secure link. You can view and submit actions as them. Every use is logged.</p>
+          <Button size="sm" variant="outline" onClick={loginAs} disabled={busy !== null || !cleaner.email} className="border-violet-300 text-violet-800">
+            {busy === "impersonate" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiLoginBoxLine className="w-4 h-4 mr-1.5" /> Log in as {cleaner.first_name || "cleaner"}</>}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1325,6 +1330,7 @@ function ActionsBlock({
   onRefresh: () => void;
   actioning: boolean;
 }) {
+  const { isAdmin } = useAdminRole();
   const s = (cleaner.status || "pending").toLowerCase();
   const [termOpen, setTermOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState(s);
@@ -1424,16 +1430,18 @@ function ActionsBlock({
             />
             <span className="text-slate-700">Approved</span>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={skipCompliance}
-              onChange={(e) => setSkipCompliance(e.target.checked)}
-              disabled={actioning}
-              className="rounded border-slate-300"
-            />
-            <span className="text-slate-700">Skip compliance (admin)</span>
-          </label>
+          {isAdmin && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={skipCompliance}
+                onChange={(e) => setSkipCompliance(e.target.checked)}
+                disabled={actioning}
+                className="rounded border-slate-300"
+              />
+              <span className="text-slate-700">Skip compliance (admin)</span>
+            </label>
+          )}
         </div>
         <Button
           type="button"
@@ -1535,15 +1543,18 @@ function ActionsBlock({
           <RiTimeLine className="w-4 h-4 mr-1.5" />
           Invite to Apploye
         </Button>
-        <Button
-          variant="outline"
-          disabled={actioning}
-          onClick={onDelete}
-          className="border-rose-300 text-rose-900 bg-rose-50 hover:bg-rose-100"
-        >
-          <RiCloseLine className="w-4 h-4 mr-1.5" />
-          Delete from directory
-        </Button>
+        {/* Hard delete is admin-only (cleaner-admin-action rejects VAs). */}
+        {isAdmin && (
+          <Button
+            variant="outline"
+            disabled={actioning}
+            onClick={onDelete}
+            className="border-rose-300 text-rose-900 bg-rose-50 hover:bg-rose-100"
+          >
+            <RiCloseLine className="w-4 h-4 mr-1.5" />
+            Delete from directory
+          </Button>
+        )}
       </div>
       {cleaner.rehire_status && REHIRE_BADGE[cleaner.rehire_status] ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-xs text-slate-600 flex items-center gap-2">
