@@ -20,15 +20,18 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface StripePaymentFormProps {
   amount: number;
-  onSuccess: () => void;
+  /** Called after a successful (or processing) confirm with the PaymentIntent id. */
+  onSuccess: (paymentIntentId?: string) => void;
   onRetry?: () => void;
   customerEmail?: string;
   bookingId?: string | null;
+  /** PaymentIntent client secret — required to confirm with a saved card. */
+  clientSecret?: string;
   /** Where redirect-based methods (3DS) land afterwards. Defaults to the booking-funnel confirmation page. */
   returnUrl?: string;
 }
 
-export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, bookingId, returnUrl: returnUrlProp }: StripePaymentFormProps) {
+export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, bookingId, clientSecret, returnUrl: returnUrlProp }: StripePaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
@@ -40,6 +43,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("new");
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [saveForFuture, setSaveForFuture] = useState(true);
+  const [elementReady, setElementReady] = useState(false);
 
   // Defer saved-card lookup so PaymentElement can mount first.
   useEffect(() => {
@@ -52,8 +56,11 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
           body: { email: customerEmail },
         });
         if (error) throw error;
-        if (data?.paymentMethods?.length > 0) {
-          setSavedPaymentMethods(data.paymentMethods);
+        // Only card PMs render meaningfully (brand + last4); Link/wallet
+        // methods would show a blank row and can't be confirmed this way.
+        const cards = (data?.paymentMethods || []).filter((pm: any) => pm?.card);
+        if (cards.length > 0) {
+          setSavedPaymentMethods(cards);
         }
       } catch (error: unknown) {
         console.error("Error loading payment methods:", error);
@@ -66,15 +73,44 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
   }, [user, customerEmail]);
 
   const getErrorMessage = (error: any): { title: string; message: string; type: string } => {
-    const errorCode = error.code || error.type;
-    
-    switch (errorCode) {
-      case 'card_declined':
+    const errorCode = error?.code || error?.type;
+    const declineCode = error?.decline_code;
+    // Stripe's own message is usually the most specific — prefer it.
+    const stripeMessage =
+      typeof error?.message === "string" && error.message.trim() ? error.message : null;
+
+    // Incomplete/invalid form input (caught by elements.submit() or confirm).
+    if (error?.type === 'validation_error') {
+      return {
+        title: 'Check Your Card Details',
+        message: stripeMessage || 'Some of your card details look incomplete or invalid. Please review them and try again.',
+        type: 'validation_error'
+      };
+    }
+
+    if (errorCode === 'card_declined') {
+      if (declineCode === 'insufficient_funds') {
+        return {
+          title: 'Insufficient Funds',
+          message: 'Your card has insufficient funds. Please use a different payment method.',
+          type: 'insufficient_funds'
+        };
+      }
+      if (declineCode === 'lost_card' || declineCode === 'stolen_card') {
         return {
           title: 'Card Declined',
-          message: 'Your card was declined. Please try a different payment method or contact your bank.',
+          message: 'This card can\'t be used. Please try a different payment method.',
           type: 'card_declined'
         };
+      }
+      return {
+        title: 'Card Declined',
+        message: stripeMessage || 'Your card was declined. Please try a different payment method or contact your bank.',
+        type: 'card_declined'
+      };
+    }
+
+    switch (errorCode) {
       case 'insufficient_funds':
         return {
           title: 'Insufficient Funds',
@@ -102,22 +138,67 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
       case 'invalid_request_error':
         return {
           title: 'Invalid Request',
-          message: 'There was a problem with the payment request. Please refresh and try again.',
+          message: stripeMessage || 'There was a problem with the payment request. Please refresh and try again.',
           type: 'invalid_request'
         };
       default:
         return {
           title: 'Payment Failed',
-          message: error.message || 'An unexpected error occurred. Please try again or use a different payment method.',
+          message: stripeMessage || 'An unexpected error occurred. Please try again or use a different payment method.',
           type: 'general'
         };
     }
+  };
+
+  const showError = (error: any) => {
+    const errorDetails = getErrorMessage(error);
+    setPaymentError(errorDetails.message);
+    setErrorType(errorDetails.type);
+    toast({
+      title: errorDetails.title,
+      description: errorDetails.message,
+      variant: "destructive",
+    });
+  };
+
+  // Shared post-confirm handling: every outcome surfaces something —
+  // success, processing, or an explicit error. Never a silent dead end.
+  const handleConfirmResult = (error: any, paymentIntent: any) => {
+    if (error) {
+      showError(error);
+      return;
+    }
+    if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture')) {
+      onSuccess(paymentIntent.id);
+      return;
+    }
+    if (paymentIntent && paymentIntent.status === 'processing') {
+      // Bank is still processing — hand off to the confirmation page,
+      // which verifies the PaymentIntent server-side.
+      toast({
+        title: "Payment Processing",
+        description: "Your payment is being processed — we'll confirm it on the next page.",
+      });
+      onSuccess(paymentIntent.id);
+      return;
+    }
+    // No redirect happened, no error object, but the payment didn't
+    // complete (e.g. abandoned wallet sheet). Tell the customer.
+    showError({
+      message: 'Your payment didn\'t complete. Please try again or use a different payment method.',
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!stripe || !elements) {
+      // Never fail silently — tell the customer the form isn't ready yet.
+      toast({
+        title: "Payment Form Loading",
+        description: "The secure payment form is still loading. Give it a second and try again.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -134,72 +215,61 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
         returnUrl.searchParams.set('booking_id', bookingId);
       }
 
-      // If using saved payment method
-      if (selectedPaymentMethod !== "new" && savedPaymentMethods.length > 0) {
-        const paymentMethod = savedPaymentMethods.find(pm => pm.id === selectedPaymentMethod);
-        if (paymentMethod) {
-          const { error, paymentIntent } = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-              return_url: returnUrl.toString(),
-              payment_method: selectedPaymentMethod,
-            },
-            redirect: 'if_required',
+      // Saved payment method: confirm against the client secret directly.
+      // (Passing both `elements` and a `payment_method` id conflicts —
+      // Stripe takes payment data from the Element and ignores/errors on
+      // the saved card.)
+      if (selectedPaymentMethod !== "new" && savedPaymentMethods.some(pm => pm.id === selectedPaymentMethod)) {
+        if (!clientSecret) {
+          setSelectedPaymentMethod("new");
+          showError({
+            message: 'Saved cards aren\'t available right now — please enter your card details instead.',
           });
-
-          if (error) {
-            const errorDetails = getErrorMessage(error);
-            setPaymentError(errorDetails.message);
-            setErrorType(errorDetails.type);
-            
-            toast({
-              title: errorDetails.title,
-              description: errorDetails.message,
-              variant: "destructive",
-            });
-          } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-            // Payment succeeded inline (no redirect needed)
-            onSuccess();
-          }
           return;
         }
+        const { error, paymentIntent } = await stripe.confirmPayment({
+          clientSecret,
+          confirmParams: {
+            return_url: returnUrl.toString(),
+            payment_method: selectedPaymentMethod,
+          },
+          redirect: 'if_required',
+        });
+        handleConfirmResult(error, paymentIntent);
+        return;
       }
 
-      // New payment method - confirm and optionally save
-      // Use redirect: 'if_required' so cards without 3DS don't redirect
+      // New payment method: validate the Payment Element FIRST so
+      // incomplete card details surface a visible error instead of a
+      // silent no-op (customers "trying 4 cards" with nothing reaching
+      // Stripe was exactly this gap).
+      try {
+        const { error: submitError } = await elements.submit();
+        if (submitError) {
+          showError(submitError);
+          return;
+        }
+      } catch {
+        // elements.submit() unavailable in this mode — confirmPayment
+        // performs its own validation below.
+      }
+
+      // Confirm and optionally save.
+      // Use redirect: 'if_required' so cards without 3DS don't redirect.
+      // Guests: the PaymentIntent's own setup_future_usage governs card
+      // saving — don't send a redundant save_payment_method flag.
       const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
           return_url: returnUrl.toString(),
-          save_payment_method: saveForFuture,
+          ...(user ? { save_payment_method: saveForFuture } : {}),
         },
         redirect: 'if_required',
       });
-
-      if (error) {
-        const errorDetails = getErrorMessage(error);
-        setPaymentError(errorDetails.message);
-        setErrorType(errorDetails.type);
-        
-        toast({
-          title: errorDetails.title,
-          description: errorDetails.message,
-          variant: "destructive",
-        });
-      } else if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture')) {
-        // Payment succeeded inline (no redirect needed)
-        onSuccess();
-      }
+      handleConfirmResult(error, paymentIntent);
     } catch (error: any) {
-      const errorDetails = getErrorMessage(error);
-      setPaymentError(errorDetails.message);
+      showError(error);
       setErrorType('general');
-      
-      toast({
-        title: "Payment Error",
-        description: errorDetails.message,
-        variant: "destructive",
-      });
     } finally {
       setIsProcessing(false);
     }
@@ -289,7 +359,11 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
             <PaymentElement 
               options={{
                 layout: "tabs",
+                ...(customerEmail
+                  ? { defaultValues: { billingDetails: { email: customerEmail } } }
+                  : {}),
               }}
+              onReady={() => setElementReady(true)}
             />
           </div>
           
@@ -312,7 +386,7 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
       
       <Button
         type="submit"
-        disabled={!stripe || isProcessing}
+        disabled={!stripe || !elements || isProcessing || (selectedPaymentMethod === "new" && !elementReady)}
         className="w-full h-14 text-lg font-semibold"
         size="lg"
       >
@@ -320,6 +394,11 @@ export function StripePaymentForm({ amount, onSuccess, onRetry, customerEmail, b
           <>
             <RiLoader4Line className="mr-2 h-5 w-5 animate-spin" />
             Processing Payment...
+          </>
+        ) : selectedPaymentMethod === "new" && !elementReady ? (
+          <>
+            <RiLoader4Line className="mr-2 h-5 w-5 animate-spin" />
+            Loading Secure Form...
           </>
         ) : (
           `Pay $${(amount / 100).toFixed(2)}`
