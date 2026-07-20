@@ -47,6 +47,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useAdminRole } from "@/hooks/use-admin-role";
 
 // Brand ramp — matches the auth surfaces so the whole product reads as one
 // design language (purple as a precise accent on a clean light shell).
@@ -57,6 +58,11 @@ interface NavItem {
   url: string;
   icon: typeof RiDashboardLine;
   description: string;
+  // Hidden from VAs. Finance, roles, and commercial surfaces are admin-only;
+  // VAs keep the operational set (bookings, dispatch, internal booking,
+  // recurring, QC, crews, customers, cleaners, map). Route-level guards in the
+  // page files (requiredRole="admin_strict") back this up server-side.
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -95,12 +101,14 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/quotes",
     icon: RiFileList3Line,
     description: "Saved quotes · send checklists",
+    adminOnly: true,
   },
   {
     title: "Partnerships",
     url: "/admin/partner",
     icon: RiHotelLine,
     description: "Commercial · Office · STR — one hub: pipeline, accounts, booking, revenue",
+    adminOnly: true,
   },
   {
     title: "Customers",
@@ -125,6 +133,7 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/payroll",
     icon: RiMoneyDollarCircleLine,
     description: "Stripe Connect cleaner payouts",
+    adminOnly: true,
   },
   {
     title: "Quality Control",
@@ -137,6 +146,7 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/pnl",
     icon: RiFileChartLine,
     description: "Expenses · ad spend · EOD — daily sheet mirror",
+    adminOnly: true,
   },
   {
     title: "Map",
@@ -149,6 +159,7 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/team",
     icon: RiTeamLine,
     description: "Admins & VA access",
+    adminOnly: true,
   },
 ];
 
@@ -163,7 +174,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+  const { isAdmin } = useAdminRole();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Hide admin-only items from VAs. Until the role resolves, treat the user as
+  // NOT a full admin so restricted items never flash for a VA.
+  const navItems = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((n) => !n.adminOnly);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -181,7 +197,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
       <aside className="hidden lg:flex w-64 flex-col border-r border-slate-200 bg-white shrink-0">
         <SidebarBrand />
-        <SidebarNav pathname={pathname} />
+        <SidebarNav pathname={pathname} items={navItems} />
         <SidebarFooter user={user} onSignOut={handleSignOut} />
       </aside>
 
@@ -209,7 +225,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <RiCloseLine className="w-5 h-5" />
           </Button>
         </div>
-        <SidebarNav pathname={pathname} />
+        <SidebarNav pathname={pathname} items={navItems} />
         <SidebarFooter user={user} onSignOut={handleSignOut} />
       </aside>
 
@@ -280,13 +296,13 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function SidebarNav({ pathname }: { pathname: string | null }) {
+function SidebarNav({ pathname, items }: { pathname: string | null; items: NavItem[] }) {
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
       <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.1em] text-slate-400 font-bold">
         Workspace
       </p>
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const isActive = isNavActive(pathname, item.url);
         return (
           <Link

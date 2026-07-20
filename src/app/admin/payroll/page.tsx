@@ -6,7 +6,7 @@ import AdminPayroll from "@/views/admin/Payroll";
 
 export default function Page() {
   return (
-    <ProtectedRoute requiredRole="admin">
+    <ProtectedRoute requiredRole="admin_strict">
       <AdminLayout>
         <Suspense>
           <AdminPayroll />

@@ -5,7 +5,7 @@ import AdminTeam from "@/views/admin/Team";
 
 export default function Page() {
   return (
-    <ProtectedRoute requiredRole="admin">
+    <ProtectedRoute requiredRole="admin_strict">
       <AdminLayout>
         <Suspense>
           <AdminTeam />

@@ -18,6 +18,10 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Where to send an unauthorized user. VAs who hit an admin-only page are
+  // bounced back into the console (they DO have portal access) rather than to
+  // the sign-in screen.
+  const [redirectTo, setRedirectTo] = useState<string>("/admin/auth");
 
   useEffect(() => {
     const checkAuthorization = async () => {
@@ -25,6 +29,7 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session) {
+          setRedirectTo("/admin/auth");
           setIsAuthorized(false);
           setIsLoading(false);
           return;
@@ -33,7 +38,38 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
         // Admin-portal pages accept both `admin` and `va` (virtual
         // assistant) roles. VAs operate the same console; the matching RLS
         // policies were added in the va_admin_portal_access migration.
-        // Any other requiredRole falls back to a strict has_role check.
+        //
+        //   • "admin"        → admin OR va (default admin-console access)
+        //   • "admin_strict" → FULL admin only; VAs are blocked and bounced
+        //                      back to the dashboard (finance, roles, and
+        //                      commercial surfaces use this)
+        //   • anything else  → strict has_role check for that role
+        if (requiredRole === "admin_strict") {
+          const { data: isAdmin, error } = await (supabase.rpc as any)("has_role", {
+            _user_id: session.user.id,
+            _role: "admin",
+          });
+          if (error) {
+            console.error('Error checking role:', error);
+            setRedirectTo("/admin/auth");
+            setIsAuthorized(false);
+          } else if (isAdmin === true) {
+            setIsAuthorized(true);
+          } else {
+            // Distinguish a VA (has console access, wrong page) from someone
+            // with no access at all so the redirect target is sensible.
+            const { data: hasPortal } = await (supabase.rpc as any)("is_admin_or_va", {
+              _uid: session.user.id,
+            });
+            setRedirectTo(hasPortal === true ? "/admin/dashboard" : "/admin/auth");
+            setIsAuthorized(false);
+            toast.error("Admins only", {
+              description: "This section is restricted to admins.",
+            });
+          }
+          return;
+        }
+
         const { data, error } =
           requiredRole === "admin"
             ? await (supabase.rpc as any)("is_admin_or_va", {
@@ -46,10 +82,12 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
 
         if (error) {
           console.error('Error checking role:', error);
+          setRedirectTo("/admin/auth");
           setIsAuthorized(false);
         } else {
           setIsAuthorized(data === true);
           if (data !== true) {
+            setRedirectTo("/admin/auth");
             toast.error("Access Denied", {
               description: "You don't have permission to access this page."
             });
@@ -57,6 +95,7 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
         }
       } catch (error) {
         console.error('Authorization check failed:', error);
+        setRedirectTo("/admin/auth");
         setIsAuthorized(false);
       } finally {
         setIsLoading(false);
@@ -68,9 +107,9 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
 
   useEffect(() => {
     if (!isLoading && !isAuthorized) {
-      router.replace('/admin/auth');
+      router.replace(redirectTo);
     }
-  }, [isLoading, isAuthorized, router]);
+  }, [isLoading, isAuthorized, redirectTo, router]);
 
   if (isLoading) {
     return (

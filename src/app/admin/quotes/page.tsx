@@ -5,7 +5,7 @@ import AdminQuotes from "@/views/admin/Quotes";
 
 export default function Page() {
   return (
-    <ProtectedRoute requiredRole="admin">
+    <ProtectedRoute requiredRole="admin_strict">
       <AdminLayout>
         <Suspense>
           <AdminQuotes />

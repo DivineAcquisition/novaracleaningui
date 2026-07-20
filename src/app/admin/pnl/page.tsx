@@ -4,7 +4,7 @@ import PnL from "@/views/admin/PnL";
 
 export default function Page() {
   return (
-    <ProtectedRoute requiredRole="admin">
+    <ProtectedRoute requiredRole="admin_strict">
       <AdminLayout>
         <PnL />
       </AdminLayout>

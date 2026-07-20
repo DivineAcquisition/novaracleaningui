@@ -6,7 +6,7 @@ import Partnerships from "@/views/admin/Partnerships";
 // Unified Partnerships console — Host Accounts (Airtable) + Turnover Ops (Supabase).
 export default function Page() {
   return (
-    <ProtectedRoute requiredRole="admin">
+    <ProtectedRoute requiredRole="admin_strict">
       <AdminLayout>
         <Suspense>
           <Partnerships />
