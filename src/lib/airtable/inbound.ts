@@ -411,23 +411,30 @@ const HUMAN_SOURCES = new Set(["client", "anonymousUser"]);
 interface FieldNameIndex {
   tableName: Map<string, string>;
   fieldName: Map<string, Map<string, string>>; // tableId → fieldId → name
+  fieldType: Map<string, Map<string, string>>; // tableId → fieldId → type
 }
 
 async function buildNameIndex(): Promise<FieldNameIndex> {
   const tableName = new Map<string, string>();
   const fieldName = new Map<string, Map<string, string>>();
+  const fieldType = new Map<string, Map<string, string>>();
   try {
     const tables = await listBaseTables();
     for (const t of tables) {
       tableName.set(t.id, t.name);
-      const fields = new Map<string, string>();
-      for (const f of t.fields) fields.set(f.id, f.name);
-      fieldName.set(t.id, fields);
+      const names = new Map<string, string>();
+      const types = new Map<string, string>();
+      for (const f of t.fields) {
+        names.set(f.id, f.name);
+        types.set(f.id, f.type);
+      }
+      fieldName.set(t.id, names);
+      fieldType.set(t.id, types);
     }
   } catch {
     /* names degrade to raw ids in flag messages */
   }
-  return { tableName, fieldName };
+  return { tableName, fieldName, fieldType };
 }
 
 function ownershipFor(tableId: string, index: FieldNameIndex): TableOwnership | null {
@@ -511,12 +518,19 @@ export async function processWebhookPayloads(state: WebhookStateRow): Promise<In
         if (!HUMAN_SOURCES.has(source)) continue; // our API writes / formulas / automations
 
         const fieldNames = index.fieldName.get(tableId) || new Map<string, string>();
+        const fieldTypes = index.fieldType.get(tableId) || new Map<string, string>();
         const wholeTableAppOwned = own.appFieldNames.includes("*");
 
         for (const [recordId, rec] of Object.entries(change.changedRecordsById || {})) {
           const changedFieldIds = Object.keys(rec.current?.cellValuesByFieldId || {});
           for (const fieldId of changedFieldIds) {
             const fName = fieldNames.get(fieldId) || fieldId;
+
+            // Attachment cells are rewritten BY AIRTABLE ITSELF (it re-hosts
+            // the file after our URL write) and that normalization is
+            // reported as a client-sourced change — derived noise, not a
+            // human edit. Skip them.
+            if (fieldTypes.get(fieldId) === "multipleAttachments") continue;
 
             if (own.keyFieldIds.includes(fieldId)) {
               conflicts += 1;
