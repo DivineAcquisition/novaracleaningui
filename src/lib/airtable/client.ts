@@ -280,9 +280,9 @@ export async function upsertRecords(
 export async function updateRecords(
   tableId: string,
   records: { id: string; fields: Fields }[],
-  options: { typecast?: boolean } = {},
+  options: { typecast?: boolean; baseId?: string } = {},
 ): Promise<AirtableRecord[]> {
-  const baseId = getBaseId();
+  const baseId = options.baseId || getBaseId();
   const typecast = options.typecast ?? true;
   const prepared = records
     .map((r) => ({ id: r.id, fields: clean(r.fields) }))
@@ -376,11 +376,13 @@ export interface ListOptions {
   filterByFormula?: string;
   pageSize?: number;
   maxRecords?: number;
+  /** Read from a different base (default: Client & Revenue Ops). */
+  baseId?: string;
 }
 
 /** List records, transparently paginating. Returns fields keyed by field id. */
 export async function listRecords(tableId: string, options: ListOptions = {}): Promise<AirtableRecord[]> {
-  const baseId = getBaseId();
+  const baseId = options.baseId || getBaseId();
   const out: AirtableRecord[] = [];
   let offset: string | undefined;
   do {

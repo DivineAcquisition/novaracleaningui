@@ -63,6 +63,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import { useAdminRole } from "@/hooks/use-admin-role";
 
 const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
@@ -161,6 +162,9 @@ export default function AdminCleaners() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  // One hub, whole lifecycle: applicants (talent-acquisition queue) and
+  // contractors (directory) are sections of the same cleaner area.
+  const [section, setSection] = useState<"contractors" | "applicants">("contractors");
 
   const selected = useMemo(
     () => cleaners.find((c) => c.id === selectedId) || null,
@@ -315,34 +319,63 @@ export default function AdminCleaners() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">
-            Cleaner directory
+            {section === "applicants" ? "Applicants" : "Cleaner directory"}
           </h1>
           <p className="text-sm text-slate-500">
-            Contractors, onboarding status, performance, and quick actions.
+            {section === "applicants"
+              ? "Talent-acquisition submissions — review, launch onboarding, activate."
+              : "Contractors, onboarding status, performance, and quick actions."}
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
-              <RiCheckLine className="w-3 h-3" /> {counts.active} active
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-              <RiTimeLine className="w-3 h-3" /> {counts.pending} pending
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-              <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
-            </span>
+          <div className="mt-2 inline-flex gap-1 bg-slate-100 rounded-lg p-1">
+            {(
+              [
+                { id: "contractors", label: "Contractors" },
+                { id: "applicants", label: "Applicants" },
+              ] as const
+            ).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSection(s.id)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  section === s.id
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900",
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
-          <ScoreEngineDialog onChanged={() => void load({ silent: true })} />
-          <Button
-            onClick={() => setAddOpen(true)}
-            className="bg-violet-600 hover:bg-violet-700 text-white"
-          >
-            + Add cleaner
-          </Button>
         </div>
+        {section === "contractors" && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                <RiCheckLine className="w-3 h-3" /> {counts.active} active
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                <RiTimeLine className="w-3 h-3" /> {counts.pending} pending
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
+              </span>
+            </div>
+            <ScoreEngineDialog onChanged={() => void load({ silent: true })} />
+            <Button
+              onClick={() => setAddOpen(true)}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              + Add cleaner
+            </Button>
+          </div>
+        )}
       </div>
 
+      {section === "applicants" && <ApplicantsPipeline />}
+
+      {section === "contractors" && (
+        <>
       <AddCleanerDialog
         open={addOpen}
         onOpenChange={setAddOpen}
@@ -516,6 +549,8 @@ export default function AdminCleaners() {
         onRefresh={() => load({ silent: true })}
         actioning={actioning}
       />
+        </>
+      )}
     </div>
   );
 }
