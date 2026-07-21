@@ -39,6 +39,7 @@ import {
   RiShieldCheckLine,
   RiFileChartLine,
   RiFileList3Line,
+  RiRefreshLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -153,6 +154,13 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/map",
     icon: RiMapPin2Line,
     description: "Coverage × booking heatmap",
+  },
+  {
+    title: "Sync Health",
+    url: "/admin/sync",
+    icon: RiRefreshLine,
+    description: "Airtable live sync · per-flow status · review queue",
+    adminOnly: true,
   },
   {
     title: "Team",

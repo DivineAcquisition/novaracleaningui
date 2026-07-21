@@ -10,6 +10,7 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { syncContractors } from "@/lib/airtable/contractors";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
+import { installAirtableReviewHooks, logSyncRun } from "@/lib/airtable/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,11 +40,28 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
+  const startedAt = Date.now();
   try {
     await primeAirtablePat();
+    installAirtableReviewHooks();
     const result = await syncContractors();
+    await logSyncRun({
+      flow: "contractors",
+      trigger: viaSecret ? "external" : "manual",
+      status: "success",
+      records: result.contractorsSynced,
+      detail: { warnings: result.warnings.slice(0, 20) },
+      startedAt,
+    });
     return NextResponse.json(result);
   } catch (err) {
+    await logSyncRun({
+      flow: "contractors",
+      trigger: viaSecret ? "external" : "manual",
+      status: "error",
+      error: (err as Error).message,
+      startedAt,
+    });
     // eslint-disable-next-line no-console
     console.error("[partner-admin/contractors-sync]", (err as Error).message);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
