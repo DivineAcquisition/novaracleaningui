@@ -27,6 +27,7 @@ import {
   markImported,
   type TalentApplicant,
 } from "@/lib/airtable/talent";
+import { logSyncRun } from "@/lib/airtable/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,6 +103,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
+  const startedAt = Date.now();
   try {
     await primeAirtablePat();
     const supabase = getAdminSupabase();
@@ -218,6 +220,18 @@ export async function POST(req: Request): Promise<NextResponse> {
       });
     }
 
+    // Report into the shared sync-health telemetry (/admin/sync).
+    await logSyncRun({
+      flow: "talent",
+      direction: "inbound",
+      trigger: viaSecret ? "poll" : "manual",
+      status: failures.length === 0 ? "success" : "error",
+      records: created + updated,
+      error: failures.length ? failures.slice(0, 3).join(" · ") : undefined,
+      detail: { total: applicants.length, created, updated, marked, failures: failures.slice(0, 10) },
+      startedAt,
+    });
+
     return NextResponse.json({
       ok: failures.length === 0,
       total: applicants.length,
@@ -227,6 +241,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       failures,
     });
   } catch (err) {
+    await logSyncRun({
+      flow: "talent",
+      direction: "inbound",
+      trigger: viaSecret ? "poll" : "manual",
+      status: "error",
+      error: (err as Error).message,
+      startedAt,
+    });
     // eslint-disable-next-line no-console
     console.error("[talent-sync]", (err as Error).message);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

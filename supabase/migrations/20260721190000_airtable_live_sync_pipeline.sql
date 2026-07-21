@@ -139,6 +139,7 @@ INSERT INTO public.airtable_sync_flow_state (flow, display_name, direction) VALU
   ('contractors',  'Contractors',                               'outbound'),
   ('vas',          'VAs',                                       'outbound'),
   ('commercial',   'Commercial Accounts & Sites',               'outbound'),
+  ('talent',       'Talent Applicants (Airtable → workspace)',  'inbound'),
   ('inbound',      'Airtable → Workspace (remote changes)',     'inbound')
 ON CONFLICT (flow) DO NOTHING;
 
@@ -841,6 +842,29 @@ begin
       format('Airtable sync flow "%s" has failed %s times in a row: %s',
              rec.display_name, rec.consecutive_failures, left(coalesce(rec.last_error, 'unknown error'), 300)),
       jsonb_build_object('flow', rec.flow, 'consecutiveFailures', rec.consecutive_failures)
+    );
+    update public.airtable_sync_flow_state set alerted_at = now(), updated_at = now()
+     where flow = rec.flow;
+  end loop;
+
+  -- Inbound flows run on a fixed cadence (5-min remote-change poll, 10-min
+  -- talent poll). If one that used to succeed goes silent for 6+ hours the
+  -- poller or its route is broken — that's silent drift, so alert.
+  for rec in
+    select flow, display_name, last_success_at
+      from public.airtable_sync_flow_state
+     where direction = 'inbound'
+       and last_success_at is not null
+       and last_success_at < now() - interval '6 hours'
+       and (alerted_at is null or alerted_at < now() - interval '6 hours')
+  loop
+    insert into public.events (event_type, source, summary, data)
+    values (
+      'airtable.sync.failing',
+      'airtable-sync-watchdog',
+      format('Airtable inbound flow "%s" has not completed a pass since %s — its poller or route may be down. Review at /admin/sync.',
+             rec.display_name, to_char(rec.last_success_at, 'YYYY-MM-DD HH24:MI UTC')),
+      jsonb_build_object('flow', rec.flow, 'lastSuccessAt', rec.last_success_at)
     );
     update public.airtable_sync_flow_state set alerted_at = now(), updated_at = now()
      where flow = rec.flow;
