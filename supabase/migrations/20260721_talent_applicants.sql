@@ -1,7 +1,8 @@
 -- ─── Talent acquisition sync + cleaner hub applicant pipeline ─────────────────
 --
--- Applicants flow Fillout → Airtable ("NVC™ | Maryland" base app0jCdQHXOvItVPo,
--- Contractors table) and are pulled ONE-WAY into the admin workspace, which is
+-- Applicants flow Fillout → Airtable ("NVC | Client & Revenue Ops" base
+-- appoUuFQZQfCyKGlw, Applicants table) and are pulled ONE-WAY into the admin
+-- workspace, which is
 -- the system of record from that point on. This migration adds:
 --
 --   1. public.cleaner_applicants — the Applicants queue behind the cleaner hub.

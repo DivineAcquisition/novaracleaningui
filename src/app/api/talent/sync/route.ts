@@ -1,8 +1,8 @@
 // ─── POST /api/talent/sync ─────────────────────────────────────────────────────
 //
-// ONE-WAY sync: talent-acquisition applicants (Fillout → Airtable, base
-// app0jCdQHXOvItVPo / Contractors) into public.cleaner_applicants — the
-// Applicants queue in the admin cleaner hub. From import onward the workspace
+// ONE-WAY sync: talent-acquisition applicants (Fillout → Airtable, Client &
+// Revenue Ops base appoUuFQZQfCyKGlw / Applicants table) into
+// public.cleaner_applicants — the Applicants queue in the admin cleaner hub. From import onward the workspace
 // is the system of record; the app owns stage progression and later syncs
 // NEVER move a stage.
 //
