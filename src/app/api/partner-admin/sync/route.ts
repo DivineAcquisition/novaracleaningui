@@ -12,7 +12,8 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { syncClient, syncProperty, invalidatePartnerSnapshot, CLIENT_TYPE } from "@/lib/airtable";
+import { syncAllPartners } from "@/lib/airtable/flows";
+import { installAirtableReviewHooks, logSyncRun } from "@/lib/airtable/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,66 +43,38 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
+  // Shared flow implementation (same one the queue worker runs) + telemetry.
+  installAirtableReviewHooks();
+  const startedAt = Date.now();
   try {
-    const supabase = getAdminSupabase();
-
-    const [{ data: hosts, error: hErr }, { data: properties, error: pErr }] = await Promise.all([
-      supabase.from("hosts").select("id, name, email, phone, status"),
-      supabase.from("properties").select("id, nickname, address, bedrooms, bathrooms, host_id"),
-    ]);
-    if (hErr) throw new Error(`Read hosts failed: ${hErr.message}`);
-    if (pErr) throw new Error(`Read properties failed: ${pErr.message}`);
-
-    const hostById = new Map<string, { email: string | null; name: string | null }>();
-    let hostsSynced = 0;
-    const warnings: string[] = [];
-
-    for (const h of hosts || []) {
-      hostById.set(h.id as string, { email: (h.email as string) || null, name: (h.name as string) || null });
-      if (!h.email) continue; // email is the Airtable merge key
-      try {
-        await syncClient({
-          email: String(h.email),
-          name: (h.name as string) || String(h.email),
-          phone: (h.phone as string) || undefined,
-          type: CLIENT_TYPE.strHost,
-        });
-        hostsSynced += 1;
-      } catch (err) {
-        warnings.push(`Host ${h.email}: ${(err as Error).message}`);
-      }
-    }
-
-    let propertiesSynced = 0;
-    for (const p of properties || []) {
-      const nickname = (p.nickname as string)?.trim();
-      if (!nickname) continue; // nickname is the Airtable merge key
-      const host = p.host_id ? hostById.get(p.host_id as string) : undefined;
-      try {
-        await syncProperty({
-          nickname,
-          address: (p.address as string) || undefined,
-          bedrooms: typeof p.bedrooms === "number" ? p.bedrooms : undefined,
-          bathrooms: typeof p.bathrooms === "number" ? p.bathrooms : undefined,
-          // Identity + host link only — Airtable owns rates/status/lifecycle.
-          hostEmail: host?.email || undefined,
-        });
-        propertiesSynced += 1;
-      } catch (err) {
-        warnings.push(`Property ${nickname}: ${(err as Error).message}`);
-      }
-    }
-
-    // Next Host Accounts read reflects the backfill immediately.
-    invalidatePartnerSnapshot();
-
+    const result = await syncAllPartners();
+    const detail = (result.detail || {}) as {
+      hostsSynced?: number;
+      propertiesSynced?: number;
+      warnings?: string[];
+    };
+    await logSyncRun({
+      flow: "partner",
+      trigger: viaSecret ? "external" : "manual",
+      status: "success",
+      records: result.records,
+      detail: result.detail,
+      startedAt,
+    });
     return NextResponse.json({
       ok: true,
-      hostsSynced,
-      propertiesSynced,
-      warnings: warnings.slice(0, 20),
+      hostsSynced: detail.hostsSynced ?? 0,
+      propertiesSynced: detail.propertiesSynced ?? 0,
+      warnings: detail.warnings ?? [],
     });
   } catch (err) {
+    await logSyncRun({
+      flow: "partner",
+      trigger: viaSecret ? "external" : "manual",
+      status: "error",
+      error: (err as Error).message,
+      startedAt,
+    });
     // eslint-disable-next-line no-console
     console.error("[partner-admin/sync]", (err as Error).message);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

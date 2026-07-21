@@ -102,7 +102,7 @@ interface RequestOptions {
   meta?: boolean;
 }
 
-async function airtableRequest<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+export async function airtableRequest<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const token = getToken();
   const host = opts.meta ? META_BASE : API_BASE;
   const url = new URL(`${host}${path}`);
@@ -210,7 +210,23 @@ function clean(fields: Fields): Record<string, Exclude<FieldValue, undefined | n
   return out;
 }
 
-function reviewUnknownOptions(records: { fields: Fields }[], knownOptions?: Record<string, readonly string[]>) {
+/**
+ * Optional hook: surfaces out-of-vocabulary select values to the review queue
+ * (airtable_review_flags) in addition to the log line. Registered by the sync
+ * entry points (see telemetry.installAirtableReviewHooks) — kept as a hook so
+ * this client stays usable from plain scripts without a Supabase env.
+ */
+export type UnknownOptionReporter = (info: { tableId: string; fieldId: string; value: string }) => void;
+let unknownOptionReporter: UnknownOptionReporter | null = null;
+export function setUnknownOptionReporter(reporter: UnknownOptionReporter | null): void {
+  unknownOptionReporter = reporter;
+}
+
+function reviewUnknownOptions(
+  tableId: string,
+  records: { fields: Fields }[],
+  knownOptions?: Record<string, readonly string[]>,
+) {
   if (!knownOptions) return;
   for (const { fields } of records) {
     for (const [fieldId, known] of Object.entries(knownOptions)) {
@@ -223,6 +239,11 @@ function reviewUnknownOptions(records: { fields: Fields }[], knownOptions?: Reco
             fieldId,
             value: v,
           });
+          try {
+            unknownOptionReporter?.({ tableId, fieldId, value: v });
+          } catch {
+            /* review reporting must never break a write */
+          }
         }
       }
     }
@@ -246,7 +267,7 @@ export async function upsertRecords(
     .map((fields) => ({ fields: clean(fields) }))
     .filter((r) => Object.keys(r.fields).length > 0);
 
-  reviewUnknownOptions(prepared as { fields: Fields }[], options.knownOptions);
+  reviewUnknownOptions(tableId, prepared as { fields: Fields }[], options.knownOptions);
 
   const result: UpsertResult = { records: [], created: 0, updated: 0 };
   if (prepared.length === 0) return result;

@@ -29,6 +29,7 @@ import {
 } from "@/lib/airtable/sync";
 import { syncAllQcIssues, syncQcIssueById } from "@/lib/airtable/qc";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
+import { installAirtableReviewHooks, logSyncRun } from "@/lib/airtable/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,6 +98,24 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   // Make app_secrets a single source of truth for the PAT (env still wins).
   await primeAirtablePat();
+  installAirtableReviewHooks();
+
+  // External callers (GHL automations, edge functions) hit this route directly;
+  // report those passes into the same sync-health telemetry as the queue worker.
+  const startedAt = Date.now();
+  const flowFor: Record<string, string> = {
+    client: "client",
+    job: "job",
+    payroll_runs: "payroll_runs",
+    payroll_run: "payroll_runs",
+    qc_issue: "qc_issue",
+    qc_issues_all: "qc_issues_all",
+  };
+  const report = (status: "success" | "error" | "skipped", records?: number, error?: string) => {
+    const flow = flowFor[entity];
+    if (!flow) return Promise.resolve();
+    return logSyncRun({ flow, trigger: "external", status, records, error, startedAt });
+  };
 
   try {
     switch (entity) {
@@ -106,34 +125,49 @@ export async function POST(req: Request): Promise<NextResponse> {
           : email
             ? await syncClientByEmail(email)
             : null;
-        if (!recordId) return NextResponse.json({ error: "Client not found" }, { status: 404 });
+        if (!recordId) {
+          await report("skipped", 0, "Client not found");
+          return NextResponse.json({ error: "Client not found" }, { status: 404 });
+        }
+        await report("success", 1);
         return NextResponse.json({ ok: true, entity, recordId });
       }
       case "job": {
         if (!id) return NextResponse.json({ error: "Missing booking id" }, { status: 400 });
         const recordId = await syncJobByBookingId(id, { entrySource: DEFAULT_LIVE_ENTRY_SOURCE });
-        if (!recordId) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+        if (!recordId) {
+          await report("skipped", 0, "Booking not found");
+          return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+        }
+        await report("success", 1);
         return NextResponse.json({ ok: true, entity, recordId });
       }
       case "payroll_runs":
       case "payroll_run": {
         const count = await syncAllPayrollRuns();
+        await report("success", count);
         return NextResponse.json({ ok: true, entity: "payroll_runs", synced: count });
       }
       case "qc_issue": {
         if (!id) return NextResponse.json({ error: "Missing issue id" }, { status: 400 });
         const recordId = await syncQcIssueById(id);
-        if (!recordId) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+        if (!recordId) {
+          await report("skipped", 0, "Issue not found");
+          return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+        }
+        await report("success", 1);
         return NextResponse.json({ ok: true, entity, recordId });
       }
       case "qc_issues_all": {
         const count = await syncAllQcIssues();
+        await report("success", count);
         return NextResponse.json({ ok: true, entity: "qc_issues_all", synced: count });
       }
       default:
         return NextResponse.json({ error: `Unsupported entity: ${entity}` }, { status: 400 });
     }
   } catch (err) {
+    await report("error", undefined, (err as Error).message);
     // eslint-disable-next-line no-console
     console.error("[airtable-sync route]", (err as Error).message);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

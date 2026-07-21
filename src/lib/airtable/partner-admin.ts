@@ -187,14 +187,38 @@ export function invalidatePartnerSnapshot(): void {
   snapshotCache = null;
 }
 
+// ── Remote-change awareness ───────────────────────────────────────────────────
+// The inbound sync (Airtable webhook / poll) stamps a marker whenever the base
+// changes. A cached snapshot older than that marker is stale — refresh it so
+// Airtable-side edits show up near-real-time instead of "within 5 minutes,
+// maybe". The marker check itself is memoized briefly so hot admin reads don't
+// hammer the DB.
+const MARKER_CHECK_TTL_MS = 15 * 1000;
+let markerCheck: { at: number; value: number | null } | null = null;
+
+async function remoteChangedSince(snapshotAt: number): Promise<boolean> {
+  try {
+    if (!markerCheck || Date.now() - markerCheck.at > MARKER_CHECK_TTL_MS) {
+      const { getRemoteChangeMarkerMs } = await import("./telemetry");
+      markerCheck = { at: Date.now(), value: await getRemoteChangeMarkerMs() };
+    }
+    return markerCheck.value != null && markerCheck.value > snapshotAt;
+  } catch {
+    return false; // telemetry unavailable → behave exactly as before
+  }
+}
+
 /**
  * Pull the STR slice of the base in three paginated reads (Clients filtered to
  * STR Hosts, all Properties, STR-Turnover Jobs) and index it for fast in-memory
- * aggregation. Cached for 5 minutes.
+ * aggregation. Cached for 5 minutes — but self-invalidating the moment the
+ * inbound sync reports an Airtable-side change.
  */
 async function getSnapshot(force = false): Promise<Snapshot> {
   if (!force && snapshotCache && Date.now() - snapshotCache.at < SNAPSHOT_TTL_MS) {
-    return snapshotCache;
+    if (!(await remoteChangedSince(snapshotCache.at))) {
+      return snapshotCache;
+    }
   }
 
   const [clientRecords, propertyRecords, jobRecords] = await Promise.all([

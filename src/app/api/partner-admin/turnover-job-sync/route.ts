@@ -11,13 +11,11 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { syncJob, JOB_SERVICE_TYPE, PAYMENT_STATUS, ENTRY_SOURCE } from "@/lib/airtable";
+import { syncTurnoverJob } from "@/lib/airtable/flows";
+import { installAirtableReviewHooks, logSyncRun } from "@/lib/airtable/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Cleaner keeps 70% of the turnover price (mirrors _shared/turnover-engine.ts).
-const CLEANER_SHARE = 0.7;
 
 async function resolveSecret(name: string): Promise<string> {
   try {
@@ -46,59 +44,36 @@ export async function POST(req: Request): Promise<NextResponse> {
   const turnoverId = body.turnoverId;
   if (!turnoverId) return NextResponse.json({ error: "turnoverId required" }, { status: 400 });
 
+  // Shared flow implementation (same one the queue worker runs) + telemetry.
+  installAirtableReviewHooks();
+  const startedAt = Date.now();
   try {
-    const supabase = getAdminSupabase();
-    const { data: tr } = await supabase
-      .from("turnover_requests")
-      .select("*")
-      .eq("id", turnoverId)
-      .maybeSingle();
-    if (!tr) return NextResponse.json({ error: "Turnover not found" }, { status: 404 });
-    if (tr.status !== "completed") {
-      return NextResponse.json({ ok: true, skipped: `status=${tr.status}` });
-    }
-
-    const [{ data: host }, { data: property }] = await Promise.all([
-      supabase.from("hosts").select("name, email").eq("id", tr.host_id).maybeSingle(),
-      supabase.from("properties").select("nickname, address").eq("id", tr.property_id).maybeSingle(),
-    ]);
-
-    let cleanerName: string | undefined;
-    if (tr.assigned_cleaner_id) {
-      const { data: cleaner } = await supabase
-        .from("cleaners")
-        .select("first_name, last_name")
-        .eq("id", tr.assigned_cleaner_id)
-        .maybeSingle();
-      if (cleaner) cleanerName = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || undefined;
-    }
-
-    const priceCents = Math.round(Number(tr.price || 0) * 100);
-    const cleanerPayCents = Math.round(priceCents * CLEANER_SHARE);
-
-    await syncJob({
-      jobId: `STR-${turnoverId}`,
-      dateCompleted: (tr.completed_at ? String(tr.completed_at).slice(0, 10) : tr.requested_date) || undefined,
-      serviceType: JOB_SERVICE_TYPE.strTurnover,
-      customerPaidCents: priceCents,
-      cleanerName,
-      numberOfCleaners: 1,
-      // Authoritative turnover pay (70% of price) — wins over the tier estimate.
-      cleanerPayPoolCents: cleanerPayCents,
-      payPerCleanerCents: cleanerPayCents,
-      paymentStatus: tr.balance_charged_at || tr.payment_option === "full" || tr.paid_at ? PAYMENT_STATUS.paid : PAYMENT_STATUS.pending,
-      entrySource: ENTRY_SOURCE.portal,
-      clientEmail: host?.email || undefined,
-      propertyNickname: property?.nickname || undefined,
+    const result = await syncTurnoverJob(turnoverId);
+    await logSyncRun({
+      flow: "turnover",
+      trigger: "external",
+      status: result.status === "skipped" ? "skipped" : "success",
+      records: result.records,
+      detail: result.detail,
+      startedAt,
     });
-
-    await supabase
-      .from("turnover_requests")
-      .update({ cleaner_payout_cents: cleanerPayCents, airtable_job_synced_at: new Date().toISOString() })
-      .eq("id", turnoverId);
-
-    return NextResponse.json({ ok: true, jobId: `STR-${turnoverId}`, cleanerPayCents });
+    if (result.status === "skipped") {
+      const reason = String((result.detail as { reason?: string } | undefined)?.reason || "skipped");
+      if (reason === "turnover not found") {
+        return NextResponse.json({ error: "Turnover not found" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true, skipped: reason });
+    }
+    const detail = (result.detail || {}) as { jobId?: string; cleanerPayCents?: number };
+    return NextResponse.json({ ok: true, jobId: detail.jobId, cleanerPayCents: detail.cleanerPayCents });
   } catch (err) {
+    await logSyncRun({
+      flow: "turnover",
+      trigger: "external",
+      status: "error",
+      error: (err as Error).message,
+      startedAt,
+    });
     // eslint-disable-next-line no-console
     console.error("[turnover-job-sync]", (err as Error).message);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
