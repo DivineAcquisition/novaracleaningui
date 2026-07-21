@@ -1,7 +1,8 @@
 // ─── Talent acquisition intake (Airtable → workspace, ONE-WAY) ────────────────
 //
-// Fillout applications land in the "NVC™ | Maryland" base (app0jCdQHXOvItVPo),
-// Contractors table. That pipeline is untouched — we only READ it and pull
+// Fillout applications land in the "NVC | Client & Revenue Ops" base
+// (appoUuFQZQfCyKGlw), Applicants table — STRICTLY that base, never the
+// Maryland base. That pipeline is untouched — we only READ it and pull
 // applicants into public.cleaner_applicants, where the cleaner hub owns the
 // rest of the lifecycle. The only write-back is a courtesy marker: rows whose
 // "Application Status" is still New/empty get stamped "Imported" so the
@@ -13,35 +14,36 @@
 
 import { listRecords, updateRecords, type AirtableRecord } from "./client";
 
-export const TALENT_BASE_ID = "app0jCdQHXOvItVPo";
-export const TALENT_CONTRACTORS_TABLE = "tblGrwPqdCStDUwIb";
+/** Applicants table in the Client & Revenue Ops base (the client's default base). */
+export const TALENT_APPLICANTS_TABLE = "tblJQx7JbalZPmlAB";
 
-/** Contractors table fields (base app0jCdQHXOvItVPo). */
+/** Applicants table fields (base appoUuFQZQfCyKGlw / tblJQx7JbalZPmlAB). */
 export const TALENT_FIELDS = {
-  contractorName: "fldcVQK2pAwMaAUu0",
-  email: "fldlYCZXvyctgJQ6m",
-  phone: "fldls5utZfALvY5wB",
-  address: "fldcAQDQaKgDexJlb",
-  zipCode: "fldnmlPcQpm7QBByq",
-  state: "fldN6Jk74QyPawpoH",
-  status: "fldR5EjGkOuIZyyX4", // Applied | No Hire | Hired | Onboarding | Active | Inactive
-  applicationStatus: "fldGLCkJr9kNs70zm", // New | Reviewed | Phone Screen | Background Check | Onboarded | Rejected
-  role: "fld6rqUC9No36HzYE",
-  department: "fldGZGUYuwarzXSfY",
-  contractorType: "fldZodJ61966tk9Xi",
-  transportation: "fldg9EPYhGsPqNQ3i",
-  authorizedToWork: "fldor1XUZwPYHYD17",
-  consent1099: "fldeo5GqcGbtPWcQb",
-  experience: "fldl0XeanKINA87EN",
-  availability: "fldkhJlQVU8dqI4t0",
-  backgroundCheckConsent: "fldsHEGuGTj83zBJd",
-  payConsent: "fldMum1EtP7GrJbqs",
-  reliabilityNote: "fldFvWSnyCsCj27Ce",
-  reasonNote: "fldVvaLT5jMaGODRo",
-  zone: "fldxfwnMu7EzUShJI",
-  preferredDays: "fldp5tzKTyYO49G5P",
-  rejectionReason: "fldrAagMV5dbgWapD",
-  lastActivity: "fld6r70UFKwZTBQfH",
+  contractorName: "fldQi9O7pxyiTQhGc",
+  email: "fldR6Jf0Tzu2CaRdZ",
+  phone: "fldCfJpafAt4TaWGa",
+  address: "fldNFQ76zvG0sSMVV",
+  zipCode: "fldochpZ4X2VZwh69",
+  state: "fldukAIbNQp2uTgHq",
+  status: "fldVn8tK9u7spOWlz", // Applied | No Hire | Hired | Onboarding | Active | Inactive
+  applicationStatus: "fldSdsxBLx6kk7gTp", // New | Reviewed | Phone Screen | Background Check | Onboarded | Rejected
+  dateApplied: "fldBzslXinV06lIeU",
+  role: "fld9qzABmztEmY5s9",
+  department: "fldP8UuWqJB42LQFS",
+  contractorType: "fldGD4Ul0wzovaIjK",
+  transportation: "flddPBlrFUTDyiNz5",
+  authorizedToWork: "fldUDu31uvFbPd8z9",
+  consent1099: "fldetuCODrqo1S9Ax",
+  experience: "fldfXUNb5j2a6ORqc",
+  availability: "fldexoUSC7tDn9zch",
+  backgroundCheckConsent: "fldDv8iHBIcQGwOOP",
+  payConsent: "fldyTNtlEI1kAq8JW",
+  reliabilityNote: "fldtAmmCkjBSGCPpE",
+  reasonNote: "fldRrFQdeoMb22LuE",
+  zone: "fld5U5rRzBtcEsVjG",
+  preferredDays: "fldG2FzcxAMUQi3wz",
+  rejectionReason: "fldT7o7zsWvdoB0qO",
+  lastActivity: "fldbm8w0hi2i7fAbr",
 } as const;
 
 export interface TalentApplicant {
@@ -139,7 +141,8 @@ export function mapTalentRecord(rec: AirtableRecord): TalentApplicant {
     reasonNote: str(f[TALENT_FIELDS.reasonNote]),
     airtableStatus: str(f[TALENT_FIELDS.status]),
     airtableApplicationStatus: str(f[TALENT_FIELDS.applicationStatus]),
-    appliedAt: rec.createdTime || null,
+    // Prefer the explicit "Date Applied" field; fall back to record creation.
+    appliedAt: str(f[TALENT_FIELDS.dateApplied]) || rec.createdTime || null,
     lastModified: str(f[TALENT_FIELDS.lastActivity]),
     submission: compactSubmission(f),
   };
@@ -166,9 +169,9 @@ export function initialStageFromAirtable(a: TalentApplicant): string {
   }
 }
 
-/** Read every applicant row from the talent base. */
+/** Read every applicant row from the Client & Revenue Ops base. */
 export async function fetchTalentApplicants(): Promise<TalentApplicant[]> {
-  const records = await listRecords(TALENT_CONTRACTORS_TABLE, { baseId: TALENT_BASE_ID });
+  const records = await listRecords(TALENT_APPLICANTS_TABLE);
   return records.map(mapTalentRecord);
 }
 
@@ -183,12 +186,12 @@ export async function markImported(records: TalentApplicant[]): Promise<number> 
   });
   if (toMark.length === 0) return 0;
   await updateRecords(
-    TALENT_CONTRACTORS_TABLE,
+    TALENT_APPLICANTS_TABLE,
     toMark.map((r) => ({
       id: r.airtableRecordId,
       fields: { [TALENT_FIELDS.applicationStatus]: "Imported" },
     })),
-    { baseId: TALENT_BASE_ID, typecast: true },
+    { typecast: true },
   );
   return toMark.length;
 }
