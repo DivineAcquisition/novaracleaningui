@@ -120,9 +120,26 @@ function compact(
   return out;
 }
 
+// Booking `service_type` values are internal slugs — map them to the customer-
+// facing labels the rest of the app already uses (send-booking-email, etc.) so
+// the executed agreement shows "Standard Cleaning" instead of "standard".
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  standard: "Standard Cleaning",
+  deep: "Deep Cleaning",
+  moveInOut: "Move In/Out Cleaning",
+};
+
+export function serviceTypeLabel(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const v = String(value).trim();
+  if (!v) return undefined;
+  return SERVICE_TYPE_LABELS[v] || v;
+}
+
 /** One-Time Service Agreement (role: Client). */
 export function buildOneTimeValues(b: {
   name?: string; email: string; phone?: string; serviceDate?: string; address?: string;
+  serviceType?: string;
   totalCents?: number; depositCents?: number; balanceCents?: number;
 }): Record<string, string | number | boolean> {
   return compact({
@@ -131,7 +148,7 @@ export function buildOneTimeValues(b: {
     "Service Address": b.address,
     "Phone": b.phone,
     "Email": b.email,
-    "Selected service type": true,
+    "Selected service type": serviceTypeLabel(b.serviceType),
     "Total Service Fee": b.totalCents != null ? dollars(b.totalCents) : undefined,
     "Deposit Amount": b.depositCents != null ? dollars(b.depositCents) : undefined,
     "Balance Due": b.balanceCents != null ? dollars(b.balanceCents) : undefined,

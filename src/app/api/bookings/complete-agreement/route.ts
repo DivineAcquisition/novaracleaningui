@@ -118,6 +118,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       phone: booking.phone || undefined,
       serviceDate: booking.service_date || undefined,
       address: addressLine || undefined,
+      serviceType: booking.service_type || undefined,
       totalCents,
       depositCents,
       balanceCents,

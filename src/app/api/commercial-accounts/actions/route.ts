@@ -207,6 +207,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         email: account.email,
         phone: account.phone || undefined,
         address: [account.address, account.city, account.state, account.zip_code].filter(Boolean).join(", ") || account.business_name,
+        serviceType: "Commercial Cleaning",
         totalCents: account.default_rate_cents || undefined,
       });
       const result = await sendAgreement({
