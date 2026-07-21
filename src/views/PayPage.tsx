@@ -176,6 +176,27 @@ export default function PayPage() {
 
   const serviceLabel = summary ? (SERVICE_LABELS[summary.serviceType] || summary.serviceType) : "";
 
+  // Mirror the signed agreement into DocuSeal (completed submission) so the
+  // pay-page signature lands in DocuSeal alongside every other agreement.
+  // Idempotent server-side (unique per booking); keepalive so it survives the
+  // navigation to the confirmation page. Best-effort — never blocks the UI.
+  const mirrorAgreementToDocuseal = useCallback(
+    (signatureImage?: string) => {
+      if (!token) return;
+      try {
+        void fetch("/api/bookings/complete-agreement", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, signatureImage }),
+          keepalive: true,
+        }).catch(() => undefined);
+      } catch {
+        /* best-effort */
+      }
+    },
+    [token],
+  );
+
   const allAccepted = agreeService && agreeTerms && agreeDisclaimer;
   const canSign = allAccepted && legalName.trim().length >= 3 && !!signatureDataUrl;
 
@@ -209,6 +230,8 @@ export default function PayPage() {
       if (!d?.ok) throw new Error(d?.error || "Could not record your agreement");
       toast.success("Agreement signed. One more step — your deposit.");
       setSummary((s) => (s ? { ...s, agreementSigned: true } : s));
+      // Mirror the executed agreement into DocuSeal with the drawn signature.
+      mirrorAgreementToDocuseal(signatureDataUrl || undefined);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not record your agreement");
     } finally {
@@ -416,6 +439,9 @@ export default function PayPage() {
                   bookingId={summary.bookingId}
                   onSuccess={(paymentIntentId) => {
                     toast.success("Deposit paid — thank you!");
+                    // Safety net: ensure the DocuSeal mirror exists even if the
+                    // sign-time call didn't land (idempotent server-side).
+                    mirrorAgreementToDocuseal();
                     goToConfirmation(paymentIntentId);
                   }}
                   onRetry={() => void startPayment()}

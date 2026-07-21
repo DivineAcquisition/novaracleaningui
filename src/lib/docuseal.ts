@@ -280,6 +280,11 @@ interface AudienceSpec {
   /** The second submitter role (the execution/company page) + its field values. */
   companyRole: string;
   companyValues: (c: CompanyInfo, signer: SignerInfo) => Record<string, string | number>;
+  /** A signature-type field that lives on the COMPANY role but represents the
+   *  SIGNER's signature (e.g. the one-time template's execution page keeps the
+   *  customer's "Signature" slot on the Company submitter). When set, a drawn
+   *  signature image (or the typed name fallback) is rendered here. */
+  companySignatureField?: string;
   /** Host agreement also has a Guarantor role. */
   guarantorRole?: string;
 }
@@ -297,6 +302,10 @@ const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
   one_time: {
     signerRole: "Client",
     companyRole: "Company",
+    // The customer's signature slot lives on the Company submitter (see field-
+    // mapping note above). sendAgreement fills it with the drawn signature
+    // image when one is provided, else the typed name.
+    companySignatureField: "Signature",
     companyValues: (c, s) => ({
       "Company": s.name,                 // Customer Full Name
       "Full Name": s.email,              // Customer Email
@@ -430,6 +439,13 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
 
   let companyValues: Record<string, string | number | boolean> =
     spec.companyValues(co, { name, email: input.email });
+
+  // Some templates (e.g. one-time) keep the SIGNER's signature slot on the
+  // Company submitter — render the drawn signature image (or typed-name
+  // fallback) there so the executed document shows the customer's mark.
+  if (spec.companySignatureField) {
+    companyValues[spec.companySignatureField] = sigValue;
+  }
 
   // Drop values whose field names don't exist on the CURRENT template
   // revision — DocuSeal rejects unknown fields, so a re-uploaded template
