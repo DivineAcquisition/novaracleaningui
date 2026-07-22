@@ -29,6 +29,7 @@ import {
   RiCameraLine,
   RiImageAddLine,
   RiUploadCloud2Line,
+  RiTimeLine,
 } from "@remixicon/react";
 import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
@@ -45,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
+import { DelayBookingDialog } from "@/components/booking/DelayBookingDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   ADD_ONS,
@@ -753,6 +755,7 @@ function BookingSheet({
 }) {
   const [working, setWorking] = useState<string | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [delayOpen, setDelayOpen] = useState(false);
   const [addonOpen, setAddonOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   // Adjust-service state (prefilled from the booking when the sheet opens).
@@ -1290,6 +1293,35 @@ function BookingSheet({
               </CardContent>
             </Card>
 
+            {/* Delay arrival window (same-day 1h/2h/3h push + optional discount/credit) */}
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <RiTimeLine className="w-4 h-4 text-amber-700" />
+                  Delay arrival window
+                </CardTitle>
+                <CardDescription>
+                  Push today&apos;s arrival back by 1h, 2h, or 3h with a reason.
+                  Optionally discount this cleaning or issue a wallet credit for
+                  the trouble. Customer and cleaner are notified.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full border-amber-200 text-amber-800 hover:bg-amber-50"
+                  onClick={() => setDelayOpen(true)}
+                  disabled={
+                    booking.status === "cancelled" ||
+                    booking.status === "completed" ||
+                    !booking.time_slot
+                  }
+                >
+                  Delay this booking <RiTimeLine className="w-4 h-4 ml-2" />
+                </Button>
+              </CardContent>
+            </Card>
+
             {/* Adjust service */}
             {booking.status !== "cancelled" && booking.status !== "completed" && (
               <Card className="border-slate-200">
@@ -1722,6 +1754,25 @@ function BookingSheet({
           </div>
         </SheetContent>
       </Sheet>
+
+      {booking && (
+        <DelayBookingDialog
+          open={delayOpen}
+          onOpenChange={setDelayOpen}
+          booking={{
+            id: booking.id,
+            service_date: booking.service_date,
+            time_slot: booking.time_slot,
+            first_name: booking.first_name,
+            last_name: booking.last_name,
+            total_estimate_cents: booking.total_estimate_cents,
+          }}
+          onSuccess={() => {
+            setDelayOpen(false);
+            onMutated();
+          }}
+        />
+      )}
 
       {booking && (
         <RescheduleDialog
