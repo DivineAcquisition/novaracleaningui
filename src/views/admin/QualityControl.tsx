@@ -46,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import AccountabilityActionDialog from "@/components/admin/AccountabilityActionDialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -520,6 +521,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [caseOpen, setCaseOpen] = useState(false);
+  const [accountabilityOpen, setAccountabilityOpen] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -633,6 +635,33 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             )}
           </div>
 
+          {/* ─── Cleaner accountability: Issue → Take Action ──────────── */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2">
+            <p className="text-sm font-bold text-amber-900">Cleaner accountability</p>
+            {issue.cleaner_id ? (
+              <>
+                <p className="text-xs text-amber-900/80">
+                  Take a formal action against <strong>{issue.cleaner_name || "the assigned cleaner"}</strong> pre-linked
+                  to this case — coaching note, strike, suspension, or removal. Documented, emailed, and logged on
+                  their profile. Never touches pay for completed work.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
+                  onClick={() => setAccountabilityOpen(true)}
+                >
+                  Take action → Strike / Suspend / Remove / Coaching note
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-amber-900/70">
+                No cleaner is attributed to this case — attribute one (via the booking&apos;s assignment)
+                to take an accountability action from here.
+              </p>
+            )}
+          </div>
+
           {/* ─── Timeline ─────────────────────────────────────────────── */}
           <div>
             <p className="text-sm font-bold text-slate-800 mb-2">Audit trail</p>
@@ -707,6 +736,24 @@ function IssueSheet({ issue, doc, onClose, reload }: {
         </div>
         {caseOpen && (
           <CaseFileSheet bookingId={issue.booking_id} caseRef={issue.booking_ref} onClose={() => setCaseOpen(false)} />
+        )}
+        {issue.cleaner_id && (
+          <AccountabilityActionDialog
+            open={accountabilityOpen}
+            onOpenChange={setAccountabilityOpen}
+            cleanerId={issue.cleaner_id}
+            cleanerName={issue.cleaner_name || "Cleaner"}
+            qcIssue={{
+              id: issue.id,
+              issue_number: issue.issue_number,
+              booking_ref: issue.booking_ref,
+              title: issue.title,
+              issue_type: issue.issue_type,
+              severity: issue.severity,
+              created_at: issue.created_at,
+            }}
+            onDone={() => void reload()}
+          />
         )}
       </SheetContent>
     </Sheet>

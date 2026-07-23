@@ -64,6 +64,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
 import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
+import CleanerAccountability from "@/components/admin/CleanerAccountability";
+import AccountabilityWatchlist from "@/components/admin/AccountabilityWatchlist";
 import { useAdminRole } from "@/hooks/use-admin-role";
 
 const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
@@ -131,6 +133,7 @@ const STATUS_FILTERS = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
   { id: "pending", label: "Pending" },
+  { id: "suspended", label: "Suspended" },
   { id: "inactive", label: "Inactive" },
   { id: "terminated", label: "Terminated" },
 ] as const;
@@ -138,6 +141,7 @@ const STATUS_FILTERS = [
 const STATUS_BADGE: Record<string, string> = {
   active: "bg-violet-100 text-violet-800 border-violet-200",
   pending: "bg-amber-100 text-amber-800 border-amber-200",
+  suspended: "bg-orange-100 text-orange-800 border-orange-200",
   inactive: "bg-slate-100 text-slate-600 border-slate-200",
   terminated: "bg-rose-100 text-rose-800 border-rose-200",
 };
@@ -227,7 +231,7 @@ export default function AdminCleaners() {
   }, [cleaners, statusFilter, search]);
 
   const counts = useMemo(() => {
-    const c = { active: 0, pending: 0, inactive: 0, terminated: 0 };
+    const c = { active: 0, pending: 0, suspended: 0, inactive: 0, terminated: 0 };
     cleaners.forEach((r) => {
       const s = (r.status || "pending").toLowerCase();
       if (s in c) (c as any)[s] += 1;
@@ -357,6 +361,11 @@ export default function AdminCleaners() {
               <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                 <RiTimeLine className="w-3 h-3" /> {counts.pending} pending
               </span>
+              {counts.suspended > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                  <RiAlertLine className="w-3 h-3" /> {counts.suspended} suspended
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                 <RiCloseCircleLine className="w-3 h-3" /> {counts.inactive} inactive
               </span>
@@ -386,6 +395,9 @@ export default function AdminCleaners() {
           void load({ silent: true });
         }}
       />
+
+      {/* Accountability review queue: suspended / active strikes / repeat offenders. */}
+      <AccountabilityWatchlist onSelectCleaner={(id) => setSelectedId(id)} />
 
       <Card className="border-slate-200">
         <CardContent className="p-3 sm:p-4">
@@ -617,7 +629,7 @@ function CleanerSheet({
               <ContactSection cleaner={cleaner} />
 
               <Tabs defaultValue="jobs">
-                <TabsList className="grid grid-cols-2 sm:grid-cols-4 h-auto bg-slate-100">
+                <TabsList className="grid grid-cols-3 sm:grid-cols-5 h-auto bg-slate-100">
                   <TabsTrigger value="jobs" className="data-[state=active]:bg-white">
                     Jobs
                   </TabsTrigger>
@@ -626,6 +638,9 @@ function CleanerSheet({
                   </TabsTrigger>
                   <TabsTrigger value="performance" className="data-[state=active]:bg-white">
                     Performance
+                  </TabsTrigger>
+                  <TabsTrigger value="accountability" className="data-[state=active]:bg-white">
+                    Accountability
                   </TabsTrigger>
                   <TabsTrigger value="ghl" className="data-[state=active]:bg-white">
                     GHL
@@ -639,6 +654,13 @@ function CleanerSheet({
                 </TabsContent>
                 <TabsContent value="performance" className="pt-3">
                   <PerformanceBlock cleaner={cleaner} onRefresh={onRefresh} />
+                </TabsContent>
+                <TabsContent value="accountability" className="pt-3">
+                  <CleanerAccountability
+                    cleanerId={cleaner.id}
+                    cleanerName={fullName(cleaner)}
+                    onChanged={onRefresh}
+                  />
                 </TabsContent>
                 <TabsContent value="ghl" className="pt-3">
                   <GhlBlock cleaner={cleaner} onResync={onResyncGhl} actioning={actioning} />
@@ -1425,6 +1447,14 @@ function ActionsBlock({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {/* Suspension is managed by the Accountability tab, not the
+                    manual picker — shown here (disabled) so the current
+                    state renders; setting Active is the manual escape hatch. */}
+                {s === "suspended" && (
+                  <SelectItem value="suspended" disabled>
+                    Suspended (accountability)
+                  </SelectItem>
+                )}
                 {CLEANER_STATUSES.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
