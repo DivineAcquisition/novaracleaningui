@@ -66,6 +66,9 @@ const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
 const QC_SEVERITY_WEIGHT: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0.5 };
+// A formal strike carries the same weight as a HIGH-severity QC case in the
+// quality penalty — the accountability ladder's automatic score hit.
+const STRIKE_WEIGHT = 2;
 const VOLUME_FULL_MARKS = 50; // completed jobs for a 100 volume score
 
 serve(async (req) => {
@@ -160,6 +163,20 @@ serve(async (req) => {
     for (const i of issues || []) {
       const wgt = QC_SEVERITY_WEIGHT[String(i.severity)] ?? 1;
       qcWeight.set(i.cleaner_id, (qcWeight.get(i.cleaner_id) || 0) + wgt);
+    }
+
+    // Active accountability strikes (last 90 days) add to the same quality
+    // penalty — a formal strike weighs like a high-severity case. Expired /
+    // lifted strikes never count (they stay in history only).
+    const { data: strikes } = await supabase
+      .from("cleaner_accountability_actions")
+      .select("cleaner_id")
+      .eq("action_type", "strike")
+      .eq("status", "active")
+      .gte("created_at", since)
+      .limit(5000);
+    for (const s of strikes || []) {
+      qcWeight.set(s.cleaner_id, (qcWeight.get(s.cleaner_id) || 0) + STRIKE_WEIGHT);
     }
 
     // Completed jobs per cleaner (last 90 days) for the per-job case rate.

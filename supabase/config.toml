@@ -333,6 +333,13 @@ verify_jwt = false
 [functions.terminate-cleaner]
 verify_jwt = true
 
+# Cleaner accountability ladder (coaching note / strike / suspension /
+# removal + formal notices). Admin/VA JWT enforced in-function; the hourly
+# 'sweep' (suspension auto-restore + strike expiry) is invoked by pg_cron
+# with the service-role bearer.
+[functions.cleaner-accountability]
+verify_jwt = false
+
 [functions.customer-manage-recurring]
 verify_jwt = false
 

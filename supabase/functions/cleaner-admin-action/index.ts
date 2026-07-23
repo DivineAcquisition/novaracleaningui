@@ -251,6 +251,11 @@ serve(async (req) => {
           patch.approved = body.approved ?? true;
           patch.deactivated_at = null;
           patch.deactivation_reason = null;
+          // Manual reactivation also clears any accountability suspension
+          // window so the row can't carry a stale suspended_until stamp.
+          patch.suspended_at = null;
+          patch.suspended_until = null;
+          patch.suspension_reason = null;
           if (!cleaner.activated_at) patch.activated_at = new Date().toISOString();
         } else if (newStatus === "pending") {
           patch.available_for_bookings = body.availableForBookings ?? false;
@@ -322,6 +327,7 @@ serve(async (req) => {
           .update({
             status: "active", available_for_bookings: true,
             deactivated_at: null, deactivation_reason: null,
+            suspended_at: null, suspended_until: null, suspension_reason: null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", cleanerId).select().maybeSingle();
