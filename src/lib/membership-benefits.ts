@@ -43,13 +43,14 @@ export const HERO_BENEFITS: BenefitSection[] = [
     ],
   },
   {
-    title: "Control Your Cleaner Selection",
-    tagline: "Your home, your cleaner — you stay in control.",
+    title: "Your Cleaner, Every Time",
+    tagline: "Same-team continuity — never start over with a stranger.",
     icon: "cleaner",
     items: [
       "Choose your preferred cleaner and keep them visit after visit",
-      "The portal remembers who has cleaned for you before and prefers them",
-      "Same trusted team means they learn your home and your standards",
+      "The portal remembers who has cleaned for you and routes them back to you",
+      "Same trusted team learns your home, your products, and your standards",
+      "If your regular is ever out, we brief the backup on your preferences first",
       "Every cleaner is vetted, background-checked, and insured",
     ],
   },
@@ -58,22 +59,22 @@ export const HERO_BENEFITS: BenefitSection[] = [
 /** The rest of the value stack. */
 export const MORE_BENEFITS: BenefitSection[] = [
   {
-    title: "Member Pricing",
-    tagline: "Our best per-clean rates, locked in.",
+    title: "Member Pricing & Add-On Discount",
+    tagline: "Our best per-clean rates — plus a members-only discount on extras.",
     icon: "price",
     items: [
       "Members pay our lowest per-clean rates — always below one-time pricing",
-      "Discounted add-ons and extras on every visit",
+      "Members-only discount on every add-on — inside the fridge, inside the oven, interior windows, laundry, and more",
       "One flat rate based on your home size — no surprise totals",
     ],
   },
   {
-    title: "Priority Scheduling",
-    tagline: "Members book first.",
+    title: "Priority Scheduling & Preferred Slot",
+    tagline: "Members book first — and hold their favorite time.",
     icon: "calendar",
     items: [
       "Priority access to the best arrival windows",
-      "Preferred standing time slot on Bi-Weekly and Weekly plans",
+      "Reserve a preferred standing day and arrival window on Bi-Weekly and Weekly plans",
       "Most member requests are scheduled within 48 hours",
     ],
   },
@@ -88,13 +89,13 @@ export const MORE_BENEFITS: BenefitSection[] = [
     ],
   },
   {
-    title: "Cleaning Credits",
-    tagline: "Your plan, ready when you are.",
+    title: "Cleaning Credits & Deep-Clean Reset",
+    tagline: "Your plan, ready when you are — with a periodic reset built in.",
     icon: "credit",
     items: [
       "Monthly cleaning credits included with every plan (1, 2, or 4 per month)",
       "Redeem credits straight from the portal — pick a date, done",
-      "Use a credit toward a deep clean when the home needs a reset",
+      "A periodic deep-clean credit to reset the whole home every few months",
     ],
   },
   {

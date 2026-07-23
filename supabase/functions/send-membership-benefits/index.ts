@@ -54,26 +54,27 @@ const BENEFIT_SECTIONS: Array<{ title: string; items: string[] }> = [
     ],
   },
   {
-    title: "Control Your Cleaner Selection",
+    title: "Your Cleaner, Every Time",
     items: [
       "Choose your preferred cleaner and keep them visit after visit",
-      "Same trusted team — they learn your home and your standards",
+      "Same-team continuity — they learn your home, products, and standards",
+      "If your regular is ever out, we brief the backup on your preferences first",
       "Every cleaner is vetted, background-checked, and insured",
     ],
   },
   {
-    title: "Member Pricing",
+    title: "Member Pricing & Add-On Discount",
     items: [
       "Our best per-clean rates — always below one-time pricing",
-      "Discounted add-ons and extras on every visit",
+      "Members-only discount on every add-on — fridge, oven, interior windows, laundry, and more",
       "One flat rate based on your home size — no surprise totals",
     ],
   },
   {
-    title: "Priority Scheduling",
+    title: "Priority Scheduling & Preferred Slot",
     items: [
       "Priority access to the best arrival windows",
-      "Preferred standing time slot on Bi-Weekly and Weekly plans",
+      "Reserve a preferred standing day and arrival window on Bi-Weekly and Weekly plans",
       "Most member requests scheduled within 48 hours",
     ],
   },
@@ -82,6 +83,7 @@ const BENEFIT_SECTIONS: Array<{ title: string; items: string[] }> = [
     items: [
       "48-hour re-clean guarantee on every visit",
       "Monthly cleaning credits included (1, 2, or 4 per month by plan)",
+      "A periodic deep-clean credit to reset the whole home every few months",
       "Free rescheduling — pause or cancel anytime from the portal",
     ],
   },
