@@ -26,6 +26,7 @@ import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import {
   fetchCleanerPortal,
   PayChip,
@@ -51,6 +52,8 @@ interface CleanerProfile {
   total_ratings?: number | null;
   pay_tier?: string | null;
   pay_percentage?: number | null;
+  suspended_until?: string | null;
+  suspension_reason?: string | null;
 }
 
 type JobSource = "assignments" | "bookings";
@@ -706,6 +709,9 @@ export default function CleanerDashboard() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        {/* Suspension status — new assignments paused, pay unaffected. */}
+        <SuspensionBanner status={profile.status} suspendedUntil={profile.suspended_until} />
+
         {/* Stats Row */}
         <div className="grid grid-cols-2 gap-3">
           <Card className="border-0 shadow-md">

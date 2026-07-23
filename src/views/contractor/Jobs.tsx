@@ -57,6 +57,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
+import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 
 const logo = "/novara-logo.png";
 
@@ -341,6 +342,8 @@ export default function ContractorJobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [cleanerName, setCleanerName] = useState("");
   const [cleanerId, setCleanerId] = useState("");
+  const [cleanerStatus, setCleanerStatus] = useState<string | null>(null);
+  const [suspendedUntil, setSuspendedUntil] = useState<string | null>(null);
   const [scores, setScores] = useState<CleanerScores | null>(null);
   const [qcSummary, setQcSummary] = useState<QcSummary | null>(null);
   const [offers, setOffers] = useState<JobOfferEntry[]>([]);
@@ -442,7 +445,7 @@ export default function ContractorJobs() {
         : value.trim().toLowerCase();
 
       const { data: cleaner, error: cleanerErr } = await (supabase.from as any)("cleaners")
-        .select("id, first_name, last_name, crew_id")
+        .select("id, first_name, last_name, crew_id, status, suspended_until")
         .ilike(filterColumn, type === "phone" ? `%${cleanValue.slice(-10)}%` : cleanValue)
         .maybeSingle();
       if (cleanerErr) throw cleanerErr;
@@ -456,6 +459,8 @@ export default function ContractorJobs() {
 
       setCleanerName(`${cleaner.first_name} ${cleaner.last_name}`.trim());
       setCleanerId(cleaner.id);
+      setCleanerStatus((cleaner as { status?: string | null }).status ?? null);
+      setSuspendedUntil((cleaner as { suspended_until?: string | null }).suspended_until ?? null);
       try { localStorage.setItem(LOOKUP_STORAGE_KEY, JSON.stringify({ type, value })); } catch { /* ignore */ }
 
       if ((cleaner as { crew_id?: string | null }).crew_id) {
@@ -614,6 +619,8 @@ export default function ContractorJobs() {
     setSummary(null);
     setCleanerName("");
     setCleanerId("");
+    setCleanerStatus(null);
+    setSuspendedUntil(null);
     setLookupValue("");
     setCrewMembers([]);
     setHandoffJobId(null);
@@ -729,6 +736,9 @@ export default function ContractorJobs() {
           </div>
         ) : (
           <div className="space-y-6 animate-fade-in">
+            {/* Suspension status — new assignments paused, pay unaffected. */}
+            <SuspensionBanner status={cleanerStatus} suspendedUntil={suspendedUntil} />
+
             {/* ── Hero: identity + real earnings from the pay ledgers ── */}
             <div className="rounded-3xl bg-gradient-to-br from-violet-700 via-violet-600 to-purple-500 p-5 md:p-6 text-white shadow-xl shadow-violet-200/60">
               <div className="flex items-center gap-3.5">

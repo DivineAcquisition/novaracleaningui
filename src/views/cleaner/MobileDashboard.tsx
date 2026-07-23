@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import { fetchCleanerPortal, type CleanerPortalData, type PortalJob } from "@/components/cleaner/portal-enrichment";
 import { toast } from "sonner";
 
@@ -352,6 +353,12 @@ export default function MobileDashboard() {
               {isNative ? "Mobile App" : "Web Version"}
             </p>
           </div>
+
+          {/* Suspension status — new assignments paused, pay unaffected. */}
+          <SuspensionBanner
+            status={cleaner?.status}
+            suspendedUntil={cleaner?.suspended_until}
+          />
 
           {cleaner && !cleaner.stripe_account_id && (
             <OnboardingChecklist cleaner={cleaner} onRefresh={fetchData} />

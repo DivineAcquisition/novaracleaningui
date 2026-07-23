@@ -63,8 +63,12 @@ export interface CleanerAuthResolution {
   sessionEmail: string | null;
 }
 
+// NOTE: "suspended" is intentionally NOT blocked. A suspension only stops
+// NEW job assignments (dispatch filters status='active'); the cleaner keeps
+// portal access to work any kept jobs and see their pay — which is never
+// touched by accountability actions. The portal shows a suspension banner
+// with the end date instead (see SuspensionBanner in the dashboards).
 export const BLOCKED_CLEANER_STATUSES = [
-  "suspended",
   "terminated",
   "fired",
   "inactive",
