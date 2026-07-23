@@ -68,6 +68,9 @@ type ActionType = (typeof ACTION_TYPES)[number];
 
 const FROM_ADDRESS = "NovaraCleaning Operations <hello@novaracleaning.com>";
 const REPLY_TO = "hello@novaracleaning.com";
+// Every formal notice CCs the office + QC inboxes — the paper trail lives
+// in company mail as well as on the action row.
+const CC_ADDRESSES = ["contact@novaracleaning.com", "qc@novaracleaning.com"];
 
 const ISSUE_TYPE_LABELS: Record<string, string> = {
   complaint: "a customer complaint",
@@ -274,6 +277,7 @@ async function sendFormalEmail(admin: SB, opts: {
     const { error } = await resend.emails.send({
       from: FROM_ADDRESS,
       to: [opts.to],
+      cc: CC_ADDRESSES,
       reply_to: REPLY_TO,
       subject: opts.subject,
       html: emailHtml(opts.body),
@@ -794,10 +798,10 @@ serve(async (req) => {
             : actionType === "suspension" ? `Suspended from new assignments through ${fmtDate(suspensionEnd)}`
             : actionType === "removal" ? "Removed / engagement ended"
             : "Coaching note logged"
-          }.${emailResult.sent ? " Formal email sent." : ""}`,
+          } for ${cleanerName}.${emailResult.sent ? " Formal email sent." : ""}`,
           actor_id: actor.id,
           actor_name: actor.name,
-          data: { accountability_action_id: actionRow.id, action_type: actionType },
+          data: { accountability_action_id: actionRow.id, action_type: actionType, cleaner_id: cleanerId },
         }).then(() => undefined, () => undefined);
       }
 

@@ -50,15 +50,23 @@ import AccountabilityActionDialog from "@/components/admin/AccountabilityActionD
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
+interface AttachedCleaner {
+  id: string;
+  name: string | null;
+  role: string | null;
+}
+
 interface IssueRow {
   id: string;
   issue_number: number;
   booking_id: string;
+  job_id: string | null;
   client_type?: string | null;
   booking_ref: string | null;
   documentation_id: string | null;
   cleaner_id: string | null;
   cleaner_name: string | null;
+  cleaners: AttachedCleaner[] | null;
   client_name: string | null;
   client_email: string | null;
   issue_type: string;
@@ -266,13 +274,18 @@ export default function QualityControl() {
   const byCleaner = useMemo(() => {
     const m = new Map<string, { name: string; total: number; open: number; recleans: number; complaints: number }>();
     for (const i of issues) {
-      const key = i.cleaner_name || "Unattributed";
-      const e = m.get(key) || { name: key, total: 0, open: 0, recleans: 0, complaints: 0 };
-      e.total++;
-      if (i.status !== "resolved") e.open++;
-      if (i.issue_type === "reclean") e.recleans++;
-      if (i.issue_type === "complaint") e.complaints++;
-      m.set(key, e);
+      // Crew jobs: every cleaner attached to the case is counted, not just
+      // the lead — the incident happened on everyone's job.
+      const names = (i.cleaners?.length ? i.cleaners.map((c) => c.name).filter(Boolean) : [i.cleaner_name])
+        .map((n) => n || "Unattributed");
+      for (const key of names.length ? names : ["Unattributed"]) {
+        const e = m.get(key) || { name: key, total: 0, open: 0, recleans: 0, complaints: 0 };
+        e.total++;
+        if (i.status !== "resolved") e.open++;
+        if (i.issue_type === "reclean") e.recleans++;
+        if (i.issue_type === "complaint") e.complaints++;
+        m.set(key, e);
+      }
     }
     return [...m.values()].sort((a, b) => b.total - a.total);
   }, [issues]);
@@ -488,7 +501,9 @@ function IssuesTab({
               <p className="font-semibold text-slate-900 mt-1.5">{i.title}</p>
               <p className="text-xs text-slate-500 mt-0.5">
                 {i.booking_ref || i.booking_id.slice(0, 8)} · {i.client_name || i.client_email || "—"}
-                {i.cleaner_name ? ` · cleaner: ${i.cleaner_name}` : ""} · via {label(i.reported_via)}
+                {i.cleaners?.length
+                  ? ` · cleaner${i.cleaners.length > 1 ? "s" : ""}: ${i.cleaners.map((c) => c.name).filter(Boolean).join(", ")}`
+                  : i.cleaner_name ? ` · cleaner: ${i.cleaner_name}` : ""} · via {label(i.reported_via)}
                 {i.reported_by_name ? ` (${i.reported_by_name})` : ""}
               </p>
             </button>
@@ -522,6 +537,20 @@ function IssueSheet({ issue, doc, onClose, reload }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [caseOpen, setCaseOpen] = useState(false);
   const [accountabilityOpen, setAccountabilityOpen] = useState(false);
+  // Crew-aware attribution: every cleaner attached to the case (auto-filled
+  // from the job's assignments; admin can attach/detach) and which one an
+  // accountability action targets.
+  const [attached, setAttached] = useState<AttachedCleaner[]>(
+    issue.cleaners?.length
+      ? issue.cleaners
+      : issue.cleaner_id
+        ? [{ id: issue.cleaner_id, name: issue.cleaner_name, role: null }]
+        : [],
+  );
+  const [jobCleaners, setJobCleaners] = useState<AttachedCleaner[]>([]);
+  const [attachPick, setAttachPick] = useState("");
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [actionCleanerId, setActionCleanerId] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -532,6 +561,80 @@ function IssueSheet({ issue, doc, onClose, reload }: {
       setEvents((data || []) as IssueEvent[]);
     })();
   }, [issue.id]);
+
+  // Everyone assigned to this job — the pool the attach picker draws from.
+  useEffect(() => {
+    if (!issue.job_id) return;
+    void (async () => {
+      const { data } = await (supabase.from as any)("job_assignments")
+        .select("cleaner_id, role, status, cleaners(first_name, last_name)")
+        .eq("job_id", issue.job_id);
+      const seen = new Set<string>();
+      const out: AttachedCleaner[] = [];
+      for (const a of data || []) {
+        if (!a.cleaner_id || seen.has(a.cleaner_id)) continue;
+        if (!["confirmed", "accepted", "completed", "in progress"].includes(String(a.status || "").toLowerCase())) continue;
+        seen.add(a.cleaner_id);
+        const c = Array.isArray(a.cleaners) ? a.cleaners[0] : a.cleaners;
+        out.push({
+          id: a.cleaner_id,
+          name: c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || null : null,
+          role: a.role || null,
+        });
+      }
+      setJobCleaners(out);
+    })();
+  }, [issue.job_id]);
+
+  // Keep the accountability target valid as attachments change.
+  useEffect(() => {
+    if (!actionCleanerId || !attached.some((c) => c.id === actionCleanerId)) {
+      setActionCleanerId(attached[0]?.id || "");
+    }
+  }, [attached, actionCleanerId]);
+
+  const unattached = jobCleaners.filter((c) => !attached.some((a) => a.id === c.id));
+  const actionCleaner = attached.find((c) => c.id === actionCleanerId) || null;
+
+  const attachCleaner = async (cleanerId: string) => {
+    if (!cleanerId) return;
+    setAttachBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "attach_cleaner", issueId: issue.id, cleanerId },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; error?: string; cleaners?: AttachedCleaner[] };
+      if (d?.ok === false) throw new Error(d.error || "Attach failed");
+      if (d.cleaners) setAttached(d.cleaners);
+      setAttachPick("");
+      toast.success("Cleaner attached to this case.");
+      void reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Attach failed");
+    } finally {
+      setAttachBusy(false);
+    }
+  };
+
+  const detachCleaner = async (cleanerId: string) => {
+    setAttachBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "detach_cleaner", issueId: issue.id, cleanerId },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; error?: string; cleaners?: AttachedCleaner[] };
+      if (d?.ok === false) throw new Error(d.error || "Detach failed");
+      if (d.cleaners) setAttached(d.cleaners);
+      toast.success("Cleaner detached (logged in the audit trail).");
+      void reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Detach failed");
+    } finally {
+      setAttachBusy(false);
+    }
+  };
 
   const act = async (body: Record<string, unknown>, busyKey: string, success: string) => {
     setBusy(busyKey);
@@ -571,7 +674,11 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             <Badge className={cn("border-0", SEVERITY_STYLE[issue.severity])}>{label(issue.severity)}</Badge>
             <Badge className={cn("border-0", STATUS_STYLE[issue.status])}>{label(issue.status)}</Badge>
             <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === issue.issue_type)?.label || issue.issue_type}</Badge>
-            {issue.cleaner_name && <Badge variant="outline">Cleaner: {issue.cleaner_name}</Badge>}
+            {attached.length > 0 && (
+              <Badge variant="outline">
+                Cleaner{attached.length > 1 ? "s" : ""}: {attached.map((c) => c.name).filter(Boolean).join(", ")}
+              </Badge>
+            )}
           </div>
 
           {issue.description && (
@@ -635,30 +742,92 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             )}
           </div>
 
-          {/* ─── Cleaner accountability: Issue → Take Action ──────────── */}
-          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2">
-            <p className="text-sm font-bold text-amber-900">Cleaner accountability</p>
-            {issue.cleaner_id ? (
-              <>
-                <p className="text-xs text-amber-900/80">
-                  Take a formal action against <strong>{issue.cleaner_name || "the assigned cleaner"}</strong> pre-linked
-                  to this case — coaching note, strike, suspension, or removal. Documented, emailed, and logged on
-                  their profile. Never touches pay for completed work.
+          {/* ─── Cleaners on this case + accountability ───────────────── */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+            <p className="text-sm font-bold text-amber-900">Cleaners on this case</p>
+            <div className="flex flex-wrap gap-1.5">
+              {attached.length === 0 && (
+                <p className="text-xs text-amber-900/70">
+                  No cleaner attached yet — attach one from the job&apos;s crew below.
                 </p>
+              )}
+              {attached.map((c) => (
+                <span
+                  key={c.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-white border border-amber-300 pl-2.5 pr-1 py-0.5 text-xs font-medium text-amber-900"
+                >
+                  {c.name || "Cleaner"}
+                  {c.role ? <span className="text-amber-700/60">· {c.role}</span> : null}
+                  <button
+                    type="button"
+                    className="ml-0.5 rounded-full hover:bg-amber-100 p-0.5"
+                    title="Detach from this case (logged)"
+                    disabled={attachBusy}
+                    onClick={() => void detachCleaner(c.id)}
+                  >
+                    <RiCloseCircleLine className="w-3.5 h-3.5 text-amber-700" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            {unattached.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={attachPick} onValueChange={setAttachPick}>
+                  <SelectTrigger className="w-[220px] h-8 bg-white text-xs">
+                    <SelectValue placeholder="Attach a cleaner from this job…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unattached.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name || "Cleaner"}{c.role ? ` (${c.role})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
-                  onClick={() => setAccountabilityOpen(true)}
+                  className="h-8 border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
+                  disabled={!attachPick || attachBusy}
+                  onClick={() => void attachCleaner(attachPick)}
                 >
-                  Take action → Strike / Suspend / Remove / Coaching note
+                  {attachBusy ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Attach"}
                 </Button>
-              </>
-            ) : (
-              <p className="text-xs text-amber-900/70">
-                No cleaner is attributed to this case — attribute one (via the booking&apos;s assignment)
-                to take an accountability action from here.
-              </p>
+                <span className="text-[11px] text-amber-800/70">
+                  Only cleaners assigned to this job can be attached.
+                </span>
+              </div>
+            )}
+
+            {attached.length > 0 && (
+              <div className="pt-1 border-t border-amber-200/70 space-y-2">
+                <p className="text-xs text-amber-900/80">
+                  Take a formal action pre-linked to this case — coaching note, strike, suspension,
+                  or removal. Documented, emailed (office + QC CC&apos;d), and logged on their profile.
+                  Never touches pay for completed work.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {attached.length > 1 && (
+                    <Select value={actionCleanerId} onValueChange={setActionCleanerId}>
+                      <SelectTrigger className="w-[200px] h-8 bg-white text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {attached.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name || "Cleaner"}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
+                    disabled={!actionCleaner}
+                    onClick={() => setAccountabilityOpen(true)}
+                  >
+                    Take action on {actionCleaner?.name || "cleaner"} → Strike / Suspend / Remove / Coaching note
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -737,12 +906,12 @@ function IssueSheet({ issue, doc, onClose, reload }: {
         {caseOpen && (
           <CaseFileSheet bookingId={issue.booking_id} caseRef={issue.booking_ref} onClose={() => setCaseOpen(false)} />
         )}
-        {issue.cleaner_id && (
+        {actionCleaner && (
           <AccountabilityActionDialog
             open={accountabilityOpen}
             onOpenChange={setAccountabilityOpen}
-            cleanerId={issue.cleaner_id}
-            cleanerName={issue.cleaner_name || "Cleaner"}
+            cleanerId={actionCleaner.id}
+            cleanerName={actionCleaner.name || "Cleaner"}
             qcIssue={{
               id: issue.id,
               issue_number: issue.issue_number,

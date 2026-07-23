@@ -10,6 +10,12 @@
 //       { action:'update_status', issueId, status, note? }
 //       { action:'add_note', issueId, note }
 //       { action:'resolve', issueId, note, resolutionPhotos? }
+//       { action:'attach_cleaner', issueId, cleanerId }  — must be assigned to the job
+//       { action:'detach_cleaner', issueId, cleanerId }
+//
+// Crew-aware attribution: qc_issues.cleaners (jsonb [{id,name,role}]) holds
+// EVERY cleaner on the job (auto-filled at creation from job_assignments);
+// cleaner_id/cleaner_name remain the primary (lead) for scoring/compat.
 //   • Cleaner field report (job_assignments.response_token — same token the
 //     job checklist uses, so a cleaner can flag from the job page):
 //       { action:'field_report', token, description, issueType?, severity? }
@@ -95,25 +101,43 @@ function bookingRef(b: BookingLite): string {
   return b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : `Job ${b.id.slice(0, 8)}`;
 }
 
-async function cleanerNameForBooking(admin: SB, b: BookingLite): Promise<{ id: string | null; name: string | null }> {
+interface InvolvedCleaner {
+  id: string;
+  name: string | null;
+  role: string | null;
+}
+
+// EVERY cleaner who worked the job (crew jobs have more than one) — the
+// lead comes first so the primary cleaner_id/cleaner_name stay stable.
+async function cleanersForBooking(admin: SB, b: BookingLite): Promise<InvolvedCleaner[]> {
+  const out: InvolvedCleaner[] = [];
+  const seen = new Set<string>();
   if (b.job_id) {
     const { data: assigns } = await admin
       .from("job_assignments")
-      .select("cleaner_id, status, cleaners(first_name, last_name)")
+      .select("cleaner_id, status, role, cleaners(first_name, last_name)")
       .eq("job_id", b.job_id);
-    const active = (assigns || []).find((a: { status?: string }) =>
+    const participating = (assigns || []).filter((a: { status?: string }) =>
       ["confirmed", "accepted", "completed", "in progress"].includes(String(a.status || "").toLowerCase()));
-    if (active) {
-      const c = Array.isArray(active.cleaners) ? active.cleaners[0] : active.cleaners;
+    participating.sort((a: { role?: string }, b2: { role?: string }) =>
+      (String(a.role || "") === "Lead" ? 0 : 1) - (String(b2.role || "") === "Lead" ? 0 : 1));
+    for (const a of participating) {
+      if (!a.cleaner_id || seen.has(a.cleaner_id)) continue;
+      seen.add(a.cleaner_id);
+      const c = Array.isArray(a.cleaners) ? a.cleaners[0] : a.cleaners;
       const name = c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() : null;
-      return { id: active.cleaner_id || null, name: name || null };
+      out.push({ id: a.cleaner_id, name: name || null, role: a.role || null });
     }
   }
-  if (b.cleaner_id) {
+  if (out.length === 0 && b.cleaner_id) {
     const { data: c } = await admin.from("cleaners").select("first_name, last_name").eq("id", b.cleaner_id).maybeSingle();
-    return { id: b.cleaner_id, name: c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || null : null };
+    out.push({
+      id: b.cleaner_id,
+      name: c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || null : null,
+      role: null,
+    });
   }
-  return { id: null, name: null };
+  return out;
 }
 
 async function createIssue(admin: SB, opts: {
@@ -129,9 +153,15 @@ async function createIssue(admin: SB, opts: {
   cleanerName?: string | null;
 }) {
   const ref = bookingRef(opts.booking);
-  const cleaner = opts.cleanerId !== undefined
-    ? { id: opts.cleanerId ?? null, name: opts.cleanerName ?? null }
-    : await cleanerNameForBooking(admin, opts.booking);
+  // ALL cleaners on the job get attached; the reporter (field reports) or
+  // the lead is the primary cleaner_id for scoring/compat.
+  const involved = await cleanersForBooking(admin, opts.booking);
+  const cleaner = opts.cleanerId !== undefined && opts.cleanerId !== null
+    ? { id: opts.cleanerId, name: opts.cleanerName ?? null }
+    : (involved[0] ?? { id: null, name: null });
+  if (cleaner.id && !involved.some((c) => c.id === cleaner.id)) {
+    involved.unshift({ id: cleaner.id, name: cleaner.name, role: null });
+  }
 
   const { data: docRow } = await admin
     .from("job_documentation")
@@ -148,6 +178,7 @@ async function createIssue(admin: SB, opts: {
       documentation_id: docRow?.id || null,
       cleaner_id: cleaner.id,
       cleaner_name: cleaner.name,
+      cleaners: involved,
       client_name: `${opts.booking.first_name || ""} ${opts.booking.last_name || ""}`.trim() || null,
       client_email: opts.booking.email,
       booking_ref: ref,
@@ -338,6 +369,87 @@ serve(async (req) => {
       });
       await admin.from("qc_issues").update({ updated_at: nowIso }).eq("id", issueId);
       return json({ ok: true });
+    }
+
+    // ─── Cleaner attachment: crew jobs involve more than one cleaner ─────
+    // attach_cleaner goes off the cleaners assigned to the job — the target
+    // must have a job_assignments row on this issue's job.
+    if (action === "attach_cleaner") {
+      const cleanerId = String(body?.cleanerId || "");
+      if (!cleanerId) return json({ ok: false, error: "cleanerId required" }, 400);
+
+      const { data: c } = await admin
+        .from("cleaners").select("id, first_name, last_name").eq("id", cleanerId).maybeSingle();
+      if (!c) return json({ ok: false, error: "Cleaner not found." }, 404);
+      const name = `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner";
+
+      let role: string | null = null;
+      if (issue.job_id) {
+        const { data: assign } = await admin
+          .from("job_assignments")
+          .select("id, role")
+          .eq("job_id", issue.job_id)
+          .eq("cleaner_id", cleanerId)
+          .limit(1)
+          .maybeSingle();
+        if (!assign) {
+          return json({
+            ok: false,
+            error: `${name} was not assigned to this job — only cleaners on the job can be attached.`,
+          }, 409);
+        }
+        role = assign.role || null;
+      }
+
+      const current: Array<{ id: string }> = Array.isArray(issue.cleaners) ? issue.cleaners : [];
+      if (current.some((e) => String(e?.id) === cleanerId)) {
+        return json({ ok: true, unchanged: true, cleaners: current });
+      }
+      const next = [...current, { id: cleanerId, name, role }];
+      const patch: Record<string, unknown> = { cleaners: next, updated_at: nowIso };
+      if (!issue.cleaner_id) {
+        patch.cleaner_id = cleanerId;
+        patch.cleaner_name = name;
+      }
+      const { error: upErr } = await admin.from("qc_issues").update(patch).eq("id", issueId);
+      if (upErr) throw upErr;
+
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "note",
+        note: `Attached cleaner ${name} to this case (assigned to the job).`,
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { attached_cleaner_id: cleanerId },
+      });
+      return json({ ok: true, cleaners: next });
+    }
+
+    if (action === "detach_cleaner") {
+      const cleanerId = String(body?.cleanerId || "");
+      if (!cleanerId) return json({ ok: false, error: "cleanerId required" }, 400);
+      const current: Array<{ id: string; name?: string | null }> = Array.isArray(issue.cleaners) ? issue.cleaners : [];
+      const entry = current.find((e) => String(e?.id) === cleanerId);
+      if (!entry) return json({ ok: true, unchanged: true, cleaners: current });
+      const next = current.filter((e) => String(e?.id) !== cleanerId);
+      const patch: Record<string, unknown> = { cleaners: next, updated_at: nowIso };
+      // Keep the primary pointer valid.
+      if (String(issue.cleaner_id) === cleanerId) {
+        patch.cleaner_id = next[0]?.id || null;
+        patch.cleaner_name = next[0]?.name || null;
+      }
+      const { error: upErr } = await admin.from("qc_issues").update(patch).eq("id", issueId);
+      if (upErr) throw upErr;
+
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "note",
+        note: `Detached cleaner ${entry.name || cleanerId} from this case.`,
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { detached_cleaner_id: cleanerId },
+      });
+      return json({ ok: true, cleaners: next });
     }
 
     if (action === "resolve") {
