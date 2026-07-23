@@ -22,6 +22,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-screening";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -212,6 +213,31 @@ export async function POST(req: Request): Promise<NextResponse> {
           cleanerId = found?.id || null;
         }
         if (!cleanerId && action === "launch_onboarding") {
+          // Carry data captured on the phone screening (availability days,
+          // hard cutoffs, travel radius, supply notes) onto the contractor
+          // record from day one — dispatch and the risk layer read these
+          // existing fields, so nothing has to be re-entered later.
+          const screeningFields: Record<string, unknown> = {};
+          const { data: latestScreening } = await supabase
+            .from("phone_screenings")
+            .select("answers")
+            .eq("applicant_id", applicantId)
+            .eq("status", "submitted")
+            .order("submitted_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (latestScreening?.answers) {
+            const derived = deriveDownstreamFields(latestScreening.answers as ScreeningAnswers);
+            if (derived.preferredDays.length > 0) screeningFields.preferred_work_days = derived.preferredDays;
+            if (derived.travelRadiusMiles) screeningFields.max_travel_miles = derived.travelRadiusMiles;
+            const constraints = {
+              ...(derived.noWorkAfter ? { no_work_after: derived.noWorkAfter } : {}),
+              ...(derived.noWorkBefore ? { no_work_before: derived.noWorkBefore } : {}),
+              ...(derived.constraintNotes ? { notes: derived.constraintNotes } : {}),
+            };
+            if (Object.keys(constraints).length > 0) screeningFields.constraints = constraints;
+          }
+
           const { data: createdRow, error: cErr } = await supabase
             .from("cleaners")
             .insert({
@@ -225,6 +251,7 @@ export async function POST(req: Request): Promise<NextResponse> {
               approved: false,
               onboarding_complete: false,
               invited_at: new Date().toISOString(),
+              ...screeningFields,
             })
             .select("id")
             .single();
@@ -243,6 +270,10 @@ export async function POST(req: Request): Promise<NextResponse> {
         const isResend = action === "resend_onboarding";
         await setStage("onboarding", {
           cleaner_id: cleanerId,
+          // Launching clears any hold — the pending item is resolved.
+          hold_pending: null,
+          hold_follow_up_at: null,
+          hold_reminder_sent_at: null,
           ...(isResend
             ? { onboarding_last_nudge_at: new Date().toISOString() }
             : { onboarding_launched_at: applicant.onboarding_launched_at || new Date().toISOString() }),

@@ -22,6 +22,9 @@ import {
   RiAlertLine,
   RiCheckboxCircleFill,
   RiCircleLine,
+  RiFileTextLine,
+  RiPauseCircleLine,
+  RiPhoneLine,
   RiSendPlaneLine,
   RiUserAddLine,
   RiCloseCircleLine,
@@ -40,6 +43,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import PhoneScreeningForm from "@/components/admin/PhoneScreeningForm";
+import { RECOMMENDATION_LABEL, declineReasonLabel, type Recommendation } from "@/lib/phone-screening";
 
 // Onboarding is considered stalled when launched this long ago without a
 // signed agreement.
@@ -77,8 +82,25 @@ interface ApplicantRow {
   cleaner_id: string | null;
   onboarding_launched_at: string | null;
   onboarding_last_nudge_at: string | null;
+  hold_pending: string | null;
+  hold_follow_up_at: string | null;
   applied_at: string | null;
   synced_at: string | null;
+}
+
+interface ScreeningSummary {
+  id: string;
+  status: "draft" | "submitted";
+  recommendation: Recommendation | null;
+  decline_reason: string | null;
+  hold_pending: string | null;
+  hold_follow_up_date: string | null;
+  screener_name: string | null;
+  started_at: string;
+  submitted_at: string | null;
+  pdf_status: "none" | "generated" | "failed";
+  pdfUrl: string | null;
+  created_at: string;
 }
 
 interface LinkedCleaner {
@@ -97,6 +119,7 @@ interface LinkedCleaner {
 type EffectiveStage =
   | "applicant"
   | "screening"
+  | "hold"
   | "onboarding"
   | "agreement_signed"
   | "active"
@@ -107,6 +130,7 @@ const STAGE_FILTERS: Array<{ id: "all" | EffectiveStage | "attention"; label: st
   { id: "all", label: "All" },
   { id: "applicant", label: "Applicants" },
   { id: "screening", label: "Screening" },
+  { id: "hold", label: "Hold" },
   { id: "onboarding", label: "Onboarding" },
   { id: "agreement_signed", label: "Agreement signed" },
   { id: "active", label: "Active" },
@@ -117,6 +141,7 @@ const STAGE_FILTERS: Array<{ id: "all" | EffectiveStage | "attention"; label: st
 const STAGE_BADGE: Record<EffectiveStage, { label: string; cls: string }> = {
   applicant: { label: "Applicant", cls: "bg-sky-50 text-sky-700 border-sky-200" },
   screening: { label: "Screening", cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  hold: { label: "Hold", cls: "bg-orange-50 text-orange-700 border-orange-200" },
   onboarding: { label: "Onboarding", cls: "bg-amber-50 text-amber-800 border-amber-200" },
   agreement_signed: { label: "Agreement signed", cls: "bg-teal-50 text-teal-700 border-teal-200" },
   active: { label: "Active", cls: "bg-violet-100 text-violet-800 border-violet-200" },
@@ -143,6 +168,12 @@ function isStalled(a: ApplicantRow, c: LinkedCleaner | undefined): boolean {
     ? Math.max(launched, new Date(a.onboarding_last_nudge_at).getTime())
     : launched;
   return Date.now() - ref > STALL_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** Hold whose follow-up date has arrived — resurfaces under needs-attention. */
+function isHoldDue(a: ApplicantRow): boolean {
+  if (a.stage !== "hold" || !a.hold_follow_up_at) return false;
+  return a.hold_follow_up_at <= new Date().toISOString().slice(0, 10);
 }
 
 const fmtDate = (iso: string | null | undefined) =>
@@ -174,6 +205,9 @@ export default function ApplicantsPipeline() {
   const [syncing, setSyncing] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [screeningOpen, setScreeningOpen] = useState(false);
+  const [screenings, setScreenings] = useState<ScreeningSummary[]>([]);
+  const [screeningsLoading, setScreeningsLoading] = useState(false);
 
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
@@ -226,6 +260,31 @@ export default function ApplicantsPipeline() {
   );
   const selectedCleaner = selected?.cleaner_id ? cleaners.get(selected.cleaner_id) : undefined;
 
+  // Screening history for the open applicant (newest first, with signed PDF urls).
+  const loadScreenings = useCallback(async (applicantId: string) => {
+    setScreeningsLoading(true);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch("/api/talent/screening", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+      },
+      body: JSON.stringify({ action: "list", applicantId }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setScreeningsLoading(false);
+    setScreenings(res.ok ? ((j.screenings || []) as ScreeningSummary[]) : []);
+  }, []);
+
+  useEffect(() => {
+    if (selectedId) {
+      void loadScreenings(selectedId);
+    } else {
+      setScreenings([]);
+    }
+  }, [selectedId, loadScreenings]);
+
   const counts = useMemo(() => {
     const c = { applicant: 0, onboarding: 0, attention: 0 };
     for (const a of applicants) {
@@ -233,7 +292,7 @@ export default function ApplicantsPipeline() {
       const st = effectiveStage(a, cl);
       if (st === "applicant") c.applicant += 1;
       if (st === "onboarding" || st === "agreement_signed") c.onboarding += 1;
-      if (isStalled(a, cl)) c.attention += 1;
+      if (isStalled(a, cl) || isHoldDue(a)) c.attention += 1;
     }
     return c;
   }, [applicants, cleaners]);
@@ -244,7 +303,7 @@ export default function ApplicantsPipeline() {
       const cl = a.cleaner_id ? cleaners.get(a.cleaner_id) : undefined;
       const st = effectiveStage(a, cl);
       if (stageFilter === "attention") {
-        if (!isStalled(a, cl)) return false;
+        if (!isStalled(a, cl) && !isHoldDue(a)) return false;
       } else if (stageFilter !== "all" && st !== stageFilter) {
         return false;
       }
@@ -410,6 +469,11 @@ export default function ApplicantsPipeline() {
                               Stalled
                             </Badge>
                           )}
+                          {isHoldDue(a) && (
+                            <Badge variant="outline" className="text-[11px] bg-rose-50 text-rose-700 border-rose-200">
+                              Follow-up due
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell">
@@ -543,6 +607,27 @@ export default function ApplicantsPipeline() {
                   </>
                 )}
 
+                {selected.stage === "hold" && (
+                  <>
+                    <Separator />
+                    <div
+                      className={cn(
+                        "flex items-start gap-2 p-3 rounded-lg border text-sm",
+                        isHoldDue(selected)
+                          ? "bg-rose-50 border-rose-200 text-rose-800"
+                          : "bg-orange-50 border-orange-200 text-orange-800",
+                      )}
+                    >
+                      <RiPauseCircleLine className="w-4 h-4 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-medium">On hold — {selected.hold_pending || "pending item"}.</span>{" "}
+                        Follow up {isHoldDue(selected) ? "was due" : "on"} {fmtDate(selected.hold_follow_up_at)}
+                        {isHoldDue(selected) ? " — run a new screening or resolve now." : "."}
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 {selected.stage === "rejected" && selected.rejection_reason && (
                   <>
                     <Separator />
@@ -553,12 +638,125 @@ export default function ApplicantsPipeline() {
                   </>
                 )}
 
+                {/* Phone screenings — permanent records, retained through activation */}
+                {(screenings.length > 0 ||
+                  ["applicant", "screening", "hold"].includes(selected.stage)) && (
+                  <>
+                    <Separator />
+                    <section className="space-y-2">
+                      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Phone screenings
+                      </h3>
+                      {screeningsLoading ? (
+                        <Skeleton className="h-10 w-full" />
+                      ) : screenings.length === 0 ? (
+                        <p className="text-xs text-slate-400">No screenings yet — start one below.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {screenings.map((s) => (
+                            <div
+                              key={s.id}
+                              className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50/60 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {s.status === "draft" ? (
+                                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-200">
+                                      Draft in progress
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[10px]",
+                                        s.recommendation === "advance" && "bg-emerald-50 text-emerald-700 border-emerald-200",
+                                        s.recommendation === "hold" && "bg-orange-50 text-orange-700 border-orange-200",
+                                        s.recommendation === "decline" && "bg-rose-50 text-rose-700 border-rose-200",
+                                      )}
+                                    >
+                                      {s.recommendation ? RECOMMENDATION_LABEL[s.recommendation] : "Submitted"}
+                                    </Badge>
+                                  )}
+                                  <span className="text-slate-600">
+                                    {fmtDate(s.submitted_at || s.started_at)} · {s.screener_name || "—"}
+                                  </span>
+                                </div>
+                                {s.status === "submitted" && s.recommendation === "decline" && (
+                                  <p className="text-slate-500 truncate">{declineReasonLabel(s.decline_reason)}</p>
+                                )}
+                                {s.status === "submitted" && s.recommendation === "hold" && (
+                                  <p className="text-slate-500 truncate">
+                                    {s.hold_pending || "Pending"} · follow up {fmtDate(s.hold_follow_up_date)}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {s.status === "draft" && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setScreeningOpen(true)}>
+                                    Resume
+                                  </Button>
+                                )}
+                                {s.pdfUrl && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                                    <a href={s.pdfUrl} target="_blank" rel="noreferrer">
+                                      <RiFileTextLine className="w-3.5 h-3.5 mr-1" /> PDF
+                                    </a>
+                                  </Button>
+                                )}
+                                {s.status === "submitted" && s.pdf_status === "failed" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-amber-300 text-amber-800"
+                                    onClick={async () => {
+                                      const { data: sessionData } = await supabase.auth.getSession();
+                                      const res = await fetch("/api/talent/screening", {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                          Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+                                        },
+                                        body: JSON.stringify({ action: "retry_pdf", screeningId: s.id }),
+                                      });
+                                      if (res.ok) {
+                                        toast.success("Screening record PDF generated.");
+                                        void loadScreenings(selected.id);
+                                      } else {
+                                        const j = await res.json().catch(() => ({}));
+                                        toast.error("PDF retry failed", { description: j?.error });
+                                      }
+                                    }}
+                                  >
+                                    Retry PDF
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+
                 <Separator />
 
                 {/* Actions */}
                 <section className="space-y-2">
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</h3>
                   <div className="flex flex-wrap gap-2">
+                    {["applicant", "screening", "hold"].includes(selected.stage) && (
+                      <Button
+                        size="sm"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                        onClick={() => setScreeningOpen(true)}
+                      >
+                        <RiPhoneLine className="w-4 h-4 mr-1.5" />
+                        {screenings.some((s) => s.status === "draft")
+                          ? "Resume phone screening"
+                          : "Start phone screening"}
+                      </Button>
+                    )}
                     {selected.stage === "applicant" && (
                       <Button
                         size="sm"
@@ -570,7 +768,7 @@ export default function ApplicantsPipeline() {
                         Advance to screening
                       </Button>
                     )}
-                    {(selected.stage === "applicant" || selected.stage === "screening") && (
+                    {(selected.stage === "applicant" || selected.stage === "screening" || selected.stage === "hold") && (
                       <Button
                         size="sm"
                         className="bg-violet-600 hover:bg-violet-700 text-white"
@@ -684,6 +882,28 @@ export default function ApplicantsPipeline() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Live phone-screening form (runs the whole call) ── */}
+      <PhoneScreeningForm
+        applicant={
+          selected
+            ? {
+                id: selected.id,
+                full_name: selected.full_name,
+                first_name: selected.first_name,
+                last_name: selected.last_name,
+                email: selected.email,
+                phone: selected.phone,
+              }
+            : null
+        }
+        open={screeningOpen}
+        onOpenChange={setScreeningOpen}
+        onFinished={() => {
+          void load({ silent: true });
+          if (selected) void loadScreenings(selected.id);
+        }}
+      />
     </div>
   );
 }
