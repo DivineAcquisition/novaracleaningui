@@ -340,6 +340,12 @@ verify_jwt = true
 [functions.cleaner-accountability]
 verify_jwt = false
 
+# Glow Membership benefits one-pager (email + SMS link to the public
+# /membership-benefits page). Invoked from the admin Quotes screen with a
+# logged-in session, same pattern as send-cleaning-checklist.
+[functions.send-membership-benefits]
+verify_jwt = true
+
 [functions.customer-manage-recurring]
 verify_jwt = false
 

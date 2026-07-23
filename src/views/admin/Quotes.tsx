@@ -4,7 +4,10 @@
 //
 // View saved VA quotes (from Internal Booking) and website custom-quote
 // requests. From any row, send the customer-facing cleaning checklist
-// via email and/or SMS (public /checklist/* page + full HTML email).
+// via email and/or SMS (public /checklist/* page + full HTML email), and
+// the Glow Membership benefits one-pager (/membership-benefits) — the
+// benefits block is highlighted automatically on membership quotes
+// (weekly / biweekly / monthly frequency).
 
 import {
   RiSearchLine,
@@ -16,6 +19,7 @@ import {
   RiFileList3Line,
   RiFileCopyLine,
   RiCalendarCheckLine,
+  RiVipCrownLine,
 } from "@remixicon/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -166,6 +170,188 @@ async function sendChecklist(opts: {
     viewUrl?: string;
     skipped?: boolean;
   };
+}
+
+const MEMBERSHIP_BENEFITS_URL = "https://try.novaracleaning.com/membership-benefits";
+
+/** Weekly / biweekly / monthly quotes are membership territory. */
+function isMembershipQuote(q: Pick<VaQuote, "frequency" | "service_type">): boolean {
+  const freq = (q.frequency || "").toLowerCase();
+  if (["weekly", "biweekly", "bi-weekly", "monthly"].includes(freq)) return true;
+  const svc = (q.service_type || "").toLowerCase();
+  return svc.includes("member") || svc.includes("recur");
+}
+
+async function sendMembershipBenefits(opts: {
+  email?: string | null;
+  phone?: string | null;
+  firstName?: string | null;
+  channel: SendChannel;
+}) {
+  const sendEmail = opts.channel === "email" || opts.channel === "both";
+  const sendSms = opts.channel === "sms" || opts.channel === "both";
+  const { data, error } = await supabase.functions.invoke("send-membership-benefits", {
+    body: {
+      email: opts.email || undefined,
+      phone: opts.phone || undefined,
+      firstName: opts.firstName || undefined,
+      sendEmail,
+      sendSms,
+      force: true,
+    },
+  });
+  if (error) throw error;
+  if ((data as { error?: string })?.error) {
+    throw new Error((data as { error: string }).error);
+  }
+  return data as {
+    success?: boolean;
+    emailed?: boolean;
+    smsSent?: boolean;
+    viewUrl?: string;
+  };
+}
+
+// ─── Membership benefits send block (shared by both quote sheets) ────────
+// Email the full benefits one-pager and/or text the public
+// /membership-benefits page — portal access, before & after photo report,
+// cleaner-selection control, and the rest of the Glow stack.
+function MembershipBenefitsBlock({
+  email,
+  phone,
+  firstName,
+  suggested,
+}: {
+  email?: string | null;
+  phone?: string | null;
+  firstName?: string | null;
+  suggested: boolean;
+}) {
+  const [actioning, setActioning] = useState<SendChannel | "copy" | null>(null);
+
+  const runSend = async (channel: SendChannel) => {
+    if ((channel === "email" || channel === "both") && !email) {
+      toast.error("No email on this quote");
+      return;
+    }
+    if ((channel === "sms" || channel === "both") && !phone) {
+      toast.error("No phone on this quote");
+      return;
+    }
+    setActioning(channel);
+    try {
+      const data = await sendMembershipBenefits({ email, phone, firstName, channel });
+      const parts: string[] = [];
+      if (data.emailed) parts.push("emailed");
+      if (data.smsSent) parts.push("texted");
+      toast.success(
+        parts.length
+          ? `Membership benefits ${parts.join(" + ")}`
+          : "Membership benefits send completed",
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send membership benefits");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const copyLink = async () => {
+    setActioning("copy");
+    try {
+      await navigator.clipboard.writeText(MEMBERSHIP_BENEFITS_URL);
+      toast.success("Membership benefits link copied");
+    } catch {
+      toast.error("Copy failed");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "space-y-3 rounded-xl p-3 -mx-1",
+        suggested && "bg-violet-50/60 border border-violet-200",
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <RiVipCrownLine className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
+        <div>
+          <div className="font-medium text-slate-900 flex items-center gap-2">
+            Membership benefits
+            {suggested && (
+              <Badge className="bg-violet-600 text-white border-0 text-[10px]">
+                Membership quote
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-slate-500">
+            Email the Glow benefits one-pager and/or text the public benefits page — portal
+            access, before &amp; after photo report, cleaner selection, member pricing.
+          </p>
+          <a
+            href={MEMBERSHIP_BENEFITS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-violet-700 hover:underline mt-1"
+          >
+            Preview customer view <RiExternalLinkLine className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          className="bg-violet-600 hover:bg-violet-700 text-white"
+          onClick={() => void runSend("email")}
+          disabled={actioning !== null || !email}
+        >
+          {actioning === "email" ? (
+            <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+          ) : (
+            <RiMailLine className="w-4 h-4 mr-1.5" />
+          )}
+          Email benefits
+        </Button>
+        <Button
+          variant="outline"
+          className="border-violet-200 text-violet-800 bg-violet-50 hover:bg-violet-100"
+          onClick={() => void runSend("sms")}
+          disabled={actioning !== null || !phone}
+        >
+          {actioning === "sms" ? (
+            <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+          ) : (
+            <RiSmartphoneLine className="w-4 h-4 mr-1.5" />
+          )}
+          Text benefits link
+        </Button>
+        <Button
+          variant="outline"
+          className="border-slate-200"
+          onClick={() => void runSend("both")}
+          disabled={actioning !== null || !email || !phone}
+        >
+          {actioning === "both" ? (
+            <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+          ) : (
+            <RiMailLine className="w-4 h-4 mr-1.5" />
+          )}
+          Email + SMS
+        </Button>
+        <Button
+          variant="outline"
+          className="border-slate-200"
+          onClick={() => void copyLink()}
+          disabled={actioning === "copy"}
+        >
+          <RiFileCopyLine className="w-4 h-4 mr-1.5" />
+          Copy link
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminQuotes() {
@@ -651,6 +837,15 @@ function VaQuoteSheet({
 
               <Separator />
 
+              <MembershipBenefitsBlock
+                email={quote.email}
+                phone={quote.phone}
+                firstName={quote.first_name}
+                suggested={isMembershipQuote(quote)}
+              />
+
+              <Separator />
+
               <Button asChild variant="outline" className="w-full border-violet-200 text-violet-800">
                 <Link href={`/admin/csr?quoteId=${quote.id}`}>Open in Internal Booking</Link>
               </Button>
@@ -829,6 +1024,15 @@ function CustomQuoteSheet({
                   </Button>
                 </div>
               </div>
+
+              <Separator />
+
+              <MembershipBenefitsBlock
+                email={quote.email}
+                phone={quote.phone}
+                firstName={firstName}
+                suggested={false}
+              />
             </div>
           </>
         )}
