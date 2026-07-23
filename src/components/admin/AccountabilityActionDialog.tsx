@@ -44,6 +44,13 @@ export interface LinkedQcIssue {
   issue_type: string;
   severity: string;
   created_at: string;
+  job_id?: string | null;
+}
+
+interface CrewMember {
+  id: string;
+  name: string;
+  role: string | null;
 }
 
 const ACTION_OPTIONS = [
@@ -114,6 +121,12 @@ export default function AccountabilityActionDialog({
   const [emailContext, setEmailContext] = useState<{ activeStrikes: number; strikeNumber: number; cleanerEmail: string | null } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Other cleaners on the same job: selecting them attaches them to the QC
+  // case, and (optionally) issues them the same action with their own
+  // auto-filled notice.
+  const [crew, setCrew] = useState<CrewMember[]>([]);
+  const [alsoIds, setAlsoIds] = useState<Set<string>>(new Set());
+  const [alsoApply, setAlsoApply] = useState(true);
 
   // Reset when (re)opened, honoring the pre-linked case.
   useEffect(() => {
@@ -133,6 +146,8 @@ export default function AccountabilityActionDialog({
     setEmailBody("");
     setEmailEdited(false);
     setEmailContext(null);
+    setAlsoIds(new Set());
+    setAlsoApply(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -141,13 +156,49 @@ export default function AccountabilityActionDialog({
     if (!open || qcIssue) return;
     void (async () => {
       const { data } = await (supabase.from as any)("qc_issues")
-        .select("id, issue_number, booking_ref, title, issue_type, severity, created_at")
+        .select("id, issue_number, booking_ref, title, issue_type, severity, created_at, job_id")
         .eq("cleaner_id", cleanerId)
         .order("created_at", { ascending: false })
         .limit(25);
       setIssueChoices((data || []) as LinkedQcIssue[]);
     })();
   }, [open, qcIssue, cleanerId]);
+
+  // The linked case's job — its crew is the pool of "other cleaners".
+  const linkedJobId = qcIssue?.job_id ?? issueChoices.find((i) => i.id === qcIssueId)?.job_id ?? null;
+
+  useEffect(() => {
+    if (!open || !linkedJobId) { setCrew([]); return; }
+    void (async () => {
+      const { data } = await (supabase.from as any)("job_assignments")
+        .select("cleaner_id, role, status, cleaners(first_name, last_name)")
+        .eq("job_id", linkedJobId);
+      const seen = new Set<string>();
+      const out: CrewMember[] = [];
+      for (const a of data || []) {
+        if (!a.cleaner_id || seen.has(a.cleaner_id) || a.cleaner_id === cleanerId) continue;
+        if (!["confirmed", "accepted", "completed", "in progress"].includes(String(a.status || "").toLowerCase())) continue;
+        seen.add(a.cleaner_id);
+        const c = Array.isArray(a.cleaners) ? a.cleaners[0] : a.cleaners;
+        out.push({
+          id: a.cleaner_id,
+          name: c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "Cleaner",
+          role: a.role || null,
+        });
+      }
+      setCrew(out);
+      setAlsoIds(new Set());
+    })();
+  }, [open, linkedJobId, cleanerId]);
+
+  const toggleAlso = (id: string) => {
+    setAlsoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // Coaching notes default to "log only"; formal actions default to sending.
   useEffect(() => {
@@ -255,7 +306,7 @@ export default function AccountabilityActionDialog({
       }
       const label = ACTION_OPTIONS.find((a) => a.id === actionType)?.label || actionType;
       toast.success(
-        `${label} logged${
+        `${label} logged for ${cleanerName}${
           sendEmail
             ? d.emailSent
               ? " — formal email sent"
@@ -263,6 +314,50 @@ export default function AccountabilityActionDialog({
             : ""
         }${d.reassignedJobs ? ` · ${d.reassignedJobs} job(s) marked for reassignment` : ""}`,
       );
+
+      // Other selected cleaners: attach them to the QC case, and (if chosen)
+      // issue them the same action with their own auto-filled notice.
+      const extras = crew.filter((c) => alsoIds.has(c.id));
+      const extraErrors: string[] = [];
+      for (const extra of extras) {
+        if (qcIssueId) {
+          const { data: ad, error: ae } = await supabase.functions.invoke("qc-issues", {
+            body: { action: "attach_cleaner", issueId: qcIssueId, cleanerId: extra.id },
+          });
+          const add = ad as { ok?: boolean; error?: string } | null;
+          if (ae || add?.ok === false) {
+            extraErrors.push(`${extra.name}: couldn't attach to the case (${add?.error || ae?.message || "error"})`);
+          }
+        }
+        if (alsoApply) {
+          const { data: cd, error: ce } = await supabase.functions.invoke("cleaner-accountability", {
+            body: {
+              action: "create",
+              cleanerId: extra.id,
+              actionType,
+              qcIssueId: qcIssueId || undefined,
+              reason: reason.trim() || undefined,
+              note: note.trim(),
+              severeCause,
+              suspensionStart,
+              suspensionEnd,
+              existingJobsHandling,
+              rehireStatus: actionType === "removal" ? rehireStatus : undefined,
+              sendEmail,
+              // No subject/body override — each cleaner's notice is
+              // auto-filled with their own name and strike number.
+            },
+          });
+          const cdd = cd as { ok?: boolean; error?: string; emailSent?: boolean } | null;
+          if (ce || cdd?.ok === false) {
+            extraErrors.push(`${extra.name}: ${cdd?.error || ce?.message || "action failed"}`);
+          } else {
+            toast.success(`${label} logged for ${extra.name}${sendEmail && cdd?.emailSent ? " — formal email sent" : ""}`);
+          }
+        }
+      }
+      for (const msg of extraErrors) toast.error(msg, { duration: 9000 });
+
       onOpenChange(false);
       onDone();
     } catch (e) {
@@ -331,6 +426,44 @@ export default function AccountabilityActionDialog({
               </Select>
             )}
           </div>
+
+          {/* Other cleaners on the same job */}
+          {crew.length > 0 && (
+            <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">
+              <Label className="text-violet-900">Other cleaners on this job</Label>
+              <div className="space-y-1.5">
+                {crew.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300"
+                      checked={alsoIds.has(c.id)}
+                      onChange={() => toggleAlso(c.id)}
+                    />
+                    <span>{c.name}{c.role ? <span className="text-slate-400"> · {c.role}</span> : null}</span>
+                  </label>
+                ))}
+              </div>
+              {alsoIds.size > 0 && (
+                <>
+                  <label className="flex items-center gap-2 text-xs text-violet-900 cursor-pointer pt-1 border-t border-violet-200/70">
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300"
+                      checked={alsoApply}
+                      onChange={(e) => setAlsoApply(e.target.checked)}
+                    />
+                    Also issue the same {ACTION_OPTIONS.find((a) => a.id === actionType)?.label.toLowerCase() || "action"} to them
+                  </label>
+                  <p className="text-[11px] text-violet-800/70">
+                    Selected cleaners are attached to the QC case{alsoApply
+                      ? " and each gets their own logged action + notice, auto-filled with their name and strike count."
+                      : " (linked to it on their record) — no action is taken on them."}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Reason + note */}
           <div>

@@ -920,6 +920,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
               issue_type: issue.issue_type,
               severity: issue.severity,
               created_at: issue.created_at,
+              job_id: issue.job_id,
             }}
             onDone={() => void reload()}
           />
