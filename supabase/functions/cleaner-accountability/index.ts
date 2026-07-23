@@ -35,9 +35,21 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
+// Same resolution order as _shared/app-secrets.ts (inlined so this function
+// deploys as a single file): app_secrets DB row first, env var fallback.
+// deno-lint-ignore no-explicit-any
+async function resolveSecret(supabase: any, name: string): Promise<string> {
+  let value = "";
+  try {
+    const { data } = await supabase.from("app_secrets").select("value").eq("key", name).maybeSingle();
+    if (data?.value && typeof data.value === "string") value = data.value.trim();
+  } catch { /* fall through to env */ }
+  return value || (Deno.env.get(name) || "").trim();
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 function json(payload: unknown, status = 200) {
@@ -252,11 +264,13 @@ function emailHtml(bodyText: string): string {
   </div>`;
 }
 
-async function sendFormalEmail(opts: {
+async function sendFormalEmail(admin: SB, opts: {
   to: string; subject: string; body: string;
 }): Promise<{ sent: boolean; error: string | null }> {
   try {
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const apiKey = await resolveSecret(admin, "RESEND_API_KEY");
+    if (!apiKey) return { sent: false, error: "RESEND_API_KEY not configured" };
+    const resend = new Resend(apiKey);
     const { error } = await resend.emails.send({
       from: FROM_ADDRESS,
       to: [opts.to],
@@ -364,11 +378,21 @@ serve(async (req) => {
     const action = String(body?.action || "").toLowerCase();
     const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
 
-    // ─── sweep — pg_cron with the service-role bearer (admins may also run) ──
+    // ─── sweep — pg_cron via x-cron-secret (CRON_SECRET, same pattern as
+    // partner-recurring-generate / pay-cleaner-transfer); service-role
+    // bearer and admin/VA JWTs also work for manual runs. ──────────────────
     if (action === "sweep") {
-      const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-      let allowed = Boolean(serviceRole) && bearer === serviceRole;
+      let allowed = false;
+      const cronHeader = req.headers.get("x-cron-secret") || "";
+      if (cronHeader) {
+        const cronSecret = await resolveSecret(admin, "CRON_SECRET");
+        allowed = Boolean(cronSecret) && cronHeader === cronSecret;
+      }
       if (!allowed) {
+        const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+        allowed = Boolean(serviceRole) && bearer === serviceRole;
+      }
+      if (!allowed && bearer) {
         try { await ensureAdminOrVa(admin, bearer); allowed = true; } catch { allowed = false; }
       }
       if (!allowed) return json({ ok: false, error: "Not authorized." }, 403);
@@ -750,7 +774,7 @@ serve(async (req) => {
         if (!emailDeliverable) {
           emailResult = { sent: false, error: "No valid contractor email on file — notice not sent." };
         } else {
-          emailResult = await sendFormalEmail({ to: toEmail, subject: emailSubject, body: emailBody });
+          emailResult = await sendFormalEmail(admin, { to: toEmail, subject: emailSubject, body: emailBody });
         }
         await admin.from("cleaner_accountability_actions").update({
           email_sent: emailResult.sent,

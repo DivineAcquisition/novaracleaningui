@@ -122,17 +122,23 @@ ON CONFLICT (event_type) DO UPDATE
   SET webhook_key = EXCLUDED.webhook_key, role_keys = EXCLUDED.role_keys, enabled = true;
 
 -- ─── 5. Cron: hourly sweep — auto-restore ended suspensions + expire strikes ─
+-- Authenticates with the x-cron-secret header (CRON_SECRET in app_secrets,
+-- same pattern as partner_recurring / payroll crons) — the service-role key
+-- is NOT stored in app_secrets, so a bearer-based schedule would send an
+-- empty token. Seed CRON_SECRET if this env never had one.
+INSERT INTO public.app_secrets (key, value)
+VALUES ('CRON_SECRET', encode(gen_random_bytes(24), 'hex'))
+ON CONFLICT (key) DO NOTHING;
+
 DO $$
 DECLARE
   v_job_id bigint;
   v_supabase_url text;
-  v_service_role text;
 BEGIN
   SELECT value INTO v_supabase_url FROM public.app_secrets WHERE key = 'SUPABASE_URL';
   IF v_supabase_url IS NULL OR length(v_supabase_url) = 0 THEN
     v_supabase_url := 'https://sxdraeptzuamsgjcvfeg.supabase.co';
   END IF;
-  SELECT value INTO v_service_role FROM public.app_secrets WHERE key = 'SUPABASE_SERVICE_ROLE_KEY';
 
   SELECT jobid INTO v_job_id FROM cron.job WHERE jobname = 'cleaner-accountability-sweep';
   IF v_job_id IS NOT NULL THEN PERFORM cron.unschedule('cleaner-accountability-sweep'); END IF;
@@ -145,13 +151,12 @@ BEGIN
           url := '%s/functions/v1/cleaner-accountability',
           headers := jsonb_build_object(
             'Content-Type', 'application/json',
-            'Authorization', 'Bearer ' || coalesce(%L::text, '')
+            'x-cron-secret', (SELECT value FROM public.app_secrets WHERE key = 'CRON_SECRET')
           ),
           body := jsonb_build_object('action', 'sweep', 'source', 'pg_cron')
         );
       $cron$,
-      v_supabase_url,
-      v_service_role
+      v_supabase_url
     )
   );
 EXCEPTION WHEN OTHERS THEN
