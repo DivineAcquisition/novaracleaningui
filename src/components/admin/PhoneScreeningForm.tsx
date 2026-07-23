@@ -112,10 +112,11 @@ async function callTalentAction(body: Record<string, unknown>): Promise<{ ok: bo
 
 // Map a failed qualifier to its standardized decline reason where one exists.
 const QUALIFIER_DECLINE_REASON: Record<string, string> = {
-  age_18: "under_18",
-  work_auth: "no_work_authorization",
+  age_work_auth: "no_work_authorization",
   vehicle: "no_vehicle",
-  license_insurance: "no_vehicle",
+  phone_app: "failed_hard_qualifier",
+  own_products: "failed_hard_qualifier",
+  photo_id: "failed_hard_qualifier",
 };
 
 export default function PhoneScreeningForm({
@@ -912,6 +913,17 @@ function MultiToggle({
   );
 }
 
+function GuidanceBlock({ text }: { text: string }) {
+  return (
+    <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 leading-relaxed">
+      <span className="font-semibold text-slate-600 uppercase tracking-wider text-[10px] mr-1.5">
+        Screener guide
+      </span>
+      {text}
+    </p>
+  );
+}
+
 function QuestionField({
   question,
   value,
@@ -925,12 +937,25 @@ function QuestionField({
 }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-sm font-medium text-slate-800">{question.label}</p>
+      <p className="text-sm font-medium text-slate-800">
+        {question.label}
+        {question.optional && (
+          <span className="ml-1.5 text-[10px] font-normal text-slate-400 uppercase tracking-wider">optional</span>
+        )}
+      </p>
       {question.script && <ScriptBlock text={fillScript(question.script)} />}
+      {question.guidance && <GuidanceBlock text={question.guidance} />}
       {question.kind === "gate" && (
         <GateToggle value={value as string | undefined} fixable={question.fixable} onChange={onChange} />
       )}
-      {question.kind === "yesno" && <YesNoToggle value={value as string | undefined} onChange={onChange} />}
+      {question.kind === "yesno" && (
+        <YesNoToggle
+          value={value as string | undefined}
+          onChange={onChange}
+          yesLabel={question.key.endsWith("_ack") ? "Confirmed — understand & accept" : "Yes"}
+          noLabel={question.key.endsWith("_ack") ? "Not confirmed" : "No"}
+        />
+      )}
       {question.kind === "multi" && (
         <MultiToggle
           options={question.options || []}
@@ -999,6 +1024,7 @@ function ScenarioFields({
         return (
           <div key={q.key} className="space-y-1.5 border-l-2 border-slate-100 pl-3">
             {q.script && <ScriptBlock text={fillScript(q.script)} />}
+            {q.guidance && <GuidanceBlock text={q.guidance} />}
             <Textarea
               value={String(values[q.key] || "")}
               onChange={(e) => onChange(q.key, e.target.value)}

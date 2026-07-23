@@ -295,9 +295,6 @@ export async function POST(req: Request): Promise<NextResponse> {
               : {}),
             ...(applicant.availability ? { hours: applicant.availability } : {}),
           },
-          experience: {
-            ...(applicant.experience ? { background: applicant.experience } : {}),
-          },
         };
 
         const { data: created, error: cErr } = await supabase

@@ -1,11 +1,17 @@
 // ─── Contractor Phone Screening — form definition (single source of truth) ────
 //
-// Mirrors the Contractor Phone Screening Guide. This file defines every
-// section, question, and read-aloud script for the live-call form, the
-// individual consent items, the standardized decline reasons, and the shared
-// validation used on both the client (to block inconsistent submissions in
-// the UI) and the server (authoritative). The screening-record PDF renders
-// from these same definitions so the record always matches the form.
+// Mirrors the Contractor Phone Screening Guide, TRIMMED to run in 15 minutes
+// or less (3–5 minutes for a fast disqualification): compound hard-qualifier
+// prompts, a lean availability set, Systems & Legal as single spoken blocks
+// with one confirmation each, and two high-signal scenario questions. The
+// six consents remain INDIVIDUAL — never collapsed into a blanket ack.
+//
+// This file defines every section, question, and read-aloud script for the
+// live-call form, the individual consent items, the standardized decline
+// reasons, and the shared validation used on both the client (to block
+// inconsistent submissions in the UI) and the server (authoritative). The
+// screening-record PDF renders from these same definitions so the record
+// always matches the form.
 //
 // Pure data + pure functions — safe to import from client components and
 // from Next.js API routes.
@@ -28,11 +34,15 @@ export interface ScreeningQuestion {
   label: string;
   /** Read-aloud script shown inline next to the field, visually distinct. */
   script?: string;
+  /** Screener-facing hint (strong vs. concerning answers) — NOT read aloud. */
+  guidance?: string;
   kind: QuestionKind;
   options?: string[];
   placeholder?: string;
   /** Gates only: can be marked "pending" (fixable) instead of a hard fail. */
   fixable?: boolean;
+  /** Optional captures (notes) don't count toward section progress. */
+  optional?: boolean;
 }
 
 export interface ScreeningSection {
@@ -74,7 +84,7 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
     id: "opening",
     title: "Call Opening",
     intro:
-      "Hi, may I speak with {name}? This is {screener} calling from Novara Cleaning about the cleaning contractor application you submitted. Do you have about 15–20 minutes to go through a few quick questions together?",
+      "Hi, may I speak with {name}? This is {screener} calling from Novara Cleaning about the cleaning contractor application you submitted. Do you have about 15 minutes for a quick screen?",
     questions: [
       { key: "identity_confirmed", label: "Confirmed speaking with the applicant", kind: "yesno" },
       {
@@ -84,7 +94,13 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         script:
           "If it's not a good time, no problem at all — when would be a better time for me to call you back?",
       },
-      { key: "callback_time", label: "Callback time (if rescheduling)", kind: "text", placeholder: "e.g. Tomorrow 2pm" },
+      {
+        key: "callback_time",
+        label: "Callback time (if rescheduling)",
+        kind: "text",
+        placeholder: "e.g. Tomorrow 2pm",
+        optional: true,
+      },
     ],
   },
   {
@@ -93,109 +109,77 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
     intro:
       "First I need to run through a few quick requirements — every contractor has to meet these before we can move forward, so I'll get them out of the way up front.",
     questions: [
-      { key: "age_18", label: "18 years or older", kind: "gate", script: "Are you 18 or older?", fixable: false },
+      {
+        key: "age_work_auth",
+        label: "18+ and authorized to work in the U.S.",
+        kind: "gate",
+        script: "Are you 18 or older and legally authorized to work in the US?",
+        fixable: false,
+      },
       {
         key: "photo_id",
         label: "Valid government-issued photo ID",
         kind: "gate",
-        script: "Do you have a valid government-issued photo ID — a driver's license, state ID, or passport?",
-        fixable: true,
-      },
-      {
-        key: "work_auth",
-        label: "Authorized to work in the U.S.",
-        kind: "gate",
-        script: "Are you legally authorized to work in the United States?",
-        fixable: false,
-      },
-      {
-        key: "ssn_itin",
-        label: "SSN or ITIN for the W-9",
-        kind: "gate",
-        script:
-          "Since this is a contractor role, we'll need a W-9 before your first payment. Do you have a Social Security Number or an ITIN for that?",
+        script: "Do you have a valid government-issued photo ID?",
         fixable: true,
       },
       {
         key: "vehicle",
-        label: "Reliable vehicle",
-        kind: "gate",
-        script: "Do you have reliable transportation — a vehicle of your own you can use to get to jobs?",
-        fixable: true,
-      },
-      {
-        key: "license_insurance",
-        label: "Valid driver's license + auto insurance",
-        kind: "gate",
-        script: "Do you have a valid driver's license and current auto insurance on that vehicle?",
-        fixable: true,
-      },
-      {
-        key: "vehicle_capacity",
-        label: "Vehicle fits supplies & equipment",
+        label: "Own vehicle + license + insurance + capacity",
         kind: "gate",
         script:
-          "Can your vehicle carry your cleaning supplies and equipment — a vacuum, mop, and a caddy of products?",
+          "Do you have your own reliable vehicle with a valid license and current insurance, and room to carry a vacuum and supplies?",
         fixable: true,
       },
       {
         key: "own_products",
-        label: "Willing to supply own products & equipment",
+        label: "Able to bring own products & equipment",
         kind: "gate",
-        script:
-          "As an independent contractor you supply your own cleaning products and equipment. Are you willing and able to do that?",
+        script: "Are you able to bring your own cleaning products and equipment to jobs?",
         fixable: true,
       },
       {
-        key: "supply_status",
-        label: "Current supply status",
-        kind: "select",
-        script: "Do you already have your supplies, or would you need to pick things up before a first job?",
-        options: ["Fully stocked now", "Has most items — minor gaps", "Needs to purchase before first job"],
+        key: "supplies_note",
+        label: "Supplies note (optional)",
+        kind: "text",
+        placeholder: "e.g. Already stocked · Needs to buy basics first",
+        optional: true,
       },
       {
-        key: "smartphone",
-        label: "Smartphone with a data plan",
-        kind: "gate",
-        script: "Do you have a smartphone with a working data plan?",
-        fixable: true,
-      },
-      {
-        key: "app_comfort",
-        label: "Comfortable using an app for jobs / checklists / photos",
+        key: "phone_app",
+        label: "Smartphone with data + app-ready",
         kind: "gate",
         script:
-          "All of our work runs through an app — you'd receive job offers, follow checklists, and upload photos from your phone. Are you comfortable with that?",
+          "Do you have a smartphone with data and are you comfortable using an app to accept jobs, follow the checklist, and upload photos?",
         fixable: true,
       },
       {
         key: "home_base",
         label: "Home base (city / ZIP)",
         kind: "text",
-        script: "What city or ZIP code would you be working out of?",
+        script: "Where are you based, and how far will you travel?",
         placeholder: "e.g. Rockville, 20850",
       },
       {
         key: "travel_radius",
         label: "Travel radius (miles)",
         kind: "text",
-        script: "How far are you willing to travel for a job — roughly how many miles from home?",
         placeholder: "e.g. 20",
       },
       {
-        key: "no_serve_areas",
-        label: "Areas they will NOT serve",
+        key: "no_serve_note",
+        label: "Areas they won't serve (optional)",
         kind: "text",
-        script: "Are there any areas you would not want to take jobs in?",
         placeholder: "e.g. DC proper, anything past Baltimore",
+        optional: true,
       },
     ],
   },
   {
     id: "availability",
-    title: "Availability & Capacity",
+    title: "Availability",
     intro:
-      "Now let's talk schedule — I want to capture exactly when you can work so we only ever offer you jobs that actually fit.",
+      "Quick schedule check — I want to capture when you can work so we only ever offer you jobs that actually fit.",
     questions: [
       {
         key: "days",
@@ -211,13 +195,6 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         script: "And on those days, what hours are you generally available?",
         placeholder: "e.g. 8am–4pm",
       },
-      {
-        key: "target_hours",
-        label: "Target hours per week",
-        kind: "text",
-        script: "How many hours a week are you looking for?",
-        placeholder: "e.g. 25–30",
-      },
       { key: "weekends", label: "Available weekends", kind: "yesno", script: "Are weekends an option for you?" },
       {
         key: "cutoff_after",
@@ -226,6 +203,7 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         script:
           "Is there a hard cutoff — a time of day after which you can never work? For example, needing to be done by school pickup.",
         placeholder: "e.g. 3pm",
+        optional: true,
       },
       {
         key: "cutoff_before",
@@ -233,32 +211,14 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         kind: "text",
         script: "Anything on the front end — a time before which you can't start?",
         placeholder: "e.g. 9am",
-      },
-      {
-        key: "commitments",
-        label: "Other jobs / commitments",
-        kind: "text",
-        script: "Do you have another job or regular commitments we should plan around?",
+        optional: true,
       },
       {
         key: "notice_needed",
         label: "Notice needed for a job offer",
         kind: "text",
-        script: "How much notice do you need to accept a job — could you take something for tomorrow, or do you need a few days?",
+        script: "How much notice do you need to accept a job — tomorrow, or a few days?",
         placeholder: "e.g. 1 day",
-      },
-      {
-        key: "blackout_dates",
-        label: "Upcoming blackout dates",
-        kind: "text",
-        script: "Any trips or dates coming up when you won't be available?",
-      },
-      {
-        key: "dependability",
-        label: "Childcare / transport reliability factors",
-        kind: "text",
-        script:
-          "Is there anything — childcare, shared vehicle, anything like that — that could affect your ability to make a scheduled job?",
       },
       {
         key: "punctuality_ack",
@@ -266,84 +226,6 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         kind: "yesno",
         script:
           "One expectation I want to set now: arriving on time matters a lot here, and if something ever comes up, we need to hear from you as early as possible — never a no-show. Can you commit to that?",
-      },
-    ],
-  },
-  {
-    id: "experience",
-    title: "Experience & Capability",
-    intro: "Tell me a bit about your cleaning experience.",
-    questions: [
-      {
-        key: "background",
-        label: "Cleaning background",
-        kind: "longtext",
-        script: "How long have you been cleaning professionally, and where — a company, on your own, or both?",
-      },
-      {
-        key: "settings",
-        label: "Settings worked",
-        kind: "multi",
-        options: ["Residential", "Commercial", "Short-term rental (STR)"],
-        script: "Have you cleaned homes, offices, short-term rentals like Airbnbs — which of those?",
-      },
-      {
-        key: "deep_moveout",
-        label: "Deep clean / move-out experience",
-        kind: "yesno",
-        script: "Have you done deep cleans or move-out cleans — inside ovens, baseboards, that level of detail?",
-      },
-      {
-        key: "checklist_comfort",
-        label: "Comfortable following a room-by-room checklist",
-        kind: "yesno",
-        script: "Every job here follows a room-by-room checklist in the app. Are you comfortable working from a checklist?",
-      },
-      {
-        key: "solo_team",
-        label: "Solo vs. team",
-        kind: "select",
-        options: ["Prefers solo", "Prefers team", "Either works"],
-        script: "Do you prefer working solo, with a team, or does either work?",
-      },
-      {
-        key: "physical",
-        label: "Physically able (stairs, bending, carrying equipment)",
-        kind: "yesno",
-        script:
-          "The work is physical — stairs, bending, kneeling, and carrying a vacuum between floors. Are you able to do that comfortably?",
-      },
-      {
-        key: "sensitivities",
-        label: "Product sensitivities / allergies",
-        kind: "text",
-        script: "Any sensitivities or allergies to cleaning products we should know about?",
-      },
-      {
-        key: "pets_ok",
-        label: "Comfortable in homes with pets",
-        kind: "yesno",
-        script: "Many of our homes have dogs or cats. Are you comfortable working around pets?",
-      },
-      {
-        key: "cameras_ok",
-        label: "Comfortable with cameras / client present",
-        kind: "yesno",
-        script: "Some homes have cameras, and sometimes the client is home while you work. Are you comfortable with both?",
-      },
-      {
-        key: "photos_ok",
-        label: "Comfortable photo-documenting work",
-        kind: "yesno",
-        script:
-          "We photo-document every job — before shots when you arrive and after shots when you finish, taken in the app. Are you comfortable doing that on every job?",
-      },
-      {
-        key: "standards_answer",
-        label: "\"How do you know a clean is done?\"",
-        kind: "longtext",
-        script:
-          "Last one here, and there's no trick to it: how do you know when a room is actually done? What do you check before you'd call a clean complete?",
       },
     ],
   },
@@ -358,90 +240,26 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
   {
     id: "systems",
     title: "Systems & Expectations",
-    intro: "Let me walk you through how day-to-day work actually runs, so nothing is a surprise.",
+    intro:
+      "Let me walk you through how day-to-day work actually runs, so nothing is a surprise. Jobs come through our contractor portal — offers show up with the date, location, and pay, and you accept or decline each one; nothing is forced onto your schedule. Before-and-after photos are mandatory on every job — they protect you as much as the client. Your work builds a performance score, the Novara Score, from reliability, quality, and client ratings; a higher score means the best jobs first and tier advancement that raises your pay percentage. If a quality issue comes up we handle it through a documented accountability process — coaching first, formal warnings if it repeats — and nothing is ever taken out of your pay. Any tip a client leaves is 100% yours. And on job days we need you reachable — confirm the job, message through the app if anything comes up, and always give early notice of a problem.",
     questions: [
       {
-        key: "portal_flow",
-        label: "Understands & accepts the portal + accept/decline flow",
+        key: "systems_ack",
+        label: "Confirmed they understand and accept",
         kind: "yesno",
-        script:
-          "Jobs come through our contractor portal: offers show up in the app with the date, location, and pay, and you accept or decline each one — nothing is ever forced on your schedule. Does that work for you?",
-      },
-      {
-        key: "photo_docs",
-        label: "Accepts mandatory before & after photos",
-        kind: "yesno",
-        script:
-          "Before-and-after photos are mandatory on every job — they protect you as much as the client, because they're proof of the condition you found and the work you did. Are you on board with that?",
-      },
-      {
-        key: "novara_score",
-        label: "Understands the Novara Score → job priority & tier advancement",
-        kind: "yesno",
-        script:
-          "Your work builds a performance score — the Novara Score — from reliability, quality, and client ratings. A higher score means you get offered the best jobs first and advance tiers, which raises your pay percentage. Make sense?",
-      },
-      {
-        key: "accountability",
-        label: "Understands the accountability process",
-        kind: "yesno",
-        script:
-          "If a quality issue comes up we handle it through a documented process — coaching first, formal warnings if it repeats. Nothing is ever taken out of your pay. Are you comfortable with that?",
-      },
-      {
-        key: "tips",
-        label: "Understands tips are 100% theirs",
-        kind: "yesno",
-        script: "Good news item: any tip a client leaves is 100% yours — we never take a cut of tips.",
-      },
-      {
-        key: "communication",
-        label: "Accepts the communication standard",
-        kind: "yesno",
-        script:
-          "On job days we need you reachable — confirm the job, message through the app if anything comes up, and always give early notice of a problem. Can you commit to that standard?",
       },
     ],
   },
   {
     id: "legal",
     title: "Legal Terms",
-    intro: "A few legal ground rules that will also be in your written agreement — I need a yes on each.",
+    intro:
+      "A few legal ground rules that will also be in your written agreement. Clients you meet through Novara are Novara clients — no side arrangements and no taking clients direct, during or after your time with us. Client privacy is strict: no posting client homes, addresses, or job photos on social media, and nothing about clients shared outside the app. The person who accepts the job is the person who shows up — no sending a friend, family member, or substitute in your place, ever. In a client's home we expect professional conduct — respectful, careful with property, nothing touched that isn't part of the job. And if you ever arrive to something out of scope — biohazards, hoarding, anything unsafe — you stop and contact us before doing anything; you'll never be penalized for stopping and reporting.",
     questions: [
       {
-        key: "non_solicitation",
-        label: "Client non-solicitation",
+        key: "legal_ack",
+        label: "Confirmed they understand and accept",
         kind: "yesno",
-        script:
-          "Clients you meet through Novara are Novara clients — no side arrangements, no taking clients direct, during or after your time with us. Do you agree to that?",
-      },
-      {
-        key: "confidentiality",
-        label: "Confidentiality — no client photos on social media",
-        kind: "yesno",
-        script:
-          "Client privacy is strict: no posting client homes, addresses, or job photos on social media, and nothing about clients shared outside the app. Agreed?",
-      },
-      {
-        key: "no_subcontract",
-        label: "No subcontracting or substitutes",
-        kind: "yesno",
-        script:
-          "The person who accepts the job is the person who shows up — no sending a friend, family member, or substitute in your place, ever. Agreed?",
-      },
-      {
-        key: "conduct",
-        label: "Conduct & property expectations",
-        kind: "yesno",
-        script:
-          "In a client's home we expect professional conduct — respectful, careful with property, nothing touched that isn't part of the job. Agreed?",
-      },
-      {
-        key: "stop_report",
-        label: "Stop-and-report rule for out-of-scope conditions",
-        kind: "yesno",
-        script:
-          "If you ever arrive to something out of scope — biohazards, hoarding, anything unsafe — you stop and contact us before doing anything. You'll never be penalized for stopping and reporting. Agreed?",
       },
     ],
   },
@@ -449,41 +267,25 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
     id: "scenarios",
     title: "Scenario Questions",
     intro:
-      "Last section — a few quick real-world situations. There are no trick answers; I just want to hear how you'd handle each one.",
+      "Two quick real-world situations — there are no trick answers; I just want to hear how you'd handle each one.",
     questions: [
-      {
-        key: "late_answer",
-        label: "Running late — applicant's answer",
-        kind: "longtext",
-        script: "You're running 20 minutes late to a job. What do you do?",
-      },
-      { key: "late_rating", label: "Running late — rating", kind: "rating" },
       {
         key: "breakage_answer",
         label: "Broke something — applicant's answer",
         kind: "longtext",
-        script: "You accidentally break something in a client's home. What do you do?",
+        script: "You accidentally break something in a client's home — what do you do?",
+        guidance:
+          "Strong: stops, photographs if safe, tells the client and Novara immediately, owns it. Concerning: hides it, leaves without saying anything, or offers to settle privately with the client.",
       },
       { key: "breakage_rating", label: "Broke something — rating", kind: "rating" },
-      {
-        key: "dirtier_answer",
-        label: "Dirtier than described — applicant's answer",
-        kind: "longtext",
-        script: "You arrive and the home is much dirtier than the job described. What do you do?",
-      },
-      { key: "dirtier_rating", label: "Dirtier than described — rating", kind: "rating" },
-      {
-        key: "complaint_answer",
-        label: "Client says job was poor — applicant's answer",
-        kind: "longtext",
-        script: "A client messages that the job was poorly done. How do you respond?",
-      },
-      { key: "complaint_rating", label: "Client complaint — rating", kind: "rating" },
       {
         key: "cash_offer_answer",
         label: "Client offers cash directly — applicant's answer",
         kind: "longtext",
-        script: "A client says: \"Next time just come directly and I'll pay you cash.\" What do you say?",
+        script:
+          "A client offers to pay you directly, cash, to clean for them privately — what do you say?",
+        guidance:
+          "Strong: declines clearly, explains Novara clients stay with Novara, offers to loop in the office. Concerning: accepts, hedges, or asks for time to think about it.",
       },
       { key: "cash_offer_rating", label: "Cash offer — rating", kind: "rating" },
     ],
@@ -491,15 +293,32 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
 ];
 
 /** Scenario answer/rating pairs, for rendering & the PDF. */
-export const SCENARIO_PAIRS: Array<{ answerKey: string; ratingKey: string; label: string }> = [
-  { answerKey: "late_answer", ratingKey: "late_rating", label: "Running late to a job" },
-  { answerKey: "breakage_answer", ratingKey: "breakage_rating", label: "Breaking something in a home" },
-  { answerKey: "dirtier_answer", ratingKey: "dirtier_rating", label: "Home dirtier than described" },
-  { answerKey: "complaint_answer", ratingKey: "complaint_rating", label: "Client says the job was poor" },
-  { answerKey: "cash_offer_answer", ratingKey: "cash_offer_rating", label: "Client offers cash directly" },
+export const SCENARIO_PAIRS: Array<{
+  answerKey: string;
+  ratingKey: string;
+  label: string;
+  guidance?: string;
+}> = [
+  {
+    answerKey: "breakage_answer",
+    ratingKey: "breakage_rating",
+    label: "Breaking something in a home",
+    guidance:
+      "Strong: stops, photographs if safe, tells the client and Novara immediately, owns it. Concerning: hides it, leaves without saying anything, or offers to settle privately with the client.",
+  },
+  {
+    answerKey: "cash_offer_answer",
+    ratingKey: "cash_offer_rating",
+    label: "Client offers cash directly",
+    guidance:
+      "Strong: declines clearly, explains Novara clients stay with Novara, offers to loop in the office. Concerning: accepts, hedges, or asks for time to think about it.",
+  },
 ];
 
 // ─── Consents (each captured individually — the legal record) ─────────────────
+// Six items. W-9 / payout setup is intentionally NOT here — onboarding already
+// gates first payment on those, so the verbal consent was redundant. Do NOT
+// collapse these into a blanket acknowledgment.
 
 export interface ConsentItem {
   key: string;
@@ -531,12 +350,6 @@ export const CONSENT_ITEMS: ConsentItem[] = [
     label: "Background check",
     script:
       "Before you can take any jobs we run a background check. Do we have your consent to run one?",
-  },
-  {
-    key: "w9_payout",
-    label: "W-9 + payout setup before first payment",
-    script:
-      "Before your first payment you'll complete a W-9 and set up direct payouts through our payment partner, Stripe. Are you able and willing to complete both?",
   },
   {
     key: "signed_agreement",
@@ -635,7 +448,7 @@ export function consentsState(consents: ScreeningConsents): ConsentsState {
   };
 }
 
-/** Per-section progress: how many questions have a non-empty answer. */
+/** Per-section progress: how many required questions have a non-empty answer. */
 export function sectionProgress(
   section: ScreeningSection,
   answers: ScreeningAnswers,
@@ -646,15 +459,16 @@ export function sectionProgress(
     return { answered: s.answered, total: s.total };
   }
   const values = (answers[section.id] || {}) as Record<string, unknown>;
+  const required = section.questions.filter((q) => !q.optional);
   let answered = 0;
-  for (const q of section.questions) {
+  for (const q of required) {
     const v = values[q.key];
     if (v == null) continue;
     if (typeof v === "string" && v.trim() === "") continue;
     if (Array.isArray(v) && v.length === 0) continue;
     answered += 1;
   }
-  return { answered, total: section.questions.length };
+  return { answered, total: required.length };
 }
 
 export interface ScreeningOutcomeInput {
@@ -762,19 +576,15 @@ export function deriveDownstreamFields(answers: ScreeningAnswers): DownstreamFie
   const availabilityParts = [
     preferredDays.length > 0 ? preferredDays.join("/") : null,
     str(av.hours),
-    str(av.target_hours) ? `~${str(av.target_hours)} hrs/wk` : null,
+    av.weekends === "yes" ? "weekends ok" : av.weekends === "no" ? "no weekends" : null,
   ].filter(Boolean);
 
   const noteParts = [
     str(av.cutoff_after) ? `No work after ${str(av.cutoff_after)}` : null,
     str(av.cutoff_before) ? `No work before ${str(av.cutoff_before)}` : null,
-    str(av.commitments) ? `Commitments: ${str(av.commitments)}` : null,
     str(av.notice_needed) ? `Needs ${str(av.notice_needed)} notice` : null,
-    str(av.blackout_dates) ? `Blackout: ${str(av.blackout_dates)}` : null,
-    str(q.no_serve_areas) ? `Won't serve: ${str(q.no_serve_areas)}` : null,
-    str(q.supply_status) && q.supply_status !== "Fully stocked now"
-      ? `Supplies: ${str(q.supply_status)}`
-      : null,
+    str(q.no_serve_note) ? `Won't serve: ${str(q.no_serve_note)}` : null,
+    str(q.supplies_note) ? `Supplies: ${str(q.supplies_note)}` : null,
   ].filter(Boolean);
 
   return {
@@ -783,7 +593,7 @@ export function deriveDownstreamFields(answers: ScreeningAnswers): DownstreamFie
     noWorkBefore: str(av.cutoff_before),
     travelRadiusMiles: Number.isFinite(radiusNum) && radiusNum > 0 ? radiusNum : null,
     homeBase: str(q.home_base),
-    supplyStatus: str(q.supply_status),
+    supplyStatus: str(q.supplies_note),
     availabilityText: availabilityParts.length > 0 ? availabilityParts.join(" · ") : null,
     constraintNotes: noteParts.length > 0 ? noteParts.join(" · ") : null,
   };
