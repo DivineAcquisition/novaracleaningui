@@ -1,6 +1,0 @@
-{
-  "project_id": "sxdraeptzuamsgjcvfeg",
-  "name": "stripe-webhook",
-  "entrypoint_path": "index.ts",
-  "verify_jwt": false
-}
