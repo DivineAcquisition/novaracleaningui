@@ -1,12 +1,17 @@
 // ─── send-post-booking-sms ───────────────────────────────────────────────
 //
-// Fires a single GHL-routed SMS after every confirmed booking. The
-// message is intentionally narrow per product spec:
+// Fires a single GHL-routed SMS AFTER the deposit (or credit) is collected.
+// The message is intentionally narrow per product spec:
 //
 //   "Thanks for booking with Novara! Manage your account: <link>
 //    Refer a friend and you both get $50: <ref-link>"
 //
 // Behavior:
+//   * Requires payment_received_at OR uses_credit — never sends on a
+//     VA "confirmed" booking that still has an unpaid deposit invoice /
+//     pay-page link. Confirm-time callers (fanout / DB trigger) no-op
+//     until the Stripe webhook stamps payment, then the webhook
+//     re-invokes this function.
 //   * Idempotent via bookings.post_confirm_ghl_sms_sent flag
 //   * Always sent via send-ghl-sms (NOT Telnyx) so we ride GHL's
 //     verified 10DLC number
@@ -15,8 +20,10 @@
 //   * Soft-fails: never throws, returns {ok:true|false, ...}
 //
 // Invoked by:
-//   * bookings_auto_send_post_booking_sms DB trigger (deploy-independent)
-//   * finalize-booking + stripe-webhook (belt-and-suspenders inline calls)
+//   * stripe-webhook payment_intent.succeeded / invoice.payment_succeeded
+//     (primary — deposit just cleared)
+//   * bookings_auto_send_post_booking_sms DB trigger + finalize-booking
+//     fanout (belt-and-suspenders; skips until paid)
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -77,7 +84,9 @@ serve(async (req) => {
 
   const { data: booking, error: bErr } = await supabase
     .from("bookings")
-    .select("id, customer_id, first_name, last_name, phone, email, status, post_confirm_ghl_sms_sent, booking_number")
+    .select(
+      "id, customer_id, first_name, last_name, phone, email, status, post_confirm_ghl_sms_sent, booking_number, payment_received_at, uses_credit",
+    )
     .eq("id", bookingId)
     .maybeSingle();
   if (bErr || !booking) {
@@ -88,8 +97,15 @@ serve(async (req) => {
   if (booking.post_confirm_ghl_sms_sent) {
     return json({ ok: true, skipped: "already_sent" });
   }
-  if (booking.status === "cancelled" || booking.status === "pending_payment" || booking.status === "pending_details") {
-    return json({ ok: true, skipped: `booking_not_confirmed:${booking.status}` });
+  if (booking.status === "cancelled") {
+    return json({ ok: true, skipped: "booking_cancelled" });
+  }
+  // Deposit (or membership credit) must have cleared. VA bookings often
+  // sit at status=confirmed with a pending deposit invoice — those must
+  // wait for Stripe to stamp payment_received_at before this fires.
+  const paid = Boolean(booking.payment_received_at) || booking.uses_credit === true;
+  if (!paid) {
+    return json({ ok: true, skipped: "awaiting_deposit" });
   }
 
   const phone = normalizeE164(booking.phone);
