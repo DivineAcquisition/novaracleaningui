@@ -87,6 +87,7 @@ export const ADD_ONS = {
   closets:      { label: "Inside closets / tidy",  price: 30, note: "Organize & wipe" },
   trashHaul:    { label: "Trash haul",             price: 75, note: "Haul away trash / junk" },
   deepBathroomDetail: { label: "Deep bathroom detail", price: 45, note: "Per bathroom" },
+  cateringEvent: { label: "Catering / event cleanup", price: 85, note: "Post-event catering mess & dish volume" },
 } as const;
 
 export type AddOnId = keyof typeof ADD_ONS;

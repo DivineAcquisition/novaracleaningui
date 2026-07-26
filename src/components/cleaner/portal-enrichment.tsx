@@ -95,6 +95,7 @@ export const titleCase = (s: string) => s.replace(/[_-]+/g, " ").replace(/\b\w/g
 const ADDON_LABELS: Record<string, string> = {
   deepBathroomDetail: "Deep bathroom detail",
   trashHaul: "Trash haul",
+  cateringEvent: "Catering / event cleanup",
   petHair: "Heavy pet-hair removal",
   basement: "Basement clean",
   insideFridge: "Inside fridge",

@@ -42,6 +42,7 @@ const ADD_ONS: Record<string, { price: number; label: string }> = {
   closets: { price: 30, label: "Inside closets" },
   trashHaul: { price: 75, label: "Trash haul" },
   deepBathroomDetail: { price: 45, label: "Deep bathroom detail" },
+  cateringEvent: { price: 85, label: "Catering / event cleanup" },
 };
 const labelOf = (id: string) => ADD_ONS[id]?.label || id;
 const priceOf = (id: string, overrides?: Record<string, number>) => {

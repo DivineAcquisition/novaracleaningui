@@ -72,6 +72,7 @@ export const ADD_ONS: Record<string, { price: number }> = {
   closets:      { price: 30 },
   trashHaul:    { price: 75 },
   deepBathroomDetail: { price: 45 },
+  cateringEvent: { price: 85 },
 };
 
 export const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
