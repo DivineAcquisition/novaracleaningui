@@ -68,6 +68,15 @@ interface AddonEmailData {
   serviceAddress?: string;
   /** When set, prepends an internal review banner (draft for approver). */
   reviewFor?: string;
+  // ─── scope_adjustment ───────────────────────────────────────────────
+  /** Price before the scope adjustment, e.g. "$190.00". */
+  originalAmount?: string;
+  /** Customer-facing name of the reclassified service, e.g. "Deep Clean". */
+  serviceLabel?: string;
+  /** The justification message the admin approved (same text sent by SMS). */
+  justification?: string;
+  /** How many condition photos back the adjustment up. */
+  photoCount?: number;
 }
 
 function renderHtml(opts: { heading: string; bodyHtml: string; rows: Array<{ label: string; value: string }>; ctaLabel?: string; ctaUrl?: string }): string {
@@ -158,6 +167,37 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
         heading: "Additional charge explanation",
         bodyHtml: `${reviewBanner}<p>${hi}</p><p>${intro}</p><p style="margin-top:16px;">We're writing to explain <strong>why this additional charge was applied</strong> and what work was performed. A copy of the charge details is included below for your records.</p>${reasonBlock}${reportBlock}<p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Charge summary</p><p style="margin:0 0 4px;font-size:15px;color:${BRAND.gray700};">The <strong>${list}</strong> add-on (${d.amount || "see below"}) was charged to the card on file after this extra work was completed.</p>`,
         rows: detailRows,
+      }),
+    };
+  }
+  if (type === "scope_adjustment") {
+    // The job performed differed materially from the one booked. Lead with
+    // the justification the admin approved, then show the price movement and
+    // note that the condition photos are on file.
+    const justification = d.justification
+      ? `<div style="background:#ffffff;border:2px solid ${BRAND.primary};border-radius:8px;padding:20px 22px;margin:20px 0 16px;"><p style="margin:0 0 12px;font-size:17px;font-weight:700;color:${BRAND.primary};">Why the rate changed</p><p style="margin:0;font-size:16px;line-height:1.65;color:${BRAND.gray700};">${d.justification}</p></div>`
+      : "";
+    const photos = d.photoCount
+      ? `<p style="margin:16px 0 0;font-size:15px;color:${BRAND.gray700};">${d.photoCount} before/after photo${d.photoCount === 1 ? "" : "s"} documenting the condition ${d.photoCount === 1 ? "is" : "are"} on file with this job. We're happy to share them on request.</p>`
+      : "";
+    return {
+      subject: `Update on your cleaning${d.amount ? ` - adjusted to ${d.amount}` : ""}`,
+      html: renderHtml({
+        heading: "An update on your clean",
+        bodyHtml:
+          `<p>${hi}</p>` +
+          `<p>Thank you for having us out. The work this job needed went beyond what the booked service covers, so we're writing to explain the adjustment clearly and put the details on record.</p>` +
+          `${justification}` +
+          `<p style="margin:0 0 8px;font-size:15px;font-weight:600;color:${BRAND.gray900};">Adjustment summary</p>` +
+          `${photos}`,
+        rows: [
+          { label: "Booking", value: d.bookingRef || "" },
+          { label: "Service date", value: d.serviceDate || "" },
+          { label: "Service address", value: d.serviceAddress || "" },
+          { label: "Classified as", value: d.serviceLabel || "" },
+          { label: "Original price", value: d.originalAmount || "" },
+          { label: "Adjusted price", value: d.amount || "" },
+        ],
       }),
     };
   }

@@ -186,7 +186,7 @@ const fmtD = (iso?: string | null) => (iso ? format(new Date(`${iso}`.slice(0, 1
 
 export default function QualityControl() {
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"issues" | "docs" | "cleaners">("issues");
+  const [tab, setTab] = useState<"issues" | "docs" | "cleaners" | "scope">("issues");
   const [loading, setLoading] = useState(true);
   const [allIssues, setAllIssues] = useState<IssueRow[]>([]);
   const [allDocs, setAllDocs] = useState<DocRow[]>([]);
@@ -372,7 +372,7 @@ export default function QualityControl() {
 
       {/* ─── Tabs ──────────────────────────────────────────────────────── */}
       <div className="flex gap-1 border-b border-slate-200">
-        {([["issues", "Issues"], ["docs", "Documentation"], ["cleaners", "By Cleaner"]] as const).map(([id, t]) => (
+        {([["issues", "Issues"], ["docs", "Documentation"], ["cleaners", "By Cleaner"], ["scope", "Scope Adjustments"]] as const).map(([id, t]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -392,8 +392,10 @@ export default function QualityControl() {
         <IssuesTab issues={issues} docs={docs} reload={load} deepLinkIssueId={deepLinkIssueId} />
       ) : tab === "docs" ? (
         <DocsTab docs={docs} reload={load} />
-      ) : (
+      ) : tab === "cleaners" ? (
         <CleanersTab byCleaner={byCleaner} />
+      ) : (
+        <ScopeAdjustmentsTab />
       )}
     </div>
   );
@@ -1480,6 +1482,203 @@ function CleanersTab({ byCleaner }: {
       <p className="text-xs text-slate-400 pt-2">
         A cleaner repeatedly driving re-cleans or complaints is a coaching conversation — the issue links carry the photo evidence for it.
       </p>
+    </div>
+  );
+}
+
+// ─── Scope adjustments tab ──────────────────────────────────────────────
+//
+// Documented price increases, cut by reason, cleaner, and customer. The
+// customer cut is the one that earns its keep: it surfaces the account that
+// keeps booking a standard clean for a deep-condition home.
+
+interface ScopeBucket {
+  key: string;
+  label: string;
+  count: number;
+  deltaCents: number;
+  unsupported: number;
+}
+
+interface ScopeReport {
+  days: number;
+  totals: {
+    count: number;
+    deltaCents: number;
+    unsupported: number;
+    overridden: number;
+    disputed: number;
+    payoutSupplementCents: number;
+  };
+  byReason: ScopeBucket[];
+  byCleaner: ScopeBucket[];
+  byCustomer: ScopeBucket[];
+  repeatCustomers: ScopeBucket[];
+  recent: Array<{
+    id: string;
+    bookingNumber: number | null;
+    customerName: string | null;
+    cleanerName: string | null;
+    serviceDate: string | null;
+    applied_at: string;
+    applied_by_name: string | null;
+    original_price_cents: number;
+    adjusted_price_cents: number;
+    delta_cents: number;
+    evidence_missing: boolean;
+    evidence_photo_count: number;
+    amount_overridden: boolean;
+    status: string;
+    reasonLabels: string[];
+  }>;
+}
+
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+function ScopeAdjustmentsTab() {
+  const [report, setReport] = useState<ScopeReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState("180");
+
+  useEffect(() => {
+    setLoading(true);
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/admin/scope-adjustment/report?days=${days}`, {
+          headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Could not load scope adjustments");
+        setReport(data as ScopeReport);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not load scope adjustments");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [days]);
+
+  if (loading) {
+    return <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>;
+  }
+  if (!report) return null;
+
+  const breakdown = (title: string, rows: ScopeBucket[], hint: string) => (
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <div className="mt-2 space-y-1.5">
+          {rows.length === 0 && <p className="text-sm text-slate-500">Nothing yet.</p>}
+          {rows.slice(0, 8).map((r) => (
+            <div key={r.key} className="flex items-center gap-2 text-sm">
+              <span className="text-slate-700 truncate">{r.label}</span>
+              <span className="ml-auto flex items-center gap-2 shrink-0">
+                {r.unsupported > 0 && (
+                  <Badge variant="outline" className="border-amber-300 text-amber-800 text-[10px]">
+                    {r.unsupported} unsupported
+                  </Badge>
+                )}
+                <Badge variant="outline">{r.count}</Badge>
+                <span className="tabular-nums text-slate-900 font-medium w-20 text-right">{money(r.deltaCents)}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400 mt-3">{hint}</p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Select value={days} onValueChange={setDays}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="90">Last 90 days</SelectItem>
+            <SelectItem value="180">Last 180 days</SelectItem>
+            <SelectItem value="365">Last 12 months</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { label: "Adjustments", value: String(report.totals.count) },
+          { label: "Additional revenue", value: money(report.totals.deltaCents) },
+          { label: "Unsupported", value: String(report.totals.unsupported), warn: report.totals.unsupported > 0 },
+          { label: "Off suggestion", value: String(report.totals.overridden) },
+          { label: "Disputed", value: String(report.totals.disputed), warn: report.totals.disputed > 0 },
+        ].map((m) => (
+          <Card key={m.label}>
+            <CardContent className="p-4">
+              <p className="text-xs text-slate-500">{m.label}</p>
+              <p className={cn("text-2xl font-bold mt-1", m.warn ? "text-amber-700" : "text-slate-900")}>{m.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {report.totals.payoutSupplementCents > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-900">
+            <strong>{money(report.totals.payoutSupplementCents)}</strong> in supplemental cleaner pay is owed across
+            these adjustments — jobs where the payout was released before the price went up. Cleaner pay follows the
+            work performed, so payroll settles the difference.
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {breakdown("By reason", report.byReason, "Which scope problems keep costing us — and which reasons carry the most unsupported adjustments.")}
+        {breakdown("By cleaner", report.byCleaner, "One cleaner raising most of the adjustments is either working the hardest jobs or over-calling them.")}
+        {breakdown(
+          "By customer",
+          report.byCustomer,
+          report.repeatCustomers.length
+            ? `${report.repeatCustomers.length} customer(s) adjusted more than once — a pattern worth a conversation about the right service tier.`
+            : "No customer has been adjusted more than once.",
+        )}
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="divide-y divide-slate-100">
+            {report.recent.length === 0 && (
+              <p className="p-10 text-center text-slate-500 text-sm">No scope adjustments in this window.</p>
+            )}
+            {report.recent.map((a) => (
+              <div key={a.id} className="p-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="font-semibold text-slate-900">
+                  {a.bookingNumber ? `NVC-${String(a.bookingNumber).padStart(4, "0")}` : "—"}
+                </span>
+                <span className="text-slate-700">{a.customerName || "—"}</span>
+                <span className="text-slate-500 text-xs">{a.reasonLabels.join(" · ")}</span>
+                <span className="ml-auto flex items-center gap-2">
+                  {a.evidence_missing ? (
+                    <Badge variant="outline" className="border-amber-300 text-amber-800 text-[10px]">Unsupported</Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-emerald-300 text-emerald-800 text-[10px]">
+                      {a.evidence_photo_count} photos
+                    </Badge>
+                  )}
+                  {a.status === "disputed" && (
+                    <Badge variant="outline" className="border-rose-300 text-rose-800 text-[10px]">Disputed</Badge>
+                  )}
+                  <span className="tabular-nums text-slate-500">
+                    {money(a.original_price_cents)} → <strong className="text-slate-900">{money(a.adjusted_price_cents)}</strong>
+                  </span>
+                  <span className="text-xs text-slate-400 w-24 text-right">
+                    {format(new Date(a.applied_at), "MMM d, yyyy")}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -30,6 +30,7 @@ import {
   RiImageAddLine,
   RiUploadCloud2Line,
   RiTimeLine,
+  RiPriceTag3Line,
 } from "@remixicon/react";
 import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
@@ -47,6 +48,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { DelayBookingDialog } from "@/components/booking/DelayBookingDialog";
+import { ScopeAdjustmentDialog } from "@/components/booking/ScopeAdjustmentDialog";
+import { isJobStillActive, isScopeAdjustable } from "@/lib/scope-adjustment";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   ADD_ONS,
@@ -88,6 +91,25 @@ interface BookingRow {
   add_ons?: string[] | null;
   membership_plan?: string | null;
   hosted_invoice_url?: string | null;
+}
+
+interface ScopeAdjustmentRow {
+  id: string;
+  reason_codes: string[];
+  original_price_cents: number;
+  adjusted_price_cents: number;
+  delta_cents: number;
+  adjusted_service_type: string | null;
+  evidence_missing: boolean;
+  evidence_photo_count: number;
+  amount_overridden: boolean;
+  customer_message: string | null;
+  message_channels: string[] | null;
+  applied_at: string;
+  applied_by_name: string | null;
+  status: string;
+  qc_issue_id: string | null;
+  payout_supplement_cents: number | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -780,6 +802,11 @@ function BookingSheet({
     id: string;
     added_addons: string[];
   } | null>(null);
+  // Scope adjustment: prior adjustments on this job, plus any unresolved
+  // scope flag the crew raised from the field.
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [scopeHistory, setScopeHistory] = useState<ScopeAdjustmentRow[]>([]);
+  const [scopeFlags, setScopeFlags] = useState<Array<{ id: string; issue_number: number | null; title: string | null; description: string | null }>>([]);
 
   useEffect(() => {
     if (!booking) return;
@@ -832,7 +859,25 @@ function BookingSheet({
         setUnpaidAddonCharge(null);
       }
     })();
+    void loadScopeState(booking.id);
   }, [booking?.id]);
+
+  const loadScopeState = async (id: string) => {
+    const [{ data: adjustments }, { data: flags }] = await Promise.all([
+      (supabase.from as any)("scope_adjustments")
+        .select("*")
+        .eq("booking_id", id)
+        .order("applied_at", { ascending: false }),
+      (supabase.from as any)("qc_issues")
+        .select("id, issue_number, title, description")
+        .eq("booking_id", id)
+        .eq("reported_via", "cleaner_field")
+        .neq("status", "resolved")
+        .order("created_at", { ascending: false }),
+    ]);
+    setScopeHistory((adjustments || []) as ScopeAdjustmentRow[]);
+    setScopeFlags((flags || []) as Array<{ id: string; issue_number: number | null; title: string | null; description: string | null }>);
+  };
 
   if (!booking) return null;
 
@@ -865,6 +910,31 @@ function BookingSheet({
       onMutated();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not retry add-on charge");
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  // A disputed adjustment becomes a normal QC case, with the reasons, prices
+  // and evidence already attached, so it runs the existing open →
+  // investigating → resolved path.
+  const openDispute = async (adjustmentId: string) => {
+    const note = window.prompt("What did the customer say? (added to the QC case)") ?? "";
+    setWorking(`dispute-${adjustmentId}`);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/scope-adjustment/dispute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ adjustmentId, note }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not open the QC case");
+      toast.success("QC case opened with the adjustment evidence attached.");
+      await loadScopeState(booking!.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open the QC case");
     } finally {
       setWorking(null);
     }
@@ -1175,6 +1245,107 @@ function BookingSheet({
                 </span>
               </CardContent>
             </Card>
+
+            {/* Scope adjustment — justified, documented price increases */}
+            {isScopeAdjustable(booking.status) && (
+              <Card className="border-slate-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <RiPriceTag3Line className="w-4 h-4 text-violet-700" />
+                    Scope adjustment
+                  </CardTitle>
+                  <CardDescription>
+                    For a job that turned out materially different from what was booked. Requires a defined reason
+                    and the job&apos;s condition photos, prices off the pricing engine, sends the customer a written
+                    justification, and pays the crew off the adjusted value.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Mid-job cue: the crew flagged something while they're still on site */}
+                  {scopeFlags.length > 0 && isJobStillActive(booking.status) && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                      <p className="text-sm font-medium text-amber-900">
+                        The crew flagged this job — consider a scope adjustment now
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1">
+                        {scopeFlags[0].title || scopeFlags[0].description || "Field report open on this job."}
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1">
+                        The job is still active, so the customer can be told in the moment rather than finding it on
+                        a closed invoice.
+                      </p>
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className="w-full border-violet-200 text-violet-800 hover:bg-violet-50"
+                    onClick={() => setScopeOpen(true)}
+                  >
+                    Apply scope adjustment <RiArrowRightLine className="w-4 h-4 ml-2" />
+                  </Button>
+
+                  {scopeHistory.map((adj) => (
+                    <div key={adj.id} className="rounded-lg border border-slate-200 p-3 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-900 tabular-nums">
+                          {fmtMoney(adj.original_price_cents)} → {fmtMoney(adj.adjusted_price_cents)}
+                        </span>
+                        <span className="text-slate-500">
+                          {format(new Date(adj.applied_at), "MMM d, yyyy")}
+                        </span>
+                      </div>
+                      <p className="text-slate-600">{adj.reason_codes.join(", ").replaceAll("_", " ")}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {adj.evidence_missing ? (
+                          <Badge variant="outline" className="border-amber-300 text-amber-800 text-[10px]">
+                            Unsupported — no photo evidence
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-emerald-300 text-emerald-800 text-[10px]">
+                            {adj.evidence_photo_count} photo{adj.evidence_photo_count === 1 ? "" : "s"} on file
+                          </Badge>
+                        )}
+                        {adj.amount_overridden && (
+                          <Badge variant="outline" className="border-slate-300 text-slate-700 text-[10px]">
+                            Amount overridden
+                          </Badge>
+                        )}
+                        {(adj.message_channels || []).map((c) => (
+                          <Badge key={c} variant="outline" className="border-violet-200 text-violet-800 text-[10px]">
+                            Sent by {c}
+                          </Badge>
+                        ))}
+                        {adj.status === "disputed" && (
+                          <Badge variant="outline" className="border-rose-300 text-rose-800 text-[10px]">
+                            Disputed — QC case open
+                          </Badge>
+                        )}
+                      </div>
+                      {(adj.payout_supplement_cents || 0) > 0 && (
+                        <p className="text-amber-800">
+                          Supplemental pay owed: {fmtMoney(adj.payout_supplement_cents)} per cleaner
+                        </p>
+                      )}
+                      {adj.status !== "disputed" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-rose-700 hover:bg-rose-50 px-2"
+                          onClick={() => openDispute(adj.id)}
+                          disabled={working === `dispute-${adj.id}`}
+                        >
+                          {working === `dispute-${adj.id}` ? (
+                            <RiLoader4Line className="w-3 h-3 mr-1 animate-spin" />
+                          ) : null}
+                          Customer disputed this
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Add-on services — works even after completion */}
             {booking.status !== "cancelled" && (
@@ -1805,6 +1976,18 @@ function BookingSheet({
           booking={booking}
           onSuccess={() => {
             setAddonOpen(false);
+            onMutated();
+          }}
+        />
+      )}
+
+      {booking && (
+        <ScopeAdjustmentDialog
+          open={scopeOpen}
+          onOpenChange={setScopeOpen}
+          bookingId={booking.id}
+          onApplied={() => {
+            void loadScopeState(booking.id);
             onMutated();
           }}
         />
