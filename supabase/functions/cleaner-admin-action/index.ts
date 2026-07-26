@@ -618,6 +618,109 @@ serve(async (req) => {
         return json({ ok: true, cleaner: updated });
       }
 
+      // ─── ADVANCE PAY TIER ─────────────────────────────────────────────
+      // Bump foundation → proven (35→40) or proven → elite (40→45).
+      // Writing pay_tier alone is enough — the DB trigger syncs
+      // pay_percentage. Historical jobs keep their snapshot %.
+      // Emails the cleaner via send-cleaner-email (tier_promotion).
+      case "advance_pay_tier": {
+        const TIER_ORDER = ["foundation", "proven", "elite"] as const;
+        const TIER_PCT: Record<string, number> = {
+          foundation: 35,
+          proven: 40,
+          elite: 45,
+        };
+        const currentRaw = String(cleaner.pay_tier || "foundation").toLowerCase().trim();
+        const currentTier = (TIER_ORDER as readonly string[]).includes(currentRaw)
+          ? currentRaw
+          : "foundation";
+        const idx = TIER_ORDER.indexOf(currentTier as typeof TIER_ORDER[number]);
+        if (idx < 0 || idx >= TIER_ORDER.length - 1) {
+          return json({
+            error: "Cleaner is already at the highest pay tier (Elite · 45%).",
+            code: "ALREADY_MAX_TIER",
+            payTier: currentTier,
+            payPercentage: TIER_PCT[currentTier] ?? Number(cleaner.pay_percentage) || 45,
+          }, 409);
+        }
+        const nextTier = TIER_ORDER[idx + 1];
+        const prevPct = TIER_PCT[currentTier] ?? Number(cleaner.pay_percentage) || 35;
+        const nextPct = TIER_PCT[nextTier];
+        const note = String(body.note || body.reason || "").trim() || null;
+
+        const { data: updated, error: upErr } = await adminClient
+          .from("cleaners")
+          .update({
+            pay_tier: nextTier,
+            // Trigger also sets this; writing both keeps the response
+            // correct even if the trigger is temporarily missing.
+            pay_percentage: nextPct,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", cleanerId)
+          .select()
+          .maybeSingle();
+        if (upErr) throw upErr;
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.pay_tier_advanced",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary: `Pay tier: ${currentTier} (${prevPct}%) → ${nextTier} (${nextPct}%) for ${cleaner.first_name || ""} ${cleaner.last_name || ""}`,
+          data: {
+            from_tier: currentTier,
+            to_tier: nextTier,
+            from_percentage: prevPct,
+            to_percentage: nextPct,
+            note,
+            by: callerId,
+          },
+        }).then(() => undefined, () => undefined);
+
+        let emailSent = false;
+        const email = String(cleaner.email || "").trim();
+        if (email && !email.endsWith("@pending.novara")) {
+          try {
+            const { error: mailErr } = await adminClient.functions.invoke("send-cleaner-email", {
+              body: {
+                type: "tier_promotion",
+                email,
+                data: {
+                  firstName: cleaner.first_name || "",
+                  previousTier: currentTier,
+                  newTier: nextTier,
+                  previousPercentage: prevPct,
+                  newPercentage: nextPct,
+                  dashboardUrl: "https://contractor.novaracleaning.com/cleaner",
+                },
+              },
+            });
+            emailSent = !mailErr;
+            if (mailErr) {
+              console.warn("[cleaner-admin-action] tier promotion email failed", mailErr);
+            }
+          } catch (mailCatch) {
+            console.warn(
+              "[cleaner-admin-action] tier promotion email failed",
+              mailCatch instanceof Error ? mailCatch.message : String(mailCatch),
+            );
+          }
+        }
+
+        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
+          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
+
+        return json({
+          ok: true,
+          cleaner: updated,
+          fromTier: currentTier,
+          toTier: nextTier,
+          fromPercentage: prevPct,
+          toPercentage: nextPct,
+          emailSent,
+        });
+      }
+
       default:
         return json({ error: `unknown action: ${action}` }, 400);
     }

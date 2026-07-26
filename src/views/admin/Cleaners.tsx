@@ -278,7 +278,8 @@ export default function AdminCleaners() {
       | "reactivate"
       | "flag"
       | "update_compliance"
-      | "set_status",
+      | "set_status"
+      | "advance_pay_tier",
     extra: Record<string, unknown> = {},
   ) => {
     if (!selected) return;
@@ -291,7 +292,20 @@ export default function AdminCleaners() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(`${action} applied`);
+      if (action === "advance_pay_tier") {
+        const d = data as {
+          toTier?: string;
+          toPercentage?: number;
+          emailSent?: boolean;
+        };
+        const tier = (d.toTier || "next").replace(/\b\w/g, (c) => c.toUpperCase());
+        toast.success(
+          `Promoted to ${tier} · ${d.toPercentage ?? "—"}%` +
+            (d.emailSent ? " — email sent" : " — email not sent (no address)"),
+        );
+      } else {
+        toast.success(`${action} applied`);
+      }
       // Optimistic refresh.
       await load({ silent: true });
     } catch (err: any) {
@@ -596,7 +610,8 @@ function CleanerSheet({
       | "reactivate"
       | "flag"
       | "update_compliance"
-      | "set_status",
+      | "set_status"
+      | "advance_pay_tier",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -1365,6 +1380,12 @@ function GhlBlock({
   );
 }
 
+const PAY_TIER_LADDER = [
+  { tier: "foundation", pct: 35, label: "Foundation" },
+  { tier: "proven", pct: 40, label: "Proven" },
+  { tier: "elite", pct: 45, label: "Elite" },
+] as const;
+
 function ActionsBlock({
   cleaner,
   onAction,
@@ -1380,7 +1401,8 @@ function ActionsBlock({
       | "reactivate"
       | "flag"
       | "update_compliance"
-      | "set_status",
+      | "set_status"
+      | "advance_pay_tier",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -1433,8 +1455,57 @@ function ActionsBlock({
     });
   };
 
+  const currentTierRaw = String(cleaner.pay_tier || "foundation").toLowerCase();
+  const tierIdx = Math.max(
+    0,
+    PAY_TIER_LADDER.findIndex((t) => t.tier === currentTierRaw),
+  );
+  const currentTier = PAY_TIER_LADDER[tierIdx];
+  const nextTier = PAY_TIER_LADDER[tierIdx + 1] ?? null;
+
   return (
     <div className="space-y-3">
+      <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+        Pay tier
+      </p>
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {currentTier.label} · {cleaner.pay_percentage ?? currentTier.pct}% revenue share
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {nextTier
+                ? `Next: ${nextTier.label} · ${nextTier.pct}%`
+                : "Already at the top tier (Elite · 45%)."}
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={actioning || !nextTier || s === "terminated"}
+            onClick={() => {
+              if (!nextTier) return;
+              if (
+                !confirm(
+                  `Promote ${cleaner.first_name || "this cleaner"} from ${currentTier.label} (${currentTier.pct}%) to ${nextTier.label} (${nextTier.pct}%)?\n\nThey'll get an email about the raise. Past jobs keep their old rate.`,
+                )
+              ) {
+                return;
+              }
+              onAction("advance_pay_tier");
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+          >
+            {actioning ? (
+              <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RiUserStarLine className="w-4 h-4 mr-1.5" />
+            )}
+            {nextTier ? `Increase to ${nextTier.pct}%` : "Max tier"}
+          </Button>
+        </div>
+      </div>
+
       <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
         Status (manual)
       </p>

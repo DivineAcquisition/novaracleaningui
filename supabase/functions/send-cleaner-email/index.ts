@@ -7,6 +7,7 @@ import { CleanerAssignment } from "../_shared/email-templates/CleanerAssignment.
 import { BookingCompletion } from "../_shared/email-templates/BookingCompletion.tsx";
 import { PayoutConfirmation } from "../_shared/email-templates/PayoutConfirmation.tsx";
 import { CleanerCredentials } from "../_shared/email-templates/CleanerCredentials.tsx";
+import { CleanerTierPromotion } from "../_shared/email-templates/CleanerTierPromotion.tsx";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -123,6 +124,23 @@ serve(async (req) => {
           })
         );
         break;
+
+      case "tier_promotion": {
+        const newTier = String(data.newTier || "proven");
+        const newPct = Number(data.newPercentage) || 40;
+        subject = `You've been promoted to ${newTier.charAt(0).toUpperCase()}${newTier.slice(1)} — ${newPct}% revenue share`;
+        html = await renderAsync(
+          React.createElement(CleanerTierPromotion, {
+            firstName: data.firstName || data.cleanerFirstName || "",
+            previousTier: data.previousTier || "foundation",
+            newTier,
+            previousPercentage: Number(data.previousPercentage) || 35,
+            newPercentage: newPct,
+            dashboardUrl: data.dashboardUrl,
+          })
+        );
+        break;
+      }
 
       default:
         throw new Error(`Unknown email type: ${type}`);
