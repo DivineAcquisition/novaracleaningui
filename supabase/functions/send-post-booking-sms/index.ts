@@ -12,6 +12,12 @@
 //     pay-page link. Confirm-time callers (fanout / DB trigger) no-op
 //     until the Stripe webhook stamps payment, then the webhook
 //     re-invokes this function.
+//   * FIRST booking only. This is welcome copy, so a recurring member
+//     must never receive it again: every cycle mints a brand-new booking
+//     row whose post_confirm_ghl_sms_sent starts false, so the per-row
+//     latch alone is not enough.
+//   * Never after the clean has happened — "thanks for booking" is
+//     meaningless once the job is done.
 //   * Idempotent via bookings.post_confirm_ghl_sms_sent flag
 //   * Always sent via send-ghl-sms (NOT Telnyx) so we ride GHL's
 //     verified 10DLC number
@@ -63,6 +69,44 @@ function normalizeE164(raw: string | null | undefined): string | null {
   return `+${digits}`;
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// True when this customer already had a booking before this one, by
+// recurring schedule, email, or customer id. Any of those means they are
+// not a first-time booker and must not get the welcome text again.
+async function isReturningCustomer(supabase: any, booking: any): Promise<boolean> {
+  const hasEarlier = async (
+    column: string,
+    value: string,
+    op: "eq" | "ilike" = "eq",
+  ): Promise<boolean> => {
+    const query = supabase
+      .from("bookings")
+      .select("id")
+      .neq("id", booking.id)
+      .neq("status", "cancelled")
+      .lt("created_at", booking.created_at)
+      .limit(1);
+    const { data } = await (op === "ilike"
+      ? query.ilike(column, escapeLike(value))
+      : query.eq(column, value));
+    return Boolean(data?.length);
+  };
+
+  if (booking.recurring_schedule_id && await hasEarlier("recurring_schedule_id", booking.recurring_schedule_id)) {
+    return true;
+  }
+  if (booking.email && await hasEarlier("email", String(booking.email), "ilike")) {
+    return true;
+  }
+  if (booking.customer_id && await hasEarlier("customer_id", String(booking.customer_id))) {
+    return true;
+  }
+  return false;
+}
+
 function buildMessage(firstName: string | null, accountUrl: string, referUrl: string): string {
   const greeting = firstName ? `Hi ${firstName}! ` : "";
   return `${greeting}Thanks for booking with Novara Cleaning ✨\n\nManage your booking, billing & membership: ${accountUrl}\n\n💜 Share the clean: copy & paste your personal referral link and send it to a friend — you BOTH get $50 off:\n${referUrl}\n\nReply STOP to opt out.`;
@@ -81,11 +125,15 @@ serve(async (req) => {
   try { body = await req.json(); } catch { return json({ ok: false, error: "invalid json" }, 400); }
   const bookingId = String(body?.bookingId || "");
   if (!bookingId) return json({ ok: false, error: "bookingId required" }, 400);
+  // Read-only probe: evaluates every guard (ignoring the idempotency latch,
+  // so an already-latched row can still be checked) and reports the verdict
+  // without sending an SMS or writing anything.
+  const dryRun = body?.dryRun === true;
 
   const { data: booking, error: bErr } = await supabase
     .from("bookings")
     .select(
-      "id, customer_id, first_name, last_name, phone, email, status, post_confirm_ghl_sms_sent, booking_number, payment_received_at, uses_credit",
+      "id, customer_id, first_name, last_name, phone, email, status, post_confirm_ghl_sms_sent, booking_number, payment_received_at, uses_credit, created_at, service_date, recurring_schedule_id",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -94,11 +142,20 @@ serve(async (req) => {
     return json({ ok: false, error: "booking not found" }, 404);
   }
 
-  if (booking.post_confirm_ghl_sms_sent) {
+  if (booking.post_confirm_ghl_sms_sent && !dryRun) {
     return json({ ok: true, skipped: "already_sent" });
   }
   if (booking.status === "cancelled") {
     return json({ ok: true, skipped: "booking_cancelled" });
+  }
+  // The clean is already over, so a "thanks for booking" welcome is wrong.
+  // The DB trigger used to fire on the completed transition too, which is
+  // how a finished recurring job sent this text hours after the crew left.
+  if (booking.status === "completed" || booking.status === "no_show") {
+    return json({ ok: true, skipped: `service_already_done:${booking.status}` });
+  }
+  if (booking.service_date && String(booking.service_date) < new Date().toISOString().slice(0, 10)) {
+    return json({ ok: true, skipped: "service_date_past" });
   }
   // Deposit (or membership credit) must have cleared. VA bookings often
   // sit at status=confirmed with a pending deposit invoice — those must
@@ -106,6 +163,12 @@ serve(async (req) => {
   const paid = Boolean(booking.payment_received_at) || booking.uses_credit === true;
   if (!paid) {
     return json({ ok: true, skipped: "awaiting_deposit" });
+  }
+  // One welcome per customer, not per booking. Recurring occurrences and
+  // re-books are new rows with a fresh (false) latch, so without this a
+  // long-standing member gets greeted as a first-time customer every cycle.
+  if (await isReturningCustomer(supabase, booking)) {
+    return json({ ok: true, skipped: "returning_customer" });
   }
 
   const phone = normalizeE164(booking.phone);
@@ -163,6 +226,13 @@ serve(async (req) => {
   const referUrl = referralCode ? `${REFER_URL_BASE}${encodeURIComponent(referralCode)}` : "https://try.novaracleaning.com";
   const message = buildMessage(booking.first_name, ACCOUNT_URL, referUrl);
 
+  if (dryRun) {
+    return json({
+      ok: true, dryRun: true, wouldSend: true, phone, referralCode,
+      alreadyLatched: booking.post_confirm_ghl_sms_sent === true,
+    });
+  }
+
   const smsResult = await safeInvoke(supabase, "send-ghl-sms", {
     phone, email: booking.email || undefined,
     firstName: booking.first_name || undefined,
@@ -180,12 +250,14 @@ serve(async (req) => {
     .update({ post_confirm_ghl_sms_sent: true, post_confirm_ghl_sms_sent_at: new Date().toISOString() })
     .eq("id", bookingId);
 
-  await supabase.from("events").insert({
-    event_type: "sms.post_booking", booking_id: bookingId,
-    source: "send-post-booking-sms",
-    summary: `Post-booking SMS sent to ${booking.first_name || "customer"} (${phone})`,
-    data: { phone, referral_code: referralCode, message_length: message.length },
-  }).then(() => undefined).catch(() => undefined);
+  try {
+    await supabase.from("events").insert({
+      event_type: "sms.post_booking", booking_id: bookingId,
+      source: "send-post-booking-sms",
+      summary: `Post-booking SMS sent to ${booking.first_name || "customer"} (${phone})`,
+      data: { phone, referral_code: referralCode, message_length: message.length },
+    });
+  } catch { /* audit trail is best-effort */ }
 
   return json({ ok: true, sent: true, phone, referralCode });
 });
