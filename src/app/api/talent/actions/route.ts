@@ -5,6 +5,7 @@
 //
 //   { action: "advance_screening", applicantId }
 //   { action: "reject",            applicantId, reason }
+//   { action: "reinstate",         applicantId, targetStage? }  ← rejected → onboarding (default) / screening / applicant
 //   { action: "launch_onboarding", applicantId }   ← email + SMS via existing channels
 //   { action: "resend_onboarding", applicantId }   ← one-click nudge for stalled onboarding
 //   { action: "activate",          applicantId }   ← gates: agreement signed + payout setup
@@ -41,6 +42,7 @@ interface ApplicantRow {
   stage: string;
   cleaner_id: string | null;
   onboarding_launched_at: string | null;
+  rejection_reason?: string | null;
 }
 
 interface CleanerRow {
@@ -126,7 +128,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: e.message }, { status: e.status || 401 });
   }
 
-  let body: { action?: string; applicantId?: string; reason?: string };
+  let body: { action?: string; applicantId?: string; reason?: string; targetStage?: string };
   try {
     body = await req.json();
   } catch {
@@ -142,7 +144,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { data: applicantData, error: aErr } = await supabase
     .from("cleaner_applicants")
     .select(
-      "id, email, phone, full_name, first_name, last_name, zip_code, state, stage, cleaner_id, onboarding_launched_at",
+      "id, email, phone, full_name, first_name, last_name, zip_code, state, stage, cleaner_id, onboarding_launched_at, rejection_reason",
     )
     .eq("id", applicantId)
     .maybeSingle();
@@ -189,6 +191,69 @@ export async function POST(req: Request): Promise<NextResponse> {
           data: { applicant_id: applicantId, from: applicant.stage, to: "rejected", reason },
         });
         return NextResponse.json({ ok: true, stage: "rejected" });
+      }
+
+      case "reinstate": {
+        // Bring a rejected (or withdrawn) applicant back into the pipeline.
+        // Default target is onboarding when they already had a launch / linked
+        // cleaner; otherwise screening. Explicit targetStage wins when valid.
+        if (applicant.stage !== "rejected" && applicant.stage !== "withdrawn") {
+          return NextResponse.json(
+            { error: `Can only reinstate from rejected/withdrawn (currently ${applicant.stage}).` },
+            { status: 409 },
+          );
+        }
+        const ALLOWED = new Set(["applicant", "screening", "hold", "onboarding"]);
+        const requested = String(body.targetStage || "").trim().toLowerCase();
+        const inferred =
+          applicant.onboarding_launched_at || applicant.cleaner_id ? "onboarding" : "screening";
+        const target = ALLOWED.has(requested) ? requested : inferred;
+        const previousRejection = applicant.rejection_reason || null;
+
+        await setStage(target, {
+          rejection_reason: null,
+          ...(target !== "hold"
+            ? { hold_pending: null, hold_follow_up_at: null, hold_reminder_sent_at: null }
+            : {}),
+        });
+
+        // If they already have a linked cleaner left inactive, nudge it back
+        // to pending so onboarding can resume.
+        if (applicant.cleaner_id && (target === "onboarding" || target === "screening")) {
+          const { data: c } = await supabase
+            .from("cleaners")
+            .select("id, status")
+            .eq("id", applicant.cleaner_id)
+            .maybeSingle();
+          const st = String(c?.status || "").toLowerCase();
+          if (c && (st === "inactive" || st === "pending")) {
+            await supabase
+              .from("cleaners")
+              .update({
+                status: "pending",
+                approved: false,
+                available_for_bookings: false,
+                deactivated_at: null,
+                deactivation_reason: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", c.id);
+          }
+        }
+
+        await logEvent(supabase, {
+          type: "applicant.reinstated",
+          summary: `${who} reinstated to ${target} by ${principal.email}` +
+            (previousRejection ? ` (was rejected: ${previousRejection})` : ""),
+          cleanerId: applicant.cleaner_id,
+          data: {
+            applicant_id: applicantId,
+            from: applicant.stage,
+            to: target,
+            previous_rejection_reason: previousRejection,
+          },
+        });
+        return NextResponse.json({ ok: true, stage: target });
       }
 
       case "launch_onboarding":

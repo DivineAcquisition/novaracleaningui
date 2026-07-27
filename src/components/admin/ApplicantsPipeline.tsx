@@ -30,6 +30,7 @@ import {
   RiCloseCircleLine,
   RiTimeLine,
   RiLoader4Line,
+  RiArrowGoBackLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -635,6 +636,46 @@ export default function ApplicantsPipeline() {
                       <span className="font-medium">Rejected: </span>
                       {selected.rejection_reason}
                     </p>
+                  </>
+                )}
+
+                {(selected.stage === "rejected" || selected.stage === "withdrawn") && (
+                  <>
+                    <Separator />
+                    <section className="space-y-2">
+                      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Reinstate
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Move them back into the pipeline. Defaults to onboarding if they already
+                        had a contractor record or onboarding launch; otherwise screening.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-violet-700 hover:bg-violet-800 text-white"
+                          disabled={actioning}
+                          onClick={async () => {
+                            const ok = await runAction("reinstate", { targetStage: "onboarding" });
+                            if (ok) toast.success("Reinstated to onboarding.");
+                          }}
+                        >
+                          <RiArrowGoBackLine className="w-4 h-4 mr-1.5" />
+                          Reinstate to onboarding
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actioning}
+                          onClick={async () => {
+                            const ok = await runAction("reinstate", { targetStage: "screening" });
+                            if (ok) toast.success("Reinstated to screening.");
+                          }}
+                        >
+                          Reinstate to screening
+                        </Button>
+                      </div>
+                    </section>
                   </>
                 )}
 
