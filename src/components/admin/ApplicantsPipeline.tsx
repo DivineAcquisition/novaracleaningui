@@ -796,6 +796,45 @@ export default function ApplicantsPipeline() {
                         Re-send onboarding
                       </Button>
                     )}
+                    {selected.stage === "onboarding" &&
+                      selected.cleaner_id &&
+                      !selectedCleaner?.ob_agreement_signed && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-violet-200 text-violet-800 bg-violet-50 hover:bg-violet-100"
+                        disabled={actioning}
+                        onClick={async () => {
+                          setActioning(true);
+                          try {
+                            const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
+                              body: { action: "send_agreement", cleanerId: selected.cleaner_id },
+                            });
+                            if (error) throw error;
+                            if ((data as { error?: string })?.error) {
+                              throw new Error((data as { error?: string }).error);
+                            }
+                            const d = data as { emailed?: boolean; smsSent?: boolean };
+                            const parts = [
+                              d.emailed ? "email" : null,
+                              d.smsSent ? "SMS" : null,
+                            ].filter(Boolean);
+                            toast.success(
+                              parts.length
+                                ? `Agreement link sent via ${parts.join(" + ")}`
+                                : "Agreement link sent",
+                            );
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Failed to send agreement link");
+                          } finally {
+                            setActioning(false);
+                          }
+                        }}
+                      >
+                        <RiFileTextLine className="w-4 h-4 mr-1.5" />
+                        Send agreement link
+                      </Button>
+                    )}
                     {(selected.stage === "onboarding" ||
                       effectiveStage(selected, selectedCleaner) === "agreement_signed") && (
                       <Button

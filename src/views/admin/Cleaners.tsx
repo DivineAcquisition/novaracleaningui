@@ -112,6 +112,8 @@ interface CleanerRow {
   onboarding_complete: boolean | null;
   phone_verified: boolean | null;
   ob_payouts_setup: boolean | null;
+  ob_agreement_signed?: boolean | null;
+  ob_agreement_signed_at?: string | null;
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
   home_address: string | null;
@@ -195,7 +197,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -279,7 +281,8 @@ export default function AdminCleaners() {
       | "flag"
       | "update_compliance"
       | "set_status"
-      | "advance_pay_tier",
+      | "advance_pay_tier"
+      | "send_agreement",
     extra: Record<string, unknown> = {},
   ) => {
     if (!selected) return;
@@ -302,6 +305,17 @@ export default function AdminCleaners() {
         toast.success(
           `Promoted to ${tier} · ${d.toPercentage ?? "—"}%` +
             (d.emailSent ? " — email sent" : " — email not sent (no address)"),
+        );
+      } else if (action === "send_agreement") {
+        const d = data as { emailed?: boolean; smsSent?: boolean };
+        const parts = [
+          d.emailed ? "email" : null,
+          d.smsSent ? "SMS" : null,
+        ].filter(Boolean);
+        toast.success(
+          parts.length
+            ? `Agreement link sent via ${parts.join(" + ")}`
+            : "Agreement link send attempted",
         );
       } else {
         toast.success(`${action} applied`);
@@ -611,7 +625,8 @@ function CleanerSheet({
       | "flag"
       | "update_compliance"
       | "set_status"
-      | "advance_pay_tier",
+      | "advance_pay_tier"
+      | "send_agreement",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -665,7 +680,11 @@ function CleanerSheet({
                   <CleanerJobsBlock cleaner={cleaner} onChanged={onRefresh} />
                 </TabsContent>
                 <TabsContent value="onboarding" className="pt-3">
-                  <OnboardingChecklist cleaner={cleaner} />
+                  <OnboardingChecklist
+                    cleaner={cleaner}
+                    onSendAgreement={() => onAction("send_agreement")}
+                    actioning={actioning}
+                  />
                 </TabsContent>
                 <TabsContent value="performance" className="pt-3">
                   <PerformanceBlock cleaner={cleaner} onRefresh={onRefresh} />
@@ -1063,20 +1082,38 @@ function ContactSection({ cleaner }: { cleaner: CleanerRow }) {
   );
 }
 
-const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string }> = [
+const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?: (c: CleanerRow) => string | null }> = [
   { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
+  {
+    done: (c) => Boolean(c.ob_agreement_signed),
+    label: "Contractor agreement signed",
+    detail: (c) =>
+      c.ob_agreement_signed_at
+        ? `Signed ${new Date(c.ob_agreement_signed_at).toLocaleDateString()}`
+        : null,
+  },
   { done: stripeOnboardingDone, label: "Stripe payouts connected" },
 ];
 
-function OnboardingChecklist({ cleaner }: { cleaner: CleanerRow }) {
+function OnboardingChecklist({
+  cleaner,
+  onSendAgreement,
+  actioning,
+}: {
+  cleaner: CleanerRow;
+  onSendAgreement: () => void;
+  actioning: boolean;
+}) {
   const introReady =
     Boolean(cleaner.phone_verified) && stripeOnboardingDone(cleaner);
+  const agreementSigned = Boolean(cleaner.ob_agreement_signed);
 
   return (
     <div className="space-y-4">
       <ul className="space-y-1.5">
         {OB_STEPS.map((s) => {
           const done = s.done(cleaner);
+          const detail = s.detail?.(cleaner);
           return (
             <li
               key={s.label}
@@ -1090,7 +1127,12 @@ function OnboardingChecklist({ cleaner }: { cleaner: CleanerRow }) {
               ) : (
                 <RiCircleLine className="w-4 h-4 text-slate-400 shrink-0" />
               )}
-              <span>{s.label}</span>
+              <span className="flex-1 min-w-0">
+                {s.label}
+                {detail ? (
+                  <span className="block text-[11px] text-slate-500 font-normal">{detail}</span>
+                ) : null}
+              </span>
             </li>
           );
         })}
@@ -1099,6 +1141,38 @@ function OnboardingChecklist({ cleaner }: { cleaner: CleanerRow }) {
           {cleaner.onboarding_complete ? " · DB onboarding_complete: yes" : ""}
         </li>
       </ul>
+
+      {!agreementSigned && cleaner.status !== "terminated" ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 space-y-2">
+          <p className="text-sm font-medium text-amber-950">Agreement not signed yet</p>
+          <p className="text-xs text-amber-800">
+            Sends email + SMS with a direct link to the contractor agreement signing page.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={actioning || (!cleaner.email && !cleaner.phone)}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Send the agreement signing link to ${cleaner.first_name || "this cleaner"} via email/SMS?`,
+                )
+              ) {
+                return;
+              }
+              onSendAgreement();
+            }}
+            className="bg-violet-700 hover:bg-violet-800 text-white"
+          >
+            {actioning ? (
+              <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
+            )}
+            Send agreement link
+          </Button>
+        </div>
+      ) : null}
 
       <IntroProfileSection cleaner={cleaner} />
     </div>
@@ -1402,7 +1476,8 @@ function ActionsBlock({
       | "flag"
       | "update_compliance"
       | "set_status"
-      | "advance_pay_tier",
+      | "advance_pay_tier"
+      | "send_agreement",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;

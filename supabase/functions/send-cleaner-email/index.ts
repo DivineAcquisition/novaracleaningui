@@ -142,6 +142,35 @@ serve(async (req) => {
         break;
       }
 
+      case "agreement_request": {
+        const first = data.firstName || "there";
+        const agreementUrl = data.agreementUrl || "https://contractor.novaracleaning.com/cleaner/onboarding";
+        const loginUrl = data.loginUrl || "https://contractor.novaracleaning.com/cleaner/auth";
+        subject = "Please sign your Novara Cleaning contractor agreement";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Your contractor agreement is ready</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              Please sign your Independent Contractor Agreement so we can finish activating your Novara Cleaning account.
+              It only takes a couple of minutes.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${agreementUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Sign your agreement
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">
+              If you're asked to log in first, use
+              <a href="${loginUrl}" style="color:#7c3aed">${loginUrl.replace(/^https?:\/\//, "")}</a>
+              with the email on your invite.
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown email type: ${type}`);
     }

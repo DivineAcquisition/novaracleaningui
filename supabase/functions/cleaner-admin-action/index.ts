@@ -721,6 +721,112 @@ serve(async (req) => {
         });
       }
 
+      // ─── SEND AGREEMENT LINK ─────────────────────────────────────────
+      // Email + SMS the contractor onboarding/agreement page when they
+      // haven't signed the ICA yet. Link goes straight to
+      // /cleaner/onboarding (auth-gated signing wizard).
+      case "send_agreement": {
+        if (cleaner.ob_agreement_signed === true) {
+          return json({
+            error: "Agreement already signed for this cleaner.",
+            code: "ALREADY_SIGNED",
+            signedAt: cleaner.ob_agreement_signed_at || null,
+          }, 409);
+        }
+        const force = Boolean(body.force);
+        if (cleaner.status === "terminated" && !force) {
+          return json({ error: "Cannot send agreement to a terminated cleaner." }, 409);
+        }
+
+        const AGREEMENT_URL = "https://contractor.novaracleaning.com/cleaner/onboarding";
+        const AUTH_URL = "https://contractor.novaracleaning.com/cleaner/auth";
+        const firstName = String(cleaner.first_name || "").trim() || "there";
+        const email = String(cleaner.email || "").trim();
+        const phone = String(cleaner.phone || "").trim();
+
+        if (!email && !phone) {
+          return json({ error: "Cleaner has no email or phone on file." }, 400);
+        }
+
+        let emailed = false;
+        let smsSent = false;
+
+        if (email && !email.endsWith("@pending.novara")) {
+          try {
+            const { error: mailErr } = await adminClient.functions.invoke("send-cleaner-email", {
+              body: {
+                type: "agreement_request",
+                email,
+                data: {
+                  firstName,
+                  lastName: cleaner.last_name || "",
+                  email,
+                  agreementUrl: AGREEMENT_URL,
+                  loginUrl: AUTH_URL,
+                },
+              },
+            });
+            emailed = !mailErr;
+            if (mailErr) {
+              console.warn("[cleaner-admin-action] agreement email failed", mailErr);
+            }
+          } catch (mailCatch) {
+            console.warn(
+              "[cleaner-admin-action] agreement email failed",
+              mailCatch instanceof Error ? mailCatch.message : String(mailCatch),
+            );
+          }
+        }
+
+        if (phone) {
+          const message =
+            `Hi ${firstName}! Novara Cleaning — please sign your contractor agreement so we can finish activating you: ${AGREEMENT_URL} ` +
+            `(Log in at ${AUTH_URL} if needed.) Questions? Just reply.`;
+          try {
+            const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
+              body: {
+                phone,
+                email: email || undefined,
+                firstName,
+                message,
+                type: "agreement_request",
+              },
+            });
+            smsSent = !smsErr && !(smsRes as { error?: string })?.error;
+            if (!smsSent) {
+              const { error: telnyxErr } = await adminClient.functions.invoke("send-sms-notification", {
+                body: { toPhone: phone, message, type: "confirmation" },
+              });
+              smsSent = !telnyxErr;
+            }
+          } catch (smsCatch) {
+            console.warn(
+              "[cleaner-admin-action] agreement SMS failed",
+              smsCatch instanceof Error ? smsCatch.message : String(smsCatch),
+            );
+          }
+        }
+
+        if (!emailed && !smsSent) {
+          return json({ error: "Could not send email or SMS. Check contact info and try again." }, 502);
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.agreement_link_sent",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary: `Agreement link sent to ${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
+          data: {
+            by: callerId,
+            emailed,
+            sms_sent: smsSent,
+            agreement_url: AGREEMENT_URL,
+          },
+        }).then(() => undefined, () => undefined);
+
+        return json({ ok: true, emailed, smsSent, agreementUrl: AGREEMENT_URL });
+      }
+
       default:
         return json({ error: `unknown action: ${action}` }, 400);
     }
