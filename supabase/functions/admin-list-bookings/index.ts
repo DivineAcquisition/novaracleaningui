@@ -69,7 +69,7 @@ async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: stri
 
 // Only columns that exist on public.bookings (service_duration is not a DB column).
 const SELECT_COLS =
-  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, add_ons, membership_plan, hosted_invoice_url";
+  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, add_ons, membership_plan, hosted_invoice_url, suppress_review_request";
 
 function matchesSearch(row: Record<string, unknown>, term: string): boolean {
   const q = term.toLowerCase();
@@ -113,36 +113,39 @@ serve(async (req) => {
     const dateRange = String(body?.dateRange || "all").toLowerCase();
     const limit = Math.min(Math.max(Number(body?.limit) || 1000, 1), 2000);
 
-    let q = admin.from("bookings").select(SELECT_COLS, { count: "exact" });
+    const buildQuery = (cols: string) => {
+      let q = admin.from("bookings").select(cols, { count: "exact" });
+      if (status !== "all") q = q.eq("status", status);
+      const today = localYmd();
+      if (dateRange === "upcoming") {
+        q = q.or(`service_date.gte.${today},service_date.is.null`);
+      } else if (dateRange === "next_14") {
+        const end = new Date();
+        end.setDate(end.getDate() + 14);
+        q = q.gte("service_date", today).lte("service_date", localYmd(end));
+      } else if (dateRange === "this_week") {
+        const { from, to } = thisWeekServiceRange();
+        q = q.gte("service_date", from).lte("service_date", to);
+      } else if (dateRange === "past_30") {
+        const past = new Date();
+        past.setDate(past.getDate() - 30);
+        q = q.gte("service_date", localYmd(past));
+      } else if (dateRange === "last_7_created") {
+        const past = new Date();
+        past.setDate(past.getDate() - 7);
+        q = q.gte("created_at", past.toISOString());
+      }
+      return q
+        .order("service_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(limit);
+    };
 
-    if (status !== "all") {
-      q = q.eq("status", status);
+    let { data, error, count } = await buildQuery(SELECT_COLS);
+    if (error && /suppress_review_request/i.test(error.message || "")) {
+      console.warn("[admin-list-bookings] suppress_review_request missing — legacy select");
+      ({ data, error, count } = await buildQuery(SELECT_COLS_LEGACY));
     }
-
-    const today = localYmd();
-    if (dateRange === "upcoming") {
-      q = q.or(`service_date.gte.${today},service_date.is.null`);
-    } else if (dateRange === "next_14") {
-      const end = new Date();
-      end.setDate(end.getDate() + 14);
-      q = q.gte("service_date", today).lte("service_date", localYmd(end));
-    } else if (dateRange === "this_week") {
-      const { from, to } = thisWeekServiceRange();
-      q = q.gte("service_date", from).lte("service_date", to);
-    } else if (dateRange === "past_30") {
-      const past = new Date();
-      past.setDate(past.getDate() - 30);
-      q = q.gte("service_date", localYmd(past));
-    } else if (dateRange === "last_7_created") {
-      const past = new Date();
-      past.setDate(past.getDate() - 7);
-      q = q.gte("created_at", past.toISOString());
-    }
-
-    const { data, error, count } = await q
-      .order("service_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(limit);
 
     if (error) {
       console.error("[admin-list-bookings] query error", error);

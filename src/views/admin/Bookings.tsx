@@ -46,6 +46,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { DelayBookingDialog } from "@/components/booking/DelayBookingDialog";
 import { ScopeAdjustmentDialog } from "@/components/booking/ScopeAdjustmentDialog";
@@ -91,6 +92,8 @@ interface BookingRow {
   add_ons?: string[] | null;
   membership_plan?: string | null;
   hosted_invoice_url?: string | null;
+  /** When true, skip post-job feedback / review SMS + email for this booking. */
+  suppress_review_request?: boolean | null;
 }
 
 interface ScopeAdjustmentRow {
@@ -776,6 +779,8 @@ function BookingSheet({
   onMutated: () => void;
 }) {
   const [working, setWorking] = useState<string | null>(null);
+  const [suppressReview, setSuppressReview] = useState(false);
+  const [suppressSaving, setSuppressSaving] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [delayOpen, setDelayOpen] = useState(false);
   const [addonOpen, setAddonOpen] = useState(false);
@@ -811,6 +816,7 @@ function BookingSheet({
   useEffect(() => {
     if (!booking) return;
     setAdjustOpen(false);
+    setSuppressReview(Boolean(booking.suppress_review_request));
     setCreditAmount("");
     setCreditSource("admin_grant");
     setCreditReason("");
@@ -828,15 +834,18 @@ function BookingSheet({
     setSvcAddOns([]);
     setAddOnPrices({});
     setTotalOverride("");
-    // add_ons isn't in the list payload — pull the current ones so the
-    // adjust form starts from the real selection on the booking.
+    // add_ons + suppress_review_request — refresh from the row so the sheet
+    // stays correct even if the list payload is stale / missing a column.
     void (async () => {
       const { data } = await (supabase.from as any)("bookings")
-        .select("add_ons")
+        .select("add_ons, suppress_review_request")
         .eq("id", booking.id)
         .maybeSingle();
       const current = Array.isArray(data?.add_ons) ? (data.add_ons as string[]) : [];
       setSvcAddOns(current);
+      if (data && typeof data.suppress_review_request === "boolean") {
+        setSuppressReview(data.suppress_review_request);
+      }
       const seeded: Record<string, string> = {};
       for (const id of current) {
         const def = (ADD_ONS as Record<string, { price: number }>)[id]?.price;
@@ -1243,6 +1252,47 @@ function BookingSheet({
                     ? currentAddOns.map((a) => ADD_ONS[a as AddOnId]?.label || a).join(", ")
                     : "—"}
                 </span>
+              </CardContent>
+            </Card>
+
+            {/* Per-booking review / feedback request opt-out */}
+            <Card className="border-slate-200">
+              <CardContent className="py-4 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">Don&apos;t send review request</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Skips the post-job feedback SMS/email and any follow-up nudges for this booking only.
+                  </p>
+                </div>
+                <Switch
+                  checked={suppressReview}
+                  disabled={suppressSaving || !booking}
+                  onCheckedChange={(checked) => {
+                    if (!booking) return;
+                    const prev = suppressReview;
+                    setSuppressReview(checked);
+                    setSuppressSaving(true);
+                    void (async () => {
+                      try {
+                        const { error } = await (supabase.from as any)("bookings")
+                          .update({ suppress_review_request: checked })
+                          .eq("id", booking.id);
+                        if (error) throw error;
+                        toast.success(
+                          checked
+                            ? "Review request disabled for this booking"
+                            : "Review request re-enabled for this booking",
+                        );
+                        onMutated();
+                      } catch (e) {
+                        setSuppressReview(prev);
+                        toast.error(e instanceof Error ? e.message : "Could not update review setting");
+                      } finally {
+                        setSuppressSaving(false);
+                      }
+                    })();
+                  }}
+                />
               </CardContent>
             </Card>
 

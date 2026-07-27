@@ -664,14 +664,19 @@ serve(async (req) => {
     // immediately (single-purpose, job-specific, expiring). The SMS itself
     // goes out via the send-rating-reminders sweep ~2h after completion so
     // it doesn't stack on top of the completion texts above. Non-blocking.
-    try {
-      const { ensureJobFeedback, feedbackUrl } = await import("../_shared/job-feedback-offer.ts");
-      const fb = await ensureJobFeedback(supabase, bookingId);
-      logStep("Feedback link minted", { feedbackUrl: feedbackUrl(fb.token) });
-    } catch (feedbackErr) {
-      logStep("Feedback link mint failed (non-blocking)", {
-        error: feedbackErr instanceof Error ? feedbackErr.message : String(feedbackErr),
-      });
+    // Skip entirely when admin disabled review requests on this booking.
+    if (booking.suppress_review_request === true) {
+      logStep("Feedback link skipped — suppress_review_request");
+    } else {
+      try {
+        const { ensureJobFeedback, feedbackUrl } = await import("../_shared/job-feedback-offer.ts");
+        const fb = await ensureJobFeedback(supabase, bookingId);
+        logStep("Feedback link minted", { feedbackUrl: feedbackUrl(fb.token) });
+      } catch (feedbackErr) {
+        logStep("Feedback link mint failed (non-blocking)", {
+          error: feedbackErr instanceof Error ? feedbackErr.message : String(feedbackErr),
+        });
+      }
     }
 
     // Trigger Zapier webhook for completed booking — this fans out to

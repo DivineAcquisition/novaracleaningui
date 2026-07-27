@@ -358,6 +358,20 @@ export async function sendJobFeedbackOffer(
   supabase: SupabaseClient,
   bookingId: string,
 ): Promise<{ feedbackUrl: string; token: string; smsSent: boolean; emailSent: boolean }> {
+  // Per-booking admin opt-out (bookings.suppress_review_request).
+  try {
+    const { data: b } = await supabase
+      .from("bookings")
+      .select("suppress_review_request")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (b?.suppress_review_request === true) {
+      return { feedbackUrl: "", token: "", smsSent: false, emailSent: false };
+    }
+  } catch {
+    /* proceed — sweep also filters */
+  }
+
   const row = await ensureJobFeedback(supabase, bookingId);
   const url = feedbackUrl(row.token);
   const ctx = await feedbackContext(supabase, bookingId);
@@ -397,6 +411,19 @@ export async function sendFeedbackReminder(
   bookingId: string,
   token: string,
 ): Promise<{ smsSent: boolean; emailSent: boolean }> {
+  try {
+    const { data: b } = await supabase
+      .from("bookings")
+      .select("suppress_review_request")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (b?.suppress_review_request === true) {
+      return { smsSent: false, emailSent: false };
+    }
+  } catch {
+    /* proceed — sweep also filters */
+  }
+
   const url = feedbackUrl(token);
   const ctx = await feedbackContext(supabase, bookingId);
 

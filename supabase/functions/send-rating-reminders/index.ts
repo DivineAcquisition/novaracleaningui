@@ -38,19 +38,43 @@ async function firstSendSweep(supabase: SB, now: number) {
 
   logStep("Phase A — first-send sweep", { eligibleBefore, eligibleAfter });
 
-  const { data: bookings, error: fetchError } = await supabase
-    .from("bookings")
-    .select("id, phone, rating_submitted, rating_reminder_sent_at")
-    .eq("status", "completed")
-    .is("rating_reminder_sent_at", null)
-    .eq("rating_submitted", false)
-    .not("phone", "is", null)
-    .not("cleaner_id", "is", null)
-    .lte("completed_at", eligibleBefore)
-    .gte("completed_at", eligibleAfter)
-    .limit(50);
-
-  if (fetchError) throw fetchError;
+  // Prefer filtering suppress_review_request in SQL. If the column isn't
+  // migrated yet, fall back so the cron keeps working.
+  let bookings: Array<Record<string, unknown>> | null = null;
+  {
+    const withFlag = await supabase
+      .from("bookings")
+      .select("id, phone, rating_submitted, rating_reminder_sent_at, suppress_review_request")
+      .eq("status", "completed")
+      .is("rating_reminder_sent_at", null)
+      .eq("rating_submitted", false)
+      .eq("suppress_review_request", false)
+      .not("phone", "is", null)
+      .not("cleaner_id", "is", null)
+      .lte("completed_at", eligibleBefore)
+      .gte("completed_at", eligibleAfter)
+      .limit(50);
+    if (withFlag.error && /suppress_review_request/i.test(withFlag.error.message || "")) {
+      logStep("suppress_review_request column missing — falling back");
+      const fallback = await supabase
+        .from("bookings")
+        .select("id, phone, rating_submitted, rating_reminder_sent_at")
+        .eq("status", "completed")
+        .is("rating_reminder_sent_at", null)
+        .eq("rating_submitted", false)
+        .not("phone", "is", null)
+        .not("cleaner_id", "is", null)
+        .lte("completed_at", eligibleBefore)
+        .gte("completed_at", eligibleAfter)
+        .limit(50);
+      if (fallback.error) throw fallback.error;
+      bookings = fallback.data;
+    } else if (withFlag.error) {
+      throw withFlag.error;
+    } else {
+      bookings = withFlag.data;
+    }
+  }
 
   const results = { attempted: 0, sent: 0, skipped: 0, failed: 0 };
 
@@ -144,7 +168,7 @@ async function followUpSweep(supabase: SB, now: number) {
     .from("job_feedback")
     .select(
       "id, token, reminder_count, sent_at, booking_id, " +
-        "bookings(phone, status, rating_submitted)",
+        "bookings(phone, status, rating_submitted, suppress_review_request)",
     )
     .eq("status", "pending")
     .is("opened_at", null)
@@ -162,10 +186,12 @@ async function followUpSweep(supabase: SB, now: number) {
 
     const booking = (row as { bookings?: Record<string, unknown> | null }).bookings || null;
     // Only nudge live, still-unrated jobs with a phone on file.
+    // suppress_review_request stops follow-ups even if the first link already went out.
     if (
       !booking ||
       booking.status !== "completed" ||
       booking.rating_submitted === true ||
+      booking.suppress_review_request === true ||
       !booking.phone
     ) {
       results.skipped++;
