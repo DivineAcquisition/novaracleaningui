@@ -640,11 +640,11 @@ serve(async (req) => {
             error: "Cleaner is already at the highest pay tier (Elite · 45%).",
             code: "ALREADY_MAX_TIER",
             payTier: currentTier,
-            payPercentage: TIER_PCT[currentTier] ?? Number(cleaner.pay_percentage) || 45,
+            payPercentage: (TIER_PCT[currentTier] ?? Number(cleaner.pay_percentage)) || 45,
           }, 409);
         }
         const nextTier = TIER_ORDER[idx + 1];
-        const prevPct = TIER_PCT[currentTier] ?? Number(cleaner.pay_percentage) || 35;
+        const prevPct = (TIER_PCT[currentTier] ?? Number(cleaner.pay_percentage)) || 35;
         const nextPct = TIER_PCT[nextTier];
         const note = String(body.note || body.reason || "").trim() || null;
 
