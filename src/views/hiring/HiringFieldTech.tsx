@@ -2,8 +2,9 @@
 
 // ─── hiring.novaracleaning.com/hiring/field-tech ────────────────────────────
 //
-// Primary Field Tech role page. Also hosts Specialized Contractors + Commercial
-// Cleaner as active evergreen lists (applicants selected when needed).
+// Field Tech role page. Hosts the former /cleaner/role intro (must-watch video
+// + role copy + supply checklist) before apply. Specialized Contractors +
+// Commercial Cleaner remain evergreen lists (selected when needed).
 
 import Link from "next/link";
 import { useMemo } from "react";
@@ -12,9 +13,15 @@ import {
   RiArrowLeftLine,
   RiArrowRightLine,
   RiCheckboxCircleFill,
+  RiDownload2Line,
+  RiFileTextLine,
   RiMapPin2Line,
+  RiMoneyDollarCircleLine,
+  RiCalendarScheduleLine,
+  RiShieldCheckLine,
 } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
+import { WistiaPlayer } from "@/components/cleaner/WistiaPlayer";
 import { roleById, type HiringRoleId } from "@/lib/hiring/roles";
 import {
   EvergreenBadge,
@@ -25,9 +32,42 @@ import {
 } from "@/components/hiring/HiringChrome";
 import { HiringApplyForm } from "@/components/hiring/HiringApplyForm";
 
+const SUPPLY_CHECKLIST_PDF = "/NovaraCleaning_Supply_Checklist_dd14.pdf";
+
 const field = roleById("field-tech");
 const specialized = roleById("specialized-contractors");
 const commercial = roleById("commercial-cleaner");
+
+const HIGHLIGHTS = [
+  {
+    icon: RiMoneyDollarCircleLine,
+    title: "Revenue-share pay",
+    body: "Earn a percentage of every job's revenue — 35% to start, rising to 45% as you prove yourself. The more jobs you ace, the more you make per clean.",
+  },
+  {
+    icon: RiCalendarScheduleLine,
+    title: "You set your availability",
+    body: "Accept the jobs that fit your schedule. We text you offers nearby; tap accept and the address + details unlock in your dashboard.",
+  },
+  {
+    icon: RiMapPin2Line,
+    title: "Work in your area",
+    body: "We route jobs based on your home base and service ZIPs, so you spend less time driving and more time earning.",
+  },
+  {
+    icon: RiShieldCheckLine,
+    title: "Independent & in control",
+    body: "You're an independent contractor: you bring your own supplies and run your own clean, backed by Novara's scheduling, payments, and support.",
+  },
+];
+
+const EXPECTATIONS = [
+  "Show up on time and check in through the app when you arrive.",
+  "Follow the job's cleaning checklist and our quality standards.",
+  "Bring your own supplies (see the checklist below).",
+  "Treat every home and customer with care and professionalism.",
+  "Upload before/after photos and mark the job complete when done.",
+];
 
 export default function HiringFieldTech() {
   const searchParams = useSearchParams();
@@ -41,7 +81,7 @@ export default function HiringFieldTech() {
     <HiringShell>
       <SEO
         title="Field Tech Role"
-        description="Join Novara Cleaning as a Field Tech independent contractor. Flexible DMV jobs, revenue-share pay, plus evergreen Specialized Contractor and Commercial Cleaner lists."
+        description="Join Novara Cleaning as a Field Tech independent contractor. Watch the role intro, then apply. Evergreen Specialized Contractor and Commercial Cleaner lists also open."
         canonical="https://hiring.novaracleaning.com/hiring/field-tech"
       />
       <HiringNav ctaHref="#apply" />
@@ -71,7 +111,9 @@ export default function HiringFieldTech() {
             {field.title}
           </h1>
           <p className="nv-hire-rise nv-hire-rise-d2 mt-4 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-            {field.summary}
+            Here&apos;s a quick look at what cleaning with Novara is all about —
+            how the work flows, how you get paid, and exactly what you&apos;ll
+            need to bring to your first job.
           </p>
           <div className="nv-hire-rise nv-hire-rise-d3 mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-slate-500">
             <span className="inline-flex items-center gap-1.5">
@@ -81,63 +123,98 @@ export default function HiringFieldTech() {
             <span>{field.type}</span>
             <span>{field.pay}</span>
           </div>
-          <div className="nv-hire-rise nv-hire-rise-d3 mt-8 flex flex-col gap-3 sm:flex-row">
-            <a
-              href="#apply"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full px-7 text-sm font-semibold uppercase tracking-[0.04em] text-white shadow-[0_14px_34px_-14px_rgba(92,15,254,0.7)] transition hover:opacity-95"
-              style={{ background: HIRING_GRADIENT }}
-            >
-              Apply now
-              <RiArrowRightLine className="h-4 w-4" />
-            </a>
-            <a
-              href="#evergreen"
-              className="inline-flex h-12 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Evergreen roles
-            </a>
-          </div>
         </div>
       </section>
 
       <main className="mx-auto max-w-6xl px-5 py-14 sm:px-6 sm:py-16">
         <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-          <div className="space-y-12">
+          <div className="space-y-10">
+            {/* Must-watch — before apply */}
+            <section className="space-y-3">
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <p className="font-bold uppercase tracking-wide text-amber-800">
+                  Must watch before you apply
+                </p>
+                <p className="mt-1 text-amber-900/90">
+                  Watch this short intro first — it covers the role, pay, and what you need to bring.
+                  Then submit your application below.
+                </p>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-sm">
+                <WistiaPlayer mediaId="9toazzorrp" aspect={1.6783216783216783} />
+              </div>
+              <p className="text-sm text-slate-500">A 2-minute intro to cleaning with Novara.</p>
+            </section>
+
             <section>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5C0FFE]">
-                Why Field Tech
+              <h2 className="font-jakarta text-2xl font-bold text-slate-900">What the role is</h2>
+              <p className="mt-2 text-slate-600">
+                You&apos;re an independent cleaning contractor. Novara brings you the customers,
+                scheduling, and payments — you bring the supplies and a great clean.
               </p>
-              <h2 className="mt-2 font-jakarta text-2xl font-bold text-slate-900 sm:text-3xl">
-                Flexible work. Real payouts. You’re in control.
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {HIGHLIGHTS.map((h) => (
+                  <div key={h.title} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5C0FFE]/10 text-[#5C0FFE]">
+                        <h.icon className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">{h.title}</p>
+                        <p className="mt-0.5 text-sm text-slate-600">{h.body}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+              <h2 className="font-jakarta text-lg font-bold text-slate-900">
+                What we expect on every job
               </h2>
-              <ul className="mt-6 space-y-3">
-                {field.highlights.map((item) => (
-                  <li key={item} className="flex gap-3 text-sm leading-relaxed text-slate-600 sm:text-[15px]">
-                    <RiCheckboxCircleFill className="mt-0.5 h-5 w-5 shrink-0 text-[#5C0FFE]" />
-                    <span>{item}</span>
+              <p className="mt-1 text-sm text-slate-500">
+                Simple standards that keep our customers happy and our cleaners booked.
+              </p>
+              <ul className="mt-4 space-y-2">
+                {EXPECTATIONS.map((e) => (
+                  <li key={e} className="flex items-start gap-2.5 text-sm text-slate-700">
+                    <RiCheckboxCircleFill className="mt-0.5 h-4 w-4 shrink-0 text-[#5C0FFE]" />
+                    <span>{e}</span>
                   </li>
                 ))}
               </ul>
             </section>
 
-            <section>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5C0FFE]">
-                What we expect
-              </p>
-              <h2 className="mt-2 font-jakarta text-2xl font-bold text-slate-900">
-                Show up sharp. Leave homes spotless.
-              </h2>
-              <ul className="mt-6 space-y-3">
-                {field.expectations.map((item) => (
-                  <li key={item} className="flex gap-3 text-sm leading-relaxed text-slate-600 sm:text-[15px]">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#8F7BFD]" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+            <section className="rounded-2xl border border-[#5C0FFE]/20 bg-[rgba(92,15,254,0.04)] p-5 sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: HIRING_GRADIENT }}>
+                  <RiFileTextLine className="h-6 w-6" />
+                </span>
+                <div className="flex-1">
+                  <h2 className="font-jakarta text-lg font-bold text-slate-900">
+                    Download the supply checklist
+                  </h2>
+                  <p className="mt-0.5 text-sm text-slate-600">
+                    As an independent contractor you provide your own supplies. This checklist covers
+                    everything you need before your first job.
+                  </p>
+                </div>
+                <a
+                  href={SUPPLY_CHECKLIST_PDF}
+                  download="Novara-Cleaning-Supply-Checklist.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold text-white"
+                  style={{ background: HIRING_GRADIENT }}
+                >
+                  <RiDownload2Line className="h-4 w-4" />
+                  Download PDF
+                </a>
+              </div>
             </section>
 
-            {/* Evergreen roles on the Field Tech page */}
+            {/* Evergreen roles */}
             <section id="evergreen" className="scroll-mt-24 space-y-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
@@ -147,9 +224,9 @@ export default function HiringFieldTech() {
                   Evergreen contractor lists
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  These roles stay open as an <strong className="font-semibold text-slate-800">active evergreen list</strong> —
-                  we review every applicant and select contractors when demand opens. Applying keeps
-                  you in consideration; it is not a standing daily roster.
+                  These roles stay open as an{" "}
+                  <strong className="font-semibold text-slate-800">active evergreen list</strong> —
+                  we review every applicant and select contractors when demand opens.
                 </p>
               </div>
 
@@ -174,14 +251,6 @@ export default function HiringFieldTech() {
                     <span>{role.type}</span>
                     <span>{role.pay}</span>
                   </div>
-                  <ul className="mt-4 space-y-2">
-                    {role.highlights.slice(0, 3).map((h) => (
-                      <li key={h} className="flex gap-2 text-sm text-slate-600">
-                        <RiCheckboxCircleFill className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                        <span>{h}</span>
-                      </li>
-                    ))}
-                  </ul>
                   <Link
                     href={`/hiring/field-tech?role=${role.id}#apply`}
                     className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#5C0FFE] hover:underline"
