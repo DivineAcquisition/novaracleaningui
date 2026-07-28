@@ -131,6 +131,7 @@ serve(async (req) => {
           name,
           serviceType: "Membership / Recurring Service",
           source: "membership_pay",
+          agreementType: "membership",
           agreed: {
             terms: true,
             disclaimer: true,

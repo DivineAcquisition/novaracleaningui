@@ -1,12 +1,13 @@
 // ─── store-service-agreement ────────────────────────────────────────────────
 //
-// Receives a customer's signed One-Time Service Agreement (generated in the
-// browser), stores the PDF in the private service-agreements bucket, records
-// the acceptance in public.service_agreements, and uploads a copy to Google
-// Drive (best-effort). Customer delivery of the agreement is handled by GHL.
+// Receives a customer's signed service / membership agreement (generated in
+// the browser), stores the PDF in the private service-agreements bucket,
+// records the acceptance in public.service_agreements, and uploads a copy to
+// Google Drive (best-effort). Customer delivery is handled by GHL.
 //
 // Body: {
 //   bookingId?, email, name, serviceType?, source?,
+//   agreementType?: "one_time_service" | "membership",
 //   agreed: { terms, disclaimer, refund, serviceAgreement },
 //   pdfBase64
 // }
@@ -137,6 +138,14 @@ serve(async (req) => {
     const source = String(body?.source || "checkout");
     const agreed = body?.agreed || {};
     const pdfBase64 = String(body?.pdfBase64 || "");
+    // Membership pay page must never land as one_time_service (DB default).
+    const rawType = String(body?.agreementType || "").trim().toLowerCase();
+    const agreementType =
+      rawType === "membership" || rawType === "membership_recurring"
+        ? "membership"
+        : source === "membership_pay"
+          ? "membership"
+          : "one_time_service";
 
     if (!email.includes("@")) return json({ error: "email required" }, 400);
     if (!pdfBase64) return json({ error: "pdfBase64 required" }, 400);
@@ -152,6 +161,7 @@ serve(async (req) => {
         booking_id: bookingId,
         customer_email: email,
         customer_name: name || null,
+        agreement_type: agreementType,
         agreed_terms: Boolean(agreed?.terms),
         agreed_disclaimer: Boolean(agreed?.disclaimer),
         agreed_refund: Boolean(agreed?.refund),
@@ -180,7 +190,7 @@ serve(async (req) => {
     }
 
     // Google Drive copy (best-effort).
-    const fileName = `Novara Service Agreement - ${name || email} - ${new Date().toISOString().slice(0, 10)}.pdf`;
+    const fileName = `Novara ${agreementType === "membership" ? "Membership" : "Service"} Agreement - ${name || email} - ${new Date().toISOString().slice(0, 10)}.pdf`;
     await uploadToDrive(bytes, fileName);
 
     // NOTE: the agreement is intentionally NOT emailed from here — delivery to
