@@ -64,7 +64,6 @@ interface Va {
   apployeMemberId: string | null;
   ghlUserId: string | null;
   workspaceUserId: string | null;
-  eodToken: string | null;
   eodLinkLastSentAt: string | null;
   discordWebhookUrl: string | null;
 }
@@ -1109,21 +1108,19 @@ function VaLinksSheet({
  * not a convenience.
  */
 function EodLinkPanel({ va, onChanged }: { va: Va; onChanged: () => Promise<void> }) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const [busy, setBusy] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
+  const [linkDate, setLinkDate] = useState(today);
 
-  const run = async (action: "send" | "rotate") => {
-    if (action === "rotate") {
-      const ok = window.confirm(
-        `Issue ${va.name} a new link? Their current one stops working immediately.`,
-      );
-      if (!ok) return;
-    }
+  const run = async (action: "send") => {
     setBusy(action);
-    const res = await callEodLink<{ url: string; emailed: boolean; discorded: boolean }>({
-      action,
-      vaId: va.id,
-    });
+    const res = await callEodLink<{
+      url: string;
+      emailed: boolean;
+      discorded: boolean;
+      expiresAt: string;
+    }>({ action, vaId: va.id, workDate: linkDate });
     setBusy(null);
     if (!res.ok) {
       toast.error(res.data.error || "Couldn't send the link.");
@@ -1133,9 +1130,7 @@ function EodLinkPanel({ va, onChanged }: { va: Va; onChanged: () => Promise<void
     const channels = [res.data.emailed ? "email" : null, res.data.discorded ? "Discord" : null]
       .filter(Boolean)
       .join(" and ");
-    toast.success(
-      action === "rotate" ? `New link issued and sent by ${channels}.` : `Link sent by ${channels}.`,
-    );
+    toast.success(`Link for ${linkDate} sent by ${channels}. Valid 24 hours.`);
     await onChanged();
   };
 
@@ -1151,10 +1146,29 @@ function EodLinkPanel({ va, onChanged }: { va: Va; onChanged: () => Promise<void
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-sm">Personal EOD link</Label>
+        <Label className="text-sm">EOD link</Label>
         <span className="text-[11px] text-slate-500">
-          {va.eodToken ? (lastSent ? `sent ${lastSent}` : "issued, not sent yet") : "not issued yet"}
+          {lastSent ? `last sent ${lastSent}` : "never sent"}
         </span>
+      </div>
+      <p className="mt-1 text-[11px] leading-snug text-slate-500">
+        One link per day, valid 24 hours. It opens that day only — a VA can&apos;t use it to file a
+        different date.
+      </p>
+      <div className="mt-2">
+        <Label className="text-[11px] text-slate-500">Day</Label>
+        <Input
+          type="date"
+          value={linkDate}
+          max={today}
+          onChange={(e) => setLinkDate(e.target.value)}
+          className="mt-1 h-8"
+        />
+        {linkDate !== today && (
+          <p className="mt-1 text-[11px] text-amber-700">
+            Backfilling {linkDate}. Recorded against your name — only admins can do this.
+          </p>
+        )}
       </div>
 
       {url && (
@@ -1179,19 +1193,13 @@ function EodLinkPanel({ va, onChanged }: { va: Va; onChanged: () => Promise<void
         <Button type="button" size="sm" variant="outline" onClick={() => run("send")} disabled={!!busy}>
           {busy === "send" && <RiLoader4Line className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
           <RiMailSendLine className="mr-1.5 h-3.5 w-3.5" />
-          {va.eodToken ? "Resend link" : "Create and send link"}
+          {linkDate === today ? "Send today's link" : `Send link for ${linkDate}`}
         </Button>
-        {va.eodToken && (
-          <Button type="button" size="sm" variant="ghost" onClick={() => run("rotate")} disabled={!!busy}>
-            {busy === "rotate" && <RiLoader4Line className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            Rotate
-          </Button>
-        )}
       </div>
 
       <p className="mt-2 text-[11px] leading-snug text-slate-500">
-        Goes to their email, and to their private Discord channel if one is set. Rotating revokes the
-        old link. Offboarding a VA disables it without rotating.
+        Goes to their email, and to their private Discord channel if one is set. Sending again for the
+        same day replaces the previous link. Offboarding a VA disables it immediately.
       </p>
     </div>
   );

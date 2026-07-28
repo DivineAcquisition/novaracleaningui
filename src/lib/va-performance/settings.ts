@@ -14,13 +14,18 @@ export interface EodSettings {
   cutoffLocalTime: string;
   /** Hours after the work date before the day locks to the VA. */
   lockAfterHours: number;
+  /** How long an issued EOD link stays valid. */
+  linkTtlHours: number;
 }
 
 export const DEFAULT_EOD_SETTINGS: EodSettings = {
   timezone: "America/New_York",
+  // A VA never picks a date: their link IS the date. This only bounds how far
+  // back an ADMIN may issue a link for.
   backdateDays: 1,
   cutoffLocalTime: "17:30",
   lockAfterHours: 36,
+  linkTtlHours: 24,
 };
 
 export interface ThresholdBand {
@@ -74,6 +79,7 @@ export async function getEodSettings(): Promise<EodSettings> {
     backdateDays: Math.min(14, num(raw.backdate_days, DEFAULT_EOD_SETTINGS.backdateDays)),
     cutoffLocalTime: /^\d{2}:\d{2}$/.test(cutoff) ? cutoff : DEFAULT_EOD_SETTINGS.cutoffLocalTime,
     lockAfterHours: num(raw.lock_after_hours, DEFAULT_EOD_SETTINGS.lockAfterHours),
+    linkTtlHours: Math.min(168, num(raw.link_ttl_hours, DEFAULT_EOD_SETTINGS.linkTtlHours)),
   };
 }
 

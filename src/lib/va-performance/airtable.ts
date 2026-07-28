@@ -11,6 +11,7 @@
 // sync updates in place and never duplicates.
 
 import {
+  getBaseId,
   createField,
   createLinkField,
   createTable,
@@ -47,7 +48,8 @@ async function resolveBaseId(): Promise<string | null> {
   const fromEnv = (process.env.AIRTABLE_TEAM_PERF_BASE_ID || "").trim();
   if (fromEnv) return fromEnv;
 
-  // The base may already exist from a previous run whose secret write failed.
+  // A separate base may already exist from a previous run whose secret write
+  // failed. Only reachable if the PAT has workspace scope.
   try {
     const bases = await listBases();
     const match = bases.find((b) => b.name === TEAM_PERF_BASE_NAME);
@@ -56,7 +58,7 @@ async function resolveBaseId(): Promise<string | null> {
       return match.id;
     }
   } catch {
-    /* the PAT may lack workspace scope — fall through to creation */
+    /* fall through */
   }
   return null;
 }
@@ -74,25 +76,25 @@ export async function ensureTeamPerformanceBase(): Promise<BaseHandle> {
 
   if (!baseId) {
     const workspaceId = (process.env.AIRTABLE_WORKSPACE_ID || "").trim();
-    if (!workspaceId) {
-      // The PAT already carries schema.bases:write, but Airtable's create-base
-      // endpoint needs a workspace and a base-scoped PAT can't enumerate one.
-      // It's the wsp… id in the Airtable URL: airtable.com/wspXXXXXXXXXXXX/…
-      throw new TeamPerfAirtableError(
-        `The "${TEAM_PERF_BASE_NAME}" base doesn't exist yet. Set AIRTABLE_WORKSPACE_ID in app_secrets — ` +
-          "it's the wsp… id in your Airtable URL — and this will create it. " +
-          "Alternatively, create the base by hand and store its id in AIRTABLE_TEAM_PERF_BASE_ID, " +
-          "or point AIRTABLE_TEAM_PERF_BASE_ID at an existing base to build the seven tables inside it.",
-      );
+    if (workspaceId) {
+      // A workspace id was supplied, so give Team Performance its own base.
+      const first = TEAM_PERF_TABLES[0];
+      const base = await createBase(workspaceId, TEAM_PERF_BASE_NAME, {
+        name: first.name,
+        description: first.description,
+        fields: first.fields,
+      });
+      baseId = base.id;
+      created = true;
+    } else {
+      // Default: build the tables inside the Client & Revenue Ops base, the
+      // same way every other Airtable integration here does (Contractors, QC
+      // Issues, VAs are all created in-place via the Meta API). Airtable's
+      // create-base endpoint needs a workspace id that a base-scoped PAT can't
+      // enumerate, and there is no reason to block on that — the tables and
+      // their links work identically in the existing base.
+      baseId = getBaseId();
     }
-    const first = TEAM_PERF_TABLES[0];
-    const base = await createBase(workspaceId, TEAM_PERF_BASE_NAME, {
-      name: first.name,
-      description: first.description,
-      fields: first.fields,
-    });
-    baseId = base.id;
-    created = true;
     await saveSecret("AIRTABLE_TEAM_PERF_BASE_ID", baseId);
   }
 
@@ -207,23 +209,22 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
   const vaTable = handle.tables.vas;
   const F = vaTable.fieldId;
 
+  // Only fields this layer owns — see the note on the VAs spec. Phone, Status,
+  // Pay Type and Notes belong to the onboarding sync and are left alone.
   const vaRecords: Fields[] = vas
     .filter((v) => v.email)
     .map((va) => ({
       [F["Email"]]: va.email,
       [F["Name"]]: va.name,
-      [F["Phone"]]: va.phone ?? undefined,
-      [F["Status"]]: titleCase(va.performanceStatus),
-      [F["Pay Type"]]: va.payType === "hourly" ? "Hourly" : "Monthly",
+      [F["Performance Status"]]: titleCase(va.performanceStatus),
       [F["Rate"]]: money(va.rateCents),
       [F["Start Date"]]: dateOnly(va.startDate),
       [F["Functions Assigned"]]: va.functionsAssigned.length
         ? va.functionsAssigned.map(titleCase)
         : undefined,
       [F["Apploye Member ID"]]: va.apployeMemberId ?? undefined,
-      [F["GHL User ID"]]: va.ghlUserId ?? undefined,
       [F["Workspace User ID"]]: va.workspaceUserId ?? undefined,
-      [F["Last Synced"]]: now,
+      [F["Perf Last Synced"]]: now,
     }));
 
   const vaUpsert = await upsertRecords(vaTable.tableId, [F["Email"]], vaRecords, {

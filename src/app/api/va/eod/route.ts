@@ -1,15 +1,18 @@
 // ─── VA-facing EOD API (eod.novaracleaning.com) ───────────────────────────────
 //
-// Two ways in, and both resolve to exactly one VA record:
+// Two ways in, and both resolve to exactly one VA record AND one date:
 //
-//   token   — the tokenized link we email/Discord to the VA. Most VAs have no
-//             workspace login, so this is the normal path. The token is looked
-//             up against a unique index; it identifies the VA by itself.
-//   session — a signed-in Supabase user mapped to their VA record, for the
-//             people who do have a workspace login.
+//   token   — the per-day link we email/Discord to the VA. Most VAs have no
+//             workspace login, so this is the normal path. The token carries
+//             its work date, so a link holder gets that day and no other, and
+//             it expires 24 hours after issue.
+//   session — a signed-in Supabase user mapped to their VA record. A VA gets
+//             today; an admin may act on any date.
 //
-// Either way, identity comes from the credential and never from a body field:
-// there is no vaId parameter, so a VA cannot read or write anyone else's day.
+// Identity and date both come from the credential, never from a body field:
+// there is no vaId parameter, and a non-admin cannot name a different day. That
+// is what makes "only admins send EODs for other days" an enforced property
+// rather than a UI convention.
 //
 // Actions:
 //   bootstrap — open/resume a day: draft + pre-filled verified metrics
@@ -32,8 +35,16 @@ import {
   submitEod,
   type SavePatch,
 } from "@/lib/va-performance/eod";
-import { primePerformanceSecrets } from "@/lib/va-performance/settings";
-import { resolveVaByEodToken, resolveVaForUser, type VaRecord } from "@/lib/va-performance/vas";
+import {
+  markTokenUsed,
+  resolveEodToken,
+  TOKEN_FAILURE_MESSAGE,
+  type EodToken,
+} from "@/lib/va-performance/eod-token";
+import { getEodSettings, localDate, primePerformanceSecrets } from "@/lib/va-performance/settings";
+import { resolveVaForUser, type VaRecord } from "@/lib/va-performance/vas";
+import type { DateGrant } from "@/lib/va-performance/eod";
+import { isAdminUser } from "@/lib/va-performance/admin-check";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -65,14 +76,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   const token = String(body.token || "").trim();
 
   let va: VaRecord | null = null;
+  let grant: DateGrant;
+  let usedToken: EodToken | null = null;
+
   if (token) {
-    va = await resolveVaByEodToken(token);
-    if (!va) {
-      return fail(
-        "This link isn't valid any more. Ask an admin to send you a fresh one.",
-        401,
-      );
-    }
+    const resolved = await resolveEodToken(token);
+    if (resolved.ok !== true) return fail(TOKEN_FAILURE_MESSAGE[resolved.reason], 401);
+    va = resolved.value.va;
+    usedToken = resolved.value.token;
+    // The link IS the date. A link holder is never an admin in this context,
+    // even if they happen to hold an admin account elsewhere.
+    grant = { allowedDate: usedToken.workDate, isAdmin: false };
   } else {
     let principal: { userId: string; email: string };
     try {
@@ -88,6 +102,11 @@ export async function POST(req: Request): Promise<NextResponse> {
         403,
       );
     }
+    const settings = await getEodSettings();
+    grant = {
+      allowedDate: localDate(new Date(), settings.timezone),
+      isAdmin: await isAdminUser(principal.userId),
+    };
   }
 
   // Re-checked on every request, so offboarding revokes an outstanding link
@@ -102,17 +121,27 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     switch (action) {
       case "bootstrap":
-        return NextResponse.json({ ok: true, ...(await bootstrapEod(va, workDate)) });
+        {
+        const result = await bootstrapEod(va, grant, workDate);
+        if (usedToken) void markTokenUsed(usedToken);
+        return NextResponse.json({
+          ok: true,
+          ...result,
+          link: usedToken
+            ? { workDate: usedToken.workDate, expiresAt: usedToken.expiresAt }
+            : null,
+        });
+      }
 
       case "save": {
         if (!workDate) return fail("Missing workDate.", 400);
-        const submission = await saveDraft(va, workDate, readPatch(body));
+        const submission = await saveDraft(va, workDate, readPatch(body), grant);
         return NextResponse.json({ ok: true, submission });
       }
 
       case "submit": {
         if (!workDate) return fail("Missing workDate.", 400);
-        const result = await submitEod(va, workDate, readPatch(body));
+        const result = await submitEod(va, workDate, readPatch(body), grant);
         if (result.issues.length) {
           return NextResponse.json({ ok: false, issues: result.issues }, { status: 422 });
         }

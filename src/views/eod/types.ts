@@ -59,4 +59,6 @@ export interface BootstrapPayload {
   verified: VerifiedView;
   locked: boolean;
   flags: FlagSummary[];
+  /** Present when opened through a per-day link. */
+  link?: { workDate: string; expiresAt: string } | null;
 }

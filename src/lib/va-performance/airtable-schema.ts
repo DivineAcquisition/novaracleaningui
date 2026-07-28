@@ -52,13 +52,24 @@ export const TEAM_PERF_TABLES: TableSpec[] = [
     key: "vas",
     name: "VAs",
     description:
-      "One row per virtual assistant. Email is the merge key. Verification identity (Apploye / GHL / workspace user IDs) lives here — that is how activity is attributed to a person.",
+      "One row per virtual assistant. Email is the merge key. Verification identity (Apploye / workspace user IDs) lives here — that is how activity is attributed to a person.",
+    // ADDITIVE ONLY. This table already exists in the Client & Revenue Ops base
+    // and is owned by the VA onboarding sync (src/lib/airtable/vas.ts), which
+    // writes Name, Phone, Role, Pay Type, Status, agreement dates and Notes.
+    //
+    // Nothing here may collide with those. The existing "Status" is the
+    // onboarding lifecycle (Invited → Approved) and "Pay Type" is
+    // Base pay / Hourly — writing performance values into either would corrupt
+    // a column another sync owns. Performance standing gets its own field, and
+    // only fields this layer owns are written.
     fields: [
       { name: "Email", type: "email" },
       { name: "Name", type: "singleLineText" },
-      { name: "Phone", type: "phoneNumber" },
-      { name: "Status", type: "singleSelect", options: select(["Active", "Probation", "Inactive", "Removed"]) },
-      { name: "Pay Type", type: "singleSelect", options: select(["Hourly", "Monthly"]) },
+      {
+        name: "Performance Status",
+        type: "singleSelect",
+        options: select(["Active", "Probation", "Inactive", "Removed"]),
+      },
       { name: "Rate", type: "currency", options: USD },
       { name: "Start Date", type: "date", options: DATE },
       {
@@ -67,10 +78,8 @@ export const TEAM_PERF_TABLES: TableSpec[] = [
         options: select(["Operations", "Sales", "Recruiting"]),
       },
       { name: "Apploye Member ID", type: "singleLineText" },
-      { name: "GHL User ID", type: "singleLineText" },
       { name: "Workspace User ID", type: "singleLineText" },
-      { name: "Notes", type: "multilineText" },
-      { name: "Last Synced", type: "dateTime", options: DATETIME },
+      { name: "Perf Last Synced", type: "dateTime", options: DATETIME },
     ],
   },
   {

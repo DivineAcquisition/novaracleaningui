@@ -96,18 +96,44 @@ export class EodError extends Error {
   }
 }
 
-/** A date is openable when it's inside the admin-configured backdate window. */
-export function assertDateAllowed(date: string, settings: EodSettings, now = new Date()): void {
+/**
+ * Which day this caller is allowed to touch.
+ *
+ * A VA never chooses. Their link is bound to one date, so `allowedDate` is
+ * simply that date; a workspace-session VA gets today and nothing else. Only an
+ * admin may act on another day, which is what makes "admins send EODs for other
+ * days" an enforced rule rather than a convention.
+ */
+export interface DateGrant {
+  allowedDate: string;
+  /** An admin acting on any date, e.g. reviewing or backfilling. */
+  isAdmin: boolean;
+}
+
+export function assertDateAllowed(date: string, grant: DateGrant): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new EodError("Invalid date.");
-  const allowed = allowedWorkDates(settings, now);
-  if (!allowed.includes(date)) {
-    const window =
-      settings.backdateDays === 0
-        ? "today"
-        : settings.backdateDays === 1
-          ? "today or yesterday"
-          : `the last ${settings.backdateDays + 1} days`;
-    throw new EodError(`You can only submit an EOD for ${window}.`, 403);
+  if (grant.isAdmin) return;
+  if (date !== grant.allowedDate) {
+    throw new EodError(
+      "This link is only for " +
+        grant.allowedDate +
+        ". Ask an admin if you need to file a different day.",
+      403,
+    );
+  }
+}
+
+/** How far back an ADMIN may issue a link. VAs are unaffected by this. */
+export function assertAdminIssuableDate(date: string, settings: EodSettings, now = new Date()): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new EodError("Invalid date.");
+  const today = localDate(now, settings.timezone);
+  if (date > today) throw new EodError("Can't issue an EOD link for a future day.", 400);
+  const earliest = allowedWorkDates(settings, now).slice(-1)[0];
+  if (date < earliest) {
+    throw new EodError(
+      `The backdate window is ${settings.backdateDays + 1} day(s) — ${date} is outside it.`,
+      400,
+    );
   }
 }
 
@@ -246,11 +272,15 @@ async function flagsForVa(vaId: string, limit = 20): Promise<FlagSummary[]> {
 }
 
 /** Open (or resume) the form for a date. */
-export async function bootstrapEod(va: VaRecord, requestedDate?: string): Promise<BootstrapResult> {
+export async function bootstrapEod(
+  va: VaRecord,
+  grant: DateGrant,
+  requestedDate?: string,
+): Promise<BootstrapResult> {
   const settings = await getEodSettings();
   const now = new Date();
-  const workDate = requestedDate || localDate(now, settings.timezone);
-  assertDateAllowed(workDate, settings, now);
+  const workDate = requestedDate || grant.allowedDate;
+  assertDateAllowed(workDate, grant);
 
   const submission = (await findSubmission(va.id, workDate)) ?? (await createDraft(va.id, workDate));
   const verified = await verifiedForForm(va, workDate);
@@ -258,7 +288,8 @@ export async function bootstrapEod(va: VaRecord, requestedDate?: string): Promis
   return {
     va: { id: va.id, name: va.name, email: va.email, functionsAssigned: va.functionsAssigned },
     workDate,
-    allowedDates: allowedWorkDates(settings, now),
+    // A link holder gets exactly their day. Admins may move between days.
+    allowedDates: grant.isAdmin ? allowedWorkDates(settings, now) : [workDate],
     settings,
     submission,
     verified,
@@ -290,9 +321,14 @@ function buildPatch(patch: SavePatch, tasks: string[]): Record<string, unknown> 
 }
 
 /** Auto-save. Draft only — a submitted day is edited by re-submitting. */
-export async function saveDraft(va: VaRecord, workDate: string, patch: SavePatch): Promise<EodSubmission> {
+export async function saveDraft(
+  va: VaRecord,
+  workDate: string,
+  patch: SavePatch,
+  grant: DateGrant,
+): Promise<EodSubmission> {
   const settings = await getEodSettings();
-  assertDateAllowed(workDate, settings);
+  assertDateAllowed(workDate, grant);
 
   const submission = await findSubmission(va.id, workDate);
   if (!submission) throw new EodError("No EOD open for that date.", 404);
@@ -333,10 +369,11 @@ export async function submitEod(
   va: VaRecord,
   workDate: string,
   patch: SavePatch,
+  grant: DateGrant,
 ): Promise<SubmitResult> {
   const settings = await getEodSettings();
   const now = new Date();
-  assertDateAllowed(workDate, settings, now);
+  assertDateAllowed(workDate, grant);
 
   const existing = await findSubmission(va.id, workDate);
   if (!existing) throw new EodError("No EOD open for that date.", 404);

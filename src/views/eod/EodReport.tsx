@@ -317,13 +317,43 @@ function Report({ token, sessionEmail }: { token?: string; sessionEmail: string 
           </div>
         ) : boot ? (
           <>
-            <DatePicker boot={boot} onPick={(d) => void load(d)} loading={loading} />
+            {boot.allowedDates.length > 1 ? (
+              <DatePicker boot={boot} onPick={(d) => void load(d)} loading={loading} />
+            ) : (
+              <DayBanner boot={boot} />
+            )}
             <div className="mt-5">
               <EodForm boot={boot} onReload={load} api={api} />
             </div>
           </>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+/**
+ * A link is bound to one day, so there is nothing to choose. Show which day
+ * this is for and when the link stops working.
+ */
+function DayBanner({ boot }: { boot: BootstrapPayload }) {
+  const pretty = new Date(`${boot.workDate}T12:00:00.000Z`).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const expires = boot.link?.expiresAt ? new Date(boot.link.expiresAt) : null;
+  const hoursLeft = expires ? Math.max(0, Math.round((expires.getTime() - Date.now()) / 3600000)) : null;
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      <h2 className="font-jakarta text-lg font-bold tracking-tight text-slate-900">{pretty}</h2>
+      {hoursLeft !== null && (
+        <span className="text-xs text-slate-500">
+          · this link expires in {hoursLeft} hour{hoursLeft === 1 ? "" : "s"}
+        </span>
+      )}
     </div>
   );
 }

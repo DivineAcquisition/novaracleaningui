@@ -35,8 +35,6 @@ export interface VaRecord {
   workspaceUserId: string | null;
   perfAirtableRecordId: string | null;
   // EOD link delivery
-  eodToken: string | null;
-  eodTokenIssuedAt: string | null;
   eodLinkLastSentAt: string | null;
   /** Private per-VA Discord channel webhook. Never a shared channel. */
   discordWebhookUrl: string | null;
@@ -45,7 +43,7 @@ export interface VaRecord {
 const VA_COLUMNS =
   "id, email, first_name, last_name, phone, status, performance_status, pay_type, rate_cents, " +
   "start_date, functions_assigned, va_role, apploye_member_id, ghl_user_id, portal_user_id, " +
-  "perf_airtable_record_id, eod_token, eod_token_issued_at, eod_link_last_sent_at, discord_webhook_url";
+  "perf_airtable_record_id, eod_link_last_sent_at, discord_webhook_url";
 
 type Row = Record<string, unknown>;
 
@@ -73,8 +71,6 @@ function mapVa(row: Row): VaRecord {
     ghlUserId: (row.ghl_user_id as string) || null,
     workspaceUserId: (row.portal_user_id as string) || null,
     perfAirtableRecordId: (row.perf_airtable_record_id as string) || null,
-    eodToken: (row.eod_token as string) || null,
-    eodTokenIssuedAt: (row.eod_token_issued_at as string) || null,
     eodLinkLastSentAt: (row.eod_link_last_sent_at as string) || null,
     discordWebhookUrl: (row.discord_webhook_url as string) || null,
   };
@@ -156,31 +152,6 @@ export async function resolveVaForUser(
     record.workspaceUserId = userId;
   }
   return record;
-}
-
-/**
- * Resolve a VA from their EOD link token.
- *
- * The token IS the credential, so this is deliberately a plain equality lookup
- * against a unique index and nothing else — no partial matching, no fallback
- * to email, no "close enough". A token that doesn't resolve is simply invalid.
- *
- * Status is re-checked by the caller on every request, so offboarding revokes
- * the link immediately without anyone needing to rotate it.
- */
-export async function resolveVaByEodToken(token: string): Promise<VaRecord | null> {
-  const value = (token || "").trim();
-  // Anything short enough to brute-force isn't one of ours.
-  if (value.length < 32) return null;
-
-  const supabase = getAdminSupabase();
-  const { data, error } = await supabase
-    .from("va_onboarding")
-    .select(VA_COLUMNS)
-    .eq("eod_token", value)
-    .maybeSingle();
-  if (error) throw new Error(`Read VA failed: ${error.message}`);
-  return data ? mapVa(data as unknown as Row) : null;
 }
 
 /**

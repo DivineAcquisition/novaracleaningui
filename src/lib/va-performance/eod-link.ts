@@ -18,19 +18,13 @@
 // supabase/functions/_shared/discord.ts), which is why the private webhook is
 // per-VA rather than something we can derive.
 
-import { randomBytes } from "node:crypto";
-
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { issueEodToken, type EodToken, type IssueOptions } from "./eod-token";
 import { getEodSettings, localDate, primePerformanceSecrets } from "./settings";
 import { listTrackedVas, type VaRecord } from "./vas";
 
 const DEFAULT_PUBLIC_BASE = "https://eod.novaracleaning.com";
 const FROM_ADDRESS = "Novara Team <hello@novaracleaning.com>";
-
-/** 32 bytes → 64 hex. Longer than the 20-byte links elsewhere in the codebase. */
-function mintToken(): string {
-  return randomBytes(32).toString("hex");
-}
 
 async function readSecret(key: string): Promise<string> {
   const fromEnv = (process.env[key] || "").trim();
@@ -51,28 +45,6 @@ export async function publicBaseUrl(): Promise<string> {
 
 export function eodUrl(base: string, token: string): string {
   return `${base}/eod/${token}`;
-}
-
-/**
- * Return the VA's token, minting one if they don't have it yet.
- * `rotate` issues a fresh token, which immediately invalidates the old link.
- */
-export async function ensureEodToken(
-  va: VaRecord,
-  options: { rotate?: boolean } = {},
-): Promise<string> {
-  if (va.eodToken && !options.rotate) return va.eodToken;
-
-  const token = mintToken();
-  const supabase = getAdminSupabase();
-  const { error } = await supabase
-    .from("va_onboarding")
-    .update({ eod_token: token, eod_token_issued_at: new Date().toISOString() })
-    .eq("id", va.id);
-  if (error) throw new Error(`Couldn't issue an EOD link: ${error.message}`);
-
-  va.eodToken = token;
-  return token;
 }
 
 // ─── Email ────────────────────────────────────────────────────────────────────
@@ -217,22 +189,34 @@ export interface DeliveryResult {
   name: string;
   email: string;
   url: string;
+  workDate: string;
+  expiresAt: string;
   emailed: boolean;
   discorded: boolean;
   skipped?: string;
 }
 
-/** Send one VA their link. Always mints a token first if they lack one. */
+/**
+ * Issue and send one VA their link for one day.
+ *
+ * A fresh token is always minted, so sending twice for the same day replaces
+ * the link rather than leaving two live. Callers are responsible for enforcing
+ * that only an admin passes a `workDate` other than the VA's current day —
+ * see the send-link route.
+ */
 export async function sendEodLink(
   va: VaRecord,
-  options: { workDate?: string; rotate?: boolean } = {},
+  options: { workDate?: string } & IssueOptions = {},
 ): Promise<DeliveryResult> {
   await primePerformanceSecrets();
   const settings = await getEodSettings();
   const workDate = options.workDate || localDate(new Date(), settings.timezone);
 
-  const token = await ensureEodToken(va, { rotate: options.rotate });
-  const url = eodUrl(await publicBaseUrl(), token);
+  const token: EodToken = await issueEodToken(va.id, workDate, {
+    issuedBy: options.issuedBy,
+    adminIssued: options.adminIssued,
+  });
+  const url = eodUrl(await publicBaseUrl(), token.token);
 
   const [emailed, discorded] = await Promise.all([
     sendEmail(va, url, workDate),
@@ -247,7 +231,16 @@ export async function sendEodLink(
       .eq("id", va.id);
   }
 
-  return { vaId: va.id, name: va.name, email: va.email, url, emailed, discorded };
+  return {
+    vaId: va.id,
+    name: va.name,
+    email: va.email,
+    url,
+    workDate,
+    expiresAt: token.expiresAt,
+    emailed,
+    discorded,
+  };
 }
 
 export interface SendAllReport {
@@ -283,6 +276,8 @@ export async function sendEodLinksToAll(
         name: va.name,
         email: va.email,
         url: "",
+        workDate,
+        expiresAt: "",
         emailed: false,
         discorded: false,
         skipped: "already sent today",

@@ -29,7 +29,7 @@ import { DEFAULT_THRESHOLDS } from "../src/lib/va-performance/settings";
 import { dayWindow } from "../src/lib/va-performance/time";
 import type { MetricValues } from "../src/lib/va-performance/metrics";
 import type { StoredVerifiedDay } from "../src/lib/va-performance/verify";
-import { resolveVaByEodToken } from "../src/lib/va-performance/vas";
+import { resolveEodToken } from "../src/lib/va-performance/eod-token";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -109,8 +109,8 @@ async function checkTokenGuard(): Promise<void> {
   for (const bad of ["", "abc", "0".repeat(31)]) {
     check(
       `a ${bad.length}-char token is rejected without a lookup`,
-      await resolveVaByEodToken(bad),
-      null,
+      await resolveEodToken(bad),
+      { ok: false, reason: "not_found" },
     );
   }
 }
