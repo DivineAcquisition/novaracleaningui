@@ -5,10 +5,15 @@
 // Notifies cleaners (email + SMS) and creates a GHL contact task when configured.
 //
 // Body (assign):
-//   { bookingId, cleanerIds: string[], mode?: "replace" | "add", notify?: boolean }
+//   { bookingId, cleanerIds: string[], mode?: "replace" | "add", notify?: boolean,
+//     bufferOverrideReason?: string }
 //
 // Body (suggest):
 //   { action: "suggest_cleaners", bookingId, limit?: number }
+//
+// Assigning a crew that already has a job that day must leave the required
+// buffer after that job's PROJECTED end. Blocked by default with the projected
+// -end explanation; bufferOverrideReason forces it and logs why.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
@@ -22,6 +27,11 @@ import { buildGhlTaskChecklistBody } from "../_shared/ghl-checklist-text.ts";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
 import { ensureAssignmentChecklistAccess } from "../_shared/job-checklist.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
+import {
+  bufferConflictBody,
+  checkScheduleBuffer,
+  recordBufferOverride,
+} from "../_shared/schedule-buffer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -242,7 +252,27 @@ serve(async (req) => {
 
     if (action === "suggest_cleaners") {
       const suggestions = await suggestCleaners(admin, booking, Number(body?.limit) || 12);
-      return json({ success: true, bookingId, suggestions, hasCoordinates: suggestions.some((s) => s.distance_miles != null) });
+      // Mark who would land inside their own buffer, so the ranking doesn't
+      // walk an admin into a block (or into starting a fresh cascade).
+      const bufferView = await checkScheduleBuffer(admin, {
+        bookingId,
+        cleanerIds: suggestions.map((s) => s.id),
+      });
+      const conflictByCleaner = new Map<string, string>();
+      for (const c of bufferView.conflicts || []) {
+        if (c.cleaner_id && !conflictByCleaner.has(c.cleaner_id)) {
+          conflictByCleaner.set(c.cleaner_id, c.message);
+        }
+      }
+      return json({
+        success: true,
+        bookingId,
+        suggestions: suggestions.map((s) => ({
+          ...s,
+          bufferConflict: conflictByCleaner.get(s.id) || null,
+        })),
+        hasCoordinates: suggestions.some((s) => s.distance_miles != null),
+      });
     }
 
     const cleanerIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
@@ -281,6 +311,32 @@ serve(async (req) => {
       if (!c.approved || c.status !== "active") {
         return json({ error: `Cleaner not active/approved: ${c.first_name} ${c.last_name}` }, 400);
       }
+    }
+
+    // ─── Buffer gate ────────────────────────────────────────────────────────
+    // A crew with an earlier job that day needs real room after that job's
+    // projected end — not after the window we hoped for. Blocked by default,
+    // forced only by an explicit reason that goes on the record.
+    const bufferOverrideReason = String(body?.bufferOverrideReason || "").trim();
+    const bufferCheck = await checkScheduleBuffer(admin, { bookingId, cleanerIds });
+    if (!bufferCheck.ok) {
+      if (!bufferOverrideReason) {
+        return json(bufferConflictBody(bufferCheck), 409);
+      }
+      let actorName = "Admin";
+      try {
+        const { data: u } = await admin.auth.admin.getUserById(callerId);
+        actorName = u?.user?.email || actorName;
+      } catch { /* name is nice to have, not required */ }
+      const logged = await recordBufferOverride(admin, {
+        bookingId,
+        cleanerIds,
+        check: bufferCheck,
+        reason: bufferOverrideReason,
+        actorId: callerId,
+        actorName,
+      });
+      if (!logged.ok) return json({ error: logged.error }, 400);
     }
 
     let jobId = booking.job_id as string | null;

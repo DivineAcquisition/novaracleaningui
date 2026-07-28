@@ -5,6 +5,7 @@
 // Brand-aligned premium SaaS shell for /admin/*.
 //   1. Dashboard          (live metrics + activity)
 //   2. Bookings           (every booking, with cancel/reschedule/refund)
+//   2a. Needs Attention   (at-risk bookings, delay cascades, backup cover)
 //   3. Cleaners           (directory + onboarding + management)
 //   4. Dispatch           (staff jobs, offers, re-dispatch)
 //   5. Internal Booking   (VA-driven booking submission, formerly "CSR Form")
@@ -21,6 +22,7 @@
 // product, not an internal form.
 
 import {
+  RiAlarmWarningLine,
   RiDashboardLine,
   RiGroupLine,
   RiToolsLine,
@@ -79,6 +81,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/bookings",
     icon: RiCalendarCheckLine,
     description: "Cancel · reschedule · refund",
+  },
+  {
+    title: "Needs Attention",
+    url: "/admin/attention",
+    icon: RiAlarmWarningLine,
+    description: "At-risk bookings · delays · backup cover",
   },
   {
     title: "Cleaners",

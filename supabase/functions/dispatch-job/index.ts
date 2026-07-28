@@ -8,6 +8,7 @@ import {
 import { scoreCleanerForJob } from "../_shared/dispatch-scoring.ts";
 import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-approval.ts";
 import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 
 // Pull the human-readable date + arrival window for a job from its linked
 // booking. We display the booking's stored time_slot (e.g. "8-12" →
@@ -406,10 +407,34 @@ serve(async (req) => {
     //
     // Scoring is delegated to the shared `scoreCleanerForJob` so the
     // auto-dispatch path and the manual VA-assign path (admin-booking-
-    // assign) use ONE formula. dispatch-job adds two extra hard gates
+    // assign) use ONE formula. dispatch-job adds three extra hard gates
     // the shared scorer doesn't cover: the blocked-cleaner set (already
-    // offered/declined on this job) and a DB-backed schedule overlap
-    // check across the cleaner's other assignments.
+    // offered/declined on this job), a DB-backed schedule overlap
+    // check across the cleaner's other assignments, and the schedule
+    // buffer.
+    //
+    // The buffer gate matters most here: an offer a cleaner can't accept
+    // without eating their breathing room is worse than no offer at all —
+    // they'd accept, the guard would refuse the commitment, and the job
+    // would look staffed while nobody was coming.
+    const { data: dispatchBooking } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const bufferBlocked = new Set<string>();
+    if (dispatchBooking?.id) {
+      const bufferView = await checkScheduleBuffer(supabase, {
+        bookingId: dispatchBooking.id,
+        cleanerIds: cleaners.map((c: { id: string }) => c.id),
+      });
+      for (const c of bufferView.conflicts || []) {
+        if (c.cleaner_id) bufferBlocked.add(c.cleaner_id);
+      }
+    }
+
     const scoredCandidates = [];
 
     for (const cleaner of cleaners) {
@@ -438,6 +463,11 @@ serve(async (req) => {
 
       if (hasConflict) {
         logStep(`Cleaner ${cleaner.first_name} has scheduling conflict`);
+        continue;
+      }
+
+      if (bufferBlocked.has(cleaner.id)) {
+        logStep(`Cleaner ${cleaner.first_name} skipped — no schedule buffer around their other job`);
         continue;
       }
 

@@ -27,6 +27,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { advanceDate, previewDates } from "../_shared/recurring-manage.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
+import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,14 +107,48 @@ serve(async (req) => {
       if (!bk) return null;
 
       const slot = timeSlot || bk.time_slot || sched.preferred_time_slot;
+
+      // A customer moving their own visit can land it on top of the assigned
+      // crew's other job. The customer's move always wins — but the crew comes
+      // off rather than the day quietly becoming impossible, and dispatch is
+      // told the visit needs re-staffing.
+      const bufferCheck = await checkScheduleBuffer(admin, {
+        bookingId: bk.id,
+        serviceDate: toDate,
+        timeSlot: slot,
+      });
+      const dropCrew = !bufferCheck.ok;
+
       await admin
         .from("bookings")
         .update({
           service_date: toDate,
           time_slot: slot,
-          team_notes: `Customer moved this recurring visit from ${fromDate} to ${toDate} via manage link (${new Date().toISOString().slice(0, 10)}).`,
+          ...(dropCrew ? { cleaner_id: null, num_cleaners_assigned: 0 } : {}),
+          team_notes: `Customer moved this recurring visit from ${fromDate} to ${toDate} via manage link (${new Date().toISOString().slice(0, 10)}).`
+            + (dropCrew ? ` Crew withdrawn — ${bufferCheck.message || "no buffer around their other job"}` : ""),
         })
         .eq("id", bk.id);
+
+      if (dropCrew) {
+        if (bk.job_id) {
+          await admin
+            .from("job_assignments")
+            .update({ status: "Withdrawn" })
+            .eq("job_id", bk.job_id)
+            .in("status", ["Offered", "Broadcast", "Accepted", "Confirmed", "Assigned"]);
+        }
+        await admin.from("events").insert({
+          event_type: "dispatch.approval_needed",
+          booking_id: bk.id,
+          job_id: bk.job_id || null,
+          source: "manage-recurring-schedule",
+          summary:
+            `🔁 Customer moved their recurring visit to ${toDate} ${slot}, which left no buffer around ` +
+            `the assigned crew's other job. Crew withdrawn — needs re-staffing.\n${bufferCheck.message || ""}`,
+          data: { reason: "buffer_conflict_on_customer_move", conflicts: bufferCheck.conflicts },
+        }).then(() => undefined, () => undefined);
+      }
 
       if (bk.job_id) {
         const clock = parseTimeSlotToClock(slot || "").start || "09:00:00";
