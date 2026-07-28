@@ -321,6 +321,17 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
 
   const ES = handle.tables.eodSubmissions.fieldId;
   const subRefById = new Map<string, string>();
+
+  // Airtable fetches the attachment URL itself and re-hosts a copy, so a
+  // short-lived signed link is enough — nothing has to be left public.
+  const attachmentUrls = new Map<string, string>();
+  for (const row of (subRows || []) as Record<string, unknown>[]) {
+    const path = row.pdf_path as string | null;
+    if (!path) continue;
+    const url = await signedReportUrl(path, 3600);
+    if (url) attachmentUrls.set(String(row.id), url);
+  }
+
   const subRecords: Fields[] = ((subRows || []) as Record<string, unknown>[]).map((row) => {
     const ref = `EOD-${(vaNameById.get(String(row.va_id)) || "VA").replace(/\s+/g, "").slice(0, 12)}-${row.work_date}`;
     subRefById.set(String(row.id), ref);
@@ -352,6 +363,9 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
       [ES["Submitted Late"]]: Boolean(row.submitted_late),
       [ES["Locked"]]: Boolean(row.locked_at),
       [ES["Drive Link"]]: (row.drive_url as string) ?? undefined,
+      [ES["EOD Report PDF"]]: attachmentUrls.has(String(row.id))
+        ? ([{ url: attachmentUrls.get(String(row.id)) as string }] as unknown as string[])
+        : undefined,
       [ES["Verified Metrics"]]: metricRefsWritten.has(metricLink) ? [metricLink] : undefined,
       [ES["Last Synced"]]: now,
     };
