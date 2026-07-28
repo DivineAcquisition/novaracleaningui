@@ -197,6 +197,8 @@ export interface UpsertOptions {
    * the set we log it (typecast will create it) so it can be reviewed.
    */
   knownOptions?: Record<string, readonly string[]>;
+  /** Write to a different base (default: Client & Revenue Ops). */
+  baseId?: string;
 }
 
 /** Strip undefined/null so we never blank an already-populated Airtable cell. */
@@ -261,7 +263,7 @@ export async function upsertRecords(
   records: Fields[],
   options: UpsertOptions = {},
 ): Promise<UpsertResult> {
-  const baseId = getBaseId();
+  const baseId = options.baseId || getBaseId();
   const typecast = options.typecast ?? true;
   const prepared = records
     .map((fields) => ({ fields: clean(fields) }))
@@ -454,14 +456,14 @@ export async function ping(): Promise<{ ok: boolean; tables: number; message: st
   }
 }
 
-export async function listBaseTables(): Promise<MetaTable[]> {
-  const baseId = getBaseId();
+export async function listBaseTables(baseIdOverride?: string): Promise<MetaTable[]> {
+  const baseId = baseIdOverride || getBaseId();
   const res = await airtableRequest<{ tables: MetaTable[] }>(`/bases/${baseId}/tables`, { meta: true });
   return res.tables || [];
 }
 
-export async function listTableFields(tableId: string): Promise<MetaField[]> {
-  const table = (await listBaseTables()).find((t) => t.id === tableId);
+export async function listTableFields(tableId: string, baseIdOverride?: string): Promise<MetaField[]> {
+  const table = (await listBaseTables(baseIdOverride)).find((t) => t.id === tableId);
   return table?.fields || [];
 }
 
@@ -480,8 +482,9 @@ export async function createTable(
   name: string,
   fields: CreateFieldSpec[],
   description?: string,
+  baseIdOverride?: string,
 ): Promise<MetaTable> {
-  const baseId = getBaseId();
+  const baseId = baseIdOverride || getBaseId();
   return airtableRequest<MetaTable>(`/bases/${baseId}/tables`, {
     meta: true,
     method: "POST",
@@ -490,8 +493,12 @@ export async function createTable(
 }
 
 /** Add a field to an existing table via the Meta API. Returns the new field. */
-export async function createField(tableId: string, field: CreateFieldSpec): Promise<MetaField> {
-  const baseId = getBaseId();
+export async function createField(
+  tableId: string,
+  field: CreateFieldSpec,
+  baseIdOverride?: string,
+): Promise<MetaField> {
+  const baseId = baseIdOverride || getBaseId();
   return airtableRequest<MetaField>(`/bases/${baseId}/tables/${tableId}/fields`, {
     meta: true,
     method: "POST",
@@ -507,8 +514,9 @@ export async function createLinkField(
   tableId: string,
   name: string,
   linkedTableId: string,
+  baseIdOverride?: string,
 ): Promise<MetaField> {
-  const baseId = getBaseId();
+  const baseId = baseIdOverride || getBaseId();
   return airtableRequest<MetaField>(`/bases/${baseId}/tables/${tableId}/fields`, {
     meta: true,
     method: "POST",
@@ -518,4 +526,37 @@ export async function createLinkField(
       options: { linkedTableId },
     },
   });
+}
+
+/**
+ * Create a whole new base in a workspace. Airtable requires at least one table
+ * up front, so pass the first table's spec; the rest are added with
+ * createTable(..., baseId). Needs a PAT with schema.bases:write and the
+ * workspace id (Airtable's workspace URL: /wsp<id>).
+ */
+export async function createBase(
+  workspaceId: string,
+  name: string,
+  firstTable: { name: string; description?: string; fields: CreateFieldSpec[] },
+): Promise<{ id: string; tables: MetaTable[] }> {
+  return airtableRequest<{ id: string; tables: MetaTable[] }>(`/bases`, {
+    meta: true,
+    method: "POST",
+    body: { workspaceId, name, tables: [firstTable] },
+  });
+}
+
+/** Bases the PAT can see, so we can find "Novara — Team Performance" if it exists. */
+export async function listBases(): Promise<{ id: string; name: string }[]> {
+  const out: { id: string; name: string }[] = [];
+  let offset: string | undefined;
+  do {
+    const res = await airtableRequest<{ bases?: { id: string; name: string }[]; offset?: string }>(
+      `/bases`,
+      { meta: true, query: { offset } },
+    );
+    out.push(...(res.bases || []));
+    offset = res.offset;
+  } while (offset);
+  return out;
 }
