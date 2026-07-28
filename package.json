@@ -13,7 +13,8 @@
     "stress:partner": "tsx scripts/stress-partner-portal.ts",
     "airtable:links": "tsx scripts/add-airtable-links.ts",
     "airtable:backfill": "tsx scripts/backfill-airtable.ts",
-    "airtable:verify": "tsx scripts/verify-airtable-mapping.ts"
+    "airtable:verify": "tsx scripts/verify-airtable-mapping.ts",
+    "va:verify": "tsx scripts/verify-va-performance.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",

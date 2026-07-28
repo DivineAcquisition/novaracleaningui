@@ -17,6 +17,11 @@ import { updateSession } from "@/integrations/supabase/middleware";
 //                                    verification → ob-portal → ID/W-9/etc),
 //                                    sign-in, dashboard, mobile-dashboard,
 //                                    jobs, password reset
+//   eod.novaracleaning.com        — the VA end-of-day report. Authenticated
+//                                    (VA or admin); one adaptive form that
+//                                    pre-fills what the system already
+//                                    observed and asks only for what it
+//                                    can't see.
 //   partner.novaracleaning.com    — Airbnb/STR host turnover portal:
 //                                    host signup/login, properties, turnover
 //                                    requests, weekly schedule, dashboard,
@@ -42,6 +47,7 @@ const HOSTS = {
   partner: "partner.novaracleaning.com",
   team: "team.novaracleaning.com",
   commercial: "commercial.novaracleaning.com",
+  eod: "eod.novaracleaning.com",
 } as const;
 
 type SubdomainKey = keyof typeof HOSTS;
@@ -110,6 +116,10 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // unlocks. Lives on try.* so the link works without any login.
   ["/membership-pay", "try"],
 
+  // VA end-of-day report (eod.novaracleaning.com). Signed-in VAs only —
+  // identity comes from the session, never from the form.
+  ["/eod", "eod"],
+
   // VA onboarding (team.novaracleaning.com): agreement signing + onboarding
   // form + pending status. Access provisioning happens only in the admin
   // workspace after approval.
@@ -124,6 +134,7 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   partner: "/partner",
   team: "/team",
   commercial: "/commercial",
+  eod: "/eod",
 };
 
 // Paths that ALL subdomains may serve (framework / static / crawler files).
@@ -172,6 +183,7 @@ function subdomainOf(hostname: string): SubdomainKey | null {
   if (h.startsWith("partner.")) return "partner";
   if (h.startsWith("commercial.")) return "commercial";
   if (h.startsWith("team.")) return "team";
+  if (h.startsWith("eod.")) return "eod";
   // hiring.* is hosted on Framer — if DNS still points here for any
   // reason, fall through to `try` (marketing) so we never serve broken
   // content on the hiring subdomain.
