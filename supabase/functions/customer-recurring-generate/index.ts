@@ -106,8 +106,31 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
     return { status: "existing", bookingId: existing.id, date: sched.next_service_date };
   }
 
-  const cleanerId = await resolveCleaner(admin, sched);
+  const resolvedCleanerId = await resolveCleaner(admin, sched);
   const serviceDate = sched.next_service_date;
+
+  // An auto-generated visit plays by the same buffer rules as one a human
+  // books. When the usual cleaner's day has no room around this slot, the
+  // visit is still created — the customer's cadence is a commitment — but it
+  // is created UNASSIGNED and put in front of dispatch, rather than silently
+  // stacking a second job onto a day that can't hold it.
+  let cleanerId = resolvedCleanerId;
+  let bufferBlockedNote: string | null = null;
+  if (cleanerId) {
+    const bufferCheck = await checkScheduleBuffer(admin, {
+      // No booking row exists yet — evaluate the slot itself, projected from
+      // the schedule's own service type and size band.
+      cleanerIds: [cleanerId],
+      serviceDate,
+      timeSlot: sched.preferred_time_slot,
+      serviceType: sched.service_type || "standard",
+      homeSizeId: sched.home_size_id,
+    });
+    if (!bufferCheck.ok) {
+      bufferBlockedNote = bufferCheck.message || "no buffer around their other job that day";
+      cleanerId = null;
+    }
+  }
 
   const { data: booking, error: insErr } = await admin
     .from("bookings")
@@ -139,6 +162,8 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
       status: "confirmed",
       dispatch_notes: cleanerId
         ? `RECURRING (${sched.cadence}) — assigned previous/preferred cleaner ${cleanerId}`
+        : bufferBlockedNote
+        ? `RECURRING (${sched.cadence}) — needs cleaner assignment. Usual cleaner skipped: ${bufferBlockedNote}`
         : `RECURRING (${sched.cadence}) — needs cleaner assignment`,
     })
     .select("id")
@@ -146,6 +171,19 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
   if (insErr) {
     console.error("[customer-recurring-generate] insert failed", insErr);
     return { status: "error_" + (insErr.message || "insert") };
+  }
+
+  if (bufferBlockedNote) {
+    await admin.from("events").insert({
+      event_type: "dispatch.approval_needed",
+      booking_id: booking.id,
+      cleaner_id: resolvedCleanerId,
+      source: "customer-recurring-generate",
+      summary:
+        `🔁 Recurring visit for ${serviceDate} was created UNASSIGNED — the usual cleaner has no ` +
+        `buffer around their other job that day.\n${bufferBlockedNote}\nNeeds a crew.`,
+      data: { reason: "buffer_conflict_on_recurring", preferred_cleaner_id: resolvedCleanerId },
+    }).then(() => undefined, () => undefined);
   }
 
   // Advance the schedule (idempotent for next run).

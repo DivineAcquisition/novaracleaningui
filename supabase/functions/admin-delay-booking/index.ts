@@ -28,6 +28,11 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
+import {
+  bufferConflictBody,
+  checkScheduleBuffer,
+  recordBufferOverride,
+} from "../_shared/schedule-buffer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,6 +53,8 @@ interface DelayRequest {
   reason: string;
   compensation?: "none" | "discount" | "credit";
   compensationAmountCents?: number;
+  /** Force a push that leaves no buffer before the crew's next job, with a logged reason. */
+  bufferOverrideReason?: string;
 }
 
 interface BookingRow {
@@ -308,6 +315,29 @@ serve(async (req) => {
     };
     if (compensation === "discount" && newTotalCents != null) {
       bookingUpdate.total_estimate_cents = newTotalCents;
+    }
+
+    // Pushing a window forward is the most direct way to eat the buffer in
+    // front of the crew's next job, so it plays by the same rules as booking
+    // one. Blocked with the projected-end explanation unless the admin says
+    // why it has to happen anyway — and the delay we're about to cause
+    // downstream is exactly what the at-risk board is for.
+    const bufferCheck = await checkScheduleBuffer(admin, {
+      bookingId: booking.id,
+      timeSlot: newSlot,
+    });
+    if (!bufferCheck.ok) {
+      const overrideReason = String(body?.bufferOverrideReason || "").trim();
+      if (!overrideReason) return json(bufferConflictBody(bufferCheck), 409);
+      const logged = await recordBufferOverride(admin, {
+        bookingId: booking.id,
+        cleanerIds: [booking.cleaner_id].filter(Boolean) as string[],
+        check: bufferCheck,
+        reason: `Delay push (${hours}h): ${overrideReason}`,
+        actorId: uid,
+        actorName: "Admin (delay)",
+      });
+      if (!logged.ok) return json({ error: logged.error }, 400);
     }
 
     const { error: upErr } = await admin.from("bookings").update(bookingUpdate).eq("id", booking.id);

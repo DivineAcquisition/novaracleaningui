@@ -9,6 +9,11 @@ import { buildGhlCustomFields } from '../_shared/ghl-field-map.ts';
 import { sendSms, formatServiceDate, formatTimeSlot } from '../_shared/sms.ts';
 import { decideRescheduleFee, smsActionTail } from '../_shared/booking-policy.ts';
 import { mirrorToLeadConnector } from '../_shared/leadconnector-mirror.ts';
+import {
+  bufferConflictBody,
+  checkScheduleBuffer,
+  recordBufferOverride,
+} from '../_shared/schedule-buffer.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +32,8 @@ interface RescheduleRequest {
   oldTimeSlot: string;
   /** Origin tag — "customer_portal" | "sms_reply" | "admin". */
   source?: string;
+  /** Admin-only: force a move that lands inside the crew's buffer, with a logged reason. */
+  bufferOverrideReason?: string;
 }
 
 function parseTimeSlot(slot: string): { start: string | null; end: string | null } {
@@ -127,7 +134,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source = 'customer_portal' }: RescheduleRequest = await req.json();
+    const body = await req.json() as RescheduleRequest;
+    const { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source = 'customer_portal' } = body;
     const isAdmin = source === "admin";
 
     console.log('Reschedule request:', { bookingId, newDate, newTimeSlot, oldDate, oldTimeSlot, source });
@@ -175,6 +183,38 @@ serve(async (req) => {
       }
     }
 
+    // 2b. Buffer check on the NEW slot. Moving a time is as capable of
+    // creating a cascade as booking one, so it plays by the same rules. A
+    // customer-initiated move that lands inside the crew's buffer keeps the
+    // date but drops the crew, so dispatch re-staffs it deliberately instead
+    // of the day quietly becoming impossible.
+    const bufferCheck = await checkScheduleBuffer(supabase, {
+      bookingId,
+      serviceDate: newDate,
+      timeSlot: newTimeSlot,
+    });
+    let unassignedForBuffer = false;
+    if (!bufferCheck.ok) {
+      const overrideReason = String(body.bufferOverrideReason || "").trim();
+      if (isAdmin && !overrideReason) {
+        return new Response(JSON.stringify(bufferConflictBody(bufferCheck, { success: false })), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 409,
+        });
+      }
+      if (overrideReason) {
+        await recordBufferOverride(supabase, {
+          bookingId,
+          cleanerIds: [booking.cleaner_id].filter(Boolean) as string[],
+          check: bufferCheck,
+          reason: overrideReason,
+          actorName: 'Admin (reschedule)',
+        });
+      } else {
+        unassignedForBuffer = true;
+      }
+    }
+
     // Decide reschedule fee BEFORE we mutate the row (so the fee is
     // calculated against the ORIGINAL service date, not the new one).
     const feeDecision = decideRescheduleFee({
@@ -194,6 +234,9 @@ serve(async (req) => {
         rescheduled_from_time_slot: oldTimeSlot,
         reschedule_fee_cents: (booking.reschedule_fee_cents || 0) + feeDecision.feeCents,
         reschedule_count: (booking.reschedule_count || 0) + 1,
+        ...(unassignedForBuffer
+          ? { cleaner_id: null, num_cleaners_assigned: 0, status: 'confirmed' }
+          : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', bookingId);
@@ -201,6 +244,28 @@ serve(async (req) => {
     if (updateError) {
       console.error('Error updating booking:', updateError);
       throw updateError;
+    }
+
+    if (unassignedForBuffer) {
+      // Withdraw the crew that can no longer make the new window, and put the
+      // job back in front of dispatch rather than letting it look staffed.
+      if (booking.job_id) {
+        await supabase
+          .from('job_assignments')
+          .update({ status: 'Withdrawn' })
+          .eq('job_id', booking.job_id)
+          .in('status', ['Offered', 'Broadcast', 'Accepted', 'Confirmed', 'Assigned']);
+      }
+      await supabase.from('events').insert({
+        event_type: 'dispatch.approval_needed',
+        booking_id: bookingId,
+        job_id: booking.job_id || null,
+        source: 'reschedule-booking',
+        summary:
+          `🔁 Reschedule to ${newDate} ${newTimeSlot} left no buffer around the crew's other job, ` +
+          `so the crew was withdrawn. Needs re-staffing.\n${bufferCheck.message || ''}`,
+        data: { reason: 'buffer_conflict_on_reschedule', conflicts: bufferCheck.conflicts },
+      }).then(() => undefined, () => undefined);
     }
 
     // 3b. Pre-authorized completion hold lifecycle.
