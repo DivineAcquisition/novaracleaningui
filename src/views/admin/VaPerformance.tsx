@@ -21,6 +21,7 @@ import {
   RiExternalLinkLine,
   RiFileList3Line,
   RiLoader4Line,
+  RiMailSendLine,
   RiRefreshLine,
   RiSettings3Line,
   RiTimeLine,
@@ -63,6 +64,9 @@ interface Va {
   apployeMemberId: string | null;
   ghlUserId: string | null;
   workspaceUserId: string | null;
+  eodToken: string | null;
+  eodLinkLastSentAt: string | null;
+  discordWebhookUrl: string | null;
 }
 
 interface Submission {
@@ -160,6 +164,22 @@ async function callAdmin<T = Record<string, unknown>>(
   return { ok: res.ok && json.ok !== false, data: json };
 }
 
+async function callEodLink<T = Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; data: T & { error?: string } }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const res = await fetch("/api/va/eod/send-link", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as T & { ok?: boolean; error?: string };
+  return { ok: res.ok && json.ok !== false, data: json };
+}
+
 const money = (cents: number | null | undefined) =>
   cents === null || cents === undefined
     ? "—"
@@ -174,6 +194,30 @@ export default function VaPerformance() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [sendingLinks, setSendingLinks] = useState(false);
+
+  const sendAllLinks = async () => {
+    setSendingLinks(true);
+    const res = await callEodLink<{
+      sent: { name: string }[];
+      skipped: { name: string; skipped?: string }[];
+    }>({ action: "send_all", force: true });
+    setSendingLinks(false);
+    if (!res.ok) {
+      toast.error(res.data.error || "Couldn't send the links.");
+      return;
+    }
+    const sent = res.data.sent?.length ?? 0;
+    const skipped = res.data.skipped ?? [];
+    if (sent === 0 && skipped.length) {
+      toast.warning(`Nothing sent — ${skipped[0].skipped || "no delivery channel"}.`);
+      return;
+    }
+    toast.success(
+      `Sent ${sent} EOD link${sent === 1 ? "" : "s"}${skipped.length ? `, ${skipped.length} skipped` : ""}.`,
+    );
+    await load();
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,6 +279,10 @@ export default function VaPerformance() {
           </p>
         </div>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" size="sm" onClick={sendAllLinks} disabled={sendingLinks}>
+            <RiMailSendLine className={cn("mr-1.5 h-3.5 w-3.5", sendingLinks && "animate-pulse")} />
+            Send EOD links
+          </Button>
           <Button variant="outline" size="sm" onClick={syncNow} disabled={syncing}>
             <RiRefreshLine className={cn("mr-1.5 h-3.5 w-3.5", syncing && "animate-spin")} />
             Sync metrics
@@ -867,6 +915,7 @@ function VaLinksSheet({
   const [startDate, setStartDate] = useState("");
   const [rate, setRate] = useState("");
   const [status, setStatus] = useState("active");
+  const [discordHook, setDiscordHook] = useState("");
   const [functions, setFunctions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [linking, setLinking] = useState(false);
@@ -902,6 +951,7 @@ function VaLinksSheet({
     setStartDate(va.startDate || "");
     setRate(va.rateCents === null ? "" : String(va.rateCents / 100));
     setStatus(va.performanceStatus || "active");
+    setDiscordHook(va.discordWebhookUrl || "");
     setFunctions(va.functionsAssigned || []);
   }, [va]);
 
@@ -917,6 +967,7 @@ function VaLinksSheet({
       rateCents: rate === "" ? null : Math.round(Number(rate) * 100),
       performanceStatus: status,
       functionsAssigned: functions,
+      discordWebhookUrl: discordHook,
     });
     setBusy(false);
     if (!res.ok) {
@@ -971,6 +1022,24 @@ function VaLinksSheet({
               <div className="space-y-1.5">
                 <Label className="text-sm">Workspace user</Label>
                 <Input value={va.workspaceUserId || "not provisioned"} disabled className="bg-slate-50" />
+                <p className="text-[11px] text-slate-500">
+                  Optional. VAs reach their EOD through the personal link below, not a login.
+                </p>
+              </div>
+
+              <EodLinkPanel va={va} onChanged={onSaved} />
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Private Discord webhook</Label>
+                <Input
+                  value={discordHook}
+                  onChange={(e) => setDiscordHook(e.target.value)}
+                  placeholder="https://discord.com/api/webhooks/…"
+                />
+                <p className="text-[11px] leading-snug text-slate-500">
+                  A channel only this VA can read. Their link is a credential, so it&apos;s never
+                  posted to the shared ops channel — that one gets a reminder with no link in it.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -1031,6 +1100,100 @@ function VaLinksSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * The VA's personal EOD link. This is how they actually get to the form —
+ * almost none of them have a workspace login, so the link is the access model,
+ * not a convenience.
+ */
+function EodLinkPanel({ va, onChanged }: { va: Va; onChanged: () => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+
+  const run = async (action: "send" | "rotate") => {
+    if (action === "rotate") {
+      const ok = window.confirm(
+        `Issue ${va.name} a new link? Their current one stops working immediately.`,
+      );
+      if (!ok) return;
+    }
+    setBusy(action);
+    const res = await callEodLink<{ url: string; emailed: boolean; discorded: boolean }>({
+      action,
+      vaId: va.id,
+    });
+    setBusy(null);
+    if (!res.ok) {
+      toast.error(res.data.error || "Couldn't send the link.");
+      return;
+    }
+    setUrl(res.data.url);
+    const channels = [res.data.emailed ? "email" : null, res.data.discorded ? "Discord" : null]
+      .filter(Boolean)
+      .join(" and ");
+    toast.success(
+      action === "rotate" ? `New link issued and sent by ${channels}.` : `Link sent by ${channels}.`,
+    );
+    await onChanged();
+  };
+
+  const lastSent = va.eodLinkLastSentAt
+    ? new Date(va.eodLinkLastSentAt).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-sm">Personal EOD link</Label>
+        <span className="text-[11px] text-slate-500">
+          {va.eodToken ? (lastSent ? `sent ${lastSent}` : "issued, not sent yet") : "not issued yet"}
+        </span>
+      </div>
+
+      {url && (
+        <div className="mt-2 flex items-center gap-2">
+          <Input value={url} readOnly className="h-8 bg-white font-mono text-[11px]" />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0"
+            onClick={() => {
+              void navigator.clipboard.writeText(url);
+              toast.success("Copied.");
+            }}
+          >
+            Copy
+          </Button>
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={() => run("send")} disabled={!!busy}>
+          {busy === "send" && <RiLoader4Line className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          <RiMailSendLine className="mr-1.5 h-3.5 w-3.5" />
+          {va.eodToken ? "Resend link" : "Create and send link"}
+        </Button>
+        {va.eodToken && (
+          <Button type="button" size="sm" variant="ghost" onClick={() => run("rotate")} disabled={!!busy}>
+            {busy === "rotate" && <RiLoader4Line className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Rotate
+          </Button>
+        )}
+      </div>
+
+      <p className="mt-2 text-[11px] leading-snug text-slate-500">
+        Goes to their email, and to their private Discord channel if one is set. Rotating revokes the
+        old link. Offboarding a VA disables it without rotating.
+      </p>
+    </div>
   );
 }
 

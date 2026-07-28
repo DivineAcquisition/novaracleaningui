@@ -29,6 +29,7 @@ import { DEFAULT_THRESHOLDS } from "../src/lib/va-performance/settings";
 import { dayWindow } from "../src/lib/va-performance/time";
 import type { MetricValues } from "../src/lib/va-performance/metrics";
 import type { StoredVerifiedDay } from "../src/lib/va-performance/verify";
+import { resolveVaByEodToken } from "../src/lib/va-performance/vas";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -97,6 +98,22 @@ check(
 );
 
 check("no tasks selected is rejected", validateSubmission({ tasksSelected: [], selfReported: {}, taskNotes: {} }).length, 1);
+
+// ─── EOD link tokens ─────────────────────────────────────────────────────────
+//
+// The token IS the credential, so a short/guessable value must be rejected
+// outright rather than sent to the database as a lookup.
+
+async function checkTokenGuard(): Promise<void> {
+  console.log("\nEOD link token guard:");
+  for (const bad of ["", "abc", "0".repeat(31)]) {
+    check(
+      `a ${bad.length}-char token is rejected without a lookup`,
+      await resolveVaByEodToken(bad),
+      null,
+    );
+  }
+}
 
 // ─── Apploye per-day attribution ─────────────────────────────────────────────
 //
@@ -332,6 +349,10 @@ const va = {
   ghlUserId: null,
   workspaceUserId: null,
   perfAirtableRecordId: null,
+  eodToken: null,
+  eodTokenIssuedAt: null,
+  eodLinkLastSentAt: null,
+  discordWebhookUrl: null,
 };
 
 const submission = (workDate: string, late: boolean) => ({
@@ -400,9 +421,11 @@ check(
   23,
 );
 
-console.log(
-  failures === 0
-    ? "\nAll VA performance checks passed."
-    : `\n${failures} check${failures === 1 ? "" : "s"} FAILED.`,
-);
-process.exit(failures === 0 ? 0 : 1);
+void checkTokenGuard().then(() => {
+  console.log(
+    failures === 0
+      ? "\nAll VA performance checks passed."
+      : `\n${failures} check${failures === 1 ? "" : "s"} FAILED.`,
+  );
+  process.exit(failures === 0 ? 0 : 1);
+});

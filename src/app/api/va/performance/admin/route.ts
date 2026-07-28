@@ -249,6 +249,15 @@ export async function POST(req: Request): Promise<NextResponse> {
             .map((f) => str(f).toLowerCase())
             .filter((f) => ["operations", "sales", "recruiting"].includes(f));
         }
+        if (body.discordWebhookUrl !== undefined) {
+          const hook = str(body.discordWebhookUrl);
+          if (hook && !hook.startsWith("https://discord.com/api/webhooks/")) {
+            return fail("That doesn't look like a Discord webhook URL.");
+          }
+          // Must be a channel only this VA can read — the EOD link is a
+          // credential, and a shared channel would hand it to everyone.
+          update.discord_webhook_url = hook || null;
+        }
         if (body.performanceStatus !== undefined) {
           const status = str(body.performanceStatus);
           if (!(PERFORMANCE_STATUSES as readonly string[]).includes(status)) {
