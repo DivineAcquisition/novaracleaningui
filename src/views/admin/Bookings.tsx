@@ -400,6 +400,8 @@ interface SuggestedCleaner {
   match_score: number;
   available: boolean;
   reason?: string;
+  /** Set when this cleaner's earlier job that day leaves no room before this one. */
+  bufferConflict?: string | null;
 }
 
 // AI/ops risk layer — advisory flags per cleaner for THIS job (score trends,
@@ -428,6 +430,11 @@ function BookingAssignBlock({
   const [loadingSuggest, setLoadingSuggest] = useState(true);
   const [depositBlocked, setDepositBlocked] = useState(false);
   const [risk, setRisk] = useState<Map<string, RiskInfo>>(new Map());
+  // The schedule buffer blocked this assignment. Holds the explanation the
+  // server computed (projected end + how short the gap is) plus the reason the
+  // admin types to force it — an override is only ever an explicit, logged act.
+  const [bufferBlock, setBufferBlock] = useState<string | null>(null);
+  const [bufferReason, setBufferReason] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -496,7 +503,7 @@ function BookingAssignBlock({
     });
   };
 
-  const assign = async (allowUnpaid = false) => {
+  const assign = async (allowUnpaid = false, bufferOverrideReason?: string) => {
     if (selectedIds.length === 0) {
       toast.error("Pick at least one cleaner from the directory.");
       return;
@@ -504,14 +511,20 @@ function BookingAssignBlock({
     setWorking("assign");
     try {
       const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
-        body: { bookingId: booking.id, cleanerIds: selectedIds, mode: "replace", allowUnpaid },
+        body: {
+          bookingId: booking.id,
+          cleanerIds: selectedIds,
+          mode: "replace",
+          allowUnpaid,
+          bufferOverrideReason,
+        },
       });
       // On non-2xx the supabase client returns a FunctionsHttpError whose
       // `context` is the raw Response — the JSON body (error message +
       // code like "deposit_unpaid") must be parsed out of it, otherwise
       // every failure surfaces as a useless generic toast and the deposit
       // override button never appears.
-      let payload = (data ?? {}) as { error?: string; code?: string };
+      let payload = (data ?? {}) as { error?: string; code?: string; bufferConflict?: unknown };
       if (!payload?.code && !payload?.error && error) {
         const ctx = (error as any)?.context;
         try {
@@ -527,9 +540,16 @@ function BookingAssignBlock({
         );
         return;
       }
+      if (payload?.code === "buffer_conflict") {
+        setBufferBlock(payload.error || "This start time leaves no buffer after the crew's earlier job.");
+        toast.error("No buffer after this crew's earlier job — assignment blocked.");
+        return;
+      }
       if (payload?.error) throw new Error(payload.error);
       if (error) throw error;
       setDepositBlocked(false);
+      setBufferBlock(null);
+      setBufferReason("");
       const notes = (data as { notifications?: Array<{ email?: boolean; sms?: boolean }> })?.notifications;
       const emailed = notes?.filter((n) => n.email).length ?? 0;
       const texted = notes?.filter((n) => n.sms).length ?? 0;
@@ -621,22 +641,31 @@ function BookingAssignBlock({
                 const on = selectedIds.includes(s.id);
                 const r = risk.get(s.id);
                 const flagged = (r?.flags.length || 0) > 0;
+                // A buffer conflict is harder than a risk flag: this crew
+                // physically can't get here in time without an override.
+                const noRoom = Boolean(s.bufferConflict);
                 return (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => toggle(s.id)}
-                    title={flagged ? r!.flags.join("\n") : undefined}
+                    title={
+                      [s.bufferConflict, flagged ? r!.flags.join("\n") : null]
+                        .filter(Boolean)
+                        .join("\n") || undefined
+                    }
                     className={cn(
                       "text-xs px-2 py-1 rounded-full border transition-colors",
                       on
                         ? "bg-indigo-600 text-white border-indigo-600"
-                        : flagged
-                          ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
-                          : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
+                        : noRoom
+                          ? "bg-orange-50 text-orange-900 border-orange-300 hover:bg-orange-100"
+                          : flagged
+                            ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                            : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
                     )}
                   >
-                    {flagged ? "⚠ " : ""}
+                    {noRoom ? "⏱ " : flagged ? "⚠ " : ""}
                     {s.first_name} {s.last_name?.[0]}.
                     {r?.overall != null ? ` · ${Math.round(r.overall)}` : ""}
                     {s.distance_miles != null ? ` · ${s.distance_miles} mi` : ""}
@@ -706,6 +735,30 @@ function BookingAssignBlock({
               disabled={working === "assign"}
             >
               Assign anyway (override — cash / comp job)
+            </Button>
+          </div>
+        )}
+        {bufferBlock && (
+          <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-900 space-y-2">
+            <p className="font-medium">{bufferBlock}</p>
+            <p className="text-orange-800/90">
+              Pick a different crew or time, or force it with a reason. Overrides stay on the
+              booking — if this turns into a cascade later, this is where it started.
+            </p>
+            <Input
+              value={bufferReason}
+              onChange={(e) => setBufferReason(e.target.value)}
+              placeholder="Why is this the right call? (required, logged)"
+              className="bg-white text-sm"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-orange-400 text-orange-900 hover:bg-orange-100"
+              onClick={() => assign(false, bufferReason.trim())}
+              disabled={working === "assign" || bufferReason.trim().length < 8}
+            >
+              Assign inside the buffer anyway (logged override)
             </Button>
           </div>
         )}
