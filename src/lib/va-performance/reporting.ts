@@ -12,7 +12,7 @@
 //     the review UI as context and never feed a rating.
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { tier2FieldByKey } from "./catalog";
+import { metricFieldByKey } from "./catalog";
 import { mapSubmission, type EodSubmission } from "./eod";
 import { METRIC_KEYS, type MetricKey, type MetricValues } from "./metrics";
 import { addDays, cutoffMinutes, getEodSettings, localDate, type EodSettings } from "./settings";
@@ -368,7 +368,7 @@ export async function todayView(date?: string): Promise<TodayView> {
     let status: TodayRow["status"] = "missing";
     if (submission && submission.status !== "draft" && submission.submittedAt) {
       status = submission.submittedLate ? "submitted_late" : "submitted_on_time";
-    } else if (submission && (submission.tasksSelected.length || submission.blockers)) {
+    } else if (submission && (Object.keys(submission.metrics).length || submission.selects.primary_focus)) {
       status = "draft";
     }
     return {
@@ -643,8 +643,8 @@ function buildComparison(
   for (const s of submissions) {
     if (s.status === "draft") continue;
     const verified = verifiedByDate.get(s.workDate) || {};
-    for (const [key, value] of Object.entries(s.selfReported || {})) {
-      const field = tier2FieldByKey(key);
+    for (const [key, value] of Object.entries(s.metrics || {})) {
+      const field = metricFieldByKey(key);
       if (!field?.corroborate) continue;
       let signal: number | null = null;
       for (const metric of field.corroborate.metrics) {

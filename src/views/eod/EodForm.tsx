@@ -1,23 +1,27 @@
 "use client";
 
-// ─── The adaptive EOD form ────────────────────────────────────────────────────
+// ─── The EOD form ─────────────────────────────────────────────────────────────
 //
-// Select the tasks you actually worked on; only those question blocks appear.
-// Everything the system already observed is pre-filled and read-only, so the
-// form is short: the VA supplies what no source can see.
+// A flat form: hours (read-only, from Apploye), ten metrics, four selects with
+// conditional follow-ups, then priorities and notes.
 //
-// Autosaves as a draft while you type. One submission per day — re-opening the
-// same day edits it until it locks.
+// Each metric shows the system's own count beside the input — "GHL shows 22" —
+// or "not tracked" where no source exists yet. The VA still enters their own
+// number; the two are compared on submit. Showing the count up front means the
+// comparison is never a gotcha: if they disagree with it, they can say so in
+// the same breath.
+//
+// Autosaves continuously. Editable until the daily cutoff, read-only after.
 
 import {
   RiAlertLine,
   RiCheckLine,
-  RiCloudOffLine,
+  RiCheckboxCircleFill,
   RiErrorWarningLine,
+  RiFilePdfLine,
   RiLoader4Line,
+  RiLockLine,
   RiSendPlaneFill,
-  RiShieldCheckLine,
-  RiTimeLine,
 } from "@remixicon/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -25,54 +29,65 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
-  CORE_FIELDS,
+  CLOSING_FIELDS,
   CORE_HOURS_METRIC,
-  isChoice,
-  isTier1,
-  isTier2,
-  TASK_CATEGORIES,
-  TASKS,
-  tasksFor,
+  METRIC_FIELDS,
+  SELECT_FIELDS,
+  followUpRequired,
+  formatMetricEntry,
   validateSubmission,
-  type ChoiceField,
-  type TaskDef,
-  type Tier2Field,
-  type Tier3Field,
+  type MetricField,
+  type SelectField,
 } from "@/lib/va-performance/catalog";
 import type { MetricKey } from "@/lib/va-performance/metrics";
 
-import { AutoFilledNote, VerifiedField } from "./VerifiedField";
+import { VerifiedField } from "./VerifiedField";
 import type { BootstrapPayload, FlagSummary } from "./types";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface FormState {
-  tasks: string[];
-  numbers: Record<string, string>;
-  notes: Record<string, string | string[]>;
-  core: Record<string, string>;
+  metrics: Record<string, string>;
+  selects: Record<string, string>;
+  text: Record<string, string>;
 }
 
 function initialState(boot: BootstrapPayload): FormState {
   const s = boot.submission;
+  const metrics: Record<string, string> = {};
+  for (const field of METRIC_FIELDS) {
+    const stored = s.metrics?.[field.key];
+    if (stored === undefined || stored === null) continue;
+    metrics[field.key] = String(field.currency ? stored / 100 : stored);
+  }
   return {
-    tasks: s.tasksSelected || [],
-    numbers: Object.fromEntries(
-      Object.entries(s.selfReported || {}).map(([k, v]) => [k, String(v)]),
-    ),
-    notes: { ...(s.taskNotes || {}) },
-    core: {
+    metrics,
+    selects: { ...(s.selects || {}) },
+    text: {
       blockers: s.blockers || "",
+      escalations: s.escalations || "",
+      cleaner_issue_notes: s.cleanerIssueNotes || "",
       priorities: s.priorities || "",
       wins: s.wins || "",
-      escalations: s.escalations || "",
     },
   };
+}
+
+/** The system's own count for a metric, or null when there's no signal. */
+function signalFor(field: MetricField, boot: BootstrapPayload): number | null {
+  if (!field.corroborate) return null;
+  let total: number | null = null;
+  for (const key of field.corroborate.metrics as MetricKey[]) {
+    const value = boot.verified.values[key];
+    if (value === null || value === undefined) continue;
+    total = (total ?? 0) + value;
+  }
+  return total;
 }
 
 export default function EodForm({
@@ -87,6 +102,7 @@ export default function EodForm({
   const [form, setForm] = useState<FormState>(() => initialState(boot));
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [submitting, setSubmitting] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const [flags, setFlags] = useState<FlagSummary[]>(
     boot.flags.filter((f) => f.workDate === boot.workDate),
   );
@@ -105,12 +121,7 @@ export default function EodForm({
   }, [boot]);
 
   const payload = useMemo(
-    () => ({
-      tasksSelected: form.tasks,
-      selfReported: form.numbers,
-      taskNotes: form.notes,
-      ...form.core,
-    }),
+    () => ({ metrics: form.metrics, selects: form.selects, text: form.text }),
     [form],
   );
 
@@ -125,7 +136,6 @@ export default function EodForm({
     setSaveState(res.ok ? "saved" : "error");
   }, [api, boot.workDate, payload, readOnly]);
 
-  // Debounced autosave. Never fires on the initial hydrate.
   useEffect(() => {
     if (readOnly) return;
     if (skipNextSave.current) {
@@ -139,38 +149,27 @@ export default function EodForm({
     };
   }, [payload, flush, readOnly]);
 
-  const selectedTasks = useMemo(() => tasksFor(form.tasks), [form.tasks]);
-
   const issues = useMemo(
-    () =>
-      validateSubmission({
-        tasksSelected: form.tasks,
-        selfReported: form.numbers,
-        taskNotes: form.notes,
-      }),
+    () => validateSubmission({ metrics: form.metrics, selects: form.selects, text: form.text }),
     [form],
   );
+  const issueByField = useMemo(
+    () => new Map(issues.map((i) => [i.field, i.message])),
+    [issues],
+  );
 
-  const toggleTask = (id: string) => {
-    if (readOnly) return;
-    setForm((f) => ({
-      ...f,
-      tasks: f.tasks.includes(id) ? f.tasks.filter((t) => t !== id) : [...f.tasks, id],
-    }));
-  };
-
-  const setNumber = (key: string, value: string) =>
-    setForm((f) => ({ ...f, numbers: { ...f.numbers, [key]: value } }));
-
-  const setNote = (key: string, value: string | string[]) =>
-    setForm((f) => ({ ...f, notes: { ...f.notes, [key]: value } }));
-
-  const setCore = (key: string, value: string) =>
-    setForm((f) => ({ ...f, core: { ...f.core, [key]: value } }));
+  const setMetric = (key: string, value: string) =>
+    setForm((f) => ({ ...f, metrics: { ...f.metrics, [key]: value } }));
+  const setSelect = (key: string, value: string) =>
+    setForm((f) => ({ ...f, selects: { ...f.selects, [key]: value } }));
+  const setText = (key: string, value: string) =>
+    setForm((f) => ({ ...f, text: { ...f.text, [key]: value } }));
 
   const submit = async () => {
+    setShowErrors(true);
     if (issues.length) {
-      toast.error(issues[0].message);
+      toast.error(`${issues.length} field${issues.length === 1 ? "" : "s"} still needs an answer.`);
+      document.getElementById(`f-${issues[0].field}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     setSubmitting(true);
@@ -185,7 +184,7 @@ export default function EodForm({
       const newFlags = (res.data.flags as FlagSummary[]) || [];
       if (newFlags.length) {
         toast.warning(
-          `Submitted. ${newFlags.length} number${newFlags.length === 1 ? "" : "s"} didn't line up with what we recorded — add a quick explanation below.`,
+          `Submitted. ${newFlags.length} number${newFlags.length === 1 ? "" : "s"} didn't line up with what we recorded — add a quick note below.`,
         );
       } else {
         toast.success("EOD submitted. Have a good evening.");
@@ -196,43 +195,17 @@ export default function EodForm({
     }
   };
 
-  const hoursVerified =
-    boot.verified.values[CORE_HOURS_METRIC] !== null &&
-    boot.verified.values[CORE_HOURS_METRIC] !== undefined;
-
   return (
-    <div className="space-y-6 pb-24">
-      {/* ── Status strip ─────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        {submitted ? (
-          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-            <RiCheckLine className="mr-1 h-3.5 w-3.5" />
-            Submitted{boot.submission.submittedLate ? " (late)" : ""}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">
-            Draft
-          </Badge>
-        )}
-        {readOnly && (
-          <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">
-            Locked — ask an admin if this needs to change
-          </Badge>
-        )}
-        <SaveIndicator state={saveState} readOnly={readOnly} />
-        <span className="ml-auto flex items-center gap-1 text-xs text-slate-500">
-          <RiTimeLine className="h-3.5 w-3.5" />
-          On time before {boot.settings.cutoffLocalTime}
-        </span>
-      </div>
+    <div className="space-y-5 pb-28">
+      <StatusStrip boot={boot} submitted={submitted} readOnly={readOnly} saveState={saveState} />
 
-      {/* ── Core block ───────────────────────────────────────────────── */}
+      {/* ── Hours ─────────────────────────────────────────────────────── */}
       <Card className="border-slate-200 p-5">
         <SectionHeading
-          title="Today at a glance"
-          subtitle="Hours come from Apploye. Everything below is yours — it's never scored."
+          title="Hours"
+          subtitle="From Apploye. Read-only — if it looks wrong, say so in your notes."
         />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3">
           <VerifiedField
             metric={CORE_HOURS_METRIC}
             values={boot.verified.values}
@@ -240,83 +213,81 @@ export default function EodForm({
             emphasis
           />
         </div>
-        {!hoursVerified && (
-          <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-amber-700">
-            <RiCloudOffLine className="mt-px h-3.5 w-3.5 shrink-0" />
-            We couldn&apos;t reach Apploye for this date. Submit anyway — it&apos;ll fill in on the next sync.
-          </p>
-        )}
+      </Card>
 
-        <div className="mt-5 space-y-4">
-          {CORE_FIELDS.map((field) => (
-            <QualitativeInput
+      {/* ── Metrics ───────────────────────────────────────────────────── */}
+      <Card className="border-slate-200 p-5">
+        <SectionHeading
+          title="Today's numbers"
+          subtitle="Every field needs an answer. Enter 0 if there were none — a blank tells us nothing."
+        />
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {METRIC_FIELDS.map((field) => (
+            <MetricInput
               key={field.key}
               field={field}
-              value={String(form.core[field.key] ?? "")}
-              onChange={(v) => setCore(field.key, v)}
+              value={form.metrics[field.key] ?? ""}
+              onChange={(v) => setMetric(field.key, v)}
+              signal={signalFor(field, boot)}
+              error={showErrors ? issueByField.get(field.key) : undefined}
               disabled={readOnly}
             />
           ))}
         </div>
       </Card>
 
-      {/* ── Task picker ──────────────────────────────────────────────── */}
+      {/* ── Selects ───────────────────────────────────────────────────── */}
       <Card className="border-slate-200 p-5">
-        <SectionHeading
-          title="What did you work on today?"
-          subtitle="Pick everything that applies — only those questions will appear."
-        />
+        <SectionHeading title="How the day went" subtitle="None of this is scored." />
         <div className="mt-4 space-y-5">
-          {TASK_CATEGORIES.map((category) => {
-            const tasks = TASKS.filter((t) => t.category === category.id);
-            return (
-              <div key={category.id}>
-                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                  {category.label}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {tasks.map((task) => {
-                    const active = form.tasks.includes(task.id);
-                    return (
-                      <button
-                        key={task.id}
-                        type="button"
-                        onClick={() => toggleTask(task.id)}
-                        disabled={readOnly}
-                        aria-pressed={active}
-                        className={cn(
-                          "rounded-full border px-3 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                          active
-                            ? "border-[#5C0FFE] bg-[#5C0FFE]/[0.07] font-semibold text-[#5C0FFE]"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
-                        )}
-                      >
-                        {task.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+          {SELECT_FIELDS.map((field) => (
+            <SelectRow
+              key={field.key}
+              field={field}
+              answer={form.selects[field.key] ?? ""}
+              followUpValue={field.followUp ? (form.text[field.followUp.key] ?? "") : ""}
+              onAnswer={(v) => setSelect(field.key, v)}
+              onFollowUp={(v) => field.followUp && setText(field.followUp.key, v)}
+              error={showErrors ? issueByField.get(field.key) : undefined}
+              followUpError={
+                showErrors && field.followUp ? issueByField.get(field.followUp.key) : undefined
+              }
+              disabled={readOnly}
+            />
+          ))}
         </div>
       </Card>
 
-      {/* ── Task blocks ──────────────────────────────────────────────── */}
-      {selectedTasks.map((task) => (
-        <TaskBlock
-          key={task.id}
-          task={task}
-          boot={boot}
-          numbers={form.numbers}
-          notes={form.notes}
-          onNumber={setNumber}
-          onNote={setNote}
-          disabled={readOnly}
-        />
-      ))}
+      {/* ── Closing ───────────────────────────────────────────────────── */}
+      <Card className="border-slate-200 p-5">
+        <SectionHeading title="Looking ahead" />
+        <div className="mt-4 space-y-4">
+          {CLOSING_FIELDS.map((field) => (
+            <div key={field.key} className="space-y-1.5">
+              <Label htmlFor={`f-${field.key}`} className="text-sm text-slate-700">
+                {field.label}
+                {!field.required && <span className="ml-1 text-xs font-normal text-slate-400">optional</span>}
+              </Label>
+              <Textarea
+                id={`f-${field.key}`}
+                rows={field.key === "priorities" ? 4 : 3}
+                value={form.text[field.key] ?? ""}
+                onChange={(e) => setText(field.key, e.target.value)}
+                placeholder={field.placeholder}
+                disabled={readOnly}
+                className={cn(
+                  "resize-y bg-white text-sm",
+                  showErrors && issueByField.get(field.key) && "border-rose-300",
+                )}
+              />
+              <FieldError message={showErrors ? issueByField.get(field.key) : undefined} />
+            </div>
+          ))}
+        </div>
+      </Card>
 
-      {/* ── Flags raised on this day ─────────────────────────────────── */}
+      {submitted && <SubmittedCard boot={boot} />}
+
       {flags.length > 0 && (
         <FlagPanel
           flags={flags}
@@ -325,26 +296,29 @@ export default function EodForm({
         />
       )}
 
-      {/* ── Submit ───────────────────────────────────────────────────── */}
-      {!readOnly && (
+      {readOnly ? (
+        <p className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+          <RiLockLine className="h-3.5 w-3.5" />
+          This day is locked and can no longer be edited.
+        </p>
+      ) : (
         <div className="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             <div className="min-w-0 flex-1 text-xs text-slate-500">
-              {issues.length ? (
-                <span className="flex items-center gap-1.5 text-amber-700">
+              {showErrors && issues.length ? (
+                <span className="flex items-center gap-1.5 text-rose-600">
                   <RiErrorWarningLine className="h-3.5 w-3.5 shrink-0" />
-                  {issues[0].message}
+                  {issues.length} field{issues.length === 1 ? "" : "s"} to finish
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5">
-                  <RiShieldCheckLine className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  Your draft saves as you go. Submitting compares your numbers to what we recorded.
+                <span>
+                  Saves as you type. You can edit until the cutoff, then the day locks.
                 </span>
               )}
             </div>
             <Button
               onClick={submit}
-              disabled={submitting || issues.length > 0}
+              disabled={submitting}
               className="h-10 shrink-0 font-semibold text-white shadow-lg shadow-[#5C0FFE]/25"
               style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}
             >
@@ -378,242 +352,253 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
   );
 }
 
-function SaveIndicator({ state, readOnly }: { state: SaveState; readOnly: boolean }) {
-  if (readOnly) return null;
-  const map: Record<SaveState, { label: string; cls: string }> = {
-    idle: { label: "Auto-saving", cls: "text-slate-400" },
-    saving: { label: "Saving…", cls: "text-slate-500" },
-    saved: { label: "Draft saved", cls: "text-emerald-600" },
-    error: { label: "Couldn't save — retrying on your next change", cls: "text-amber-700" },
-  };
-  const { label, cls } = map[state];
-  return <span className={cn("text-xs", cls)}>{label}</span>;
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-[11px] leading-snug text-rose-600">{message}</p>;
 }
 
-function TaskBlock({
-  task,
+function StatusStrip({
   boot,
-  numbers,
-  notes,
-  onNumber,
-  onNote,
-  disabled,
+  submitted,
+  readOnly,
+  saveState,
 }: {
-  task: TaskDef;
   boot: BootstrapPayload;
-  numbers: Record<string, string>;
-  notes: Record<string, string | string[]>;
-  onNumber: (key: string, value: string) => void;
-  onNote: (key: string, value: string | string[]) => void;
-  disabled: boolean;
+  submitted: boolean;
+  readOnly: boolean;
+  saveState: SaveState;
 }) {
-  const tier1 = task.fields.filter(isTier1);
-  const tier2 = task.fields.filter(isTier2);
-  const qualitative = task.fields.filter((f) => f.tier === 3);
-
+  const saveLabel: Record<SaveState, string> = {
+    idle: "Auto-saving",
+    saving: "Saving…",
+    saved: "Saved",
+    error: "Couldn't save — retrying on your next change",
+  };
   return (
-    <Card className="border-slate-200 p-5">
-      <SectionHeading title={task.label} subtitle={task.hint} />
-
-      {tier1.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <AutoFilledNote />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {tier1.map((f) => (
-              <VerifiedField
-                key={f.metric}
-                metric={f.metric}
-                label={f.label}
-                values={boot.verified.values}
-                provenance={boot.verified.provenance}
-              />
-            ))}
-          </div>
-        </div>
+    <div className="flex flex-wrap items-center gap-2">
+      {submitted ? (
+        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+          <RiCheckLine className="mr-1 h-3.5 w-3.5" />
+          Submitted{boot.submission.submittedLate ? " (late)" : ""}
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">
+          Draft
+        </Badge>
       )}
-
-      {tier2.length > 0 && (
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          {tier2.map((f) => (
-            <CorroboratedInput
-              key={f.key}
-              field={f}
-              value={numbers[f.key] ?? ""}
-              onChange={(v) => onNumber(f.key, v)}
-              boot={boot}
-              disabled={disabled}
-            />
-          ))}
-        </div>
+      {readOnly && (
+        <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">
+          <RiLockLine className="mr-1 h-3 w-3" />
+          Locked
+        </Badge>
       )}
-
-      {qualitative.length > 0 && (
-        <div className="mt-5 space-y-4">
-          {qualitative.map((f) =>
-            isChoice(f) ? (
-              <ChoiceInput
-                key={f.key}
-                field={f}
-                value={notes[f.key]}
-                onChange={(v) => onNote(f.key, v)}
-                disabled={disabled}
-              />
-            ) : (
-              <QualitativeInput
-                key={f.key}
-                field={f as Tier3Field}
-                value={String(notes[f.key] ?? "")}
-                onChange={(v) => onNote(f.key, v)}
-                disabled={disabled}
-              />
-            ),
+      {!readOnly && (
+        <span
+          className={cn(
+            "text-xs",
+            saveState === "saved"
+              ? "text-emerald-600"
+              : saveState === "error"
+                ? "text-amber-700"
+                : "text-slate-400",
           )}
-        </div>
+        >
+          {saveLabel[saveState]}
+        </span>
       )}
-    </Card>
+      <span className="ml-auto text-xs text-slate-500">On time before {boot.settings.cutoffLocalTime}</span>
+    </div>
   );
 }
 
-function CorroboratedInput({
+function MetricInput({
   field,
   value,
   onChange,
-  boot,
+  signal,
+  error,
   disabled,
 }: {
-  field: Tier2Field;
+  field: MetricField;
   value: string;
   onChange: (v: string) => void;
-  boot: BootstrapPayload;
+  signal: number | null;
+  error?: string;
   disabled: boolean;
 }) {
-  // Show what this will be compared against, so the check is never a surprise.
-  let signal: number | null = null;
-  if (field.corroborate) {
-    for (const metric of field.corroborate.metrics as MetricKey[]) {
-      const v = boot.verified.values[metric];
-      if (v === null || v === undefined) continue;
-      signal = (signal ?? 0) + v;
-    }
-  }
-
   return (
     <div className="space-y-1.5">
       <Label htmlFor={`f-${field.key}`} className="text-sm text-slate-700">
         {field.label}
         {field.unit && <span className="ml-1 text-xs font-normal text-slate-400">({field.unit})</span>}
       </Label>
-      <Input
-        id={`f-${field.key}`}
-        type="number"
-        min={0}
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className="h-10 bg-white"
-        placeholder="—"
-      />
-      {field.help && <p className="text-[11px] text-slate-500">{field.help}</p>}
-      {field.corroborate ? (
-        <p className="text-[11px] leading-snug text-slate-500">
-          {signal === null ? (
-            <>Checked against {field.corroborate.describe} — currently unverified, so nothing to compare.</>
-          ) : (
-            <>
-              We recorded <span className="font-mono font-semibold text-slate-700">{signal}</span> from{" "}
-              {field.corroborate.describe}.
-            </>
-          )}
+      <div className="relative">
+        {field.currency && (
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+            $
+          </span>
+        )}
+        <Input
+          id={`f-${field.key}`}
+          type="number"
+          min={0}
+          step={field.currency ? "0.01" : "1"}
+          inputMode={field.currency ? "decimal" : "numeric"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          // Deliberately not "0": blank and zero mean different things here,
+          // and a zero-looking placeholder invites people to skip the field
+          // believing it's already answered.
+          placeholder="—"
+          className={cn("h-10 bg-white", field.currency && "pl-7", error && "border-rose-300")}
+        />
+      </div>
+      <p className="text-[11px] leading-snug text-slate-500">{field.definition}</p>
+
+      {/* The system's own count, or an honest admission that we can't see it. */}
+      {!field.corroborate ? (
+        <p className="text-[11px] leading-snug text-slate-400">
+          <span className="font-medium text-slate-500">not tracked</span>
+          {field.notTrackedReason ? ` — ${field.notTrackedReason}` : ""}
+        </p>
+      ) : signal === null ? (
+        <p className="text-[11px] leading-snug text-amber-700">
+          {field.corroborate.sourceLabel} is unreachable right now — nothing to compare against.
         </p>
       ) : (
         <p className="text-[11px] leading-snug text-slate-500">
-          Nothing corroborates this one, so it&apos;s recorded as you report it.
+          {field.corroborate.sourceLabel} shows{" "}
+          <span className="font-mono font-semibold text-slate-700">
+            {formatMetricEntry(field, signal)}
+          </span>
         </p>
+      )}
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function SelectRow({
+  field,
+  answer,
+  followUpValue,
+  onAnswer,
+  onFollowUp,
+  error,
+  followUpError,
+  disabled,
+}: {
+  field: SelectField;
+  answer: string;
+  followUpValue: string;
+  onAnswer: (v: string) => void;
+  onFollowUp: (v: string) => void;
+  error?: string;
+  followUpError?: string;
+  disabled: boolean;
+}) {
+  const showFollowUp = followUpRequired(field, answer);
+  const urgent = field.urgentOn?.includes(answer);
+
+  return (
+    <div className="space-y-2" id={`f-${field.key}`}>
+      <Label className="text-sm text-slate-700">{field.label}</Label>
+      <div className="flex flex-wrap gap-2">
+        {field.options.map((option) => {
+          const active = answer === option;
+          const isUrgentOption = field.urgentOn?.includes(option);
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onAnswer(option)}
+              disabled={disabled}
+              aria-pressed={active}
+              className={cn(
+                "rounded-full border px-3.5 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                active
+                  ? isUrgentOption
+                    ? "border-rose-400 bg-rose-50 font-semibold text-rose-700"
+                    : "border-[#5C0FFE] bg-[#5C0FFE]/[0.07] font-semibold text-[#5C0FFE]"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+              )}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+      <FieldError message={error} />
+
+      {showFollowUp && field.followUp && (
+        <div className="space-y-1.5 pt-1">
+          <Label htmlFor={`f-${field.followUp.key}`} className="text-sm text-slate-700">
+            {field.followUp.label}
+          </Label>
+          <Textarea
+            id={`f-${field.followUp.key}`}
+            rows={3}
+            value={followUpValue}
+            onChange={(e) => onFollowUp(e.target.value)}
+            placeholder={field.followUp.placeholder}
+            disabled={disabled}
+            className={cn("resize-y bg-white text-sm", followUpError && "border-rose-300")}
+          />
+          <FieldError message={followUpError} />
+          {urgent && (
+            <p className="flex items-start gap-1.5 text-[11px] leading-snug text-rose-600">
+              <RiAlertLine className="mt-px h-3.5 w-3.5 shrink-0" />
+              This goes to Malik as soon as you submit — you don&apos;t need to chase it separately.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function QualitativeInput({
-  field,
-  value,
-  onChange,
-  disabled,
-}: {
-  field: Tier3Field;
-  value: string;
-  onChange: (v: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={`q-${field.key}`} className="text-sm text-slate-700">
-        {field.label}
-      </Label>
-      <Textarea
-        id={`q-${field.key}`}
-        rows={field.rows ?? 3}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        placeholder={field.placeholder}
-        className="resize-y bg-white text-sm"
-      />
-    </div>
-  );
-}
+function SubmittedCard({ boot }: { boot: BootstrapPayload }) {
+  const s = boot.submission;
+  const time = s.submittedAt
+    ? new Date(s.submittedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : null;
 
-function ChoiceInput({
-  field,
-  value,
-  onChange,
-  disabled,
-}: {
-  field: ChoiceField;
-  value: string | string[] | undefined;
-  onChange: (v: string[]) => void;
-  disabled: boolean;
-}) {
-  const selected = Array.isArray(value) ? value : value ? [value] : [];
-  const toggle = (choice: string) => {
-    if (!field.multiple) {
-      onChange(selected.includes(choice) ? [] : [choice]);
-      return;
-    }
-    onChange(selected.includes(choice) ? selected.filter((c) => c !== choice) : [...selected, choice]);
+  const pdf: Record<string, { label: string; tone: string }> = {
+    generated: { label: "Report saved", tone: "text-emerald-600" },
+    drive_pending: { label: "Report saved — filing to Drive shortly", tone: "text-slate-500" },
+    failed: { label: "Report will be regenerated automatically", tone: "text-amber-700" },
+    none: { label: "Report generating…", tone: "text-slate-500" },
   };
+  const pdfState = pdf[s.pdfStatus] ?? pdf.none;
+
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm text-slate-700">{field.label}</Label>
-      <div className="flex flex-wrap gap-2">
-        {field.choices.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            onClick={() => toggle(choice)}
-            disabled={disabled}
-            aria-pressed={selected.includes(choice)}
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-60",
-              selected.includes(choice)
-                ? "border-[#5C0FFE] bg-[#5C0FFE]/[0.07] font-semibold text-[#5C0FFE]"
-                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-            )}
-          >
-            {choice}
-          </button>
-        ))}
+    <Card className="border-emerald-200 bg-emerald-50/40 p-5">
+      <div className="flex items-start gap-2.5">
+        <RiCheckboxCircleFill className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+        <div>
+          <h2 className="font-jakarta text-base font-bold tracking-tight text-slate-900">
+            Submitted{time ? ` at ${time}` : ""}
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+            You can keep editing until the cutoff — changes re-save and the report is rebuilt. After
+            that the day locks.
+          </p>
+          <p className={cn("mt-2 flex items-center gap-1.5 text-xs", pdfState.tone)}>
+            <RiFilePdfLine className="h-3.5 w-3.5" />
+            {pdfState.label}
+          </p>
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
 // ─── Discrepancy flags ────────────────────────────────────────────────────────
 //
-// Deliberately written as a question, not a verdict. There are plenty of
-// legitimate reasons a number won't match, and the VA gets to say so before
-// anyone concludes anything.
+// Written as a question, not a verdict. There are plenty of legitimate reasons
+// a number won't match, and the VA gets to say so before anyone concludes
+// anything.
 
 function FlagPanel({
   flags,
@@ -633,8 +618,8 @@ function FlagPanel({
             A couple of numbers didn&apos;t line up
           </h2>
           <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
-            This isn&apos;t an accusation — work happens outside the systems we can see all the time. Add
-            a line of context and someone will read it. Nothing happens automatically.
+            Not an accusation — work happens outside the systems we can see all the time. Add a line
+            of context and someone will read it. Nothing happens automatically.
           </p>
         </div>
       </div>
@@ -681,7 +666,7 @@ function FlagRow({
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <p className="text-sm font-semibold text-slate-900">{flag.metricLabel || flag.metricKey}</p>
         <p className="font-mono text-xs tabular-nums text-slate-500">
-          you reported {flag.selfReported} · we recorded {flag.verified}
+          you entered {flag.selfReported} · we recorded {flag.verified}
         </p>
         <Badge
           variant="outline"

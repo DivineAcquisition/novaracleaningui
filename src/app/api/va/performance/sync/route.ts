@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { syncTeamPerformanceBase } from "@/lib/va-performance/airtable";
+import { retryPendingReports } from "@/lib/va-performance/eod-report";
 import {
   addDays,
   dateRange,
@@ -75,6 +76,20 @@ async function handle(req: Request, body: Record<string, unknown>): Promise<Next
   try {
     const report = await syncVerifiedMetrics(dates, vaIds);
 
+    // Heal any EOD report whose PDF or Drive mirror didn't land. Automatic and
+    // logged, so a Drive outage recovers without anyone noticing it happened.
+    let pdfRetry: { retried: number; healed: number } | undefined;
+    try {
+      pdfRetry = await retryPendingReports();
+      if (pdfRetry.retried > pdfRetry.healed) {
+        report.warnings.push(
+          `EOD reports: ${pdfRetry.retried - pdfRetry.healed} still pending after retry.`,
+        );
+      }
+    } catch (err) {
+      report.warnings.push(`EOD report retry: ${(err as Error).message}`);
+    }
+
     // Push the Airtable mirror on the same schedule, the way the other
     // Airtable flows here run. Never fatal: a mirror failure must not fail the
     // sync that produced the source-of-truth rows.
@@ -91,7 +106,7 @@ async function handle(req: Request, body: Record<string, unknown>): Promise<Next
       }
     }
 
-    return NextResponse.json({ ok: true, ...report, airtable });
+    return NextResponse.json({ ok: true, ...report, airtable, pdfRetry });
   } catch (err) {
     console.error("[va-metrics-sync] failed:", (err as Error).message);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });

@@ -73,9 +73,12 @@ interface Submission {
   vaId: string;
   workDate: string;
   status: string;
-  tasksSelected: string[];
-  selfReported: Record<string, number>;
+  metrics: Record<string, number>;
+  selects: Record<string, string>;
   blockers: string | null;
+  cleanerIssueNotes: string | null;
+  pdfStatus: string;
+  driveUrl: string | null;
   priorities: string | null;
   wins: string | null;
   escalations: string | null;
@@ -766,6 +769,22 @@ function PerVaTab({ vas, onSaved }: { vas: Va[]; onSaved: () => Promise<void> })
                       <p className="mt-1 text-xs text-slate-700">
                         <span className="font-semibold">Escalation:</span> {s.escalations}
                       </p>
+                    )}
+                    {s.cleanerIssueNotes && (
+                      <p className="mt-1 text-xs text-slate-700">
+                        <span className="font-semibold">Cleaner issue:</span> {s.cleanerIssueNotes}
+                      </p>
+                    )}
+                    {s.driveUrl && (
+                      <a
+                        href={s.driveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[#5C0FFE] hover:underline"
+                      >
+                        <RiExternalLinkLine className="h-3 w-3" />
+                        EOD report PDF
+                      </a>
                     )}
                     {s.wins && (
                       <p className="mt-1 text-xs text-slate-700">

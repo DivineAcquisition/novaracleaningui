@@ -26,6 +26,7 @@ import {
 
 const METRICS: MetricKey[] = [
   "bookings_created",
+  "jobs_completed",
   "revenue_booked_cents",
   "commercial_accounts_touched",
   "walkthroughs_booked",
@@ -73,7 +74,7 @@ export const revenueOpsCollector: Collector = {
     const vaStatus = new Map<string, SourceStatus>();
     const index = aliasIndex(ctx.vas);
 
-    const [bookings, accounts] = await Promise.all([
+    const [bookings, completed, accounts] = await Promise.all([
       ctx.supabase
         .from("bookings")
         .select(
@@ -82,6 +83,15 @@ export const revenueOpsCollector: Collector = {
         )
         .gte("created_at", ctx.window.startIso)
         .lt("created_at", ctx.window.endIso),
+      // Jobs finished today. Attribution doesn't apply — the cleaner completes
+      // the job — so this is the company-wide count, which is exactly what the
+      // VA is reporting when they answer "jobs completed".
+      ctx.supabase
+        .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "completed")
+        .gte("updated_at", ctx.window.startIso)
+        .lt("updated_at", ctx.window.endIso),
       ctx.supabase
         .from("business_accounts")
         .select("id, created_by, created_at, last_activity_at")
@@ -119,6 +129,9 @@ export const revenueOpsCollector: Collector = {
       if (isCommercial) bump(byVa, vaId, "walkthroughs_booked", 1);
     }
 
+    const completedCount = completed.error ? null : (completed.count ?? 0);
+    for (const va of ctx.vas) setValue(byVa, va.id, "jobs_completed", completedCount);
+
     if (!accounts.error) {
       const byUser = new Map<string, string>();
       for (const va of ctx.vas) if (va.workspaceUserId) byUser.set(va.workspaceUserId, va.id);
@@ -136,7 +149,10 @@ export const revenueOpsCollector: Collector = {
       byVa,
       status: ok(),
       vaStatus,
-      ...(accounts.error ? { metricStatus: { commercial_accounts_touched: "unavailable" as SourceStatus } } : {}),
+      metricStatus: {
+        ...(accounts.error ? { commercial_accounts_touched: "unavailable" as SourceStatus } : {}),
+        ...(completed.error ? { jobs_completed: "unavailable" as SourceStatus } : {}),
+      },
     };
   },
 };

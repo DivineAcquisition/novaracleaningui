@@ -53,6 +53,7 @@ const METRIC_COLUMN: Record<MetricKey, string> = {
   median_response_seconds: "median_response_seconds",
   leads_converted: "leads_converted",
   bookings_created: "bookings_created",
+  jobs_completed: "jobs_completed",
   revenue_booked_cents: "revenue_booked_cents",
   quotes_sent: "quotes_sent",
   commercial_accounts_touched: "commercial_accounts_touched",

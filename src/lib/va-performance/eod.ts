@@ -14,14 +14,16 @@
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
-  CORE_TEXT_KEYS,
-  sanitizeSelfReported,
-  sanitizeTaskNotes,
-  TASK_IDS,
+  FREE_TEXT_KEYS,
+  isUrgent,
+  sanitizeMetrics,
+  sanitizeSelects,
+  sanitizeText,
   validateSubmission,
   type ValidationIssue,
 } from "./catalog";
 import { runDiscrepancyCheck, type PersistedFlag } from "./discrepancy";
+import { generateEodReport } from "./eod-report";
 import type { MetricValues } from "./metrics";
 import {
   allowedWorkDates,
@@ -49,18 +51,23 @@ export interface EodSubmission {
   vaId: string;
   workDate: string;
   status: "draft" | "submitted" | "reviewed" | "flagged";
-  tasksSelected: string[];
-  selfReported: Record<string, number>;
-  taskNotes: Record<string, string | string[]>;
+  /** The ten entered metrics, keyed by metric field key. Money is in cents. */
+  metrics: Record<string, number>;
+  /** The four single-select answers, keyed by select field key. */
+  selects: Record<string, string>;
   blockers: string | null;
+  escalations: string | null;
+  cleanerIssueNotes: string | null;
   priorities: string | null;
   wins: string | null;
-  escalations: string | null;
   submittedAt: string | null;
   submittedLate: boolean;
   lockedAt: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
+  pdfStatus: string;
+  pdfPath: string | null;
+  driveUrl: string | null;
   updatedAt: string;
 }
 
@@ -70,18 +77,26 @@ export function mapSubmission(row: Record<string, unknown>): EodSubmission {
     vaId: String(row.va_id),
     workDate: String(row.work_date),
     status: String(row.status || "draft") as EodSubmission["status"],
-    tasksSelected: Array.isArray(row.tasks_selected) ? (row.tasks_selected as string[]) : [],
-    selfReported: (row.self_reported as Record<string, number>) || {},
-    taskNotes: (row.task_notes as Record<string, string | string[]>) || {},
+    metrics: (row.self_reported as Record<string, number>) || {},
+    selects: {
+      primary_focus: (row.primary_focus as string) || "",
+      blockers_level: (row.blockers_level as string) || "",
+      management_attention: (row.management_attention as string) || "",
+      cleaner_issues: (row.cleaner_issues as string) || "",
+    },
     blockers: (row.blockers as string) ?? null,
+    escalations: (row.escalations as string) ?? null,
+    cleanerIssueNotes: (row.cleaner_issue_notes as string) ?? null,
     priorities: (row.priorities as string) ?? null,
     wins: (row.wins as string) ?? null,
-    escalations: (row.escalations as string) ?? null,
     submittedAt: (row.submitted_at as string) ?? null,
     submittedLate: Boolean(row.submitted_late),
     lockedAt: (row.locked_at as string) ?? null,
     reviewedAt: (row.reviewed_at as string) ?? null,
     reviewNote: (row.review_note as string) ?? null,
+    pdfStatus: String(row.pdf_status || "none"),
+    pdfPath: (row.pdf_path as string) ?? null,
+    driveUrl: (row.drive_url as string) ?? null,
     updatedAt: String(row.updated_at || row.created_at || new Date().toISOString()),
   };
 }
@@ -299,25 +314,35 @@ export async function bootstrapEod(
 }
 
 export interface SavePatch {
-  tasksSelected?: string[];
-  selfReported?: Record<string, unknown>;
-  taskNotes?: Record<string, unknown>;
-  blockers?: string;
-  priorities?: string;
-  wins?: string;
-  escalations?: string;
+  metrics?: Record<string, unknown>;
+  selects?: Record<string, unknown>;
+  text?: Record<string, unknown>;
 }
 
-function buildPatch(patch: SavePatch, tasks: string[]): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (patch.tasksSelected) out.tasks_selected = tasks;
-  if (patch.selfReported) out.self_reported = sanitizeSelfReported(tasks, patch.selfReported);
-  if (patch.taskNotes) out.task_notes = sanitizeTaskNotes(tasks, patch.taskNotes);
-  for (const key of CORE_TEXT_KEYS) {
-    const value = patch[key];
-    if (value !== undefined) out[key] = String(value ?? "").slice(0, 4000) || null;
-  }
-  return out;
+/** Merge a patch onto what's already stored, so a partial autosave never wipes. */
+function mergedState(submission: EodSubmission, patch: SavePatch) {
+  const metrics = { ...submission.metrics, ...sanitizeMetrics(patch.metrics || {}) };
+  const selects = { ...submission.selects, ...sanitizeSelects(patch.selects || {}) };
+  const text: Record<string, string> = {
+    blockers: submission.blockers ?? "",
+    escalations: submission.escalations ?? "",
+    cleaner_issue_notes: submission.cleanerIssueNotes ?? "",
+    priorities: submission.priorities ?? "",
+    wins: submission.wins ?? "",
+    ...sanitizeText(patch.text || {}),
+  };
+  return { metrics, selects, text };
+}
+
+function toRow(state: ReturnType<typeof mergedState>): Record<string, unknown> {
+  return {
+    self_reported: state.metrics,
+    primary_focus: state.selects.primary_focus || null,
+    blockers_level: state.selects.blockers_level || null,
+    management_attention: state.selects.management_attention || null,
+    cleaner_issues: state.selects.cleaner_issues || null,
+    ...Object.fromEntries(FREE_TEXT_KEYS.map((k) => [k, state.text[k]?.trim() ? state.text[k] : null])),
+  };
 }
 
 /** Auto-save. Draft only — a submitted day is edited by re-submitting. */
@@ -336,9 +361,7 @@ export async function saveDraft(
     throw new EodError("This day is locked. Ask an admin if it needs to change.", 403);
   }
 
-  const tasks = (patch.tasksSelected ?? submission.tasksSelected).filter((t) => TASK_IDS.includes(t));
-  const update = buildPatch(patch, tasks);
-  if (Object.keys(update).length === 0) return submission;
+  const update = toRow(mergedState(submission, patch));
 
   const supabase = getAdminSupabase();
   const { data, error } = await supabase
@@ -381,22 +404,22 @@ export async function submitEod(
     throw new EodError("This day is locked. Ask an admin if it needs to change.", 403);
   }
 
-  const tasks = (patch.tasksSelected ?? existing.tasksSelected).filter((t) => TASK_IDS.includes(t));
-  const selfReported = sanitizeSelfReported(tasks, patch.selfReported ?? existing.selfReported);
-  const taskNotes = sanitizeTaskNotes(tasks, patch.taskNotes ?? existing.taskNotes);
-
-  const issues = validateSubmission({ tasksSelected: tasks, selfReported, taskNotes });
-  if (issues.length) return { submission: existing, flags: [], issues, verified: await verifiedForForm(va, workDate) };
+  const state = mergedState(existing, patch);
+  const issues = validateSubmission({
+    metrics: state.metrics,
+    selects: state.selects,
+    text: state.text,
+  });
+  if (issues.length) {
+    return { submission: existing, flags: [], issues, verified: await verifiedForForm(va, workDate) };
+  }
 
   // Refresh once more so the comparison uses the freshest signal available.
   const verified = await verifiedForForm(va, workDate);
 
   const supabase = getAdminSupabase();
   const update: Record<string, unknown> = {
-    ...buildPatch({ ...patch, tasksSelected: tasks, selfReported, taskNotes }, tasks),
-    tasks_selected: tasks,
-    self_reported: selfReported,
-    task_notes: taskNotes,
+    ...toRow(state),
     status: "submitted",
     submitted_at: now.toISOString(),
     submitted_late: wasSubmittedLate(settings, workDate, now),
@@ -421,8 +444,7 @@ export async function submitEod(
     submissionId: submission.id,
     vaId: va.id,
     workDate,
-    tasksSelected: tasks,
-    selfReported,
+    selfReported: state.metrics,
     verified: verified.values as MetricValues,
   });
 
@@ -437,6 +459,19 @@ export async function submitEod(
   }
 
   await announceSubmission(va, submission, flags);
+
+  // The submission is saved and flagged by this point. The PDF renders FROM
+  // the saved row, so a generation or Drive failure is flagged for retry and
+  // never costs the VA their work.
+  const report = await generateEodReport(submission, va);
+  if (report.ok || report.error) {
+    const { data: stamped } = await getAdminSupabase()
+      .from("va_eod_submissions")
+      .select("*")
+      .eq("id", submission.id)
+      .maybeSingle();
+    if (stamped) submission = mapSubmission(stamped as Record<string, unknown>);
+  }
 
   return { submission, flags, issues: [], verified };
 }
@@ -482,6 +517,43 @@ async function announceSubmission(
   const supabase = getAdminSupabase();
   const notable = flags.filter((f) => f.severity === "medium" || f.severity === "high");
 
+  // "Urgent" for management, or "Serious" on cleaner issues, goes out the
+  // moment it's submitted. Those shouldn't wait for someone to open a
+  // dashboard, so they get their own event rather than riding the daily digest.
+  const urgent = isUrgent(submission.selects);
+  if (urgent.length) {
+    const detail = urgent
+      .map((f) => {
+        const answer = submission.selects[f.key];
+        const note =
+          f.followUp?.key === "escalations"
+            ? submission.escalations
+            : f.followUp?.key === "cleaner_issue_notes"
+              ? submission.cleanerIssueNotes
+              : null;
+        return `${f.label}: ${answer}${note ? ` — ${note}` : ""}`;
+      })
+      .join("; ");
+    try {
+      await supabase.from("events").insert({
+        event_type: "va.eod.urgent",
+        source: "eod-form",
+        summary: `Needs attention now — ${va.name}, ${submission.workDate}: ${detail}`,
+        data: {
+          va_id: va.id,
+          va_name: va.name,
+          work_date: submission.workDate,
+          management_attention: submission.selects.management_attention,
+          cleaner_issues: submission.selects.cleaner_issues,
+          escalations: submission.escalations,
+          cleaner_issue_notes: submission.cleanerIssueNotes,
+        },
+      });
+    } catch {
+      /* never block a submission on a notification */
+    }
+  }
+
   try {
     await supabase.from("events").insert({
       event_type: "va.eod.submitted",
@@ -494,7 +566,7 @@ async function announceSubmission(
         va_id: va.id,
         va_name: va.name,
         work_date: submission.workDate,
-        tasks: submission.tasksSelected,
+        focus: submission.selects.primary_focus,
         late: submission.submittedLate,
         flags: flags.length,
       },

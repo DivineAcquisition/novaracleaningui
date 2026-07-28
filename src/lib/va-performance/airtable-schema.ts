@@ -11,7 +11,7 @@
 // editing a cell can never overwrite a verified metric.
 
 import type { CreateFieldSpec } from "@/lib/airtable/client";
-import { TASKS } from "./catalog";
+import { METRIC_FIELDS, SELECT_FIELDS } from "./catalog";
 
 export const TEAM_PERF_BASE_NAME = "Novara — Team Performance";
 
@@ -91,21 +91,33 @@ export const TEAM_PERF_TABLES: TableSpec[] = [
       { name: "Submission ID", type: "singleLineText" },
       { name: "Date", type: "date", options: DATE },
       { name: "Submitted At", type: "dateTime", options: DATETIME },
-      // Seeded from the catalog so the option list matches the form exactly
-      // (Airtable rejects a multipleSelects field with no choices).
-      {
-        name: "Tasks Selected",
-        type: "multipleSelects",
-        options: select(TASKS.map((t) => t.label)),
-      },
-      { name: "Self-Reported Values", type: "multilineText" },
+      // One column per entered metric, so the base is queryable rather than a
+      // wall of JSON. Currency fields keep their own type.
+      ...METRIC_FIELDS.map((m) => ({
+        name: m.label,
+        type: m.currency ? "currency" : "number",
+        options: m.currency ? USD : INT,
+      })),
+      // The verification half of the record: what the system saw, beside what
+      // was entered. Kept as text so "not tracked" reads as itself rather than
+      // collapsing into a blank cell.
+      { name: "Entered vs Verified", type: "multilineText" },
+      ...SELECT_FIELDS.map((f) => ({
+        name: f.label,
+        type: "singleSelect",
+        options: select(f.options),
+      })),
       { name: "Blockers", type: "multilineText" },
+      { name: "Escalations", type: "multilineText" },
+      { name: "Cleaner Issue Notes", type: "multilineText" },
       { name: "Tomorrow's Priorities", type: "multilineText" },
       { name: "Wins", type: "multilineText" },
-      { name: "Escalations", type: "multilineText" },
-      { name: "Task Notes", type: "multilineText" },
       { name: "Status", type: "singleSelect", options: select(["Submitted", "Reviewed", "Flagged", "Draft"]) },
       { name: "Submitted Late", type: "checkbox", options: { ...CHECKBOX } },
+      { name: "Locked", type: "checkbox", options: { ...CHECKBOX } },
+      // The generated record. Airtable fetches and re-hosts the PDF itself.
+      { name: "EOD Report PDF", type: "multipleAttachments" },
+      { name: "Drive Link", type: "url" },
       { name: "Last Synced", type: "dateTime", options: DATETIME },
     ],
     links: [

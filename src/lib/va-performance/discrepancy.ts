@@ -15,7 +15,7 @@
 //   * Nothing here writes to pay, status, or any automated consequence.
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { tier2Fields, type Tier2Field } from "./catalog";
+import { METRIC_FIELDS, metricFieldByKey, type MetricField } from "./catalog";
 import { type MetricValues } from "./metrics";
 import {
   getDiscrepancyThresholds,
@@ -58,7 +58,7 @@ function severityFor(
  * Sum the corroborating metrics. Returns null when NONE of them is verified —
  * there is no signal, so there can be no discrepancy.
  */
-function signalFor(field: Tier2Field, verified: MetricValues): number | null {
+function signalFor(field: MetricField, verified: MetricValues): number | null {
   if (!field.corroborate) return null;
   let total = 0;
   let sawOne = false;
@@ -72,7 +72,7 @@ function signalFor(field: Tier2Field, verified: MetricValues): number | null {
 }
 
 export interface EvaluateInput {
-  tasksSelected: string[];
+  /** The VA's entered metrics, keyed by metric field key. */
   selfReported: Record<string, number>;
   verified: MetricValues;
   /** Prior flag counts per metric inside the repeat window. */
@@ -84,7 +84,7 @@ export interface EvaluateInput {
 export function evaluateDiscrepancies(input: EvaluateInput): DiscrepancyCandidate[] {
   const out: DiscrepancyCandidate[] = [];
 
-  for (const field of tier2Fields(input.tasksSelected)) {
+  for (const field of METRIC_FIELDS) {
     if (!field.corroborate) continue;
 
     const reported = input.selfReported[field.key];
@@ -232,7 +232,6 @@ export async function runDiscrepancyCheck(args: {
   submissionId: string;
   vaId: string;
   workDate: string;
-  tasksSelected: string[];
   selfReported: Record<string, number>;
   verified: MetricValues;
 }): Promise<PersistedFlag[]> {
@@ -243,7 +242,6 @@ export async function runDiscrepancyCheck(args: {
     thresholds.repeat.windowDays,
   );
   const candidates = evaluateDiscrepancies({
-    tasksSelected: args.tasksSelected,
     selfReported: args.selfReported,
     verified: args.verified,
     repeatCounts,

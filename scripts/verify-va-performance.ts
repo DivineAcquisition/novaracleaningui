@@ -17,11 +17,12 @@
 
 import { __test__pickDayTotal as pickDayTotal } from "../src/lib/apploye/client";
 import {
-  sanitizeSelfReported,
-  sanitizeTaskNotes,
-  tier2Fields,
+  METRIC_FIELDS,
+  isUrgent,
+  sanitizeMetrics,
+  sanitizeSelects,
+  sanitizeText,
   validateSubmission,
-  visibleMetrics,
 } from "../src/lib/va-performance/catalog";
 import { evaluateDiscrepancies } from "../src/lib/va-performance/discrepancy";
 import { complianceFor, revenuePerHour, rollUp } from "../src/lib/va-performance/reporting";
@@ -49,55 +50,127 @@ const T = DEFAULT_THRESHOLDS;
 
 console.log("Catalog / payload sanitation:");
 
-const tasks = ["outbound_calling", "commercial_outreach"];
+const ALL_METRICS = Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 0]));
+const ALL_SELECTS = {
+  primary_focus: "Mixed",
+  blockers_level: "None",
+  management_attention: "No",
+  cleaner_issues: "None",
+};
+const ALL_TEXT = { priorities: "Follow up on the Riverside quote." };
 
 check(
-  "Tier 1 metric keys are discarded from a self-reported payload",
-  sanitizeSelfReported(tasks, {
-    calls_placed: 999, // Tier 1 — system-fed, must never come from the client
-    hours_tracked: 12, // Tier 1
-    quotes_from_calls: 4, // Tier 2 — allowed
-  }),
-  { quotes_from_calls: 4 },
+  "Tier 1 metric keys are discarded from an entered payload",
+  sanitizeMetrics({ hours_tracked: 12, calls_placed: 999, quotes_sent: 4 }),
+  { quotes_sent: 4 },
 );
 
 check(
-  "a Tier 2 key from an UNSELECTED task is discarded",
-  sanitizeSelfReported(["outbound_calling"], { reactivation_attempts: 20, quotes_from_calls: 3 }),
-  { quotes_from_calls: 3 },
+  "money is entered in dollars and stored in cents",
+  sanitizeMetrics({ revenue_booked: 1234.56 }),
+  { revenue_booked: 123456 },
 );
 
-check("negative numbers are rejected", sanitizeSelfReported(tasks, { quotes_from_calls: -5 }), {});
+check("negative numbers are dropped", sanitizeMetrics({ quotes_sent: -5 }), {});
 
 check(
-  "a choice field only accepts values from its own vocabulary",
-  sanitizeTaskNotes(tasks, { commercial_method: ["Call", "Telepathy"] }),
-  { commercial_method: ["Call"] },
-);
-
-check(
-  "hours is always visible, even with no tasks selected",
-  visibleMetrics([]),
-  ["hours_tracked"],
+  "a select only accepts its own vocabulary",
+  sanitizeSelects({ blockers_level: "Catastrophic", primary_focus: "Sales" }),
+  { primary_focus: "Sales" },
 );
 
 check(
-  '"Other" cannot be submitted without a description',
-  validateSubmission({ tasksSelected: ["other"], selfReported: {}, taskNotes: {} }).length,
-  1,
+  "free text is limited to the known keys",
+  sanitizeText({ wins: "Closed two.", sneaky: "nope" }),
+  { wins: "Closed two." },
 );
 
 check(
-  '"Other" passes once described',
+  "a complete submission validates",
+  validateSubmission({ metrics: ALL_METRICS, selects: ALL_SELECTS, text: ALL_TEXT }).length,
+  0,
+);
+
+check(
+  "zero is a valid answer for every metric",
+  validateSubmission({ metrics: ALL_METRICS, selects: ALL_SELECTS, text: ALL_TEXT })
+    .filter((i) => i.field in ALL_METRICS).length,
+  0,
+);
+
+check(
+  "a BLANK metric is rejected — blank is not zero",
   validateSubmission({
-    tasksSelected: ["other"],
-    selfReported: {},
-    taskNotes: { other_description: "Cleaned up the zone spreadsheet." },
+    metrics: { ...ALL_METRICS, quotes_sent: "" },
+    selects: ALL_SELECTS,
+    text: ALL_TEXT,
+  }).map((i) => i.field),
+  ["quotes_sent"],
+);
+
+check(
+  "every one of the ten metrics is required",
+  validateSubmission({ metrics: {}, selects: ALL_SELECTS, text: ALL_TEXT }).length,
+  METRIC_FIELDS.length,
+);
+
+check(
+  "an unanswered select is rejected",
+  validateSubmission({
+    metrics: ALL_METRICS,
+    selects: { ...ALL_SELECTS, cleaner_issues: "" },
+    text: ALL_TEXT,
+  }).map((i) => i.field),
+  ["cleaner_issues"],
+);
+
+check(
+  "a revealed follow-up must be filled in",
+  validateSubmission({
+    metrics: ALL_METRICS,
+    selects: { ...ALL_SELECTS, management_attention: "Urgent" },
+    text: ALL_TEXT,
+  }).map((i) => i.field),
+  ["escalations"],
+);
+
+check(
+  "the follow-up is not required when the answer doesn't reveal it",
+  validateSubmission({
+    metrics: ALL_METRICS,
+    selects: { ...ALL_SELECTS, management_attention: "No" },
+    text: ALL_TEXT,
   }).length,
   0,
 );
 
-check("no tasks selected is rejected", validateSubmission({ tasksSelected: [], selfReported: {}, taskNotes: {} }).length, 1);
+check(
+  "tomorrow's priorities is required, wins is not",
+  validateSubmission({ metrics: ALL_METRICS, selects: ALL_SELECTS, text: {} }).map((i) => i.field),
+  ["priorities"],
+);
+
+console.log("\nUrgent routing:");
+check(
+  "Urgent on management attention pings admin",
+  isUrgent({ ...ALL_SELECTS, management_attention: "Urgent" }).map((f) => f.key),
+  ["management_attention"],
+);
+check(
+  "Serious on cleaner issues pings admin",
+  isUrgent({ ...ALL_SELECTS, cleaner_issues: "Serious" }).map((f) => f.key),
+  ["cleaner_issues"],
+);
+check(
+  "Minor does not ping admin",
+  isUrgent({ ...ALL_SELECTS, cleaner_issues: "Minor", blockers_level: "Major" }).length,
+  0,
+);
+check(
+  "membership closes has no source, so it can never be flagged",
+  METRIC_FIELDS.find((m) => m.key === "membership_closes")?.corroborate,
+  null,
+);
 
 // ─── EOD link tokens ─────────────────────────────────────────────────────────
 //
@@ -172,63 +245,62 @@ const evaluate = (
   selfReported: Record<string, number>,
   verified: MetricValues,
   repeatCounts: Record<string, number> = {},
-  taskIds = tasks,
-) => evaluateDiscrepancies({ tasksSelected: taskIds, selfReported, verified, repeatCounts, thresholds: T });
+) => evaluateDiscrepancies({ selfReported, verified, repeatCounts, thresholds: T });
 
 check(
   "an UNVERIFIED signal raises nothing — we never compare against nothing",
-  evaluate({ quotes_from_calls: 50 }, { quotes_sent: null }),
+  evaluate({ quotes_sent: 50 }, { quotes_sent: null }),
   [],
 );
 
 check(
   "a matching number raises nothing",
-  evaluate({ quotes_from_calls: 10 }, { quotes_sent: 10 }),
+  evaluate({ quotes_sent: 10 }, { quotes_sent: 10 }),
   [],
 );
 
 check(
   "a small variance stays under the base threshold (10 vs 12: abs 2 < 10)",
-  evaluate({ quotes_from_calls: 12 }, { quotes_sent: 10 }),
+  evaluate({ quotes_sent: 12 }, { quotes_sent: 10 }),
   [],
 );
 
 // verified 10 → base threshold = max(20% of 10, 10) = 10. Variance 15 > 10 → flag.
 // medium = max(4, 25) = 25 → not exceeded. So Low.
-const low = evaluate({ quotes_from_calls: 25 }, { quotes_sent: 10 });
+const low = evaluate({ quotes_sent: 25 }, { quotes_sent: 10 });
 check("a material variance flags Low", low.map((f) => [f.metricKey, f.severity]), [
-  ["quotes_from_calls", "low"],
+  ["quotes_sent", "low"],
 ]);
 check("variance and % are reported", [low[0].variance, low[0].variancePct], [15, 150]);
 
 // verified 100 → base max(20,10)=20, medium max(40,25)=40, high max(75,50)=75.
 check(
   "variance of 50 on 100 is Medium",
-  evaluate({ quotes_from_calls: 150 }, { quotes_sent: 100 }).map((f) => f.severity),
+  evaluate({ quotes_sent: 150 }, { quotes_sent: 100 }).map((f) => f.severity),
   ["medium"],
 );
 check(
   "variance of 100 on 100 is High",
-  evaluate({ quotes_from_calls: 200 }, { quotes_sent: 100 }).map((f) => f.severity),
+  evaluate({ quotes_sent: 200 }, { quotes_sent: 100 }).map((f) => f.severity),
   ["high"],
 );
 
 check(
   "a DIRECT comparison flags an under-report too",
-  evaluate({ quotes_from_calls: 0 }, { quotes_sent: 100 }).map((f) => f.severity),
+  evaluate({ quotes_sent: 0 }, { quotes_sent: 100 }).map((f) => f.severity),
   ["high"],
 );
 
-// businesses_contacted is a CEILING against calls + sms + commercial accounts.
+// commercial_outreach is a CEILING against calls + sms + commercial accounts.
 check(
   "a CEILING signal ignores being under it — that's normal",
-  evaluate({ businesses_contacted: 5 }, { calls_placed: 40, sms_sent: 10, commercial_accounts_touched: 0 }),
+  evaluate({ commercial_outreach: 5 }, { calls_placed: 40, sms_sent: 10, commercial_accounts_touched: 0 }),
   [],
 );
 check(
   "a CEILING signal flags only when the report EXCEEDS observed activity",
   evaluate(
-    { businesses_contacted: 200 },
+    { commercial_outreach: 200 },
     { calls_placed: 40, sms_sent: 10, commercial_accounts_touched: 0 },
   ).map((f) => [f.verified, f.severity]),
   [[50, "high"]],
@@ -237,7 +309,7 @@ check(
 check(
   "a ceiling with every metric unverified raises nothing",
   evaluate(
-    { businesses_contacted: 200 },
+    { commercial_outreach: 200 },
     { calls_placed: null, sms_sent: null, commercial_accounts_touched: null },
   ),
   [],
@@ -245,20 +317,20 @@ check(
 
 check(
   "a ceiling sums only the metrics that ARE verified",
-  evaluate({ businesses_contacted: 200 }, { calls_placed: 40, sms_sent: null, commercial_accounts_touched: null })
+  evaluate({ commercial_outreach: 200 }, { calls_placed: 40, sms_sent: null, commercial_accounts_touched: null })
     .map((f) => f.verified),
   [40],
 );
 
 check(
   "a repeat inside the window escalates an otherwise-Low variance to High",
-  evaluate({ quotes_from_calls: 25 }, { quotes_sent: 10 }, { quotes_from_calls: 2 }).map((f) => f.severity),
+  evaluate({ quotes_sent: 25 }, { quotes_sent: 10 }, { quotes_sent: 2 }).map((f) => f.severity),
   ["high"],
 );
 
 check(
-  "a Tier 2 field with no corroboration can never be flagged",
-  evaluate({ jobs_dispatched: 9999 }, { bookings_created: 1 }, {}, ["dispatch"]),
+  "a metric with no source can never be flagged",
+  evaluate({ membership_closes: 9999 }, { bookings_created: 1 }),
   [],
 );
 
@@ -269,9 +341,9 @@ check(
 );
 
 check(
-  "every Tier 2 field on a task is evaluated",
-  tier2Fields(["reactivation"]).map((f) => f.key),
-  ["reactivation_attempts", "reactivation_rebooked"],
+  "the metrics block is exactly the ten fields in the spec",
+  METRIC_FIELDS.length,
+  10,
 );
 
 // ─── Rollups ─────────────────────────────────────────────────────────────────
@@ -360,13 +432,16 @@ const submission = (workDate: string, late: boolean) => ({
   vaId: "va-1",
   workDate,
   status: "submitted" as const,
-  tasksSelected: [],
-  selfReported: {},
-  taskNotes: {},
+  metrics: {},
+  selects: {},
   blockers: null,
+  escalations: null,
+  cleanerIssueNotes: null,
   priorities: null,
   wins: null,
-  escalations: null,
+  pdfStatus: "generated",
+  pdfPath: null,
+  driveUrl: null,
   submittedAt: `${workDate}T22:00:00.000Z`,
   submittedLate: late,
   lockedAt: null,

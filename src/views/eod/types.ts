@@ -7,16 +7,21 @@ export interface EodSubmissionView {
   vaId: string;
   workDate: string;
   status: "draft" | "submitted" | "reviewed" | "flagged";
-  tasksSelected: string[];
-  selfReported: Record<string, number>;
-  taskNotes: Record<string, string | string[]>;
+  /** Entered metrics keyed by metric field key. Money is in cents. */
+  metrics: Record<string, number>;
+  /** The four single-select answers. */
+  selects: Record<string, string>;
   blockers: string | null;
+  escalations: string | null;
+  cleanerIssueNotes: string | null;
   priorities: string | null;
   wins: string | null;
-  escalations: string | null;
   submittedAt: string | null;
   submittedLate: boolean;
   lockedAt: string | null;
+  pdfStatus: string;
+  pdfPath: string | null;
+  driveUrl: string | null;
   updatedAt: string;
 }
 
@@ -54,6 +59,7 @@ export interface BootstrapPayload {
     backdateDays: number;
     cutoffLocalTime: string;
     lockAfterHours: number;
+    linkTtlHours: number;
   };
   submission: EodSubmissionView;
   verified: VerifiedView;

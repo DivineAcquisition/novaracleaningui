@@ -46,6 +46,7 @@ export type MetricKey =
   | "median_response_seconds"
   | "leads_converted"
   | "bookings_created"
+  | "jobs_completed"
   | "revenue_booked_cents"
   | "quotes_sent"
   | "commercial_accounts_touched"
@@ -122,6 +123,14 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     source: "airtableRevenueOps",
     format: "count",
     detail: "Jobs created and attributed to you on this date.",
+  },
+  jobs_completed: {
+    key: "jobs_completed",
+    label: "Jobs completed",
+    source: "airtableRevenueOps",
+    format: "count",
+    detail:
+      "Bookings marked completed on this date. Counted company-wide — a job is finished by the cleaner, not by whoever booked it.",
   },
   revenue_booked_cents: {
     key: "revenue_booked_cents",

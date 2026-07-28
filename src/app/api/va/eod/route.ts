@@ -56,15 +56,14 @@ function fail(message: string, status: number) {
 function readPatch(body: Record<string, unknown>): SavePatch {
   const patch = (body.patch as Record<string, unknown>) || {};
   const out: SavePatch = {};
-  if (Array.isArray(patch.tasksSelected)) out.tasksSelected = patch.tasksSelected.map(String);
-  if (patch.selfReported && typeof patch.selfReported === "object") {
-    out.selfReported = patch.selfReported as Record<string, unknown>;
+  if (patch.metrics && typeof patch.metrics === "object") {
+    out.metrics = patch.metrics as Record<string, unknown>;
   }
-  if (patch.taskNotes && typeof patch.taskNotes === "object") {
-    out.taskNotes = patch.taskNotes as Record<string, unknown>;
+  if (patch.selects && typeof patch.selects === "object") {
+    out.selects = patch.selects as Record<string, unknown>;
   }
-  for (const key of ["blockers", "priorities", "wins", "escalations"] as const) {
-    if (patch[key] !== undefined) out[key] = String(patch[key] ?? "");
+  if (patch.text && typeof patch.text === "object") {
+    out.text = patch.text as Record<string, unknown>;
   }
   return out;
 }

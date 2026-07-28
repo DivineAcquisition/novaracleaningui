@@ -24,7 +24,8 @@ import {
 } from "@/lib/airtable/client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { TASKS_BY_ID } from "./catalog";
+import { METRIC_FIELDS, SELECT_FIELDS, formatMetricEntry, metricFieldByKey } from "./catalog";
+import { signedReportUrl } from "./eod-pdf";
 import { METRICS, type MetricKey } from "./metrics";
 import { primePerformanceSecrets, saveSecret } from "./settings";
 import { listAllVas, type VaRecord } from "./vas";
@@ -323,24 +324,34 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
   const subRecords: Fields[] = ((subRows || []) as Record<string, unknown>[]).map((row) => {
     const ref = `EOD-${(vaNameById.get(String(row.va_id)) || "VA").replace(/\s+/g, "").slice(0, 12)}-${row.work_date}`;
     subRefById.set(String(row.id), ref);
-    const tasks = Array.isArray(row.tasks_selected) ? (row.tasks_selected as string[]) : [];
     const metricLink = metricRef(String(row.va_id), String(row.work_date));
+    const entered = (row.self_reported as Record<string, number>) || {};
+    const snapshot = ((row.verified_snapshot as Record<string, unknown>)?.values ||
+      {}) as Record<string, number | null>;
     return {
       [ES["Submission ID"]]: ref,
       [ES["VA"]]: linkToVa(String(row.va_id)),
       [ES["Date"]]: String(row.work_date),
       [ES["Submitted At"]]: iso(row.submitted_at),
-      [ES["Tasks Selected"]]: tasks.length
-        ? tasks.map((t) => TASKS_BY_ID[t]?.label || titleCase(t))
-        : undefined,
-      [ES["Self-Reported Values"]]: describeSelfReported(row.self_reported),
+      ...Object.fromEntries(
+        METRIC_FIELDS.filter((m) => entered[m.key] !== undefined).map((m) => [
+          ES[m.label],
+          m.currency ? Number(entered[m.key]) / 100 : Number(entered[m.key]),
+        ]),
+      ),
+      [ES["Entered vs Verified"]]: describeVerification(entered, snapshot),
+      ...Object.fromEntries(
+        SELECT_FIELDS.filter((f) => row[f.key]).map((f) => [ES[f.label], String(row[f.key])]),
+      ),
       [ES["Blockers"]]: (row.blockers as string) ?? undefined,
+      [ES["Escalations"]]: (row.escalations as string) ?? undefined,
+      [ES["Cleaner Issue Notes"]]: (row.cleaner_issue_notes as string) ?? undefined,
       [ES["Tomorrow's Priorities"]]: (row.priorities as string) ?? undefined,
       [ES["Wins"]]: (row.wins as string) ?? undefined,
-      [ES["Escalations"]]: (row.escalations as string) ?? undefined,
-      [ES["Task Notes"]]: pretty(row.task_notes),
       [ES["Status"]]: titleCase(String(row.status || "submitted")),
       [ES["Submitted Late"]]: Boolean(row.submitted_late),
+      [ES["Locked"]]: Boolean(row.locked_at),
+      [ES["Drive Link"]]: (row.drive_url as string) ?? undefined,
       [ES["Verified Metrics"]]: metricRefsWritten.has(metricLink) ? [metricLink] : undefined,
       [ES["Last Synced"]]: now,
     };
@@ -518,11 +529,41 @@ function describeSourceStatus(raw: unknown): string | undefined {
   return lines.join("\n");
 }
 
-function describeSelfReported(raw: unknown): string | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const entries = Object.entries(raw as Record<string, unknown>);
-  if (!entries.length) return undefined;
-  return entries.map(([k, v]) => `${titleCase(k)}: ${String(v)}`).join("\n");
+/**
+ * The verification half of the permanent record: what was entered, what the
+ * system saw, and the gap. "not tracked" is written out in full so a blank
+ * cell can never be mistaken for a verified zero.
+ */
+function describeVerification(
+  entered: Record<string, number>,
+  verified: Record<string, number | null>,
+): string | undefined {
+  const lines: string[] = [];
+  for (const field of METRIC_FIELDS) {
+    const own = entered[field.key];
+    if (own === undefined) continue;
+    const enteredText = formatMetricEntry(field, own);
+    if (!field.corroborate) {
+      lines.push(`${field.label}: ${enteredText} entered · not tracked`);
+      continue;
+    }
+    let signal: number | null = null;
+    for (const key of field.corroborate.metrics) {
+      const v = verified[key];
+      if (v === null || v === undefined) continue;
+      signal = (signal ?? 0) + Number(v);
+    }
+    if (signal === null) {
+      lines.push(`${field.label}: ${enteredText} entered · source unavailable`);
+      continue;
+    }
+    const variance = own - signal;
+    lines.push(
+      `${field.label}: ${enteredText} entered · ${formatMetricEntry(field, signal)} verified · ` +
+        `${variance >= 0 ? "+" : ""}${formatMetricEntry(field, Math.abs(variance)).replace(/^-/, "")} variance`,
+    );
+  }
+  return lines.length ? lines.join("\n") : undefined;
 }
 
 function describeRollups(raw: unknown): string | undefined {
