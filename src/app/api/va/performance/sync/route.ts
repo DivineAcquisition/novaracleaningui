@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { syncTeamPerformanceBase } from "@/lib/va-performance/airtable";
 import {
   addDays,
   dateRange,
@@ -73,7 +74,24 @@ async function handle(req: Request, body: Record<string, unknown>): Promise<Next
 
   try {
     const report = await syncVerifiedMetrics(dates, vaIds);
-    return NextResponse.json({ ok: true, ...report });
+
+    // Push the Airtable mirror on the same schedule, the way the other
+    // Airtable flows here run. Never fatal: a mirror failure must not fail the
+    // sync that produced the source-of-truth rows.
+    let airtable: unknown;
+    if (body.airtable !== false) {
+      try {
+        airtable = await syncTeamPerformanceBase({
+          startDate: dates[0] ?? today,
+          endDate: dates[dates.length - 1] ?? today,
+        });
+      } catch (err) {
+        airtable = { ok: false, error: (err as Error).message };
+        report.warnings.push(`Airtable mirror: ${(err as Error).message}`);
+      }
+    }
+
+    return NextResponse.json({ ok: true, ...report, airtable });
   } catch (err) {
     console.error("[va-metrics-sync] failed:", (err as Error).message);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
