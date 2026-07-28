@@ -31,6 +31,7 @@ import {
   RiCloseLine,
   RiCalendarCheckLine,
   RiTeamLine,
+  RiUserStarLine,
   RiRocket2Line,
   RiHotelLine,
   RiRepeatLine,
@@ -160,6 +161,13 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/sync",
     icon: RiRefreshLine,
     description: "Airtable live sync · per-flow status · review queue",
+    adminOnly: true,
+  },
+  {
+    title: "VA Performance",
+    url: "/admin/va-performance",
+    icon: RiUserStarLine,
+    description: "Verified actuals vs EOD · flags · revenue per VA hour",
     adminOnly: true,
   },
   {
