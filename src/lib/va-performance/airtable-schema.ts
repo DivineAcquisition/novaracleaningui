@@ -11,6 +11,7 @@
 // editing a cell can never overwrite a verified metric.
 
 import type { CreateFieldSpec } from "@/lib/airtable/client";
+import { TASKS } from "./catalog";
 
 export const TEAM_PERF_BASE_NAME = "Novara — Team Performance";
 
@@ -81,7 +82,13 @@ export const TEAM_PERF_TABLES: TableSpec[] = [
       { name: "Submission ID", type: "singleLineText" },
       { name: "Date", type: "date", options: DATE },
       { name: "Submitted At", type: "dateTime", options: DATETIME },
-      { name: "Tasks Selected", type: "multipleSelects", options: select([]) },
+      // Seeded from the catalog so the option list matches the form exactly
+      // (Airtable rejects a multipleSelects field with no choices).
+      {
+        name: "Tasks Selected",
+        type: "multipleSelects",
+        options: select(TASKS.map((t) => t.label)),
+      },
       { name: "Self-Reported Values", type: "multilineText" },
       { name: "Blockers", type: "multilineText" },
       { name: "Tomorrow's Priorities", type: "multilineText" },

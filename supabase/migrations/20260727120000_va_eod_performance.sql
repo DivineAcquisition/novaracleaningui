@@ -387,6 +387,7 @@ END $$;
 -- va_verified_metrics is system-written: strip UPDATE/INSERT from the admin
 -- policy so nobody can hand-edit the source of truth from the console.
 DROP POLICY IF EXISTS va_verified_metrics_admin_all ON public.va_verified_metrics;
+DROP POLICY IF EXISTS va_verified_metrics_admin_read ON public.va_verified_metrics;
 CREATE POLICY va_verified_metrics_admin_read ON public.va_verified_metrics
   FOR SELECT TO authenticated
   USING (public.has_role(auth.uid(), 'admin'));

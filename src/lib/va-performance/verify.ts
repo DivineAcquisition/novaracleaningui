@@ -167,22 +167,62 @@ export async function collectDay(date: string, vas: VaRecord[]): Promise<{
   return { rows, sources };
 }
 
-/** Upsert merged rows. Idempotent on (va_id, work_date) — never duplicates. */
+/**
+ * Upsert merged rows. Idempotent on (va_id, work_date) — never duplicates.
+ *
+ * A metric that comes back unverified does NOT erase a value we previously
+ * observed. Wiping Monday's real 8 hours because Apploye blipped on Wednesday
+ * would be losing data, not being careful. The prior value is kept along with
+ * the provenance it was actually recorded under, so the form still shows when
+ * it was observed, while source_status records the current outage.
+ *
+ * A metric that has never been verified stays NULL, which is what makes
+ * "unverified" distinguishable from a real zero.
+ */
 export async function writeVerifiedDays(rows: VerifiedDay[]): Promise<number> {
   if (!rows.length) return 0;
   const supabase = getAdminSupabase();
 
+  const existing = new Map<string, StoredVerifiedDay>();
+  const { data: priorRows } = await supabase
+    .from("va_verified_metrics")
+    .select("*")
+    .in("va_id", [...new Set(rows.map((r) => r.vaId))])
+    .in("work_date", [...new Set(rows.map((r) => r.workDate))]);
+  for (const raw of (priorRows || []) as unknown as Record<string, unknown>[]) {
+    const prior = mapVerifiedRow(raw);
+    existing.set(`${prior.vaId}|${prior.workDate}`, prior);
+  }
+
   const payload = rows.map((row) => {
+    const prior = existing.get(`${row.vaId}|${row.workDate}`);
+    const provenance: MetricProvenance = { ...row.provenance };
     const record: Record<string, unknown> = {
       va_id: row.vaId,
       work_date: row.workDate,
       source_status: row.sourceStatus,
-      metric_sources: row.provenance,
       last_synced_at: row.lastSyncedAt,
     };
+
     for (const [key, column] of Object.entries(METRIC_COLUMN)) {
-      record[column] = row.values[key as MetricKey] ?? null;
+      const metric = key as MetricKey;
+      const fresh = row.values[metric];
+      if (fresh !== null && fresh !== undefined) {
+        record[column] = fresh;
+        continue;
+      }
+      const kept = prior?.values[metric];
+      if (kept !== null && kept !== undefined) {
+        record[column] = kept;
+        // Keep the provenance the value was actually observed under, so the
+        // timestamp never claims a freshness the number doesn't have.
+        if (prior?.provenance[metric]) provenance[metric] = prior.provenance[metric];
+        continue;
+      }
+      record[column] = null;
     }
+
+    record.metric_sources = provenance;
     return record;
   });
 

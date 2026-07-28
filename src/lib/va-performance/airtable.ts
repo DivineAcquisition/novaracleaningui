@@ -259,6 +259,11 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
   const metricRef = (vaId: string, date: string) =>
     `VM-${(vaNameById.get(vaId) || vaId).replace(/\s+/g, "").slice(0, 12)}-${date}`;
 
+  // Only link a submission to a metrics row that actually exists — writing the
+  // ref with typecast on would otherwise CREATE an empty Verified Metrics
+  // record, and an empty row in the source-of-truth table reads like a zero.
+  const metricRefsWritten = new Set<string>();
+
   const metricRecords: Fields[] = ((metricRows || []) as Record<string, unknown>[]).map((row) => ({
     [VM["Metric ID"]]: metricRef(String(row.va_id), String(row.work_date)),
     [VM["VA"]]: linkToVa(String(row.va_id)),
@@ -293,6 +298,9 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
       { baseId: handle.baseId },
     );
     counts.verifiedMetrics = res.records.length;
+    for (const row of (metricRows || []) as Record<string, unknown>[]) {
+      metricRefsWritten.add(metricRef(String(row.va_id), String(row.work_date)));
+    }
   }
 
   // ── 3. EOD Submissions ──────────────────────────────────────────────────
@@ -310,6 +318,7 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
     const ref = `EOD-${(vaNameById.get(String(row.va_id)) || "VA").replace(/\s+/g, "").slice(0, 12)}-${row.work_date}`;
     subRefById.set(String(row.id), ref);
     const tasks = Array.isArray(row.tasks_selected) ? (row.tasks_selected as string[]) : [];
+    const metricLink = metricRef(String(row.va_id), String(row.work_date));
     return {
       [ES["Submission ID"]]: ref,
       [ES["VA"]]: linkToVa(String(row.va_id)),
@@ -326,7 +335,7 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
       [ES["Task Notes"]]: pretty(row.task_notes),
       [ES["Status"]]: titleCase(String(row.status || "submitted")),
       [ES["Submitted Late"]]: Boolean(row.submitted_late),
-      [ES["Verified Metrics"]]: [metricRef(String(row.va_id), String(row.work_date))],
+      [ES["Verified Metrics"]]: metricRefsWritten.has(metricLink) ? [metricLink] : undefined,
       [ES["Last Synced"]]: now,
     };
   });

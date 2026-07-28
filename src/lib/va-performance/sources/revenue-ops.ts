@@ -85,9 +85,11 @@ export const revenueOpsCollector: Collector = {
       ctx.supabase
         .from("business_accounts")
         .select("id, created_by, created_at, last_activity_at")
+        // Created OR touched inside the window. Timestamps are quoted so
+        // PostgREST treats them as literal values.
         .or(
-          `and(created_at.gte.${ctx.window.startIso},created_at.lt.${ctx.window.endIso}),` +
-            `and(last_activity_at.gte.${ctx.window.startIso},last_activity_at.lt.${ctx.window.endIso})`,
+          `and(created_at.gte."${ctx.window.startIso}",created_at.lt."${ctx.window.endIso}"),` +
+            `and(last_activity_at.gte."${ctx.window.startIso}",last_activity_at.lt."${ctx.window.endIso}")`,
         ),
     ]);
 
