@@ -108,6 +108,15 @@ const PRIMED_KEYS = [
   "APPLOYE_API_BASE",
   "AIRTABLE_TEAM_PERF_BASE_ID",
   "AIRTABLE_WORKSPACE_ID",
+  // The edge functions get these as Supabase function secrets, which the
+  // Next.js runtime never sees. Priming them from app_secrets is what lets the
+  // GHL reader verify calls and SMS instead of falling back to the workspace
+  // call log (which can't see SMS at all).
+  "GHL_PIT_TOKEN",
+  "GHL_LOCATION_ID",
+  // Read directly by the Stripe collector too, but priming keeps one path.
+  "STRIPE_SECRET_KEY",
+  "RESEND_API_KEY",
 ] as const;
 
 export async function primePerformanceSecrets(): Promise<void> {
