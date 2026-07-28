@@ -51,11 +51,23 @@ const FEATURES = [
   },
 ];
 
-export default function EodReport() {
+/**
+ * `token` comes from /eod/[token] — the personal link emailed to the VA. It is
+ * the credential, so when it's present we skip sign-in entirely: most VAs have
+ * no workspace login, and requiring one is what made this form unreachable.
+ *
+ * Without a token we fall back to the workspace session, which is how an admin
+ * (or a VA who does have a login) reaches /eod directly.
+ */
+export default function EodReport({ token }: { token?: string }) {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
+    if (token) {
+      setCheckingSession(false);
+      return;
+    }
     let active = true;
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
@@ -69,7 +81,7 @@ export default function EodReport() {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [token]);
 
   if (checkingSession) {
     return (
@@ -79,8 +91,8 @@ export default function EodReport() {
     );
   }
 
-  if (!session) return <SignIn />;
-  return <Report session={session} />;
+  if (!token && !session) return <SignIn />;
+  return <Report token={token} sessionEmail={session?.user.email ?? null} />;
 }
 
 // ─── Sign-in ──────────────────────────────────────────────────────────────────
@@ -201,26 +213,29 @@ function SignIn() {
 
 // ─── The report ───────────────────────────────────────────────────────────────
 
-function Report({ session }: { session: Session }) {
+function Report({ token, sessionEmail }: { token?: string; sessionEmail: string | null }) {
   const [boot, setBoot] = useState<BootstrapPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const api = useCallback(
     async (body: Record<string, unknown>) => {
-      const { data } = await supabase.auth.getSession();
+      // With a token the request carries its own identity; otherwise fall back
+      // to the workspace session.
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (!token) {
+        const { data } = await supabase.auth.getSession();
+        headers.Authorization = `Bearer ${data.session?.access_token || ""}`;
+      }
       const res = await fetch("/api/va/eod", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.session?.access_token || ""}`,
-        },
-        body: JSON.stringify(body),
+        headers,
+        body: JSON.stringify(token ? { ...body, token } : body),
       });
       const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       return { ok: res.ok && json.ok !== false, data: json };
     },
-    [],
+    [token],
   );
 
   const load = useCallback(
@@ -229,7 +244,12 @@ function Report({ session }: { session: Session }) {
       const res = await api({ action: "bootstrap", workDate });
       setLoading(false);
       if (!res.ok) {
-        setError(String(res.data.error || "Couldn't open your EOD."));
+        setError(
+          String(
+            res.data.error ||
+              "Something went wrong on our end. Try again in a moment — nothing you've typed is lost.",
+          ),
+        );
         setBoot(null);
         return;
       }
@@ -265,14 +285,18 @@ function Report({ session }: { session: Session }) {
             </h1>
             {boot && <p className="truncate text-[11px] text-slate-500">{boot.va.name}</p>}
           </div>
-          <button
-            onClick={signOut}
-            className="ml-auto flex items-center gap-1.5 text-xs text-slate-500 transition-colors hover:text-slate-900"
-          >
-            <RiLogoutBoxRLine className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{session.user.email}</span>
-            <span className="sm:hidden">Sign out</span>
-          </button>
+          {token ? (
+            <span className="ml-auto truncate text-xs text-slate-400">{boot?.va.email}</span>
+          ) : (
+            <button
+              onClick={signOut}
+              className="ml-auto flex items-center gap-1.5 text-xs text-slate-500 transition-colors hover:text-slate-900"
+            >
+              <RiLogoutBoxRLine className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{sessionEmail}</span>
+              <span className="sm:hidden">Sign out</span>
+            </button>
+          )}
         </div>
       </header>
 

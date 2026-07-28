@@ -1,8 +1,15 @@
 // ─── VA-facing EOD API (eod.novaracleaning.com) ───────────────────────────────
 //
-// Authenticated: the caller's Supabase session is verified server-side and
-// mapped to their VA record. Identity is never taken from the request body, so
-// a VA can only ever read or write their own day.
+// Two ways in, and both resolve to exactly one VA record:
+//
+//   token   — the tokenized link we email/Discord to the VA. Most VAs have no
+//             workspace login, so this is the normal path. The token is looked
+//             up against a unique index; it identifies the VA by itself.
+//   session — a signed-in Supabase user mapped to their VA record, for the
+//             people who do have a workspace login.
+//
+// Either way, identity comes from the credential and never from a body field:
+// there is no vaId parameter, so a VA cannot read or write anyone else's day.
 //
 // Actions:
 //   bootstrap — open/resume a day: draft + pre-filled verified metrics
@@ -26,7 +33,7 @@ import {
   type SavePatch,
 } from "@/lib/va-performance/eod";
 import { primePerformanceSecrets } from "@/lib/va-performance/settings";
-import { resolveVaForUser } from "@/lib/va-performance/vas";
+import { resolveVaByEodToken, resolveVaForUser, type VaRecord } from "@/lib/va-performance/vas";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -52,28 +59,43 @@ function readPatch(body: Record<string, unknown>): SavePatch {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  let principal: { userId: string; email: string };
-  try {
-    principal = await requireUser(req);
-  } catch (err) {
-    const e = err as AdminAuthError;
-    return fail(e.message, e.status || 401);
-  }
-
   await primePerformanceSecrets();
 
-  const va = await resolveVaForUser(principal.userId, principal.email);
-  if (!va) {
-    return fail(
-      "This account isn't linked to a VA record yet. Ask an admin to finish provisioning your access.",
-      403,
-    );
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const token = String(body.token || "").trim();
+
+  let va: VaRecord | null = null;
+  if (token) {
+    va = await resolveVaByEodToken(token);
+    if (!va) {
+      return fail(
+        "This link isn't valid any more. Ask an admin to send you a fresh one.",
+        401,
+      );
+    }
+  } else {
+    let principal: { userId: string; email: string };
+    try {
+      principal = await requireUser(req);
+    } catch (err) {
+      const e = err as AdminAuthError;
+      return fail(e.message, e.status || 401);
+    }
+    va = await resolveVaForUser(principal.userId, principal.email);
+    if (!va) {
+      return fail(
+        "This account isn't linked to a VA record yet. Ask an admin to send you your EOD link.",
+        403,
+      );
+    }
   }
+
+  // Re-checked on every request, so offboarding revokes an outstanding link
+  // immediately without anyone having to rotate it.
   if (va.performanceStatus === "removed" || va.status === "offboarded") {
     return fail("This account is no longer active.", 403);
   }
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action || "bootstrap");
   const workDate = body.workDate ? String(body.workDate) : undefined;
 
