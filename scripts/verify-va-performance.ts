@@ -15,6 +15,7 @@
 //
 //   Run:  npm run va:verify
 
+import { __test__pickDayTotal as pickDayTotal } from "../src/lib/apploye/client";
 import {
   sanitizeSelfReported,
   sanitizeTaskNotes,
@@ -96,6 +97,55 @@ check(
 );
 
 check("no tasks selected is rejected", validateSubmission({ tasksSelected: [], selfReported: {}, taskNotes: {} }).length, 1);
+
+// ─── Apploye per-day attribution ─────────────────────────────────────────────
+//
+// /timesheets returns ONE row per user for the WHOLE requested range, with
+// `duration` totalled across every date in `dates` (verified against the live
+// API: 167972s spanning 9 dates in a single row). Attributing that to one day
+// would invent hours nobody worked, so anything but an exact single-day match
+// must resolve to unverified.
+
+console.log("\nApploye per-day attribution:");
+
+check(
+  "an exact single-day row is attributed (28829s -> 8.01h)",
+  pickDayTotal({ user_id: "m1", duration: 28829, dates: ["2026-07-26"] }, "2026-07-26"),
+  { memberId: "m1", date: "2026-07-26", hours: 8.01 },
+);
+
+check(
+  "a multi-date row is REFUSED — its duration is a range total, not a day's",
+  pickDayTotal(
+    { user_id: "m1", duration: 167972, dates: ["2026-05-30", "2026-05-31", "2026-06-01"] },
+    "2026-05-30",
+  ),
+  null,
+);
+
+check(
+  "a row for a different day is refused",
+  pickDayTotal({ user_id: "m1", duration: 3600, dates: ["2026-07-25"] }, "2026-07-26"),
+  null,
+);
+
+check(
+  "an empty dates array is refused",
+  pickDayTotal({ user_id: "m1", duration: 3600, dates: [] }, "2026-07-26"),
+  null,
+);
+
+check(
+  "a bare string date (the shape the docs claim) still works",
+  pickDayTotal({ user_id: "m1", duration: 1800, dates: "2026-07-26" }, "2026-07-26"),
+  { memberId: "m1", date: "2026-07-26", hours: 0.5 },
+);
+
+check(
+  "a row with no user id is refused",
+  pickDayTotal({ duration: 3600, dates: ["2026-07-26"] }, "2026-07-26"),
+  null,
+);
 
 // ─── Discrepancies ───────────────────────────────────────────────────────────
 
@@ -278,7 +328,7 @@ const va = {
   startDate: null,
   functionsAssigned: [],
   vaRole: null,
-  apployeUserId: null,
+  apployeMemberId: null,
   ghlUserId: null,
   workspaceUserId: null,
   perfAirtableRecordId: null,

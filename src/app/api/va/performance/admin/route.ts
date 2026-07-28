@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { isApployeConfigured, listMembers as listApployeMembers } from "@/lib/apploye/client";
 import { syncTeamPerformanceBase } from "@/lib/va-performance/airtable";
 import {
   generatePeriod,
@@ -236,7 +237,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         const vaId = str(body.vaId);
         if (!vaId) return fail("Missing vaId.");
         const update: Record<string, unknown> = {};
-        if (body.apployeUserId !== undefined) update.apploye_user_id = str(body.apployeUserId) || null;
+        if (body.apployeMemberId !== undefined) update.apploye_member_id = str(body.apployeMemberId) || null;
         if (body.ghlUserId !== undefined) update.ghl_user_id = str(body.ghlUserId) || null;
         if (body.startDate !== undefined) update.start_date = str(body.startDate) || null;
         if (body.rateCents !== undefined) {
@@ -266,6 +267,53 @@ export async function POST(req: Request): Promise<NextResponse> {
         if (error) throw new Error(error.message);
         if (!data) return fail("VA not found.", 404);
         return NextResponse.json({ ok: true });
+      }
+
+      // Resolve Apploye member ids by email, the same way the cleaner side
+      // does it (supabase/functions/apploye-invite-cleaner). Nobody should have
+      // to copy UUIDs out of a dashboard by hand.
+      case "link_apploye": {
+        if (!isApployeConfigured()) {
+          return fail("Apploye isn't connected — set APPLOYE_API_KEY in app_secrets.", 503);
+        }
+        let members;
+        try {
+          members = await listApployeMembers();
+        } catch (err) {
+          return fail(`Couldn't reach Apploye: ${(err as Error).message}`, 502);
+        }
+        const byEmail = new Map<string, string>(
+          members.filter((m) => m.email).map((m) => [m.email as string, m.id]),
+        );
+
+        const vas = await listAllVas();
+        const targetId = str(body.vaId);
+        const scope = targetId ? vas.filter((v) => v.id === targetId) : vas;
+
+        const linked: { name: string; memberId: string }[] = [];
+        const unmatched: string[] = [];
+        for (const va of scope) {
+          if (va.apployeMemberId) continue;
+          const memberId = byEmail.get(va.email.trim().toLowerCase());
+          if (!memberId) {
+            unmatched.push(va.email);
+            continue;
+          }
+          await supabase
+            .from("va_onboarding")
+            .update({ apploye_member_id: memberId })
+            .eq("id", va.id);
+          linked.push({ name: va.name, memberId });
+        }
+
+        return NextResponse.json({
+          ok: true,
+          linked,
+          unmatched,
+          // Apploye has no invite endpoint on the public API — an unmatched VA
+          // has to be invited from the dashboard first, then linked.
+          inviteUrl: "https://app.apploye.com/members/invite",
+        });
       }
 
       case "save_targets": {

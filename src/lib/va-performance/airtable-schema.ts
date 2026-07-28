@@ -66,7 +66,7 @@ export const TEAM_PERF_TABLES: TableSpec[] = [
         type: "multipleSelects",
         options: select(["Operations", "Sales", "Recruiting"]),
       },
-      { name: "Apploye User ID", type: "singleLineText" },
+      { name: "Apploye Member ID", type: "singleLineText" },
       { name: "GHL User ID", type: "singleLineText" },
       { name: "Workspace User ID", type: "singleLineText" },
       { name: "Notes", type: "multilineText" },

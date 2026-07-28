@@ -29,7 +29,7 @@ export interface VaRecord {
   functionsAssigned: string[];
   vaRole: string | null;
   // Verification identity
-  apployeUserId: string | null;
+  apployeMemberId: string | null;
   ghlUserId: string | null;
   /** auth.users id — the workspace user. Also how the EOD form identifies them. */
   workspaceUserId: string | null;
@@ -38,7 +38,7 @@ export interface VaRecord {
 
 const VA_COLUMNS =
   "id, email, first_name, last_name, phone, status, performance_status, pay_type, rate_cents, " +
-  "start_date, functions_assigned, va_role, apploye_user_id, ghl_user_id, portal_user_id, " +
+  "start_date, functions_assigned, va_role, apploye_member_id, ghl_user_id, portal_user_id, " +
   "perf_airtable_record_id";
 
 type Row = Record<string, unknown>;
@@ -63,7 +63,7 @@ function mapVa(row: Row): VaRecord {
       ? (row.functions_assigned as string[])
       : [],
     vaRole: (row.va_role as string) || null,
-    apployeUserId: (row.apploye_user_id as string) || null,
+    apployeMemberId: (row.apploye_member_id as string) || null,
     ghlUserId: (row.ghl_user_id as string) || null,
     workspaceUserId: (row.portal_user_id as string) || null,
     perfAirtableRecordId: (row.perf_airtable_record_id as string) || null,

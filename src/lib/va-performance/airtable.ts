@@ -75,9 +75,14 @@ export async function ensureTeamPerformanceBase(): Promise<BaseHandle> {
   if (!baseId) {
     const workspaceId = (process.env.AIRTABLE_WORKSPACE_ID || "").trim();
     if (!workspaceId) {
+      // The PAT already carries schema.bases:write, but Airtable's create-base
+      // endpoint needs a workspace and a base-scoped PAT can't enumerate one.
+      // It's the wsp… id in the Airtable URL: airtable.com/wspXXXXXXXXXXXX/…
       throw new TeamPerfAirtableError(
-        `The "${TEAM_PERF_BASE_NAME}" base doesn't exist yet. Set AIRTABLE_WORKSPACE_ID (app_secrets) so it can be created, ` +
-          "or create the base by hand and store its id in AIRTABLE_TEAM_PERF_BASE_ID.",
+        `The "${TEAM_PERF_BASE_NAME}" base doesn't exist yet. Set AIRTABLE_WORKSPACE_ID in app_secrets — ` +
+          "it's the wsp… id in your Airtable URL — and this will create it. " +
+          "Alternatively, create the base by hand and store its id in AIRTABLE_TEAM_PERF_BASE_ID, " +
+          "or point AIRTABLE_TEAM_PERF_BASE_ID at an existing base to build the seven tables inside it.",
       );
     }
     const first = TEAM_PERF_TABLES[0];
@@ -215,7 +220,7 @@ export async function syncTeamPerformanceBase(window: SyncWindow): Promise<TeamP
       [F["Functions Assigned"]]: va.functionsAssigned.length
         ? va.functionsAssigned.map(titleCase)
         : undefined,
-      [F["Apploye User ID"]]: va.apployeUserId ?? undefined,
+      [F["Apploye Member ID"]]: va.apployeMemberId ?? undefined,
       [F["GHL User ID"]]: va.ghlUserId ?? undefined,
       [F["Workspace User ID"]]: va.workspaceUserId ?? undefined,
       [F["Last Synced"]]: now,
@@ -536,7 +541,7 @@ function describeRollups(raw: unknown): string | undefined {
 /** Which VAs are missing a verification link — surfaced in the admin tab. */
 export function unlinkedSources(va: VaRecord): string[] {
   const missing: string[] = [];
-  if (!va.apployeUserId) missing.push("Apploye");
+  if (!va.apployeMemberId) missing.push("Apploye");
   if (!va.ghlUserId) missing.push("GHL");
   if (!va.workspaceUserId) missing.push("Workspace");
   return missing;

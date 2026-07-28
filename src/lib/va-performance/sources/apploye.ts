@@ -9,7 +9,7 @@
 // genuinely don't know their hours, and showing 0.00 h would be a lie that
 // happens to look like an accusation.
 
-import { hoursByUserForDate, isApployeConfigured, ApployeNotConfiguredError } from "@/lib/apploye/client";
+import { hoursByMemberForDate, isApployeConfigured, ApployeNotConfiguredError } from "@/lib/apploye/client";
 import type { MetricKey, SourceStatus } from "../metrics";
 import { notConfigured, ok, setValue, unavailable, type Collector, type CollectorResult } from "./types";
 
@@ -27,7 +27,7 @@ export const apployeCollector: Collector = {
 
     let hours: Map<string, number>;
     try {
-      hours = await hoursByUserForDate(ctx.date);
+      hours = await hoursByMemberForDate(ctx.date);
     } catch (err) {
       if (err instanceof ApployeNotConfiguredError) {
         return { byVa, status: notConfigured(err.message) };
@@ -36,13 +36,13 @@ export const apployeCollector: Collector = {
     }
 
     for (const va of ctx.vas) {
-      if (!va.apployeUserId) {
+      if (!va.apployeMemberId) {
         vaStatus.set(va.id, "unlinked");
         continue;
       }
       // The source WAS reached, so a member with no entry genuinely tracked
       // nothing today — 0.00 is a real answer here, not a missing one.
-      setValue(byVa, va.id, "hours_tracked", hours.get(va.apployeUserId) ?? 0);
+      setValue(byVa, va.id, "hours_tracked", hours.get(va.apployeMemberId) ?? 0);
     }
 
     return { byVa, status: ok(), vaStatus };

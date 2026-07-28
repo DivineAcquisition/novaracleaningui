@@ -60,7 +60,7 @@ interface Va {
   rateCents: number | null;
   startDate: string | null;
   functionsAssigned: string[];
-  apployeUserId: string | null;
+  apployeMemberId: string | null;
   ghlUserId: string | null;
   workspaceUserId: string | null;
 }
@@ -869,10 +869,35 @@ function VaLinksSheet({
   const [status, setStatus] = useState("active");
   const [functions, setFunctions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [linking, setLinking] = useState(false);
+
+  const linkApploye = async () => {
+    if (!va) return;
+    setLinking(true);
+    const res = await callAdmin<{
+      linked: { name: string; memberId: string }[];
+      unmatched: string[];
+    }>({ action: "link_apploye", vaId: va.id });
+    setLinking(false);
+    if (!res.ok) {
+      toast.error(res.data.error || "Couldn't reach Apploye.");
+      return;
+    }
+    const match = res.data.linked?.[0];
+    if (match) {
+      setApploye(match.memberId);
+      toast.success(`Matched ${match.name} to their Apploye member.`);
+      await onSaved();
+      return;
+    }
+    toast.warning(
+      `No Apploye member with ${va.email}. Invite them from the Apploye dashboard, then try again.`,
+    );
+  };
 
   useEffect(() => {
     if (!va) return;
-    setApploye(va.apployeUserId || "");
+    setApploye(va.apployeMemberId || "");
     setGhl(va.ghlUserId || "");
     setStartDate(va.startDate || "");
     setRate(va.rateCents === null ? "" : String(va.rateCents / 100));
@@ -886,7 +911,7 @@ function VaLinksSheet({
     const res = await callAdmin({
       action: "save_va_profile",
       vaId: va.id,
-      apployeUserId: apploye,
+      apployeMemberId: apploye,
       ghlUserId: ghl,
       startDate,
       rateCents: rate === "" ? null : Math.round(Number(rate) * 100),
@@ -919,10 +944,24 @@ function VaLinksSheet({
             </SheetHeader>
             <div className="mt-5 space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Apploye user ID</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm">Apploye member ID</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={linkApploye}
+                    disabled={linking}
+                  >
+                    {linking && <RiLoader4Line className="mr-1.5 h-3 w-3 animate-spin" />}
+                    Match by email
+                  </Button>
+                </div>
                 <Input value={apploye} onChange={(e) => setApploye(e.target.value)} placeholder="uuid" />
                 <p className="text-[11px] text-slate-500">
-                  Used for hours only. No activity or screenshot data is read.
+                  Used for hours only. No activity or screenshot data is read. If the match fails, invite
+                  them in Apploye first — the public API has no invite endpoint.
                 </p>
               </div>
               <div className="space-y-1.5">

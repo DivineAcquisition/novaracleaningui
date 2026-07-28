@@ -1,4 +1,10 @@
-// ─── Apploye API client — HOURS AND TIME ENTRIES ONLY ─────────────────────────
+// ─── Apploye API client (Node/Next side) — HOURS ONLY ─────────────────────────
+//
+// The Deno mirror of this lives at supabase/functions/_shared/apploye-client.ts
+// and is used by apploye-invite-cleaner / apploye-live-tracking. Same API, same
+// credentials (APPLOYE_API_KEY + optional APPLOYE_API_BASE in app_secrets) —
+// this is the Next.js runtime's copy, following the same split the Airtable
+// integration already uses.
 //
 // SCOPE LIMIT (deliberate, and enforced structurally below).
 //
@@ -7,21 +13,29 @@
 // contractor. Behavioural surveillance is not, and it undermines the
 // independent-contractor relationship — so this client:
 //
-//   * calls ONLY /members and /timesheets. No screenshot, activity, app-usage
-//     or URL endpoint is ever requested, even if the account exposes one.
+//   * calls ONLY /members and /timesheets. Apploye's public API doesn't expose
+//     screenshots, activity levels or app usage at all, and if that ever
+//     changes this client still cannot reach them.
 //   * projects every response through an explicit allowlist (`pickMember`,
-//     `pickTimesheet`) before it leaves this module, so an API that starts
-//     returning activity percentages tomorrow still cannot leak them into the
-//     rest of the system.
+//     `pickDayTotal`) before it leaves this module.
 //   * has no type, field or storage anywhere downstream that could hold that
 //     data even if someone tried.
 //
 // If you are extending this file: adding a monitoring endpoint is not a
 // feature request, it's a change to how we treat contractors. Don't.
 //
-// Auth: Organization API Key in the X-APPLOYE-API-KEY header. The key is read
-// at call time from the environment (primed from app_secrets) and is never
-// logged and never sent to the browser.
+// ─── The shape of /timesheets (verified against the live API) ────────────────
+//
+// The published docs show `dates` as a single string. It is NOT. The endpoint
+// returns ONE ROW PER USER for the WHOLE requested range:
+//
+//   { "user_id": "…", "duration": 167972, "dates": ["2026-05-30", … 9 dates] }
+//
+// `duration` is the TOTAL across every date in `dates`, so a multi-day query
+// cannot be attributed to a single day — there is no per-day breakdown in the
+// response. We therefore query ONE DAY AT A TIME, and refuse to attribute a
+// row whose `dates` isn't exactly the day we asked for. Guessing a split would
+// invent hours nobody worked.
 
 const DEFAULT_API_BASE = "https://public-api.apploye.com";
 
@@ -39,7 +53,7 @@ export class ApployeError extends Error {
   }
 }
 
-/** Thrown when no API key is configured — treated as "not_configured", not an outage. */
+/** Thrown when no API key is configured — "not_configured", not an outage. */
 export class ApployeNotConfiguredError extends ApployeError {
   constructor() {
     super("Apploye is not connected (APPLOYE_API_KEY is unset).");
@@ -63,9 +77,8 @@ function apiKey(): string {
 
 interface ApployeEnvelope<T> {
   success?: boolean;
-  page?: number;
-  per_page?: number;
-  total?: number;
+  error?: string;
+  total_count?: number;
   response?: T[];
 }
 
@@ -114,6 +127,9 @@ async function request<T>(
 
     const body = (await res.json()) as ApployeEnvelope<T> | T[];
     if (Array.isArray(body)) return body;
+    if (body.success === false && body.error) {
+      throw new ApployeError(`Apploye rejected the request: ${body.error}`);
+    }
     return body.response ?? [];
   }
 }
@@ -133,83 +149,83 @@ export interface ApployeMember {
 function pickMember(raw: Record<string, unknown>): ApployeMember | null {
   const id = raw.id ?? raw.user_id;
   if (!id) return null;
+  // The live API returns `username`; the published docs say `user_name`.
+  const name = raw.username ?? raw.user_name;
   return {
     id: String(id),
-    userName: raw.user_name ? String(raw.user_name) : null,
+    userName: name ? String(name) : null,
     email: raw.email ? String(raw.email).toLowerCase() : null,
     timezone: raw.timezone ? String(raw.timezone) : null,
   };
 }
 
-/** A day of tracked time for one member. Duration only — nothing else. */
-export interface ApployeTimeEntry {
-  userId: string;
-  /** Local calendar date the time was tracked on (YYYY-MM-DD). */
+/** One member's tracked total for one specific date. Duration only. */
+export interface ApployeDayTotal {
+  memberId: string;
+  /** The calendar date this total belongs to (YYYY-MM-DD). */
   date: string;
-  /** Seconds tracked. */
-  durationSeconds: number;
+  hours: number;
 }
 
-function pickTimesheet(raw: Record<string, unknown>): ApployeTimeEntry | null {
-  const userId = raw.user_id ?? raw.userId ?? raw.id;
-  const date = raw.dates ?? raw.date;
-  const duration = raw.duration ?? raw.duration_seconds ?? raw.total_duration;
-  if (!userId || !date) return null;
-  const seconds = Number(duration);
+/**
+ * Project a /timesheets row onto a single requested day.
+ *
+ * Returns null unless the row's `dates` is exactly the day we asked for. The
+ * endpoint aggregates `duration` across every date in `dates`, so any other
+ * shape has no honest per-day answer and must resolve to "unverified".
+ */
+function pickDayTotal(raw: Record<string, unknown>, requestedDate: string): ApployeDayTotal | null {
+  const memberId = raw.user_id ?? raw.userId ?? raw.id;
+  if (!memberId) return null;
+
+  const rawDates = raw.dates ?? raw.date;
+  const dates = (Array.isArray(rawDates) ? rawDates : [rawDates])
+    .filter((d) => d !== null && d !== undefined)
+    .map((d) => String(d).slice(0, 10));
+
+  if (dates.length !== 1 || dates[0] !== requestedDate) return null;
+
+  const seconds = Number(raw.duration ?? raw.duration_seconds ?? raw.total_duration);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+
   return {
-    userId: String(userId),
-    date: String(date).slice(0, 10),
-    durationSeconds: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0,
+    memberId: String(memberId),
+    date: requestedDate,
+    hours: Math.round((seconds / 3600) * 100) / 100,
   };
 }
 
+/** Exposed for the offline verification script — not part of the API surface. */
+export const __test__pickDayTotal = pickDayTotal;
+
 // ─── Public surface ───────────────────────────────────────────────────────────
 
-/** Organization members — used to resolve a VA's Apploye user id from their email. */
+/** Organization members — used to resolve a VA's Apploye member id by email. */
 export async function listMembers(): Promise<ApployeMember[]> {
   const rows = await request<Record<string, unknown>>("/members");
   return rows.map(pickMember).filter((m): m is ApployeMember => m !== null);
 }
 
 /**
- * Tracked time per member per day for an inclusive date range.
+ * Hours tracked per member for ONE date, keyed by Apploye member id.
  *
- * The API takes ISO datetimes; we widen the window by a day on each side and
- * then filter by the returned calendar date, so a member in a different
- * timezone still lands on the right day.
+ * Queried a single day at a time because the endpoint has no per-day
+ * breakdown (see the note at the top of this file). A member with no entry is
+ * simply absent from the map — the caller decides whether that means "zero
+ * hours" (source reachable) or "unverified".
  */
-export async function listTimeEntries(
-  startDate: string,
-  endDate: string,
-): Promise<ApployeTimeEntry[]> {
-  const start = new Date(`${startDate}T00:00:00.000Z`);
-  const end = new Date(`${endDate}T00:00:00.000Z`);
-  start.setUTCDate(start.getUTCDate() - 1);
-  end.setUTCDate(end.getUTCDate() + 1);
-
+export async function hoursByMemberForDate(date: string): Promise<Map<string, number>> {
   const rows = await request<Record<string, unknown>>("/timesheets", {
-    start_date: start.toISOString(),
-    end_date: end.toISOString(),
+    start_date: `${date}T00:00:00Z`,
+    end_date: `${date}T23:59:59Z`,
   });
 
-  return rows
-    .map(pickTimesheet)
-    .filter((e): e is ApployeTimeEntry => e !== null)
-    .filter((e) => e.date >= startDate && e.date <= endDate);
-}
-
-/**
- * Hours tracked per Apploye user id for a single date, keyed by user id.
- * A user with no entry is simply absent from the map — the caller decides
- * whether that means "zero hours" (source reachable) or "unverified".
- */
-export async function hoursByUserForDate(date: string): Promise<Map<string, number>> {
-  const entries = await listTimeEntries(date, date);
   const out = new Map<string, number>();
-  for (const e of entries) {
-    out.set(e.userId, (out.get(e.userId) || 0) + e.durationSeconds / 3600);
+  for (const raw of rows) {
+    const total = pickDayTotal(raw, date);
+    if (!total) continue;
+    out.set(total.memberId, (out.get(total.memberId) || 0) + total.hours);
   }
-  for (const [k, v] of out) out.set(k, Math.round(v * 100) / 100);
   return out;
 }
 

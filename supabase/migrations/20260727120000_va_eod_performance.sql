@@ -32,10 +32,12 @@
 --
 -- Metrics are attributed to a VA through their linked source user IDs. GHL and
 -- workspace IDs already live on va_onboarding (ghl_user_id, portal_user_id);
--- Apploye is the only new one.
+-- Apploye is the only new one, and it reuses the column name and email-match
+-- linking convention the cleaner side already established
+-- (cleaners.apploye_member_id, see 20260530_apploye_integration.sql).
 
 ALTER TABLE public.va_onboarding
-  ADD COLUMN IF NOT EXISTS apploye_user_id text,
+  ADD COLUMN IF NOT EXISTS apploye_member_id text,
   ADD COLUMN IF NOT EXISTS start_date date,
   ADD COLUMN IF NOT EXISTS rate_cents integer,
   ADD COLUMN IF NOT EXISTS functions_assigned text[] NOT NULL DEFAULT '{}',
@@ -52,7 +54,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 CREATE INDEX IF NOT EXISTS va_onboarding_apploye_idx
-  ON public.va_onboarding (apploye_user_id) WHERE apploye_user_id IS NOT NULL;
+  ON public.va_onboarding (apploye_member_id) WHERE apploye_member_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS va_onboarding_portal_user_idx
   ON public.va_onboarding (portal_user_id) WHERE portal_user_id IS NOT NULL;
 
@@ -439,19 +441,37 @@ ON CONFLICT (event_type) DO NOTHING;
 -- and again after the EOD cutoff to settle the day. Idempotent: each run
 -- upserts on (va_id, work_date).
 
+-- APPLOYE_API_KEY and the Airtable PAT already exist in app_secrets and are
+-- deliberately not touched here. Only the two new keys are seeded.
 INSERT INTO public.app_secrets (key, value, description)
 VALUES
   ('VA_METRICS_SYNC_URL', 'https://admin.novaracleaning.com/api/va/performance/sync',
    'Next.js route that pulls verified VA metrics from Apploye/GHL/Airtable/workspace/Stripe.'),
   ('VA_METRICS_SYNC_SECRET', encode(gen_random_bytes(24), 'hex'),
    'Shared secret for the VA metrics sync route (query ?secret= or x-va-metrics-secret header).'),
-  ('APPLOYE_API_KEY', '',
-   'Apploye Organization API Key (X-APPLOYE-API-KEY). Used for /members and /timesheets ONLY — hours and time entries. Screenshots and activity data are never requested or stored.'),
   ('AIRTABLE_TEAM_PERF_BASE_ID', '',
    'Airtable base id for "Novara — Team Performance". Set automatically the first time the base is provisioned.'),
   ('AIRTABLE_WORKSPACE_ID', '',
-   'Airtable workspace id — required once, to create the Team Performance base via the Meta API.')
+   'Airtable workspace id (wsp…) — required once, to create the Team Performance base via the Meta API.')
 ON CONFLICT (key) DO NOTHING;
+
+-- Correct the Apploye descriptions seeded by 20260530_apploye_integration.sql.
+-- They describe a Bearer token against www.apploye.com/api/v1, but the client
+-- that was actually built (supabase/functions/_shared/apploye-client.ts) uses
+-- the public API with an X-APPLOYE-API-KEY header — verified against the live
+-- endpoint. APPLOYE_WORKSPACE_ID is unused by that API and is left in place
+-- only so an operator doesn't wonder where it went.
+UPDATE public.app_secrets SET description =
+  'Apploye Organization API Key, sent as the X-APPLOYE-API-KEY header. Used for /members and /timesheets ONLY — identity and hours. Screenshots and activity data are never requested or stored.'
+WHERE key = 'APPLOYE_API_KEY';
+
+UPDATE public.app_secrets SET description =
+  'Optional override of the Apploye API base URL. Defaults to https://public-api.apploye.com when blank.'
+WHERE key = 'APPLOYE_API_BASE';
+
+UPDATE public.app_secrets SET description =
+  'UNUSED — the Apploye public API scopes by the organization API key, so no workspace id is sent. Kept to avoid confusion; safe to delete.'
+WHERE key = 'APPLOYE_WORKSPACE_ID';
 
 DO $$
 BEGIN
