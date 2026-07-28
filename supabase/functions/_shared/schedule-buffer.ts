@@ -1,6 +1,6 @@
 // ─── Schedule buffer helpers (edge side) ─────────────────────────────────────
 //
-// The buffer rules themselves live in Postgres (20260728190000_schedule_buffer
+// The buffer rules themselves live in Postgres (20260728200000_schedule_buffer
 // _projections.sql): the duration model, the projection, the conflict math, and
 // the write guards that enforce it on job_assignments and bookings. That is
 // deliberate — there is one set of numbers and one place they are enforced, so

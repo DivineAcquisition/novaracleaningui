@@ -1,6 +1,6 @@
 -- ─── Delay detection, cascade walk, customer heads-up, backup coverage ────
 --
--- The buffer (20260728190000) buys room. This is what happens when the day
+-- The buffer (20260728200000) buys room. This is what happens when the day
 -- goes wrong anyway.
 --
 --   1. schedule_delay_events — late start, overrun, no-show, and the cleaner's

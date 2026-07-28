@@ -1,7 +1,7 @@
 // ─── Schedule guard: shared types + settings shape ───────────────────────────
 //
-// The rules themselves are in Postgres (see the 20260728190000 /
-// 20260728190100 migrations). This file is only the shape the workspace reads
+// The rules themselves are in Postgres (see the 20260728200000 /
+// 20260728200100 migrations). This file is only the shape the workspace reads
 // and writes, plus the defaults, so a partially-populated settings row can
 // never leave a threshold undefined.
 
