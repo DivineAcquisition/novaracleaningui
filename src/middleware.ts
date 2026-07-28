@@ -29,8 +29,8 @@ import { updateSession } from "@/integrations/supabase/middleware";
 //                                    /partner/* — everything else 308s away,
 //                                    and /partner/* is served ONLY here.
 //
-// hiring.novaracleaning.com is NOT served by this Next.js app — it is
-// hosted on Framer. DNS for hiring.* points away from this project.
+// hiring.novaracleaning.com — public careers site (open roles + apply).
+// Owned paths: /hiring/*. DNS points here; Framer is no longer the front door.
 //
 // Apex novaracleaning.com / www.* are treated as `try` (marketing root).
 // localhost / *.lovableproject.com / *.vercel.app / preview hosts skip
@@ -48,6 +48,7 @@ const HOSTS = {
   team: "team.novaracleaning.com",
   commercial: "commercial.novaracleaning.com",
   eod: "eod.novaracleaning.com",
+  hiring: "hiring.novaracleaning.com",
 } as const;
 
 type SubdomainKey = keyof typeof HOSTS;
@@ -60,7 +61,7 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
   // Contractor portal: the entire cleaner journey lives here.
   // - /cleaner/onboarding, /cleaner/ob-portal, /ob-portal: application
-  //   funnel (post-Framer hand-off from hiring.novaracleaning.com)
+  //   funnel (post-hiring-site hand-off from hiring.novaracleaning.com)
   // - /cleaner/auth, /cleaner/dashboard, /cleaner/mobile-dashboard,
   //   /cleaner/reset-password: signed-in cleaner portal
   // - /contractor/*: legacy contractor routes
@@ -124,6 +125,9 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // form + pending status. Access provisioning happens only in the admin
   // workspace after approval.
   ["/team", "team"],
+
+  // Public careers site (hiring.novaracleaning.com).
+  ["/hiring", "hiring"],
 ];
 
 const DEFAULT_LANDING: Record<SubdomainKey, string> = {
@@ -135,6 +139,7 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   team: "/team",
   commercial: "/commercial",
   eod: "/eod",
+  hiring: "/hiring",
 };
 
 // Paths that ALL subdomains may serve (framework / static / crawler files).
@@ -184,9 +189,7 @@ function subdomainOf(hostname: string): SubdomainKey | null {
   if (h.startsWith("commercial.")) return "commercial";
   if (h.startsWith("team.")) return "team";
   if (h.startsWith("eod.")) return "eod";
-  // hiring.* is hosted on Framer — if DNS still points here for any
-  // reason, fall through to `try` (marketing) so we never serve broken
-  // content on the hiring subdomain.
+  if (h.startsWith("hiring.")) return "hiring";
   return null;
 }
 

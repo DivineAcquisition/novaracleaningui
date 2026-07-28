@@ -11,15 +11,17 @@
 //   { action: "activate",          applicantId }   ← gates: agreement signed + payout setup
 //
 // launch_onboarding reuses the EXISTING contractor onboarding flow: the invite
-// email/SMS point at the contractor portal (account → wizard → sign the ICA →
-// Stripe Connect W-9/payouts). No parallel onboarding is invented here. A
-// cleaners row is created (status=pending, approved=false) so progress reads
-// through live; portal access stays gated by the existing rules (no dispatch
-// before signed agreement + admin approval/activation).
+// email/SMS point at a TOKENIZED contractor auth link (?invite=…) that skips
+// the /cleaner/role intro video and goes straight into account → wizard →
+// ICA → Stripe Connect. No parallel onboarding is invented here. A cleaners
+// row is created (status=pending, approved=false) so progress reads through
+// live; portal access stays gated by the existing rules (no dispatch before
+// signed agreement + admin approval/activation).
 //
 // Every stage change writes an events row (who / when) — the existing audit
 // channel, which also feeds Discord.
 
+import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
@@ -28,7 +30,17 @@ import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-scree
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ONBOARDING_URL = "https://contractor.novaracleaning.com/cleaner/role";
+const ONBOARDING_AUTH_BASE = "https://contractor.novaracleaning.com/cleaner/auth";
+/** Invite links stay valid for 14 days; resend mints a fresh token/window. */
+const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+function mintInviteToken(): string {
+  return randomBytes(24).toString("hex");
+}
+
+function onboardingInviteUrl(token: string): string {
+  return `${ONBOARDING_AUTH_BASE}?invite=${encodeURIComponent(token)}`;
+}
 
 interface ApplicantRow {
   id: string;
@@ -72,6 +84,7 @@ async function logEvent(
 async function sendOnboardingInvite(
   supabase: ReturnType<typeof getAdminSupabase>,
   applicant: ApplicantRow,
+  onboardingUrl: string,
 ): Promise<{ emailed: boolean; smsSent: boolean }> {
   const firstName = applicant.first_name || applicant.full_name || "there";
   let emailed = false;
@@ -86,7 +99,7 @@ async function sendOnboardingInvite(
           firstName,
           lastName: applicant.last_name || "",
           email: applicant.email,
-          onboardingUrl: ONBOARDING_URL,
+          onboardingUrl,
         },
       },
     });
@@ -100,7 +113,7 @@ async function sendOnboardingInvite(
   if (applicant.phone) {
     const message =
       `Hi ${firstName}! It's Novara Cleaning — you've been selected to join our contractor team. ` +
-      `Start your onboarding here (agreement, payout setup & portal access): ${ONBOARDING_URL} ` +
+      `Start your onboarding here (agreement, payout setup & portal access): ${onboardingUrl} ` +
       `Questions? Just reply to this text.`;
     // GHL is the canonical SMS channel; Telnyx is the fallback (mirrors
     // supabase/functions/_shared/sms.ts).
@@ -324,7 +337,13 @@ export async function POST(req: Request): Promise<NextResponse> {
           cleanerId = createdRow.id as string;
         }
 
-        const { emailed, smsSent } = await sendOnboardingInvite(supabase, applicant);
+        // Mint a fresh invite token so the link skips /cleaner/role (video)
+        // and lands on contractor auth → normal onboarding.
+        const inviteToken = mintInviteToken();
+        const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+        const inviteUrl = onboardingInviteUrl(inviteToken);
+
+        const { emailed, smsSent } = await sendOnboardingInvite(supabase, applicant, inviteUrl);
         if (!emailed && !smsSent) {
           return NextResponse.json(
             { error: "Neither the onboarding email nor SMS could be sent." },
@@ -339,6 +358,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           hold_pending: null,
           hold_follow_up_at: null,
           hold_reminder_sent_at: null,
+          invite_token: inviteToken,
+          invite_expires_at: inviteExpiresAt,
+          invite_sent_at: new Date().toISOString(),
           ...(isResend
             ? { onboarding_last_nudge_at: new Date().toISOString() }
             : { onboarding_launched_at: applicant.onboarding_launched_at || new Date().toISOString() }),
@@ -347,9 +369,23 @@ export async function POST(req: Request): Promise<NextResponse> {
           type: "applicant.onboarding_launched",
           summary: `${isResend ? "Onboarding re-sent to" : "Onboarding launched for"} ${who} by ${principal.email} (email: ${emailed ? "sent" : "no"}, SMS: ${smsSent ? "sent" : "no"})`,
           cleanerId,
-          data: { applicant_id: applicantId, resend: isResend, emailed, smsSent },
+          data: {
+            applicant_id: applicantId,
+            resend: isResend,
+            emailed,
+            smsSent,
+            invite_expires_at: inviteExpiresAt,
+            skip_role_video: true,
+          },
         });
-        return NextResponse.json({ ok: true, stage: "onboarding", emailed, smsSent, cleanerId });
+        return NextResponse.json({
+          ok: true,
+          stage: "onboarding",
+          emailed,
+          smsSent,
+          cleanerId,
+          inviteExpiresAt,
+        });
       }
 
       case "activate": {

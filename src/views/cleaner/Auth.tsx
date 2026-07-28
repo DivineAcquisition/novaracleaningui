@@ -10,7 +10,7 @@ import {
   RiCalendarCheckLine,
 } from "@remixicon/react";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -44,9 +44,57 @@ export default function CleanerAuth() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteName, setInviteName] = useState<string | null>(null);
+  const [inviteReady, setInviteReady] = useState(false);
+  const [defaultTab, setDefaultTab] = useState<"signin" | "signup">("signin");
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    checkExistingSession();
+    void (async () => {
+      const token = searchParams.get("invite")?.trim() || null;
+      if (!token) {
+        setInviteReady(true);
+        await checkExistingSession();
+        return;
+      }
+      setInviteToken(token);
+      try {
+        const res = await fetch("/api/talent/invite/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inviteToken: token }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          expired?: boolean;
+          email?: string | null;
+          firstName?: string | null;
+          fullName?: string | null;
+        };
+        if (!res.ok) {
+          toast.error(data.error || "This invite link isn't valid.");
+          setInviteReady(true);
+          await checkExistingSession();
+          return;
+        }
+        if (data.email) setEmail(data.email);
+        setInviteName(data.firstName || data.fullName || null);
+        setDefaultTab("signup");
+        toast.success(
+          data.firstName
+            ? `Welcome, ${data.firstName} — create your account to start onboarding.`
+            : "You're invited — create your account to start onboarding.",
+        );
+      } catch (err) {
+        console.error("Invite redeem failed:", err);
+        toast.error("Could not validate your invite link. Try again or ask recruiting to resend.");
+      } finally {
+        setInviteReady(true);
+        await checkExistingSession();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkExistingSession = async () => {
@@ -185,7 +233,7 @@ export default function CleanerAuth() {
     }
   };
 
-  if (isCheckingSession) {
+  if (isCheckingSession || !inviteReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC]">
         <div className="text-center">
@@ -229,7 +277,18 @@ export default function CleanerAuth() {
             <div className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <Tabs defaultValue="signin" className="w-full">
+          {inviteToken && (
+            <div className="rounded-xl border border-[#5C0FFE]/20 bg-[rgba(92,15,254,0.04)] px-3.5 py-3 text-sm text-slate-700">
+              <p className="font-semibold text-[#5C0FFE]">
+                {inviteName ? `You're invited, ${inviteName}` : "You're invited"}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Create your account (or sign in) to continue onboarding — no intro video required.
+              </p>
+            </div>
+          )}
+
+          <Tabs defaultValue={defaultTab} key={defaultTab} className="w-full">
             <TabsList className="mb-4 grid h-10 w-full grid-cols-2 rounded-xl bg-slate-100 p-1">
               <TabsTrigger value="signin" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm">Sign In</TabsTrigger>
               <TabsTrigger value="signup" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm">Join Us</TabsTrigger>
@@ -241,7 +300,7 @@ export default function CleanerAuth() {
                   <Label htmlFor="signin-email" className="text-slate-700">Email</Label>
                   <div className="relative">
                     <RiMailLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input id="signin-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
+                    <Input id="signin-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading || Boolean(inviteToken && email)} required />
                   </div>
                 </div>
                 <div className="space-y-1.5">
@@ -270,7 +329,7 @@ export default function CleanerAuth() {
                   <Label htmlFor="signup-email" className="text-slate-700">Email</Label>
                   <div className="relative">
                     <RiMailLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input id="signup-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
+                    <Input id="signup-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading || Boolean(inviteToken && email)} required />
                   </div>
                 </div>
                 <div className="space-y-1.5">
@@ -284,7 +343,11 @@ export default function CleanerAuth() {
                 <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Creating account…</> : <><RiSparklingLine className="mr-2 h-4 w-4" />Join Our Team</>}
                 </Button>
-                <p className="text-center text-xs text-slate-500">You'll complete your profile after signing up.</p>
+                <p className="text-center text-xs text-slate-500">
+                  {inviteToken
+                    ? "After signing up you'll go straight into onboarding (agreement & payouts)."
+                    : "You'll complete your profile after signing up."}
+                </p>
               </form>
             </TabsContent>
           </Tabs>

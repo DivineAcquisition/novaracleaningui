@@ -1,11 +1,10 @@
 import { Suspense } from "react";
-
-import CleanerAuthPage from "@/views/cleaner/Auth";
+import HiringFieldTech from "@/views/hiring/HiringFieldTech";
 
 export default function Page() {
   return (
     <Suspense>
-      <CleanerAuthPage />
+      <HiringFieldTech />
     </Suspense>
   );
 }
