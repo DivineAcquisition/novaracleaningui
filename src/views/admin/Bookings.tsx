@@ -33,6 +33,7 @@ import {
   RiPriceTag3Line,
   RiListCheck2,
   RiArrowRightSLine,
+  RiSubtractLine,
 } from "@remixicon/react";
 import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
@@ -943,10 +944,13 @@ function BookingSheet({
   const [addOnPrices, setAddOnPrices] = useState<Record<string, string>>({});
   // Optional manual override of the whole new total (dollars). Blank = auto.
   const [totalOverride, setTotalOverride] = useState<string>("");
-  // Grant-credit state (applies to the booking's customer by email).
+  // Credit state (grants and removals both target the booking email's wallet).
+  const [creditMode, setCreditMode] = useState<"grant" | "remove">("grant");
   const [creditAmount, setCreditAmount] = useState("");
   const [creditSource, setCreditSource] = useState("admin_grant");
   const [creditReason, setCreditReason] = useState("");
+  const [creditNotify, setCreditNotify] = useState(true);
+  const [walletCents, setWalletCents] = useState<number | null>(null);
   // Adjust-job-cost state (revenue + optional refund).
   const [jobCost, setJobCost] = useState("");
   const [jobCostRefund, setJobCostRefund] = useState("");
@@ -965,9 +969,13 @@ function BookingSheet({
     if (!booking) return;
     setAdjustOpen(false);
     setSuppressReview(Boolean(booking.suppress_review_request));
+    setCreditMode("grant");
     setCreditAmount("");
     setCreditSource("admin_grant");
     setCreditReason("");
+    setCreditNotify(true);
+    setWalletCents(null);
+    void loadWalletBalance(booking.email);
     setJobCost(
       booking.final_charge_cents != null
         ? (booking.final_charge_cents / 100).toFixed(2)
@@ -1018,6 +1026,15 @@ function BookingSheet({
     })();
     void loadScopeState(booking.id);
   }, [booking?.id]);
+
+  const loadWalletBalance = async (email: string | null) => {
+    if (!email) {
+      setWalletCents(0);
+      return;
+    }
+    const { data } = await (supabase.rpc as any)("get_customer_credit_balance_by_email", { _email: email });
+    setWalletCents(Number((data as { balance_cents?: number })?.balance_cents || 0));
+  };
 
   const loadScopeState = async (id: string) => {
     const [{ data: adjustments }, { data: flags }] = await Promise.all([
@@ -1295,7 +1312,8 @@ function BookingSheet({
     }
   };
 
-  const grantCredit = async () => {
+  const applyCreditChange = async () => {
+    const removing = creditMode === "remove";
     const cents = Math.round(parseFloat(creditAmount) * 100);
     if (!Number.isFinite(cents) || cents <= 0) {
       toast.error("Enter a positive dollar amount");
@@ -1305,26 +1323,48 @@ function BookingSheet({
       toast.error("This booking has no customer email to credit.");
       return;
     }
+    if (removing && !creditReason.trim()) {
+      toast.error("Add a reason so the ledger says why the credit came off");
+      return;
+    }
+    if (removing && walletCents != null && cents > walletCents) {
+      toast.error(`Only $${(walletCents / 100).toFixed(2)} available to remove`);
+      return;
+    }
     setWorking("credit");
     try {
       const { data, error } = await supabase.functions.invoke("admin-grant-credit", {
-        body: {
-          action: "grant",
-          email: booking.email,
-          firstName: booking.first_name || undefined,
-          lastName: booking.last_name || undefined,
-          phone: booking.phone || undefined,
-          amountCents: cents,
-          source: creditSource,
-          reason: creditReason || `Credit applied from booking #${booking.booking_number || booking.id.slice(0, 6)}`,
-        },
+        body: removing
+          ? {
+              action: "revoke",
+              email: booking.email,
+              amountCents: cents,
+              reason: creditReason.trim(),
+            }
+          : {
+              action: "grant",
+              email: booking.email,
+              firstName: booking.first_name || undefined,
+              lastName: booking.last_name || undefined,
+              phone: booking.phone || undefined,
+              amountCents: cents,
+              source: creditSource,
+              reason: creditReason || `Credit applied from booking #${booking.booking_number || booking.id.slice(0, 6)}`,
+              notify: creditNotify,
+            },
       });
-      if (error) throw error;
-      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-      const notified = [(data as { emailSent?: boolean })?.emailSent && "email", (data as { smsSent?: boolean })?.smsSent && "SMS"].filter(Boolean).join(" + ");
-      toast.success(`Credited $${(cents / 100).toFixed(2)} to ${booking.email}${notified ? ` · ${notified} sent` : ""}`);
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error);
+      if (removing) {
+        const removed = Number((data as { removedCents?: number })?.removedCents || 0);
+        toast.success(`Removed $${(removed / 100).toFixed(2)} from ${booking.email} · customer not notified`);
+      } else {
+        const notified = [(data as { emailSent?: boolean })?.emailSent && "email", (data as { smsSent?: boolean })?.smsSent && "SMS"].filter(Boolean).join(" + ");
+        toast.success(`Credited $${(cents / 100).toFixed(2)} to ${booking.email}${notified ? ` · ${notified} sent` : " · no notification sent"}`);
+      }
       setCreditAmount("");
       setCreditReason("");
+      await loadWalletBalance(booking.email);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1945,18 +1985,49 @@ function BookingSheet({
               </CardContent>
             </Card>
 
-            {/* Grant credit (to the booking's customer, by email) */}
+            {/* Grant or remove credit (to the booking's customer, by email) */}
             <Card className="border-slate-200">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-700" />
-                  Apply account credit
+                  Account credit
                 </CardTitle>
                 <CardDescription>
-                  Adds wallet credit to {booking.email || "this customer"} (auto-applies at their next checkout). They get an email + SMS.
+                  {creditMode === "remove" ? (
+                    <>Takes credit back off {booking.email || "this customer"}&apos;s wallet. They are never emailed or texted about a removal.</>
+                  ) : (
+                    <>Adds wallet credit to {booking.email || "this customer"} (auto-applies at their next checkout).</>
+                  )}
+                  {walletCents != null ? (
+                    <> Current balance <strong className="text-slate-900">${(walletCents / 100).toFixed(2)}</strong>.</>
+                  ) : null}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={creditMode === "grant" ? "default" : "outline"}
+                    onClick={() => setCreditMode("grant")}
+                    className={cn(
+                      "h-8 text-xs",
+                      creditMode === "grant" && "bg-violet-600 hover:bg-violet-700 text-white",
+                    )}
+                  >
+                    Grant credit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={creditMode === "remove" ? "default" : "outline"}
+                    onClick={() => setCreditMode("remove")}
+                    className={cn(
+                      "h-8 text-xs",
+                      creditMode === "remove" && "bg-rose-600 hover:bg-rose-700 text-white",
+                    )}
+                  >
+                    Remove credit
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">Amount (USD)</Label>
@@ -1970,37 +2041,58 @@ function BookingSheet({
                       placeholder="50"
                     />
                   </div>
-                  <div>
-                    <Label className="text-xs">Source</Label>
-                    <Select value={creditSource} onValueChange={setCreditSource}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin_grant">Admin grant</SelectItem>
-                        <SelectItem value="refund_credit">Refund as credit</SelectItem>
-                        <SelectItem value="promo">Promo</SelectItem>
-                        <SelectItem value="perk">Loyalty perk / goodwill</SelectItem>
-                        <SelectItem value="adjustment">Service recovery / adjustment</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {creditMode === "grant" ? (
+                    <div>
+                      <Label className="text-xs">Source</Label>
+                      <Select value={creditSource} onValueChange={setCreditSource}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin_grant">Admin grant</SelectItem>
+                          <SelectItem value="refund_credit">Refund as credit</SelectItem>
+                          <SelectItem value="promo">Promo</SelectItem>
+                          <SelectItem value="perk">Loyalty perk / goodwill</SelectItem>
+                          <SelectItem value="adjustment">Service recovery / adjustment</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
                 </div>
                 <div>
-                  <Label className="text-xs">Reason (visible to customer)</Label>
+                  <Label className="text-xs">
+                    {creditMode === "remove" ? "Reason (internal only)" : "Reason (visible to customer)"}
+                  </Label>
                   <Input
                     value={creditReason}
                     onChange={(e) => setCreditReason(e.target.value)}
-                    placeholder="e.g., Sorry about the late arrival"
+                    placeholder={
+                      creditMode === "remove"
+                        ? "e.g., Duplicate goodwill credit issued on 7/2"
+                        : "e.g., Sorry about the late arrival"
+                    }
                   />
                 </div>
+                {creditMode === "grant" ? (
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <Switch checked={creditNotify} onCheckedChange={setCreditNotify} />
+                    Email + text the customer about this credit
+                  </label>
+                ) : null}
                 <Button
-                  onClick={grantCredit}
+                  onClick={applyCreditChange}
                   disabled={working === "credit" || !creditAmount}
-                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                  className={cn(
+                    "w-full text-white",
+                    creditMode === "remove"
+                      ? "bg-rose-600 hover:bg-rose-700"
+                      : "bg-violet-600 hover:bg-violet-700",
+                  )}
                 >
                   {working === "credit" ? (
                     <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
+                  ) : creditMode === "remove" ? (
+                    <><RiSubtractLine className="w-4 h-4 mr-2" /> Remove ${creditAmount || "0"} credit</>
                   ) : (
                     <><RiMoneyDollarCircleLine className="w-4 h-4 mr-2" /> Apply ${creditAmount || "0"} credit</>
                   )}

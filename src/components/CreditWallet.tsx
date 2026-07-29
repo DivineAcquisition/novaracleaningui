@@ -58,9 +58,12 @@ export function CreditWallet({ email }: Props) {
         // regardless of which customer row the credit was granted against.
         const [{ data: bal }, { data: history }] = await Promise.all([
           (supabase.rpc as any)("get_customer_credit_balance_by_email", { _email: cleanEmail }),
+          // Revoked rows are an internal correction, not something the
+          // customer needs to see in their own activity feed.
           (supabase.from as any)("customer_credits")
             .select("id, amount_cents, source, status, reason, created_at, applied_at, expires_at")
             .ilike("email", cleanEmail)
+            .neq("status", "revoked")
             .order("created_at", { ascending: false })
             .limit(20),
         ]);
