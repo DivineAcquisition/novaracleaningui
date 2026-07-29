@@ -56,9 +56,28 @@ export interface PortalJob {
   internalDetails: EnrichedInternalDetails | null;
 }
 
+/**
+ * A job that lost its cleaner and is being offered around. Surfaced in the
+ * portal as well as by SMS because the accept window is short and a text is
+ * easy to miss — and an offer nobody saw is the same as having no bench.
+ */
+export interface CoverageOfferSummary {
+  offerId: string;
+  token: string;
+  expiresAt: string | null;
+  wasDesignatedBackup: boolean;
+  serviceType: string;
+  serviceDate: string | null;
+  timeSlot: string | null;
+  city: string | null;
+  state: string | null;
+  estimatedPayCents: number | null;
+}
+
 export interface CleanerPortalData {
   jobs: PortalJob[];
   summary: { lifetimePaidCents: number; pendingCents: number; paidJobs: number } | null;
+  coverageOffers: CoverageOfferSummary[];
   byJobId: Map<string, PortalJob>;
   byBooking: Map<string, PortalJob>;
 }
@@ -67,13 +86,24 @@ export interface CleanerPortalData {
 // by supabase-js). Never throws — returns empty maps on failure so callers can
 // fall back to their existing estimate display.
 export async function fetchCleanerPortal(cleanerId?: string): Promise<CleanerPortalData> {
-  const empty: CleanerPortalData = { jobs: [], summary: null, byJobId: new Map(), byBooking: new Map() };
+  const empty: CleanerPortalData = {
+    jobs: [],
+    summary: null,
+    coverageOffers: [],
+    byJobId: new Map(),
+    byBooking: new Map(),
+  };
   try {
     const { data, error } = await supabase.functions.invoke("get-cleaner-portal", {
       body: cleanerId ? { cleanerId } : {},
     });
     if (error) return empty;
-    const res = data as { ok?: boolean; jobs?: PortalJob[]; summary?: CleanerPortalData["summary"] };
+    const res = data as {
+      ok?: boolean;
+      jobs?: PortalJob[];
+      summary?: CleanerPortalData["summary"];
+      coverageOffers?: CoverageOfferSummary[];
+    };
     if (!res?.ok || !Array.isArray(res.jobs)) return empty;
     const byJobId = new Map<string, PortalJob>();
     const byBooking = new Map<string, PortalJob>();
@@ -81,10 +111,86 @@ export async function fetchCleanerPortal(cleanerId?: string): Promise<CleanerPor
       if (j.jobId) byJobId.set(j.jobId, j);
       if (j.bookingId) byBooking.set(j.bookingId, j);
     }
-    return { jobs: res.jobs, summary: res.summary || null, byJobId, byBooking };
+    return {
+      jobs: res.jobs,
+      summary: res.summary || null,
+      coverageOffers: Array.isArray(res.coverageOffers) ? res.coverageOffers : [],
+      byJobId,
+      byBooking,
+    };
   } catch {
     return empty;
   }
+}
+
+/**
+ * The coverage offers waiting on a cleaner. Deliberately says out loud that
+ * passing costs them nothing: the moment cleaners suspect a decline is held
+ * against them, they stop answering at all — and then there is no bench.
+ */
+export function CoverageOfferBanner({ offers }: { offers: CoverageOfferSummary[] }) {
+  if (!offers.length) return null;
+  return (
+    <div className="space-y-2">
+      {offers.map((o) => {
+        const minutesLeft = o.expiresAt
+          ? Math.max(0, Math.round((new Date(o.expiresAt).getTime() - Date.now()) / 60000))
+          : null;
+        return (
+          <div
+            key={o.offerId}
+            className="rounded-xl border border-primary/30 bg-primary/5 p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Coverage job available{o.wasDesignatedBackup ? " — you're on call today" : ""}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {titleCase(o.serviceType)} · {o.serviceDate || "TBD"}
+                  {o.timeSlot ? ` · ${o.timeSlot}` : ""}
+                  {o.city ? ` · ${o.city}${o.state ? `, ${o.state}` : ""}` : ""}
+                </p>
+              </div>
+              <div className="text-right">
+                {o.estimatedPayCents != null ? (
+                  <p className="text-sm font-semibold text-primary">{money(o.estimatedPayCents)}</p>
+                ) : null}
+                {minutesLeft != null ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {minutesLeft > 0 ? `${minutesLeft} min to claim` : "closing now"}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href={coverageRespondUrl(o.token, "accept")}
+                className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground"
+              >
+                I&apos;ll take it
+              </a>
+              <a
+                href={coverageRespondUrl(o.token, "decline")}
+                className="flex-1 rounded-lg border border-border bg-background px-4 py-2.5 text-center text-sm font-medium text-foreground"
+              >
+                Can&apos;t do it
+              </a>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Paid normally at your usual rate. Passing doesn&apos;t affect your score — we&apos;d much rather you
+              say no than accept and not turn up.
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function coverageRespondUrl(token: string, action: "accept" | "decline"): string {
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
+  return `${base}/functions/v1/coverage-respond?t=${encodeURIComponent(token)}&a=${action}`;
 }
 
 export const money = (cents: number | null | undefined) =>

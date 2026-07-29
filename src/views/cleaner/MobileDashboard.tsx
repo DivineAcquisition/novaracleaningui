@@ -22,7 +22,12 @@ import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
-import { fetchCleanerPortal, type CleanerPortalData, type PortalJob } from "@/components/cleaner/portal-enrichment";
+import {
+  CoverageOfferBanner,
+  fetchCleanerPortal,
+  type CleanerPortalData,
+  type PortalJob,
+} from "@/components/cleaner/portal-enrichment";
 import { toast } from "sonner";
 
 export default function MobileDashboard() {
@@ -359,6 +364,10 @@ export default function MobileDashboard() {
             status={cleaner?.status}
             suspendedUntil={cleaner?.suspended_until}
           />
+
+          {/* Someone dropped a job and you're near the top of the list. Above
+              the stats because the accept window is measured in minutes. */}
+          <CoverageOfferBanner offers={portal?.coverageOffers || []} />
 
           {cleaner && !cleaner.stripe_account_id && (
             <OnboardingChecklist cleaner={cleaner} onRefresh={fetchData} />

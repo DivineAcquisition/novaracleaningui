@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { noticeLabel, type CleanerReliabilityRow } from "@/lib/schedule-risk";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import AccountabilityActionDialog from "@/components/admin/AccountabilityActionDialog";
 
@@ -121,6 +122,7 @@ export default function CleanerAccountability({
   const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [expiryDraft, setExpiryDraft] = useState("6");
+  const [reliability, setReliability] = useState<CleanerReliabilityRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +145,20 @@ export default function CleanerAccountability({
   }, [cleanerId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // The behaviour pattern behind the score: no-shows and cancellations WITH
+  // their notice periods. Read straight from the reliability view because it is
+  // the thing a human needs before deciding a consequence — a cleaner with two
+  // early cancellations is not the same person as one with two no-shows.
+  useEffect(() => {
+    void (async () => {
+      const { data } = await (supabase.from as any)("cleaner_reliability_v1")
+        .select("*")
+        .eq("cleaner_id", cleanerId)
+        .maybeSingle();
+      setReliability((data || null) as CleanerReliabilityRow | null);
+    })();
+  }, [cleanerId]);
 
   const liftSuspension = async () => {
     if (!liftTarget) return;
@@ -230,6 +246,73 @@ export default function CleanerAccountability({
         Strikes auto-apply the score hit — the Novara Score stays the continuous priority lever.
         {settings ? ` Strikes ${settings.strike_expiry_months > 0 ? `expire after ${settings.strike_expiry_months} months of clean performance` : "never expire"}.` : ""}
       </p>
+
+      {/* ── Attendance pattern over 90 days ─────────────────────────────── */}
+      {reliability &&
+      (reliability.no_shows_90d > 0 ||
+        reliability.cancellations_90d > 0 ||
+        reliability.nudges_unanswered_90d > 0 ||
+        reliability.days_on_call_90d > 0) ? (
+        <div className="rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Attendance · last 90 days
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {reliability.no_shows_90d > 0 ? (
+              <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-800">
+                {reliability.no_shows_90d} no-show{reliability.no_shows_90d === 1 ? "" : "s"}
+                {reliability.no_shows_30d > 0 ? ` (${reliability.no_shows_30d} in 30d)` : ""}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                No no-shows
+              </Badge>
+            )}
+            {reliability.short_notice_cancellations_90d > 0 ? (
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                {reliability.short_notice_cancellations_90d} short-notice cancel
+                {reliability.short_notice_cancellations_90d === 1 ? "" : "s"}
+              </Badge>
+            ) : null}
+            {reliability.cancellations_90d > reliability.short_notice_cancellations_90d ? (
+              <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800">
+                {reliability.cancellations_90d - reliability.short_notice_cancellations_90d} cancelled with good
+                notice
+              </Badge>
+            ) : null}
+            {reliability.late_but_reachable_90d > 0 ? (
+              <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800">
+                Late but reachable {reliability.late_but_reachable_90d}×
+              </Badge>
+            ) : null}
+            {reliability.nudges_unanswered_90d > 0 ? (
+              <Badge variant="outline" className="border-slate-300 bg-white text-slate-700">
+                {reliability.nudges_unanswered_90d} nudge
+                {reliability.nudges_unanswered_90d === 1 ? "" : "s"} unanswered
+              </Badge>
+            ) : null}
+            {reliability.days_on_call_90d > 0 ? (
+              <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-800">
+                On call {reliability.days_on_call_90d} day
+                {reliability.days_on_call_90d === 1 ? "" : "s"}
+                {reliability.coverage_offers_accepted_90d > 0
+                  ? ` · covered ${reliability.coverage_offers_accepted_90d}`
+                  : ""}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            {reliability.cancellations_90d > 0
+              ? `Cancellations averaged ${noticeLabel(reliability.avg_cancellation_notice_minutes)}. `
+              : ""}
+            A no-show means we couldn&apos;t reach them at all; cancelling ahead is the behaviour we ask for and
+            weighs far less.
+            {reliability.coverage_offers_declined_90d > 0
+              ? ` Passed on ${reliability.coverage_offers_declined_90d} coverage offer(s) — never a penalty.`
+              : ""}
+          </p>
+        </div>
+      ) : null}
 
       {/* ── Actions row ────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">

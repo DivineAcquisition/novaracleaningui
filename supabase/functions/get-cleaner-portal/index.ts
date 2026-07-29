@@ -468,6 +468,57 @@ serve(async (req) => {
       }
     } catch { /* offers are additive — never break the portal */ }
 
+    // ── Live COVERAGE offers ──────────────────────────────────────────────
+    // Someone dropped a job and this cleaner is near the top of the ranked
+    // list. It shows up here as well as by SMS because a coverage window is
+    // short and a text can be missed — and an offer nobody saw is the same as
+    // no bench at all. Never a penalty to pass: only accepting and then not
+    // turning up counts against a cleaner.
+    // deno-lint-ignore no-explicit-any
+    const coverageOffers: any[] = [];
+    try {
+      const { data: openCoverage } = await admin
+        .from("coverage_offers")
+        .select("id, booking_id, status, response_token, expires_at, was_designated_backup, offered_at")
+        .eq("cleaner_id", cleanerId)
+        .eq("status", "offered")
+        .gt("expires_at", new Date().toISOString())
+        .order("offered_at", { ascending: false })
+        .limit(5);
+      const coverageBookingIds = (openCoverage || []).map((o: Row) => o.booking_id).filter(Boolean);
+      if (coverageBookingIds.length > 0) {
+        const { data: covBookings } = await admin
+          .from("bookings")
+          .select("id, service_type, service_date, time_slot, arrival_window, city, state, total_estimate_cents, final_charge_cents, status")
+          .in("id", coverageBookingIds);
+        const byBooking = new Map<string, Row>();
+        for (const cb of covBookings || []) {
+          const st = String(cb.status || "").toLowerCase();
+          if (["completed", "cancelled", "canceled", "pending_review"].includes(st)) continue;
+          byBooking.set(String(cb.id), cb);
+        }
+        for (const o of openCoverage || []) {
+          const cb = byBooking.get(String(o.booking_id));
+          if (!cb) continue;
+          const revenue = Number(cb.final_charge_cents ?? cb.total_estimate_cents ?? 0);
+          coverageOffers.push({
+            offerId: o.id,
+            token: o.response_token,
+            expiresAt: o.expires_at || null,
+            wasDesignatedBackup: !!o.was_designated_backup,
+            serviceType: cb.service_type || "Cleaning",
+            serviceDate: cb.service_date || null,
+            timeSlot: cb.time_slot || cb.arrival_window || null,
+            city: cb.city || null,
+            state: cb.state || null,
+            // Coverage is ordinary work at their ordinary tier. Being on call
+            // is not paid and being activated changes nothing about the rate.
+            estimatedPayCents: revenue > 0 ? Math.floor(revenue * payPct / 100) : null,
+          });
+        }
+      }
+    } catch { /* coverage offers are additive — never break the portal */ }
+
     // Transparency: a cleaner sees their OWN scores (never others'), plus a
     // summary of the QC cases feeding their Rating — so a score change is
     // never unexplainable. Counts only; no customer identities or details.
@@ -533,6 +584,7 @@ serve(async (req) => {
       summary: { lifetimePaidCents, pendingCents, paidJobs, lifetimeTipsCents },
       tips,
       offers,
+      coverageOffers,
       jobs,
     });
   } catch (e) {

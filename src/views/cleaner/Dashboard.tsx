@@ -28,6 +28,7 @@ import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import {
+  CoverageOfferBanner,
   fetchCleanerPortal,
   PayChip,
   JobDetails,
@@ -711,6 +712,10 @@ export default function CleanerDashboard() {
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Suspension status — new assignments paused, pay unaffected. */}
         <SuspensionBanner status={profile.status} suspendedUntil={profile.suspended_until} />
+
+        {/* Someone dropped a job and you're near the top of the list. Above
+            the stats because the accept window is measured in minutes. */}
+        <CoverageOfferBanner offers={portal?.coverageOffers || []} />
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 gap-3">

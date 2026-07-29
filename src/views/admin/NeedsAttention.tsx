@@ -6,27 +6,41 @@
 //
 //   At risk    — every booking a delay has put in jeopardy, with the computed
 //                new arrival ETA and the customer heads-up already drafted.
-//                One tap sends it. One tap covers the job.
+//                One tap sends it. One tap logs the ETA a cleaner just gave
+//                you on the phone, which is what keeps a late job from being
+//                recorded as a no-show.
+//   Coverage   — every job that lost its cleaner, its offer trail, and the
+//                bench: which days have nobody on call, and which days keep
+//                failing.
 //   On call    — who is designated backup for a day, drawn from availability.
-//   Projections— projected vs actual by service type × sqft band, so the
-//                duration assumptions get corrected from reality.
-//   Thresholds — buffer, late-start, no-show, and escalation timings.
+//   Projections— projected vs actual by service type × sqft band, plus the
+//                reliability pattern per cleaner.
+//   Thresholds — buffer, the nudge/alert/no-show ladder, coverage and
+//                escalation timings.
 //
 // The whole tab is built around one belief: a customer may tolerate lateness,
 // but no customer tolerates silence. So the drafted message is the primary
 // action on every card, and anything left unsent turns red rather than fading
 // quietly down the list.
+//
+// The second belief, close behind it: reach the cleaner before concluding
+// anything about them. Every at-risk card shows what we actually tried —
+// nudged at, called at, what they said — because a no-show declared without
+// that trail is a guess, and this product does not punish people on guesses.
 
 import {
   RiAlarmWarningLine,
   RiAlertLine,
   RiCheckLine,
   RiCloseLine,
+  RiFlashlightLine,
   RiLifebuoyLine,
   RiLoader4Line,
   RiMailSendLine,
+  RiPhoneLine,
   RiRefreshLine,
   RiRulerLine,
+  RiSendPlaneLine,
   RiSettings3Line,
   RiShieldCheckLine,
   RiTimeLine,
@@ -35,6 +49,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import CoverageBoard from "@/components/admin/CoverageBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,19 +66,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { callScheduleRisk } from "@/lib/schedule-risk-client";
 import { cn } from "@/lib/utils";
 import {
   DELAY_EVENT_LABELS,
   SCHEDULE_GUARD_DEFAULTS,
+  noticeLabel,
   varianceHeadline,
+  type CleanerReliabilityRow,
   type CoverageCandidate,
+  type CoverageGapRow,
+  type CoverageHealthRow,
+  type CoverageRow,
   type DurationVarianceRow,
   type LateStartOffenderRow,
   type RiskBoardRow,
   type ScheduleGuardSettings,
 } from "@/lib/schedule-risk";
 
-type Tab = "risk" | "backups" | "projections" | "settings";
+type Tab = "risk" | "coverage" | "backups" | "projections" | "settings";
 
 interface BackupRow {
   id: string;
@@ -84,6 +105,31 @@ interface BackupRow {
     novara_score: number | null;
     home_zip: string | null;
   } | null;
+}
+
+/**
+ * The contact trail behind a late job: what we tried, when, and what came
+ * back. Rendered on every at-risk card because a no-show is only ever declared
+ * after this trail exists — and a dispatcher deciding what to do next needs to
+ * know whether the cleaner has been reached, not just that they're late.
+ */
+interface DelayEventRow {
+  id: string;
+  booking_id: string;
+  event_type: string;
+  minutes_late: number | null;
+  nudge_sent_at: string | null;
+  nudge_count: number;
+  va_alerted_at: string | null;
+  no_show_declared_at: string | null;
+  cleaner_responded_at: string | null;
+  cleaner_eta_at: string | null;
+  cleaner_response_note: string | null;
+  cleaner_response_via: string | null;
+  notice_minutes: number | null;
+  cancellation_reason: string | null;
+  resolved_at: string | null;
+  detected_at: string;
 }
 
 interface OverrideRow {
@@ -129,38 +175,34 @@ interface BoardPayload {
   onCallDate: string;
   settings: ScheduleGuardSettings;
   board: RiskBoardRow[];
+  delayEvents: DelayEventRow[];
   backups: BackupRow[];
   variance: DurationVarianceRow[];
   lateStartOffenders: LateStartOffenderRow[];
   overrides: OverrideRow[];
   reassignments: ReassignmentRow[];
   assumptions: AssumptionRow[];
+  coverage: CoverageRow[];
+  coverageHealth: CoverageHealthRow[];
+  coverageGaps: CoverageGapRow[];
+  reliability: CleanerReliabilityRow[];
   counts: {
     atRisk: number;
     unacknowledged: number;
     awaitingCustomerMessage: number;
     escalated: number;
     noShows: number;
+    coverageOpen: number;
+    coverageUrgent: number;
+    uncovered: number;
+    daysWithoutBackup: number;
+    strDaysExposed: number;
   };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function callApi<T = Record<string, unknown>>(
-  body: Record<string, unknown>,
-): Promise<{ ok: boolean; data: T & { error?: string; bufferConflict?: unknown } }> {
-  const { data: session } = await supabase.auth.getSession();
-  const res = await fetch("/api/admin/schedule-risk", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.session?.access_token || ""}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as T & { ok?: boolean; error?: string };
-  return { ok: res.ok && json.ok !== false, data: json };
-}
+const callApi = callScheduleRisk;
 
 function clockIn(tz: string, iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -195,11 +237,13 @@ function RiskCard({
   row,
   tz,
   messageEscalateMinutes,
+  contactTrail,
   onChanged,
 }: {
   row: RiskBoardRow;
   tz: string;
   messageEscalateMinutes: number;
+  contactTrail: DelayEventRow | undefined;
   onChanged: () => void;
 }) {
   const [draft, setDraft] = useState(row.draft_body || "");
@@ -208,6 +252,8 @@ function RiskCard({
   const [candidates, setCandidates] = useState<CoverageCandidate[] | null>(null);
   const [dismissing, setDismissing] = useState(false);
   const [dismissReason, setDismissReason] = useState("");
+  const [etaNote, setEtaNote] = useState("");
+  const [etaOpen, setEtaOpen] = useState(false);
 
   useEffect(() => {
     setDraft(row.draft_body || "");
@@ -265,12 +311,50 @@ function RiskCard({
     setCandidates(data.candidates || []);
   };
 
-  const reassign = async (candidate: CoverageCandidate) => {
+  /**
+   * Start the offer cycle. This is the DEFAULT path: the job goes to the top
+   * candidates with a short accept window and rolls on by itself, so cover gets
+   * found even while the dispatcher is on another call.
+   */
+  const startOffers = async () => {
+    setBusy("offers");
+    const { ok, data } = await callApi<{ offersSent: number }>({
+      action: "open_coverage",
+      bookingId: row.booking_id,
+      trigger: row.delay_event_type === "no_show" ? "no_show" : "cascade_risk",
+      delayEventId: row.delay_event_id,
+      riskFlagId: row.risk_flag_id,
+      detail: row.reason,
+    });
+    setBusy(null);
+    if (!ok) return void toast.error(data.error || "Could not start coverage.");
+    if (!data.offersSent) {
+      return void toast.warning(
+        "Coverage search opened, but nobody clears this job's window and zone right now. Check the Coverage tab.",
+      );
+    }
+    toast.success(
+      `${data.offersSent} offer${data.offersSent === 1 ? "" : "s"} out — no answer rolls to the next candidate automatically.`,
+    );
+    onChanged();
+  };
+
+  const reassign = async (candidate: CoverageCandidate, urgent: boolean) => {
     const reason = window.prompt(
-      `Reassign ${row.booking_ref} to ${candidate.name}. Why? (logged against the delay)`,
+      `${urgent ? "Assign" : "Reassign"} ${row.booking_ref} to ${candidate.name}. Why? (logged against the delay)`,
       `${DELAY_EVENT_LABELS[row.delay_event_type]} on ${row.upstream_booking_ref || row.booking_ref} — covering to protect the customer's window.`,
     );
     if (!reason?.trim()) return;
+
+    let urgencyReason: string | undefined;
+    if (urgent) {
+      const urgency = window.prompt(
+        "Skipping the accept window needs its reason on the record — what makes this too tight to ask?",
+        "Job is already past its start window and the customer is waiting.",
+      );
+      if (!urgency?.trim()) return;
+      urgencyReason = urgency.trim();
+    }
 
     let bufferOverrideReason: string | undefined;
     if (!candidate.buffer_ok) {
@@ -283,17 +367,76 @@ function RiskCard({
 
     setBusy("reassign");
     const { ok, data } = await callApi({
-      action: "reassign",
+      action: urgent ? "direct_assign" : "reassign",
       bookingId: row.booking_id,
       toCleanerId: candidate.cleaner_id,
       riskFlagId: row.risk_flag_id,
       delayEventId: row.delay_event_id,
       reason: reason.trim(),
+      urgencyReason,
       bufferOverrideReason,
     });
     setBusy(null);
     if (!ok) return void toast.error(data.error || "Reassignment failed.");
     toast.success(`${row.booking_ref} moved to ${candidate.name} — their portal has the full job.`);
+    onChanged();
+  };
+
+  /**
+   * The single most valuable thing on this card. A cleaner who tells us they're
+   * 20 minutes out is LATE — a service hiccup we can communicate. Logging that
+   * here takes the no-show declaration off the table and rewrites the
+   * customer's message with a real arrival time.
+   */
+  const logEta = async (minutes: number) => {
+    setBusy("eta");
+    const { ok, data } = await callApi<{ etaAt: string; minutesLate: number }>({
+      action: "record_eta",
+      bookingId: row.booking_id,
+      etaMinutes: minutes,
+      note: etaNote.trim() || undefined,
+      via: "call",
+    });
+    setBusy(null);
+    if (!ok) return void toast.error(data.error || "Could not log the ETA.");
+    setEtaOpen(false);
+    setEtaNote("");
+    toast.success(
+      `Logged as running late, not a no-show. The customer message now says ${clockIn(tz, data.etaAt)}.`,
+    );
+    onChanged();
+  };
+
+  const nudgeAgain = async () => {
+    setBusy("nudge");
+    const { ok, data } = await callApi({ action: "nudge_cleaner", bookingId: row.booking_id });
+    setBusy(null);
+    if (!ok) return void toast.error(data.error || "Could not send the nudge.");
+    toast.success(`Nudge queued to ${row.cleaner_name || "the cleaner"} with a one-tap ETA link.`);
+    onChanged();
+  };
+
+  /** They rang to say they can't make it — a cancellation, not a no-show. */
+  const logCancellation = async () => {
+    const reason = window.prompt(
+      `${row.cleaner_name || "The cleaner"} says they can't make ${row.booking_ref}.\n\n` +
+        `This is logged as a CANCELLATION with the notice period, not a no-show, and coverage starts immediately.\n\nReason they gave:`,
+      "",
+    );
+    if (reason === null) return;
+    setBusy("cancel");
+    const { ok, data } = await callApi<{ noticeLabel: string; shortNotice: boolean; offersSent: number }>({
+      action: "cleaner_cancellation",
+      bookingId: row.booking_id,
+      cleanerId: row.cleaner_id,
+      reason: reason.trim() || undefined,
+    });
+    setBusy(null);
+    if (!ok) return void toast.error(data.error || "Could not record the cancellation.");
+    toast.success(
+      `Logged as a cancellation with ${data.noticeLabel}. ` +
+        `${data.offersSent ? `${data.offersSent} coverage offer(s) already out.` : "Coverage is sourcing."}`,
+    );
     onChanged();
   };
 
@@ -359,8 +502,113 @@ function RiskCard({
               {clockIn(tz, row.upstream_projected_end_at)})
             </div>
           ) : null}
-          {row.qc_issue_id ? <div className="text-red-700">QC reliability case opened</div> : null}
+          {row.qc_issue_id ? (
+            <div className="text-red-700">
+              QC reliability case opened — a human decides the consequence
+            </div>
+          ) : null}
         </div>
+
+        {/* What we actually tried, before concluding anything about anyone. */}
+        {contactTrail ? (
+          <div
+            className={cn(
+              "rounded-md border px-3 py-2 text-xs",
+              contactTrail.cleaner_eta_at
+                ? "border-emerald-200 bg-emerald-50/60 text-emerald-900"
+                : "border-slate-200 bg-slate-50 text-slate-700",
+            )}
+          >
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide">
+              {contactTrail.cleaner_eta_at ? "Running late — they answered" : "Reaching the cleaner"}
+            </p>
+            <div className="space-y-0.5">
+              <div>
+                {contactTrail.nudge_sent_at
+                  ? `Nudged at ${clockIn(tz, contactTrail.nudge_sent_at)}${
+                      contactTrail.nudge_count > 1 ? ` (${contactTrail.nudge_count}×)` : ""
+                    } with a one-tap ETA link.`
+                  : "No nudge sent yet."}
+              </div>
+              <div>
+                {contactTrail.va_alerted_at
+                  ? `Escalated to the team at ${clockIn(tz, contactTrail.va_alerted_at)}.`
+                  : "Not escalated yet."}
+              </div>
+              {contactTrail.cleaner_eta_at ? (
+                <div className="font-medium">
+                  They said {clockIn(tz, contactTrail.cleaner_eta_at)}
+                  {contactTrail.cleaner_response_via ? ` (via ${contactTrail.cleaner_response_via})` : ""}.
+                  {contactTrail.cleaner_response_note ? ` "${contactTrail.cleaner_response_note}"` : ""} Late with
+                  communication — not a no-show.
+                </div>
+              ) : contactTrail.no_show_declared_at ? (
+                <div className="font-medium text-red-700">
+                  Unreachable — declared a no-show at {clockIn(tz, contactTrail.no_show_declared_at)}.
+                </div>
+              ) : (
+                <div>No reply yet. An ETA at any point makes this a late job, not a no-show.</div>
+              )}
+              {contactTrail.notice_minutes != null ? (
+                <div>Cancelled in advance · {noticeLabel(contactTrail.notice_minutes)}.</div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Reaching the cleaner is a first-class action, not buried in a menu. */}
+        {row.cleaner_id && !contactTrail?.cleaner_eta_at ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {row.cleaner_phone ? (
+              <>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={`tel:${row.cleaner_phone}`}>
+                    <RiPhoneLine className="mr-1.5 h-4 w-4" />
+                    Call {row.cleaner_name?.split(" ")[0] || "cleaner"}
+                  </a>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={`sms:${row.cleaner_phone}`}>
+                    <RiSendPlaneLine className="mr-1.5 h-4 w-4" />
+                    Text
+                  </a>
+                </Button>
+              </>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={nudgeAgain} disabled={busy !== null}>
+              {busy === "nudge" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Nudge again
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setEtaOpen((v) => !v)} disabled={busy !== null}>
+              They gave me an ETA
+            </Button>
+            <Button size="sm" variant="ghost" className="text-slate-600" onClick={logCancellation} disabled={busy !== null}>
+              {busy === "cancel" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              They cancelled
+            </Button>
+          </div>
+        ) : null}
+
+        {etaOpen ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50/50 p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-900">
+              How far out are they? This moves the job to running late and rewrites the customer message.
+            </p>
+            <Input
+              value={etaNote}
+              onChange={(e) => setEtaNote(e.target.value)}
+              placeholder="What did they say? (optional, logged)"
+              className="mb-2 text-sm"
+            />
+            <div className="flex flex-wrap gap-2">
+              {[10, 20, 30, 45, 60, 90].map((m) => (
+                <Button key={m} size="sm" variant="outline" onClick={() => logEta(m)} disabled={busy !== null}>
+                  {busy === "eta" ? <RiLoader4Line className="h-3.5 w-3.5 animate-spin" /> : `${m} min`}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* The heads-up. Primary action on every card. */}
         {row.message_id && awaitingSend ? (
@@ -456,9 +704,19 @@ function RiskCard({
         {/* Coverage: backups first, then the rest by score, zone and slack. */}
         {coverageOpen ? (
           <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700 mb-2">
-              Coverage candidates — designated backups first
-            </p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+                Coverage candidates — designated backups first
+              </p>
+              <Button size="sm" onClick={startOffers} disabled={busy !== null}>
+                {busy === "offers" ? (
+                  <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <RiSendPlaneLine className="mr-1.5 h-4 w-4" />
+                )}
+                Send offers
+              </Button>
+            </div>
             {candidates === null ? (
               <Skeleton className="h-16 w-full" />
             ) : candidates.length === 0 ? (
@@ -467,43 +725,51 @@ function RiskCard({
                 customer instead of sending someone who can&apos;t finish it.
               </p>
             ) : (
-              <div className="space-y-1.5">
-                {candidates.map((c) => (
-                  <div
-                    key={c.cleaner_id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2.5 py-1.5"
-                  >
-                    <div className="text-xs">
-                      <span className="font-medium text-slate-900">{c.name}</span>
-                      {c.is_designated_backup ? (
-                        <Badge className="ml-1.5 bg-indigo-600 hover:bg-indigo-600 text-[10px]">
-                          On call
-                        </Badge>
-                      ) : null}
-                      <span className="ml-1.5 text-slate-500">
-                        Novara {c.novara_score ?? "—"} · {c.zone_fit}
-                        {c.distance_miles != null ? ` · ${c.distance_miles} mi` : ""} ·{" "}
-                        {c.jobs_that_day} job{c.jobs_that_day === 1 ? "" : "s"} that day
-                      </span>
-                      {!c.buffer_ok ? (
-                        <span className="ml-1.5 text-orange-700">· {c.buffer_note}</span>
-                      ) : null}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={c.buffer_ok ? "default" : "outline"}
-                      onClick={() => reassign(c)}
-                      disabled={busy !== null}
+              <>
+                <div className="space-y-1.5">
+                  {candidates.map((c) => (
+                    <div
+                      key={c.cleaner_id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2.5 py-1.5"
                     >
-                      {busy === "reassign" ? (
-                        <RiLoader4Line className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        "Assign"
-                      )}
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                      <div className="text-xs">
+                        <span className="font-medium text-slate-900">{c.name}</span>
+                        {c.is_designated_backup ? (
+                          <Badge className="ml-1.5 bg-indigo-600 hover:bg-indigo-600 text-[10px]">
+                            On call
+                          </Badge>
+                        ) : null}
+                        <span className="ml-1.5 text-slate-500">{c.rank_reason}</span>
+                        {c.availability_note ? (
+                          <span className="ml-1.5 text-slate-500">· {c.availability_note}</span>
+                        ) : null}
+                        {!c.buffer_ok ? (
+                          <span className="ml-1.5 text-orange-700">· {c.buffer_note}</span>
+                        ) : null}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={c.buffer_ok ? "outline" : "ghost"}
+                        onClick={() => reassign(c, true)}
+                        disabled={busy !== null}
+                      >
+                        {busy === "reassign" ? (
+                          <RiLoader4Line className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <RiFlashlightLine className="mr-1 h-3.5 w-3.5" />
+                            Assign now
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Offering is the default — the job rolls down this list on its own. Assign now skips the accept
+                  window for a genuinely tight deadline and asks for the reason.
+                </p>
+              </>
             )}
           </div>
         ) : null}
@@ -571,6 +837,29 @@ export default function NeedsAttention() {
     };
   }, [payload]);
 
+  /**
+   * The freshest contact attempt per booking. The late-start event carries the
+   * nudge and the ETA even after a no-show has been declared on top of it, so
+   * prefer it — that trail is the reason the declaration is defensible.
+   */
+  const trailByBooking = useMemo(() => {
+    const map = new Map<string, DelayEventRow>();
+    for (const e of (payload?.delayEvents || []) as DelayEventRow[]) {
+      if (!["late_start", "no_show", "cleaner_cancellation"].includes(e.event_type)) continue;
+      const held = map.get(e.booking_id);
+      if (!held) {
+        map.set(e.booking_id, e);
+        continue;
+      }
+      const better =
+        (e.cleaner_eta_at && !held.cleaner_eta_at) ||
+        (e.event_type === "late_start" && held.event_type !== "late_start") ||
+        (e.event_type === held.event_type && e.detected_at > held.detected_at);
+      if (better) map.set(e.booking_id, e);
+    }
+    return map;
+  }, [payload?.delayEvents]);
+
   const runSweep = async () => {
     setSweeping(true);
     const { ok, data } = await callApi<{ result: Record<string, number> }>({ action: "run_sweep" });
@@ -611,7 +900,7 @@ export default function NeedsAttention() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <StatCard label="At risk now" value={counts?.atRisk} tone={counts?.atRisk ? "warning" : "ok"} />
         <StatCard
           label="Customer not told yet"
@@ -620,17 +909,40 @@ export default function NeedsAttention() {
         />
         <StatCard label="No-shows" value={counts?.noShows} tone={counts?.noShows ? "danger" : "ok"} />
         <StatCard
-          label="Unacknowledged"
-          value={counts?.unacknowledged}
-          tone={counts?.unacknowledged ? "warning" : "ok"}
+          label="Looking for cover"
+          value={counts?.coverageOpen}
+          tone={counts?.coverageUrgent ? "danger" : counts?.coverageOpen ? "warning" : "ok"}
         />
-        <StatCard label="Escalated to admin" value={counts?.escalated} tone={counts?.escalated ? "danger" : "ok"} />
+        <StatCard label="Uncovered" value={counts?.uncovered} tone={counts?.uncovered ? "danger" : "ok"} />
+        <StatCard
+          label="Days with no backup"
+          value={counts?.daysWithoutBackup}
+          tone={counts?.strDaysExposed ? "danger" : counts?.daysWithoutBackup ? "warning" : "ok"}
+        />
       </div>
+
+      {counts?.strDaysExposed ? (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 py-3">
+            <p className="text-sm text-red-900">
+              <span className="font-semibold">
+                {counts.strDaysExposed} day{counts.strDaysExposed === 1 ? "" : "s"} with STR turnovers and nobody on
+                call.
+              </span>{" "}
+              A guest check-in deadline is the least forgiving job we run — those days need a bench.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setTab("coverage")}>
+              Fix the bench
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200">
         {(
           [
             ["risk", "At risk", RiAlertLine],
+            ["coverage", "Coverage", RiUserSharedLine],
             ["backups", "On call", RiLifebuoyLine],
             ["projections", "Projections", RiRulerLine],
             ["settings", "Thresholds", RiSettings3Line],
@@ -686,6 +998,7 @@ export default function NeedsAttention() {
                   row={row}
                   tz={tz}
                   messageEscalateMinutes={payload?.settings.customer_message_escalate_minutes ?? 20}
+                  contactTrail={trailByBooking.get(row.booking_id)}
                   onChanged={() => void load(true)}
                 />
               ))}
@@ -703,6 +1016,7 @@ export default function NeedsAttention() {
                   row={row}
                   tz={tz}
                   messageEscalateMinutes={payload?.settings.customer_message_escalate_minutes ?? 20}
+                  contactTrail={trailByBooking.get(row.booking_id)}
                   onChanged={() => void load(true)}
                 />
               ))}
@@ -717,6 +1031,7 @@ export default function NeedsAttention() {
                   row={row}
                   tz={tz}
                   messageEscalateMinutes={payload?.settings.customer_message_escalate_minutes ?? 20}
+                  contactTrail={trailByBooking.get(row.booking_id)}
                   onChanged={() => void load(true)}
                 />
               ))}
@@ -752,6 +1067,19 @@ export default function NeedsAttention() {
 
           <BufferTrail overrides={payload?.overrides || []} reassignments={payload?.reassignments || []} tz={tz} />
         </div>
+      ) : tab === "coverage" ? (
+        <CoverageBoard
+          coverage={payload?.coverage || []}
+          health={payload?.coverageHealth || []}
+          gaps={payload?.coverageGaps || []}
+          tz={tz}
+          today={payload?.onCallDate || onCallDate}
+          onChanged={() => void load(true)}
+          onPickDay={(date) => {
+            setOnCallDate(date);
+            setTab("backups");
+          }}
+        />
       ) : tab === "backups" ? (
         <BackupsTab
           payload={payload}
@@ -913,9 +1241,17 @@ function BackupsTab({
   setOnCallDate: (v: string) => void;
   onChanged: () => void;
 }) {
-  const [cleaners, setCleaners] = useState<
-    { id: string; first_name: string | null; last_name: string | null; novara_score: number | null; home_zip: string | null }[]
-  >([]);
+  interface PickableCleaner {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    novara_score: number | null;
+    home_zip: string | null;
+    preferred_work_days: string[] | null;
+  }
+
+  const [cleaners, setCleaners] = useState<PickableCleaner[]>([]);
+  const [offIds, setOffIds] = useState<Set<string>>(new Set());
   const [pick, setPick] = useState("");
   const [priority, setPriority] = useState("10");
   const [notes, setNotes] = useState("");
@@ -925,19 +1261,45 @@ function BackupsTab({
     void (async () => {
       // Cast: novara_score post-dates the generated Supabase types.
       const { data } = await (supabase.from as any)("cleaners")
-        .select("id, first_name, last_name, novara_score, home_zip")
+        .select("id, first_name, last_name, novara_score, home_zip, preferred_work_days")
         .eq("status", "active")
         .eq("approved", true)
         .eq("available_for_bookings", true)
         .order("novara_score", { ascending: false });
-      setCleaners((data || []) as typeof cleaners);
+      setCleaners((data || []) as PickableCleaner[]);
     })();
   }, []);
+
+  // Backup is a label on availability the cleaner already gave us, so anyone
+  // who booked that day off simply isn't offered. A name on the coverage view
+  // that can't actually be activated is worse than an honestly empty day.
+  useEffect(() => {
+    if (!onCallDate) return;
+    void (async () => {
+      const { data } = await (supabase.from as any)("cleaner_schedule_exceptions")
+        .select("cleaner_id")
+        .eq("exception_date", onCallDate);
+      setOffIds(new Set(((data || []) as { cleaner_id: string }[]).map((r) => r.cleaner_id)));
+    })();
+  }, [onCallDate]);
+
+  const weekday = onCallDate
+    ? new Date(`${onCallDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" }).toLowerCase()
+    : "";
+
+  const available = cleaners.filter((c) => {
+    if (offIds.has(c.id)) return false;
+    const days = c.preferred_work_days;
+    if (!days || days.length === 0) return true;
+    return days.some((d) => String(d).trim().toLowerCase().slice(0, 3) === weekday.slice(0, 3));
+  });
+
+  const health = (payload?.coverageHealth || []).find((h) => h.service_date === onCallDate);
 
   const designate = async () => {
     if (!pick) return void toast.error("Pick a cleaner.");
     setBusy(true);
-    const { ok, data } = await callApi({
+    const { ok, data } = await callApi<{ code?: string }>({
       action: "designate_backup",
       cleanerId: pick,
       onCallDate,
@@ -983,7 +1345,7 @@ function BackupsTab({
                 <SelectValue placeholder="Pick from availability" />
               </SelectTrigger>
               <SelectContent>
-                {cleaners.map((c) => (
+                {available.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.first_name} {c.last_name}
                     {c.novara_score != null ? ` · ${c.novara_score}` : ""}
@@ -992,6 +1354,15 @@ function BackupsTab({
                 ))}
               </SelectContent>
             </Select>
+            {available.length === 0 ? (
+              <p className="text-[11px] text-amber-700">
+                Nobody has told us they work that day. That is a hiring signal, not a scheduling one.
+              </p>
+            ) : available.length < cleaners.length ? (
+              <p className="text-[11px] text-slate-500">
+                {cleaners.length - available.length} hidden — they don&apos;t work that day.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Order (lower first)</Label>
@@ -1009,9 +1380,40 @@ function BackupsTab({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        className={cn(
+          health?.str_day_exposed
+            ? "border-red-200 bg-red-50/40"
+            : health?.uncovered_day
+            ? "border-amber-200 bg-amber-50/30"
+            : undefined,
+        )}
+      >
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">On call for {onCallDate || "today"}</CardTitle>
+          {health ? (
+            <CardDescription className="text-xs">
+              {health.jobs} job{health.jobs === 1 ? "" : "s"} on the books
+              {health.str_turnovers
+                ? `, ${health.str_turnovers} of them STR turnover${health.str_turnovers === 1 ? "" : "s"}`
+                : ""}
+              .{" "}
+              {health.str_day_exposed ? (
+                <span className="font-semibold text-red-800">
+                  Turnovers with a guest check-in and nobody on the bench — cover this day first.
+                </span>
+              ) : health.uncovered_day ? (
+                <span className="font-medium text-amber-800">No backup available for this day.</span>
+              ) : (
+                <span className="text-emerald-700">Bench in place.</span>
+              )}
+              {health.uncovered_jobs ? (
+                <span className="ml-1 text-red-700">
+                  {health.uncovered_jobs} job{health.uncovered_jobs === 1 ? "" : "s"} already went uncovered.
+                </span>
+              ) : null}
+            </CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent className="p-0">
           {rows.length === 0 ? (
@@ -1206,6 +1608,8 @@ function ProjectionsTab({
         </CardContent>
       </Card>
 
+      <ReliabilityPanel rows={payload?.reliability || []} shortNoticeHours={payload?.settings.short_notice_cancel_hours ?? 24} />
+
       {chronic.length > 0 ? (
         <p className="text-xs text-slate-500">
           {chronic.length} service band{chronic.length === 1 ? "" : "s"} currently under-projected.
@@ -1213,6 +1617,114 @@ function ProjectionsTab({
         </p>
       ) : null}
     </div>
+  );
+}
+
+// ─── Reliability: the pattern, not the verdict ────────────────────────────────
+
+/**
+ * Repeat no-shows and short-notice cancellations by the same cleaner, side by
+ * side with the times they were late but reachable.
+ *
+ * The two columns exist to be compared. A no-show is unreachable; a
+ * cancellation with notice is somebody doing exactly what we asked. If this
+ * table ever treated them the same, cleaners would learn that telling us early
+ * costs the same as vanishing — and then they'd stop telling us.
+ *
+ * Nothing here applies a consequence. It points at the QC console, where a
+ * person works the accountability ladder.
+ */
+function ReliabilityPanel({
+  rows,
+  shortNoticeHours,
+}: {
+  rows: CleanerReliabilityRow[];
+  shortNoticeHours: number;
+}) {
+  const flagged = rows
+    .filter((r) => r.no_shows_90d > 0 || r.short_notice_cancellations_90d > 0 || r.nudges_unanswered_90d > 0)
+    .sort(
+      (a, b) =>
+        b.no_shows_90d * 3 + b.short_notice_cancellations_90d - (a.no_shows_90d * 3 + a.short_notice_cancellations_90d),
+    );
+  const dependable = rows.filter(
+    (r) =>
+      r.no_shows_90d === 0 &&
+      r.short_notice_cancellations_90d === 0 &&
+      (r.coverage_offers_accepted_90d > 0 || r.days_on_call_90d > 0 || r.late_but_reachable_90d > 0),
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Reliability patterns</CardTitle>
+        <CardDescription className="text-xs">
+          No-shows and cancellations over 90 days, with the notice period. Cancelling inside{" "}
+          {shortNoticeHours}h counts as short notice — but it counts far less than a no-show, because{" "}
+          <span className="font-medium">telling us early is the behaviour we want</span>. Repeat patterns feed the
+          accountability ladder in Quality Control; nothing is applied automatically from here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        {flagged.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-slate-600">
+            No no-shows and no short-notice cancellations in the last 90 days.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {flagged.map((r) => (
+              <div key={r.cleaner_id} className="px-4 py-2.5 text-xs">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-medium text-slate-900">
+                    {r.cleaner_name || "Cleaner"}
+                    <span className="ml-1.5 font-normal text-slate-500">Novara {r.novara_score ?? "—"}</span>
+                  </span>
+                  <span className="flex flex-wrap gap-2">
+                    {r.no_shows_90d > 0 ? (
+                      <Badge variant="destructive" className="text-[10px]">
+                        {r.no_shows_90d} no-show{r.no_shows_90d === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null}
+                    {r.short_notice_cancellations_90d > 0 ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {r.short_notice_cancellations_90d} short-notice cancel
+                        {r.short_notice_cancellations_90d === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null}
+                    {r.nudges_unanswered_90d > 0 ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        {r.nudges_unanswered_90d} nudge{r.nudges_unanswered_90d === 1 ? "" : "s"} unanswered
+                      </Badge>
+                    ) : null}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-slate-600">
+                  {r.cancellations_90d > 0
+                    ? `${r.cancellations_90d} cancellation${r.cancellations_90d === 1 ? "" : "s"} averaging ${noticeLabel(r.avg_cancellation_notice_minutes)}`
+                    : "No cancellations"}
+                  {r.late_but_reachable_90d > 0
+                    ? ` · late but reachable ${r.late_but_reachable_90d}×`
+                    : ""}
+                  {r.days_on_call_90d > 0 ? ` · on call ${r.days_on_call_90d} day(s)` : ""}
+                  {r.coverage_offers_accepted_90d > 0
+                    ? ` · covered ${r.coverage_offers_accepted_90d} job(s) for us`
+                    : ""}
+                  {r.coverage_offers_declined_90d > 0
+                    ? ` · passed on ${r.coverage_offers_declined_90d} coverage offer(s) (never a penalty)`
+                    : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+        {dependable.length > 0 ? (
+          <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-emerald-800">
+            {dependable.length} cleaner{dependable.length === 1 ? "" : "s"} with no no-shows and no short-notice
+            cancellations who have taken cover or stood by for us.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1293,17 +1805,100 @@ function SettingsTab({
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Detection</CardTitle>
+          <CardTitle className="text-sm">Contact before conclusion</CardTitle>
           <CardDescription className="text-xs">
-            Measured against the arrival window and the projected end. The sweep runs every five
-            minutes.
+            The ladder a late job climbs, measured from the arrival window. Nudge the cleaner, then pull in the team,
+            and only then declare. A cleaner who replies with an ETA at any rung is{" "}
+            <span className="font-medium">running late, not a no-show</span> — the two are never recorded as the same
+            thing. The sweep runs every five minutes.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {num("late_start_minutes", "Late start after (min)", "No en-route or check-in this far past the window raises a late-start event.")}
-          {num("no_show_minutes", "No-show after (min)", "The firmer threshold: opens a QC reliability case and surfaces coverage. Must be later than the late-start alert.")}
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {num(
+            "cleaner_nudge_minutes",
+            "Nudge the cleaner after (min)",
+            "Automatic SMS + push with a one-tap ETA link. Most misses are a dead phone, and a nudge here saves the job. Must come before the team alert.",
+          )}
+          {num(
+            "late_start_minutes",
+            "Alert the team after (min)",
+            "Still nothing: the VA gets one-tap call/text links and the job is marked at risk.",
+          )}
+          {num(
+            "no_show_minutes",
+            "Declare a no-show after (min)",
+            "Still unreachable: opens a QC reliability case with the contact timeline attached, contacts the customer, and sources coverage. Must be later than the team alert.",
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Overruns</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
           {num("overrun_grace_minutes", "Overrun grace (min)", "Slack past the projected end before an in-progress job counts as running over.")}
           {num("field_flag_overrun_minutes", "Assume on scope flag (min)", "Overrun assumed the moment a crew flags a job as bigger than scoped — no waiting for the clock.")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Coverage</CardTitle>
+          <CardDescription className="text-xs">
+            How the bench gets asked. Offering is the default and rolls on by itself; a decline is never a
+            reliability penalty. Only when the list or the clock runs out is a job marked uncovered — which is
+            logged as a bench-depth problem on us, with the goodwill gesture funded from margin. Cleaner pay is
+            never the source and pay for completed work is never docked.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {num("coverage_offer_window_minutes", "Accept window (min)", "How long an offer is held before it rolls to the next candidate.")}
+          {num("coverage_simultaneous_offers", "Offer to how many at once", "1 asks one at a time. More than 1 asks the top N together — first accept wins, the rest auto-withdraw.")}
+          {num("coverage_max_rounds", "Offer rounds", "How many times to roll down the list before the job counts as uncovered.")}
+          {num("coverage_give_up_minutes", "Give up after (min)", "Past this with nobody accepting, the job is marked uncovered and the customer is offered a reschedule.")}
+          {num("coverage_urgent_within_minutes", "Urgent window (min)", "A job starting (or a deadline landing) inside this counts as urgent: the cycle widens and shortens, and admin may direct-assign.")}
+          {num("short_notice_cancel_hours", "Short notice under (hours)", "A cleaner cancellation with less notice than this counts as short notice — still far gentler than a no-show.")}
+          <div className="space-y-1">
+            <Label className="text-xs font-medium">Goodwill on an uncovered job ($)</Label>
+            <Input
+              value={String((draft.goodwill_credit_cents ?? 0) / 100)}
+              inputMode="decimal"
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  goodwill_credit_cents: Math.round((Number(e.target.value.replace(/[^\d.]/g, "")) || 0) * 100),
+                }))
+              }
+            />
+            <p className="text-[11px] text-slate-500">
+              Margin-funded service recovery when we couldn&apos;t staff a visit. Never taken from cleaner pay.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Auto-source</Label>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={draft.coverage_auto_source}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, coverage_auto_source: v }))}
+              />
+              <span className="text-xs text-slate-700">Start coverage the moment a no-show is declared</span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              On by default. Off means a person has to open the search from the at-risk card.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium">STR guest check-in time</Label>
+            <Input
+              value={draft.str_checkin_time ?? "16:00"}
+              onChange={(e) => setDraft((d) => ({ ...d, str_checkin_time: e.target.value }))}
+              placeholder="16:00"
+            />
+            <p className="text-[11px] text-slate-500">
+              The deadline a turnover is measured against when the booking doesn&apos;t carry its own.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
