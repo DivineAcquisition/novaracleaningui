@@ -68,8 +68,56 @@ async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: stri
 }
 
 // Only columns that exist on public.bookings (service_duration is not a DB column).
-const SELECT_COLS =
-  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, first_name, last_name, email, phone, address, city, state, zip_code, total_estimate_cents, deposit_cents, final_charge_cents, payment_intent_id, cleaner_id, job_id, num_cleaners_assigned, estimated_duration_hours, created_at, uses_credit, cancel_reason, add_ons, membership_plan, hosted_invoice_url, suppress_review_request";
+const BASE_COLS = [
+  "id",
+  "booking_number",
+  "status",
+  "service_type",
+  "home_size_id",
+  "service_date",
+  "time_slot",
+  "first_name",
+  "last_name",
+  "email",
+  "phone",
+  "address",
+  "city",
+  "state",
+  "zip_code",
+  "total_estimate_cents",
+  "deposit_cents",
+  "final_charge_cents",
+  "payment_intent_id",
+  "cleaner_id",
+  "job_id",
+  "num_cleaners_assigned",
+  "estimated_duration_hours",
+  "created_at",
+  "uses_credit",
+  "cancel_reason",
+  "add_ons",
+  "membership_plan",
+  "hosted_invoice_url",
+];
+
+// Columns that some environments predate. Requesting one that doesn't exist
+// fails the WHOLE select, which is how a single missing column used to blank the
+// admin booking list — so they are dropped individually on error instead.
+//
+// The property details are here because the admin list needs them: dispatching
+// and pricing a job means knowing how big the home is and what's in it, and
+// until now none of it was fetched.
+const OPTIONAL_COLS = [
+  "suppress_review_request",
+  "sqft",
+  "bedrooms",
+  "bathrooms",
+  "dwelling_type",
+  "pets",
+  "flooring_type",
+  "access_notes",
+  "frequency",
+];
 
 function matchesSearch(row: Record<string, unknown>, term: string): boolean {
   const q = term.toLowerCase();
@@ -141,10 +189,17 @@ serve(async (req) => {
         .limit(limit);
     };
 
-    let { data, error, count } = await buildQuery(SELECT_COLS);
-    if (error && /suppress_review_request/i.test(error.message || "")) {
-      console.warn("[admin-list-bookings] suppress_review_request missing — legacy select");
-      ({ data, error, count } = await buildQuery(SELECT_COLS_LEGACY));
+    // Drop optional columns one at a time as the database rejects them, rather
+    // than giving up on the whole list.
+    let optional = [...OPTIONAL_COLS];
+    let { data, error, count } = await buildQuery([...BASE_COLS, ...optional].join(", "));
+    for (let attempt = 0; error && optional.length > 0 && attempt < OPTIONAL_COLS.length; attempt++) {
+      const message = error.message || "";
+      const missing = optional.filter((col) => new RegExp(`\\b${col}\\b`).test(message));
+      if (missing.length === 0) break;
+      console.warn(`[admin-list-bookings] dropping missing column(s): ${missing.join(", ")}`);
+      optional = optional.filter((col) => !missing.includes(col));
+      ({ data, error, count } = await buildQuery([...BASE_COLS, ...optional].join(", ")));
     }
 
     if (error) {
@@ -155,6 +210,26 @@ serve(async (req) => {
     let rows = (data || []) as Record<string, unknown>[];
     if (search.length >= 1) {
       rows = rows.filter((row) => matchesSearch(row, search));
+    }
+
+    // ─── Contractor checklist progress per booking ───────────────────────────
+    // Read-only and batched. The full item-by-item list is fetched on demand by
+    // admin-booking-checklist when a booking is opened; this is just enough to
+    // show progress in the list without a request per row.
+    const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean).map(String))];
+    if (jobIds.length > 0) {
+      const { data: checklists } = await admin
+        .from("job_checklists")
+        .select(
+          "job_id, token, service_type, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_at, last_activity_by",
+        )
+        .in("job_id", jobIds);
+      const byJob = new Map<string, Record<string, unknown>>();
+      for (const c of checklists || []) byJob.set(String(c.job_id), c);
+      rows = rows.map((r) => ({
+        ...r,
+        checklist: r.job_id ? byJob.get(String(r.job_id)) || null : null,
+      }));
     }
 
     return json({
