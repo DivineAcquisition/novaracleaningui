@@ -49,6 +49,7 @@ export default function UnsignedAgreements({
 }) {
   const [rows, setRows] = useState<AgreementStatusRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -59,7 +60,11 @@ export default function UnsignedAgreements({
       .order("working_unsigned", { ascending: false })
       .order("cleaner_name", { ascending: true })
       .limit(50);
-    if (!error) setRows((data || []) as AgreementStatusRow[]);
+    // An empty backlog and a broken query both used to render as nothing at
+    // all, which reads as "everybody has signed" — the most expensive possible
+    // wrong answer here. Say so instead.
+    setLoadError(error ? error.message || "Couldn't load agreement status." : null);
+    setRows(error ? [] : ((data || []) as AgreementStatusRow[]));
     setLoading(false);
   }, []);
 
@@ -99,7 +104,25 @@ export default function UnsignedAgreements({
     }
   };
 
-  if (loading || rows.length === 0) return null;
+  if (loading) return null;
+
+  if (loadError) {
+    return (
+      <Card className="border-rose-200 bg-rose-50/40">
+        <CardContent className="p-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-rose-900">
+            <RiFileWarningLine className="h-4 w-4" />
+            Couldn&apos;t check who still owes a signed agreement
+          </p>
+          <p className="mt-1 text-xs text-rose-800">
+            {loadError} — treat this as unknown rather than clear.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (rows.length === 0) return null;
 
   const working = rows.filter((r) => r.working_unsigned);
 

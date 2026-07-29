@@ -44,6 +44,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { edgeResult } from "@/lib/edge-invoke";
 import PhoneScreeningForm from "@/components/admin/PhoneScreeningForm";
 import { RECOMMENDATION_LABEL, declineReasonLabel, type Recommendation } from "@/lib/phone-screening";
 
@@ -901,11 +902,16 @@ export default function ApplicantsPipeline() {
                             const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
                               body: { action: "send_agreement", cleanerId: selected.cleaner_id },
                             });
-                            if (error) throw error;
-                            if ((data as { error?: string })?.error) {
-                              throw new Error((data as { error?: string }).error);
-                            }
-                            const d = data as { emailed?: boolean; smsSent?: boolean };
+                            // invoke() collapses every non-2xx into the same
+                            // opaque message, so read the real reason out of the
+                            // response before reporting it.
+                            const outcome = await edgeResult(error, data);
+                            if (!outcome.ok) throw new Error(outcome.error);
+                            const d = data as {
+                              emailed?: boolean;
+                              smsSent?: boolean;
+                              agreementUrl?: string;
+                            };
                             const parts = [
                               d.emailed ? "email" : null,
                               d.smsSent ? "SMS" : null,
@@ -913,10 +919,14 @@ export default function ApplicantsPipeline() {
                             toast.success(
                               parts.length
                                 ? `Agreement link sent via ${parts.join(" + ")}`
-                                : "Agreement link sent",
+                                : "Agreement link created",
+                              { description: parts.length ? undefined : d.agreementUrl },
                             );
                           } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Failed to send agreement link");
+                            toast.error("Couldn't send the agreement link", {
+                              description: e instanceof Error ? e.message : String(e),
+                              duration: 20_000,
+                            });
                           } finally {
                             setActioning(false);
                           }

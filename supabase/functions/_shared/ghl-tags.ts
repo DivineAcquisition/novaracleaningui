@@ -145,7 +145,6 @@ const SOURCE_VALUES: ReadonlySet<string> = new Set([
   "partner",
   "turnover portal",
   "custom quote",
-  "openphone",
   "recycled",
 ]);
 

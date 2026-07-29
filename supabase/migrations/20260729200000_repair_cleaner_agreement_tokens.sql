@@ -1,22 +1,23 @@
--- ─── Tokenized contractor agreement signing ─────────────────────────────────
+-- ─── Repair: tokenized contractor agreement signing ─────────────────────────
 --
--- We have active contractors who never signed an ICA. The only way to sign one
--- today is the five-step onboarding wizard behind a login — which is the wrong
--- ask for somebody who has been working for months and just needs to put their
--- name on a document. Every extra step is a place they drop out, and an unsigned
--- agreement is the one thing that blocks activation.
+-- 20260729180000_cleaner_agreement_tokens.sql only landed halfway in
+-- production. The three token columns and the unique index are there, but
+-- `agreement_token_sent_count`, `mint_cleaner_agreement_token()` and
+-- `cleaner_agreement_status_v1` never got created — so every "send agreement
+-- link" click died on the missing RPC before a token was ever minted, and the
+-- unsigned-contractor panel silently rendered nothing because its view was
+-- absent.
 --
--- So: a single-purpose tokenized link. Open it, read the agreement, sign, done.
--- No account, no wizard, no dashboard. Same pattern as every other one-tap
--- contractor link we already send (job checklist, offer response, photo upload):
--- the unguessable token IS the credential, and it is single-use.
+-- The minting function was also wrong where it did exist: pgcrypto lives in the
+-- `extensions` schema here, so an unqualified gen_random_bytes() is invisible to
+-- a SECURITY DEFINER function pinned to `search_path = public, pg_temp`. It is
+-- schema-qualified below rather than widening the search path, which keeps a
+-- definer-rights function from resolving names through a caller-influenced path.
 --
--- Reuses: cleaners (the flags activation already gates on), docuseal_submissions
--- (the signed PDF lands in the same place as a wizard signature), events.
+-- Everything here is written to converge from either state: the halfway one in
+-- production, or a clean database that already ran the original migration.
 
 ALTER TABLE public.cleaners
-  -- 40 hex chars, minted per send. Cleared the moment it's used, so a
-  -- forwarded text can't be replayed into a second submission.
   ADD COLUMN IF NOT EXISTS agreement_token text,
   ADD COLUMN IF NOT EXISTS agreement_token_expires_at timestamptz,
   ADD COLUMN IF NOT EXISTS agreement_token_sent_at timestamptz,
@@ -26,19 +27,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS cleaners_agreement_token_uniq
   ON public.cleaners (agreement_token)
   WHERE agreement_token IS NOT NULL;
 
-COMMENT ON COLUMN public.cleaners.agreement_token IS
-  'Single-use credential for the tokenized ICA signing page (contractor.novaracleaning.com/cleaner/agreement/<token>). Cleared on signature so the link cannot be replayed. NULL = no outstanding signing link.';
-COMMENT ON COLUMN public.cleaners.agreement_token_expires_at IS
-  'When the outstanding signing link stops working. Short enough that a forwarded text goes stale, long enough that a contractor can sign at the weekend.';
-
-/**
- * Mint (or re-mint) a signing link for a contractor who hasn't signed.
- *
- * Idempotent per send: calling it again replaces the token and extends the
- * window, so "resend" is always safe and the previous link dies. Returns NULL
- * when the cleaner has already signed — re-signing an executed agreement would
- * put a second contradictory document on the record.
- */
 CREATE OR REPLACE FUNCTION public.mint_cleaner_agreement_token(
   p_cleaner_id uuid,
   p_ttl_days integer DEFAULT 30
@@ -54,11 +42,11 @@ DECLARE
 BEGIN
   SELECT COALESCE(ob_agreement_signed, false) INTO v_signed
   FROM public.cleaners WHERE id = p_cleaner_id;
-  IF v_signed IS NULL THEN RETURN NULL; END IF;
+  -- No row at all: NOT FOUND rather than a NULL signed flag, since the
+  -- COALESCE above means a real row can never yield NULL here.
+  IF NOT FOUND THEN RETURN NULL; END IF;
   IF v_signed THEN RETURN NULL; END IF;
 
-  -- Schema-qualified: pgcrypto is installed in `extensions`, which this
-  -- function's pinned search_path deliberately excludes.
   v_token := encode(extensions.gen_random_bytes(20), 'hex');
 
   UPDATE public.cleaners
@@ -73,12 +61,9 @@ BEGIN
 END;
 $$;
 
--- Only the service role mints tokens (the admin edge function runs as it).
--- Supabase's default privileges grant EXECUTE on new public-schema functions to
--- anon and authenticated, and REVOKE ... FROM PUBLIC does NOT remove those, so
--- they have to be revoked by name. Without this, anyone holding the publicly
--- embedded anon key could mint a signing token for any unsigned contractor and
--- execute their agreement.
+-- Revoked by name as well as from PUBLIC: Supabase's default privileges grant
+-- EXECUTE on new public-schema functions directly to anon and authenticated, and
+-- revoking PUBLIC leaves those untouched.
 REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM anon;
 REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM authenticated;
@@ -86,7 +71,14 @@ GRANT EXECUTE ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) TO 
 
 -- Who still owes us a signature, and whether a link is out. The admin
 -- directory reads this so "unsigned" is a worklist rather than a discovery.
-CREATE OR REPLACE VIEW public.cleaner_agreement_status_v1 AS
+DROP VIEW IF EXISTS public.cleaner_agreement_status_v1;
+
+CREATE VIEW public.cleaner_agreement_status_v1
+-- Contractor names, emails and phones. Without security_invoker the view would
+-- run as its owner and hand the whole roster to anyone holding the anon key,
+-- because Supabase grants public-schema tables to anon by default. Invoker
+-- rights mean the existing admin/VA policies on `cleaners` decide instead.
+WITH (security_invoker = true) AS
 SELECT
   c.id                                        AS cleaner_id,
   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS cleaner_name,
@@ -119,7 +111,10 @@ FROM public.cleaners c
 WHERE c.status <> 'terminated';
 
 COMMENT ON VIEW public.cleaner_agreement_status_v1 IS
-  'Per-contractor ICA standing: signed or not, whether a signing link is outstanding, and whether they are ALREADY WORKING unsigned — the backlog the tokenized signing page exists to clear.';
+  'Per-contractor ICA standing: signed or not, whether a signing link is outstanding, and whether they are ALREADY WORKING unsigned — the backlog the tokenized signing page exists to clear. security_invoker, so the caller''s own access to public.cleaners applies.';
+
+REVOKE ALL ON public.cleaner_agreement_status_v1 FROM anon;
+GRANT SELECT ON public.cleaner_agreement_status_v1 TO authenticated, service_role;
 
 INSERT INTO public.discord_routes (event_type, webhook_key, role_keys) VALUES
   ('cleaner.agreement_link_sent', 'DISCORD_WEBHOOK_DISPATCH', ARRAY['DISCORD_ROLE_OPERATIONS']),

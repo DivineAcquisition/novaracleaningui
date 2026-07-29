@@ -31,6 +31,8 @@ import {
   RiUploadCloud2Line,
   RiTimeLine,
   RiPriceTag3Line,
+  RiListCheck2,
+  RiArrowRightSLine,
 } from "@remixicon/react";
 import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
@@ -60,6 +62,20 @@ import {
   HOME_SIZE_RANGES,
 } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
+import { edgeResult } from "@/lib/edge-invoke";
+
+/** Live contractor checklist progress, as attached by admin-list-bookings. */
+interface ChecklistSummary {
+  token: string | null;
+  service_type: string | null;
+  total_items: number | null;
+  completed_items: number | null;
+  progress_pct: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  last_activity_at: string | null;
+  last_activity_by: string | null;
+}
 
 interface BookingRow {
   id: string;
@@ -94,6 +110,19 @@ interface BookingRow {
   hosted_invoice_url?: string | null;
   /** When true, skip post-job feedback / review SMS + email for this booking. */
   suppress_review_request?: boolean | null;
+  // ─── Property details ──────────────────────────────────────────────────
+  // What the crew is walking into. `sqft` is only set when a customer typed an
+  // exact number; most bookings carry the size as `home_size_id` (a range), so
+  // read both.
+  sqft?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  dwelling_type?: string | null;
+  pets?: string | null;
+  flooring_type?: string | null;
+  access_notes?: string | null;
+  frequency?: string | null;
+  checklist?: ChecklistSummary | null;
 }
 
 interface ScopeAdjustmentRow {
@@ -143,6 +172,52 @@ const STATUS_OPTIONS = [
 
 const fmtMoney = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
+
+// ─── Property details ──────────────────────────────────────────────────────
+//
+// Size arrives two ways and almost always the second: `sqft` is only populated
+// when someone typed an exact figure, while `home_size_id` is the priced range
+// every booking carries. Prefer the exact number, fall back to the range, and
+// never render a bare tier id like "1501_2000" at somebody.
+
+/** Short size label for dense rows — "1,850 sq ft" or "1,501 – 2,000 sq ft". */
+function homeSizeLabel(booking: {
+  sqft?: number | null;
+  home_size_id?: string | null;
+}): string | null {
+  if (booking.sqft && booking.sqft > 0) return `${booking.sqft.toLocaleString()} sq ft`;
+  const id = booking.home_size_id;
+  if (!id) return null;
+  return HOME_SIZE_RANGES.find((h) => h.id === id)?.label ?? id.replaceAll("_", "–");
+}
+
+/** "3 bd · 2.5 ba" — omits either half rather than showing a zero. */
+function bedBathLabel(booking: {
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+}): string | null {
+  const parts: string[] = [];
+  if (booking.bedrooms != null && booking.bedrooms > 0) parts.push(`${booking.bedrooms} bd`);
+  if (booking.bathrooms != null && booking.bathrooms > 0) parts.push(`${booking.bathrooms} ba`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+const PETS_LABELS: Record<string, string> = {
+  none: "No pets",
+  dog: "Dog",
+  cat: "Cat",
+  multiple: "Multiple pets",
+  other: "Other pets",
+};
+
+const titleCase = (v: string) => v.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+
+/** Compact one-liner for the list row: size · beds/baths · dwelling. */
+function propertySummary(booking: BookingRow): string | null {
+  const parts = [homeSizeLabel(booking), bedBathLabel(booking)].filter(Boolean) as string[];
+  if (booking.dwelling_type) parts.push(titleCase(booking.dwelling_type));
+  return parts.length ? parts.join(" · ") : null;
+}
 
 export default function AdminBookings() {
   const searchParams = useSearchParams();
@@ -347,11 +422,31 @@ export default function AdminBookings() {
                       </p>
                       <p className="text-xs text-slate-500">{b.time_slot || ""}</p>
                     </div>
-                    <div className="col-span-6 md:col-span-2 text-sm text-slate-700">
-                      {b.service_type ? b.service_type.replaceAll("_", " ") : "—"}
+                    <div className="col-span-6 md:col-span-2 min-w-0">
+                      <p className="text-sm text-slate-700 capitalize truncate">
+                        {b.service_type ? b.service_type.replaceAll("_", " ") : "—"}
+                      </p>
+                      {/* Size and contents, so the list can be scanned for
+                          "which of these is a big job" without opening each. */}
+                      <p className="text-xs text-slate-500 truncate">
+                        {propertySummary(b) || ""}
+                      </p>
                     </div>
-                    <div className="col-span-6 md:col-span-2 text-xs text-slate-500 truncate">
-                      {b.city ? `${b.city}, ${b.state || ""} ${b.zip_code || ""}` : "—"}
+                    <div className="col-span-6 md:col-span-2 min-w-0">
+                      <p className="text-xs text-slate-500 truncate">
+                        {b.city ? `${b.city}, ${b.state || ""} ${b.zip_code || ""}` : "—"}
+                      </p>
+                      {b.checklist && (b.checklist.total_items ?? 0) > 0 ? (
+                        <p
+                          className={cn(
+                            "text-xs tabular-nums truncate",
+                            b.checklist.completed_at ? "text-emerald-600" : "text-slate-500",
+                          )}
+                        >
+                          {b.checklist.completed_at ? "Checklist done" : "Checklist"}{" "}
+                          {b.checklist.completed_items ?? 0}/{b.checklist.total_items}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="col-span-6 md:col-span-2 text-sm tabular-nums text-slate-900 font-medium">
                       {fmtMoney(b.total_estimate_cents)}
@@ -1286,6 +1381,51 @@ function BookingSheet({
                   {booking.address || "—"}
                   {booking.city && `, ${booking.city}`}
                 </span>
+
+                {/* What the crew is walking into. Sits with service and address
+                    because size and contents decide staffing and duration as
+                    much as the service tier does. */}
+                <span className="text-slate-500">Home size</span>
+                <span className="text-right">{homeSizeLabel(booking) || "—"}</span>
+                <span className="text-slate-500">Beds / baths</span>
+                <span className="text-right tabular-nums">{bedBathLabel(booking) || "—"}</span>
+                {booking.dwelling_type ? (
+                  <>
+                    <span className="text-slate-500">Property type</span>
+                    <span className="text-right">{titleCase(booking.dwelling_type)}</span>
+                  </>
+                ) : null}
+                {booking.flooring_type ? (
+                  <>
+                    <span className="text-slate-500">Flooring</span>
+                    <span className="text-right">{titleCase(booking.flooring_type)}</span>
+                  </>
+                ) : null}
+                {booking.pets ? (
+                  <>
+                    <span className="text-slate-500">Pets</span>
+                    <span className="text-right">
+                      {PETS_LABELS[booking.pets] || titleCase(booking.pets)}
+                    </span>
+                  </>
+                ) : null}
+                {booking.frequency ? (
+                  <>
+                    <span className="text-slate-500">Frequency</span>
+                    <span className="text-right">{titleCase(booking.frequency)}</span>
+                  </>
+                ) : null}
+                {booking.access_notes ? (
+                  <>
+                    <span className="text-slate-500">Access</span>
+                    {/* Gate codes and parking, so wrap rather than truncate —
+                        a half-shown door code is useless. */}
+                    <span className="text-right whitespace-pre-wrap break-words">
+                      {booking.access_notes}
+                    </span>
+                  </>
+                ) : null}
+
                 <Separator className="col-span-2 my-1" />
                 <span className="text-slate-500">Total</span>
                 <span className="text-right tabular-nums font-semibold">
@@ -1307,6 +1447,9 @@ function BookingSheet({
                 </span>
               </CardContent>
             </Card>
+
+            {/* The scope of work, and how much of it is done */}
+            <BookingChecklist booking={booking} />
 
             {/* Per-booking review / feedback request opt-out */}
             <Card className="border-slate-200">
@@ -2103,6 +2246,264 @@ function BookingSheet({
 // Shows the booking's CURRENT before/after photos, straight from the bookings
 // row, the moment they exist. Auto-refreshes while the sheet is open so a
 // cleaner uploading from the field appears here within seconds — no reload.
+// ─── The cleaning checklist for this booking ─────────────────────────────────
+//
+// Checklist progress already existed on the Dispatch board and in QC, but not
+// here — and Bookings is the screen you are on when a customer asks what is
+// included, or whether the oven actually got done. Answering meant going to
+// find the job somewhere else.
+//
+// Fetched when the section is opened rather than with the list: the item-level
+// detail is only wanted for the one booking being looked at, and the summary
+// already rides along on the list row.
+
+interface ChecklistDetail {
+  name: string;
+  service_type: string;
+  sections: { title: string; items: string[] }[];
+  items: Record<string, { done?: boolean; at?: string; by?: string }>;
+  total_items: number;
+  completed_items: number;
+  progress_pct: number;
+  started_at: string | null;
+  completed_at: string | null;
+  last_activity_at: string | null;
+  last_activity_by: string | null;
+}
+
+function BookingChecklist({ booking }: { booking: BookingRow }) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState<ChecklistDetail | null>(null);
+  const [contractorUrl, setContractorUrl] = useState<string | null>(null);
+  const [hasJob, setHasJob] = useState<boolean>(Boolean(booking.job_id));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Re-collapse and drop everything when the sheet moves to another booking, so
+  // an open panel never shows the previous booking's checklist.
+  useEffect(() => {
+    setOpen(false);
+    setDetail(null);
+    setError(null);
+    setContractorUrl(null);
+    setHasJob(Boolean(booking.job_id));
+  }, [booking.id, booking.job_id]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Two steps on purpose. The first finds the booking's job and guarantees a
+      // checklist row exists; the second reads it through the same resolver the
+      // contractors use, so admin and crew can never be looking at different
+      // versions of the list.
+      const access = await supabase.functions.invoke("admin-booking-checklist", {
+        body: { bookingId: booking.id },
+      });
+      const accessOutcome = await edgeResult(access.error, access.data);
+      if (!accessOutcome.ok) throw new Error(accessOutcome.error);
+      const { hasJob: jobExists, token, contractorUrl: url } = access.data as {
+        hasJob: boolean;
+        token: string | null;
+        contractorUrl: string | null;
+      };
+      setHasJob(jobExists);
+      setContractorUrl(url);
+
+      if (!jobExists || !token) {
+        setDetail(null);
+        return;
+      }
+
+      const read = await supabase.functions.invoke("cleaner-job-checklist", {
+        body: { token },
+      });
+      const readOutcome = await edgeResult(read.error, read.data);
+      if (!readOutcome.ok) throw new Error(readOutcome.error);
+      setDetail((read.data as { checklist: ChecklistDetail }).checklist);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [booking.id]);
+
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !detail && !loading) void load();
+  };
+
+  const summary = booking.checklist;
+  const done = detail?.completed_items ?? summary?.completed_items ?? 0;
+  const total = detail?.total_items ?? summary?.total_items ?? 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const completedAt = detail?.completed_at ?? summary?.completed_at ?? null;
+
+  // Two different things both end up as "complete", and conflating them would
+  // mislead: a crew ticking each line leaves a per-item record, while closing
+  // the job rolls the count to 100% via a database trigger and ticks nothing.
+  // When the headline count outruns the per-item record, say so — otherwise
+  // this panel reads as "32 of 32 done" beside 32 visibly unticked lines.
+  const tickedItems = detail
+    ? Object.values(detail.items || {}).filter((entry) => entry?.done).length
+    : 0;
+  const countedWithoutDetail = Boolean(detail) && done > tickedItems;
+
+  return (
+    <Card className="border-slate-200">
+      <CardContent className="py-4 space-y-3">
+        <button onClick={toggleOpen} className="w-full text-left" type="button">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-900 flex items-center gap-1.5">
+              <RiListCheck2 className="h-4 w-4 text-slate-400" />
+              Cleaning checklist
+              {completedAt ? (
+                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800 text-[10px]">
+                  complete
+                </Badge>
+              ) : null}
+            </p>
+            <span className="flex items-center gap-2 text-xs text-slate-500 tabular-nums">
+              {total > 0 ? `${done}/${total}` : null}
+              <RiArrowRightSLine
+                className={cn("h-4 w-4 transition-transform", open && "rotate-90")}
+              />
+            </span>
+          </div>
+          {total > 0 ? (
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  pct === 100 ? "bg-emerald-500" : "bg-[#5C0FFE]",
+                )}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          ) : null}
+          <p className="mt-1.5 text-xs text-slate-500">
+            {!booking.job_id
+              ? "Not dispatched yet — a checklist starts once a contractor is assigned."
+              : open
+                ? "What the crew works through on site."
+                : "Tap to see what's in scope and what's been done."}
+          </p>
+        </button>
+
+        {open ? (
+          <div className="space-y-3">
+            {loading ? (
+              <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                <RiLoader4Line className="h-3.5 w-3.5 animate-spin" />
+                Loading the checklist…
+              </p>
+            ) : null}
+
+            {error ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                <p className="text-xs text-rose-800">{error}</p>
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => void load()}>
+                  Try again
+                </Button>
+              </div>
+            ) : null}
+
+            {!loading && !error && !hasJob ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                No checklist yet — one is created when this booking is dispatched to a
+                contractor. Until then there is no job for the crew to work through.
+              </p>
+            ) : null}
+
+            {countedWithoutDetail ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Counted as {done}/{total} when the job was closed
+                {tickedItems > 0 ? `, but only ${tickedItems} were ticked off individually` : ""} —
+                so the lines below are not a record of what the crew confirmed one by one.
+              </p>
+            ) : null}
+
+            {detail ? (
+              <>
+                {detail.last_activity_by && detail.last_activity_at ? (
+                  <p className="text-xs text-slate-500">
+                    Last update by {detail.last_activity_by} ·{" "}
+                    {new Date(detail.last_activity_at).toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                ) : null}
+
+                <div className="space-y-3">
+                  {detail.sections.map((section, sectionIdx) => {
+                    const doneInSection = section.items.filter(
+                      (_, itemIdx) => detail.items?.[`${sectionIdx}:${itemIdx}`]?.done,
+                    ).length;
+                    return (
+                      <div key={section.title}>
+                        <p className="flex items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          <span>{section.title}</span>
+                          <span className="tabular-nums">
+                            {doneInSection}/{section.items.length}
+                          </span>
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {section.items.map((item, itemIdx) => {
+                            const entry = detail.items?.[`${sectionIdx}:${itemIdx}`];
+                            const isDone = Boolean(entry?.done);
+                            return (
+                              <li
+                                key={`${sectionIdx}:${itemIdx}`}
+                                className="flex items-start gap-1.5 text-xs"
+                              >
+                                <RiCheckLine
+                                  className={cn(
+                                    "mt-0.5 h-3.5 w-3.5 shrink-0",
+                                    isDone ? "text-emerald-600" : "text-slate-300",
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    isDone ? "text-slate-500 line-through" : "text-slate-700",
+                                  )}
+                                >
+                                  {item}
+                                  {entry?.by ? (
+                                    <span className="text-slate-400"> · {entry.by}</span>
+                                  ) : null}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {contractorUrl ? (
+                  <a
+                    href={contractorUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block text-xs font-medium text-[#5C0FFE] underline decoration-dotted"
+                  >
+                    Open the contractor&apos;s view
+                  </a>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function LivePhotoGallery({ bookingId }: { bookingId: string }) {
   const [before, setBefore] = useState<string[]>([]);
   const [after, setAfter] = useState<string[]>([]);

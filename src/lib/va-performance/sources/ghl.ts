@@ -5,9 +5,13 @@
 //   Messaging (calls placed, conversations connected, SMS sent) comes from the
 //   GHL conversations API, attributed by the sender's GHL user id. When GHL
 //   credentials aren't configured we fall back to the workspace's own call log
-//   (phone_calls, populated by the OpenPhone/GHL bridge) for calls, and leave
-//   sms_sent UNVERIFIED — a fallback that can't see SMS must say so rather
-//   than report zero.
+//   (phone_calls) for calls, and leave sms_sent UNVERIFIED — a fallback that
+//   can't see SMS must say so rather than report zero.
+//
+//   That ledger has had no writer since the unused OpenPhone webhook was
+//   removed, so the fallback now treats an empty window as "can't see" instead
+//   of reporting a confident zero. An empty table is not evidence that nobody
+//   made any calls, and reporting it as such would quietly grade VAs on it.
 //
 //   Lead handling (leads received, responded, median response, converted) comes
 //   from public.leads, where assignment already carries the VA's workspace user
@@ -129,6 +133,8 @@ async function collectCallsFromWorkspace(
     .gte("started_at", ctx.window.startIso)
     .lt("started_at", ctx.window.endIso);
   if (error) return { ok: false };
+  // No rows at all means the ledger is unwritten, not that zero calls happened.
+  if (!data || data.length === 0) return { ok: false };
 
   const byUser = new Map<string, string>();
   for (const va of ctx.vas) if (va.workspaceUserId) byUser.set(va.workspaceUserId, va.id);
