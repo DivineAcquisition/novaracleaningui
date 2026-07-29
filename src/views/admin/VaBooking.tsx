@@ -243,6 +243,33 @@ type LeadHydration = LeadRow & {
   special_requests?: string;
 };
 
+// The lookup searches leads AND existing customers. They are two different
+// tables — a returning customer is in `customers`, not `leads`, and there are
+// far more of them — so a search that only hit `leads` found nobody the admin
+// was actually looking for. A customer also carries a full service address we
+// can prefill, which a lead does not.
+type SearchKind = "customer" | "lead";
+interface SearchResult {
+  kind: SearchKind;
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  zip_code: string | null;
+  // Customers only.
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  lat: number | null;
+  lng: number | null;
+  // Leads only.
+  service_type: string | null;
+  lead_score: string | null;
+  status: string | null;
+  source: string | null;
+}
+
 interface Cleaner {
   id: string;
   first_name: string | null;
@@ -298,46 +325,127 @@ export default function VaBooking() {
   const leadIdParam = searchParams.get("lead_id");
   const quoteIdParam = searchParams.get("quoteId");
 
-  // Lead lookup (collapsed by default)
+  // Customer / lead lookup (collapsed by default)
   const [leadLookupOpen, setLeadLookupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [leadResults, setLeadResults] = useState<LeadRow[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  // Only a real lead links back to leads/va_quotes (both FK-bound to leads.id).
+  // A selected customer is tracked separately so its id never lands in a lead
+  // column.
   const [linkedLead, setLinkedLead] = useState<LeadRow | null>(null);
+  const [linkedCustomerId, setLinkedCustomerId] = useState<string | null>(null);
+  // Bumped whenever a selection prefills the address, so AddressAutocomplete
+  // (which reads its initial value only on mount) remounts and shows it.
+  const [prefillKey, setPrefillKey] = useState(0);
 
   useEffect(() => {
     if (!leadLookupOpen) {
-      setLeadResults([]);
+      setSearchResults([]);
+      setSearchError(null);
       return;
     }
     const q = searchQuery.trim();
     setSearching(true);
+    setSearchError(null);
     const t = setTimeout(async () => {
-      const baseSelect =
-        "id, first_name, last_name, email, phone, zip_code, service_type, lead_score, status, source";
-      let query = supabase
-        .from("leads")
-        .select(baseSelect)
-        .order("created_at", { ascending: false })
-        .limit(15);
-      if (q) {
-        const digits = digitsOnly(q);
+      const digits = digitsOnly(q);
+
+      const leadCols =
+        "id, first_name, last_name, email, phone, zip_code, service_type, lead_score, status, source, created_at";
+      const customerCols =
+        "id, first_name, last_name, email, phone, zip, address, city, state, lat, lng, lifecycle_stage, membership_status, last_booking_at, created_at";
+
+      const applyNameFilters = <T,>(qb: T): T => {
+        if (!q) return qb;
         const filters = [
           `first_name.ilike.%${q}%`,
           `last_name.ilike.%${q}%`,
           `email.ilike.%${q}%`,
         ];
         if (digits) filters.push(`phone.ilike.%${digits}%`);
-        query = supabase
-          .from("leads")
-          .select(baseSelect)
-          .or(filters.join(","))
-          .order("created_at", { ascending: false })
-          .limit(15);
-      }
-      const { data, error } = await query;
+        // deno-lint-ignore no-explicit-any
+        return (qb as any).or(filters.join(","));
+      };
+
+      const customerQuery = applyNameFilters(
+        supabase.from("customers").select(customerCols),
+      )
+        .order("last_booking_at", { ascending: false, nullsFirst: false })
+        .limit(15);
+      const leadQuery = applyNameFilters(
+        supabase.from("leads").select(leadCols),
+      )
+        .order("created_at", { ascending: false })
+        .limit(15);
+
+      const [customersRes, leadsRes] = await Promise.all([customerQuery, leadQuery]);
       setSearching(false);
-      if (!error && data) setLeadResults(data as unknown as LeadRow[]);
+
+      // Surface a real failure rather than rendering an empty list that reads
+      // as "no such customer" — the old silent-fail is what made this look
+      // broken.
+      if (customersRes.error && leadsRes.error) {
+        setSearchResults([]);
+        setSearchError(customersRes.error.message || leadsRes.error.message || "Search failed.");
+        return;
+      }
+
+      const results: SearchResult[] = [];
+      const seenEmails = new Set<string>();
+
+      // Customers first: they carry an address and are the returning-customer
+      // case this lookup exists for.
+      for (const c of (customersRes.data || []) as unknown as Record<string, unknown>[]) {
+        const email = c.email ? String(c.email).toLowerCase() : null;
+        if (email) seenEmails.add(email);
+        results.push({
+          kind: "customer",
+          id: String(c.id),
+          first_name: (c.first_name as string) ?? null,
+          last_name: (c.last_name as string) ?? null,
+          email: (c.email as string) ?? null,
+          phone: (c.phone as string) ?? null,
+          zip_code: (c.zip as string) ?? null,
+          address: (c.address as string) ?? null,
+          city: (c.city as string) ?? null,
+          state: (c.state as string) ?? null,
+          lat: c.lat != null ? Number(c.lat) : null,
+          lng: c.lng != null ? Number(c.lng) : null,
+          service_type: null,
+          lead_score: null,
+          status: (c.membership_status as string) || (c.lifecycle_stage as string) || null,
+          source: "customer",
+        });
+      }
+
+      // Leads that aren't already represented by a customer with the same email.
+      for (const l of (leadsRes.data || []) as unknown as Record<string, unknown>[]) {
+        const email = l.email ? String(l.email).toLowerCase() : null;
+        if (email && seenEmails.has(email)) continue;
+        if (email) seenEmails.add(email);
+        results.push({
+          kind: "lead",
+          id: String(l.id),
+          first_name: (l.first_name as string) ?? null,
+          last_name: (l.last_name as string) ?? null,
+          email: (l.email as string) ?? null,
+          phone: (l.phone as string) ?? null,
+          zip_code: (l.zip_code as string) ?? null,
+          address: null,
+          city: null,
+          state: null,
+          lat: null,
+          lng: null,
+          service_type: (l.service_type as string) ?? null,
+          lead_score: (l.lead_score as string) ?? null,
+          status: (l.status as string) ?? null,
+          source: (l.source as string) ?? null,
+        });
+      }
+
+      setSearchResults(results.slice(0, 20));
     }, 200);
     return () => clearTimeout(t);
   }, [searchQuery, leadLookupOpen]);
@@ -566,8 +674,57 @@ export default function VaBooking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadIdParam]);
 
+  // Prefill the form from a lookup result. A customer brings a full service
+  // address; a lead brings its service type. Only a lead sets linkedLead, so a
+  // customer's id can never be written into the leads-bound leadId/lead_id.
+  function applyResult(r: SearchResult) {
+    setFirstName(r.first_name || "");
+    setLastName(r.last_name || "");
+    setEmail(r.email || "");
+    setPhone(r.phone || "");
+    setZipCode(r.zip_code || "");
+
+    if (r.kind === "customer") {
+      setLinkedLead(null);
+      setLinkedCustomerId(r.id);
+      setAddress(r.address || "");
+      setCity(r.city || "");
+      setState(r.state || "");
+      setAddressLat(r.lat);
+      setAddressLng(r.lng);
+      if (r.address) setPrefillKey((k) => k + 1);
+    } else {
+      setLinkedCustomerId(null);
+      setLinkedLead({
+        id: r.id,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        email: r.email,
+        phone: r.phone,
+        zip_code: r.zip_code,
+        service_type: r.service_type,
+        lead_score: r.lead_score,
+        status: r.status,
+        source: r.source,
+      });
+      if (r.service_type) {
+        const st = r.service_type as ServiceType;
+        if (["standard", "deep", "moveInOut", "combo"].includes(st)) {
+          setServiceType(st);
+        }
+      }
+    }
+
+    setLeadLookupOpen(false);
+    const name = `${r.first_name || ""} ${r.last_name || ""}`.trim() || "(no name)";
+    toast.success(
+      r.kind === "customer" ? `Loaded customer — ${name}` : `Loaded lead — ${name}`,
+    );
+  }
+
   function applyLead(lead: LeadHydration) {
     setLinkedLead(lead);
+    setLinkedCustomerId(null);
     setFirstName(lead.first_name || "");
     setLastName(lead.last_name || "");
     setEmail(lead.email || "");
@@ -1398,6 +1555,11 @@ export default function VaBooking() {
               Lead linked · {linkedLead.id.slice(0, 8)}
             </Badge>
           )}
+          {linkedCustomerId && (
+            <Badge className="bg-slate-100 text-slate-700 border-0 hover:bg-slate-100 text-[10px]">
+              Existing customer · {linkedCustomerId.slice(0, 8)}
+            </Badge>
+          )}
         </div>
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
@@ -1424,7 +1586,7 @@ export default function VaBooking() {
               className="border-slate-200 bg-white"
             >
               <RiUserSearchLine className="w-4 h-4 mr-1.5" />
-              {leadLookupOpen ? "Close lead search" : "Search existing lead"}
+              {leadLookupOpen ? "Close search" : "Search existing customer or lead"}
             </Button>
           </div>
         </div>
@@ -1500,47 +1662,66 @@ export default function VaBooking() {
             </div>
             <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 max-h-72 overflow-y-auto">
               {searching && <Skeleton className="h-10 w-full m-2" />}
-              {!searching && leadResults.length === 0 && (
-                <p className="text-xs text-slate-500 p-3">
-                  No leads found. Start typing or press × to close.
+              {!searching && searchError && (
+                <p className="text-xs text-rose-700 p-3">
+                  Couldn&apos;t search: {searchError}
                 </p>
               )}
-              {leadResults.map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  onClick={() => applyLead(l as LeadHydration)}
-                  className={cn(
-                    "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between transition-colors",
-                    linkedLead?.id === l.id && "bg-violet-50/60",
-                  )}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">
-                      {l.first_name || ""} {l.last_name || ""}
-                      {!l.first_name && !l.last_name && (
-                        <span className="text-slate-400">(no name)</span>
+              {!searching && !searchError && searchResults.length === 0 && (
+                <p className="text-xs text-slate-500 p-3">
+                  No customers or leads found. Try a name, email, or phone — or press × to close.
+                </p>
+              )}
+              {searchResults.map((r) => {
+                const isLinked =
+                  r.kind === "customer"
+                    ? linkedCustomerId === r.id
+                    : linkedLead?.id === r.id;
+                return (
+                  <button
+                    key={`${r.kind}:${r.id}`}
+                    type="button"
+                    onClick={() => applyResult(r)}
+                    className={cn(
+                      "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between transition-colors",
+                      isLinked && "bg-violet-50/60",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">
+                        {r.first_name || ""} {r.last_name || ""}
+                        {!r.first_name && !r.last_name && (
+                          <span className="text-slate-400">(no name)</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {r.phone || r.email || "—"}
+                        {r.kind === "customer" && r.city
+                          ? ` · ${r.city}${r.state ? `, ${r.state}` : ""}`
+                          : ` · ${r.zip_code || "?"}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge
+                        variant={r.kind === "customer" ? "default" : "outline"}
+                        className="text-[10px] capitalize"
+                      >
+                        {r.kind}
+                      </Badge>
+                      {r.lead_score && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {r.lead_score}
+                        </Badge>
                       )}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {l.phone || l.email || "—"} · {l.zip_code || "?"} ·{" "}
-                      {l.source || "—"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {l.lead_score && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {l.lead_score}
-                      </Badge>
-                    )}
-                    {l.status && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        {l.status}
-                      </Badge>
-                    )}
-                  </div>
-                </button>
-              ))}
+                      {r.status && (
+                        <Badge variant="secondary" className="text-[10px] capitalize">
+                          {r.status.replaceAll("_", " ")}
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -1600,7 +1781,7 @@ export default function VaBooking() {
             </div>
             <div className="relative overflow-visible">
             <AddressAutocomplete
-              key="va-service-address"
+              key={`va-service-address-${prefillKey}`}
               label="Service address *"
               placeholder="Start typing the customer's address…"
               initialValue={address}
