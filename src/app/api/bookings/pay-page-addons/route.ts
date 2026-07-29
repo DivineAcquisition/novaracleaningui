@@ -50,18 +50,42 @@ function priceCents(id: string, serviceType: string | null): number {
   return entry ? entry.price * 100 : 0;
 }
 
+/** Throws on a query error — "no such link" and "our query is broken" must not
+ *  collapse into the same answer for the customer. */
 async function load(token: string): Promise<Row | null> {
   if (!token || token.length < 16) return null;
   const supabase = getAdminSupabase();
-  const { data } = await (supabase.from as never as (t: string) => {
+  const { data, error } = await (supabase.from as never as (t: string) => {
     select: (c: string) => {
-      eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: Row | null }> };
+      eq: (k: string, v: string) => {
+        maybeSingle: () => Promise<{ data: Row | null; error: { message: string } | null }>;
+      };
     };
   })("bookings")
     .select(COLS)
     .eq("pay_page_token", token)
     .maybeSingle();
+  if (error) throw new Error(`booking lookup failed: ${error.message}`);
   return data || null;
+}
+
+/** Shared wrapper so both handlers report a broken query as a 500, not a 404. */
+async function loadOrRespond(
+  token: string,
+): Promise<{ booking: Row | null; failure: NextResponse | null }> {
+  try {
+    return { booking: await load(token), failure: null };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[pay-page-addons] lookup failed", err);
+    return {
+      booking: null,
+      failure: NextResponse.json(
+        { error: "We couldn't load your booking just now. Please try again in a moment." },
+        { status: 500 },
+      ),
+    };
+  }
 }
 
 function catalogue(serviceType: string | null, selected: string[]) {
@@ -77,7 +101,8 @@ function catalogue(serviceType: string | null, selected: string[]) {
 
 export async function GET(req: Request): Promise<NextResponse> {
   const token = new URL(req.url).searchParams.get("token") || "";
-  const booking = await load(token);
+  const { booking, failure } = await loadOrRespond(token);
+  if (failure) return failure;
   if (!booking) return NextResponse.json({ error: "Invalid link." }, { status: 404 });
 
   const selected = (booking.add_ons || []).filter(Boolean);
@@ -101,7 +126,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const token = String(body.token || "");
-  const booking = await load(token);
+  const { booking, failure } = await loadOrRespond(token);
+  if (failure) return failure;
   if (!booking) return NextResponse.json({ error: "Invalid link." }, { status: 404 });
   if (String(booking.status || "").toLowerCase() === "cancelled") {
     return NextResponse.json({ error: "This booking was cancelled." }, { status: 410 });

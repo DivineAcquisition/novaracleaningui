@@ -92,19 +92,33 @@ async function stripeCall(
   return data;
 }
 
+/**
+ * Resolve the token to a booking.
+ *
+ * Throws on a query error rather than returning null. Those two things mean
+ * completely different things — "no such link" versus "our query is broken" —
+ * and collapsing them is how a missing column surfaces to a paying customer as
+ * "this payment link isn't valid".
+ */
 async function loadBooking(token: string): Promise<BookingRow | null> {
   // Length floor mirrors the deposit page: a short token is a typo or a probe,
   // not a link we ever issued.
   if (!token || token.length < 16) return null;
   const supabase = getAdminSupabase();
-  const { data } = await (supabase.from as never as (t: string) => {
+  const { data, error } = await (supabase.from as never as (t: string) => {
     select: (c: string) => {
-      eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: BookingRow | null }> };
+      eq: (k: string, v: string) => {
+        maybeSingle: () => Promise<{
+          data: BookingRow | null;
+          error: { message: string } | null;
+        }>;
+      };
     };
   })("bookings")
     .select(BOOKING_COLS)
     .eq("balance_pay_token", token)
     .maybeSingle();
+  if (error) throw new Error(`booking lookup failed: ${error.message}`);
   return data || null;
 }
 
@@ -294,7 +308,18 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await params;
-  const booking = await loadBooking(token);
+  let booking: BookingRow | null;
+  try {
+    booking = await loadBooking(token);
+  } catch (err) {
+    // Our fault, not theirs — never dress a broken query up as a bad link.
+    // eslint-disable-next-line no-console
+    console.error("[balance-pay] lookup failed", err);
+    return NextResponse.json(
+      { error: "We couldn't load your booking just now. Please try again in a moment." },
+      { status: 500 },
+    );
+  }
   if (!booking) {
     return NextResponse.json(
       { error: "This payment link isn't valid. If you think it should be, reply to our text." },
@@ -341,7 +366,17 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await params;
-  const booking = await loadBooking(token);
+  let booking: BookingRow | null;
+  try {
+    booking = await loadBooking(token);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[balance-pay] lookup failed", err);
+    return NextResponse.json(
+      { error: "We couldn't start the payment just now. Please try again in a moment." },
+      { status: 500 },
+    );
+  }
   if (!booking) {
     return NextResponse.json({ error: "This payment link isn't valid." }, { status: 404 });
   }
