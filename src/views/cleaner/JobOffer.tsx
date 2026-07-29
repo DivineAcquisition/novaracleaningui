@@ -36,6 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { payExplanation, normalizePayTier, PAY_BASIS_NOTE } from "@/lib/crew-pay";
 
 interface OfferDetail {
   assignment: {
@@ -46,6 +47,7 @@ interface OfferDetail {
     pay_rate_hr: number | null;
     pay_percentage_snapshot: number | null;
     estimated_pay_cents: number | null;
+    crew_size_snapshot: number | null;
     expires_at: string | null;
     accepted_at: string | null;
     declined_at: string | null;
@@ -72,7 +74,7 @@ interface OfferDetail {
   customer: {
     first_name: string | null;
   };
-  cleaner: { first_name: string | null };
+  cleaner: { first_name: string | null; pay_tier?: string | null };
 }
 
 const dollars = (cents: number | null) =>
@@ -343,15 +345,28 @@ export default function CleanerJobOfferPage() {
               value={offer.customer.first_name || "Customer"}
               hint="The job address & details appear in your dashboard after you accept."
             />
+            {/* Spell out the crew size and that the rate is a POOL. "45%" beside
+                a number that plainly isn't 45% of the job is the fastest way to
+                convince somebody they've been underpaid. */}
             <InfoRow
               icon={RiMoneyDollarCircleLine}
-              label="Revenue share"
+              label="Your pay"
               value={
                 offer.assignment.estimated_pay_cents
-                  ? `${offer.assignment.pay_percentage_snapshot ?? 35}% of job revenue · ${dollars(offer.assignment.estimated_pay_cents)} for you`
+                  ? payExplanation({
+                    cleanerId: "",
+                    payTier: normalizePayTier(offer.cleaner?.pay_tier),
+                    crewSize: offer.assignment.crew_size_snapshot ?? 1,
+                    ratePercent: Number(offer.assignment.pay_percentage_snapshot ?? 0),
+                    shareCents: offer.assignment.estimated_pay_cents,
+                  })
                   : "—"
               }
-              hint="Pay = job revenue × your tier %, split evenly when multiple cleaners are assigned."
+              hint={
+                (offer.assignment.crew_size_snapshot ?? 1) > 1
+                  ? `The rate is the share of the job paid to the whole crew of ${offer.assignment.crew_size_snapshot}, divided between you — it isn't paid to each of you. ${PAY_BASIS_NOTE}`
+                  : PAY_BASIS_NOTE
+              }
             />
             {offer.job.notes ? (
               <>

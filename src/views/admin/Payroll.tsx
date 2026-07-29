@@ -60,6 +60,7 @@ import AutoPayrollTab from "@/components/admin/payroll/AutoPayrollTab";
 import RunsTab from "@/components/admin/payroll/RunsTab";
 import ExtraPayTab from "@/components/admin/payroll/ExtraPayTab";
 import ExpensesTab from "@/components/admin/payroll/ExpensesTab";
+import CrewPayRatesCard from "@/components/admin/payroll/CrewPayRatesCard";
 import { loadActiveCleaners, type PayrollCleaner } from "@/components/admin/payroll/shared";
 import { parseServiceDate } from "@/lib/service-date";
 
@@ -137,6 +138,7 @@ export default function AdminPayroll() {
           <TabsTrigger value="runs">Payroll Runs</TabsTrigger>
           <TabsTrigger value="cleaner">Extra Pay</TabsTrigger>
           <TabsTrigger value="expenses">Expenses &amp; Reimb</TabsTrigger>
+          <TabsTrigger value="rates">Pay Rates</TabsTrigger>
           <TabsTrigger value="overview">Connect Overview</TabsTrigger>
         </TabsList>
         <TabsContent value="payout"><SimplePayoutTab /></TabsContent>
@@ -146,6 +148,7 @@ export default function AdminPayroll() {
         <TabsContent value="runs"><RunsTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="cleaner"><ExtraPayTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab /></TabsContent>
+        <TabsContent value="rates"><CrewPayRatesCard /></TabsContent>
         <TabsContent value="overview"><PayrollOverview /></TabsContent>
       </Tabs>
     </div>
