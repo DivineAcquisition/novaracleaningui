@@ -214,8 +214,15 @@ serve(async (req: Request) => {
         logStep("Using React Email fallback for confirmation email");
       }
 
+      // service_date is a calendar day ("2026-08-05"), not an instant. Parsing
+      // it bare gives UTC midnight, which formats as the day BEFORE in every
+      // timezone we operate in — so the subject line of the confirmation email
+      // would name the wrong day.
+      const serviceDayAt = (ymd: string) =>
+        new Date(/^\d{4}-\d{2}-\d{2}$/.test(ymd) ? `${ymd}T12:00:00` : ymd);
+
       const formattedDate = data.serviceDate
-        ? new Date(data.serviceDate).toLocaleDateString('en-US', {
+        ? serviceDayAt(data.serviceDate).toLocaleDateString('en-US', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
@@ -231,10 +238,10 @@ serve(async (req: Request) => {
           const startHour = parseInt(timeSlotParts[0]);
           const endHour = parseInt(timeSlotParts[1]);
           
-          const serviceDate = new Date(data.serviceDate);
+          const serviceDate = serviceDayAt(data.serviceDate);
           const startDate = new Date(serviceDate);
           startDate.setHours(startHour, 0, 0, 0);
-          
+
           const endDate = new Date(serviceDate);
           endDate.setHours(endHour, 0, 0, 0);
 

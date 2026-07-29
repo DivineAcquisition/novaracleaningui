@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { SEO } from "@/components/SEO";
+import { parseServiceDate } from "@/lib/service-date";
 
 const logo = "/novara-logo.png";
 
@@ -203,7 +204,7 @@ export default function ManageBooking() {
   };
 
   const upcomingBookings = bookings.filter(
-    (b) => isFuture(new Date(b.service_date)) && b.status === "confirmed"
+    (b) => isFuture(parseServiceDate(b.service_date)) && b.status === "confirmed"
   );
   const pastBookings = bookings.filter(
     (b) => b.status === "completed" || b.status === "cancelled"
@@ -425,15 +426,15 @@ export default function ManageBooking() {
                             <div className="flex items-center gap-3">
                               <div className="text-center min-w-[48px] py-2 px-3 rounded-xl bg-primary/5">
                                 <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">
-                                  {format(new Date(booking.service_date), "MMM")}
+                                  {format(parseServiceDate(booking.service_date), "MMM")}
                                 </p>
                                 <p className="text-xl font-bold leading-tight">
-                                  {format(new Date(booking.service_date), "d")}
+                                  {format(parseServiceDate(booking.service_date), "d")}
                                 </p>
                               </div>
                               <div>
                                 <p className="font-semibold text-sm">
-                                  {format(new Date(booking.service_date), "EEEE")}
+                                  {format(parseServiceDate(booking.service_date), "EEEE")}
                                 </p>
                                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                                   <RiTimeLine className="w-3 h-3" />
@@ -517,10 +518,10 @@ export default function ManageBooking() {
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="text-center min-w-[40px]">
                               <p className="text-[9px] uppercase tracking-wider text-muted-foreground">
-                                {format(new Date(booking.service_date), "MMM")}
+                                {format(parseServiceDate(booking.service_date), "MMM")}
                               </p>
                               <p className="text-base font-bold leading-tight">
-                                {format(new Date(booking.service_date), "d")}
+                                {format(parseServiceDate(booking.service_date), "d")}
                               </p>
                             </div>
                             <div className="min-w-0">

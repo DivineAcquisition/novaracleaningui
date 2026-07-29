@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ResponsiveModal } from "@/components/booking/ResponsiveModal";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
+import { parseServiceDate } from "@/lib/service-date";
 
 /**
  * Safely format a YYYY-MM-DD service date. Internal/admin bookings can
@@ -24,8 +25,10 @@ import { SchedulePicker } from "@/components/booking/SchedulePicker";
  */
 function safeFormatDate(value: string | null | undefined, pattern: string): string {
   if (!value) return "—";
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "—";
+  // A bare service_date is a calendar day, not an instant: parsed raw it lands
+  // on UTC midnight and displays as the day before.
+  const d = parseServiceDate(value);
+  if (!d || isNaN(d.getTime())) return "—";
   return format(d, pattern);
 }
 

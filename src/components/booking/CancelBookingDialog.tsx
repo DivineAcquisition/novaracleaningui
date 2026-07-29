@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ResponsiveModal } from "@/components/booking/ResponsiveModal";
+import { parseServiceDate } from "@/lib/service-date";
 
 interface Booking {
   id: string;
@@ -59,7 +60,7 @@ export function CancelBookingDialog({
   const [isCancelling, setIsCancelling] = useState(false);
   const [refundInfo, setRefundInfo] = useState("");
 
-  const serviceDate = new Date(booking.service_date);
+  const serviceDate = parseServiceDate(booking.service_date);
   const hoursUntil = differenceInHours(serviceDate, new Date());
   const isWithin24Hours = hoursUntil < 24 && hoursUntil > 0;
   const totalDollars = (booking.total_estimate_cents / 100).toFixed(2);

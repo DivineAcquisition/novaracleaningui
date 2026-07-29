@@ -58,6 +58,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
+import { parseServiceDate } from "@/lib/service-date";
 
 const logo = "/novara-logo.png";
 
@@ -909,14 +910,14 @@ export default function ContractorJobs() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="text-center min-w-[52px] py-2 px-2.5 rounded-2xl bg-gradient-to-b from-violet-50 to-purple-50 border border-violet-100">
-                              <p className="text-[10px] uppercase tracking-wider font-bold text-violet-600">{format(new Date(job.serviceDate), "MMM")}</p>
-                              <p className="text-xl font-extrabold leading-tight text-slate-900">{format(new Date(job.serviceDate), "d")}</p>
+                              <p className="text-[10px] uppercase tracking-wider font-bold text-violet-600">{format(parseServiceDate(job.serviceDate), "MMM")}</p>
+                              <p className="text-xl font-extrabold leading-tight text-slate-900">{format(parseServiceDate(job.serviceDate), "d")}</p>
                             </div>
                             <div className="min-w-0">
                               <p className="font-bold text-[15px] leading-tight truncate">{job.customerName || "Customer"}</p>
                               <p className="text-xs text-muted-foreground">{titleCase(job.serviceType)}</p>
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <RiTimeLine className="w-3 h-3" />{format(new Date(job.serviceDate), "EEE")}{job.timeSlot ? ` · ${job.timeSlot}` : ""}
+                                <RiTimeLine className="w-3 h-3" />{format(parseServiceDate(job.serviceDate), "EEE")}{job.timeSlot ? ` · ${job.timeSlot}` : ""}
                               </p>
                             </div>
                           </div>
@@ -1075,8 +1076,8 @@ export default function ContractorJobs() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="text-center min-w-[44px] py-1.5 px-2 rounded-xl bg-muted/40">
-                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{format(new Date(job.serviceDate), "MMM")}</p>
-                              <p className="text-base font-bold leading-tight">{format(new Date(job.serviceDate), "d")}</p>
+                              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{format(parseServiceDate(job.serviceDate), "MMM")}</p>
+                              <p className="text-base font-bold leading-tight">{format(parseServiceDate(job.serviceDate), "d")}</p>
                             </div>
                             <div className="min-w-0">
                               <p className="font-semibold text-sm truncate">{job.customerName || "Customer"}</p>
@@ -1142,8 +1143,8 @@ export default function ContractorJobs() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="text-center min-w-[40px]">
-                            <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(new Date(job.serviceDate), "MMM")}</p>
-                            <p className="text-base font-bold leading-tight text-muted-foreground line-through">{format(new Date(job.serviceDate), "d")}</p>
+                            <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{format(parseServiceDate(job.serviceDate), "MMM")}</p>
+                            <p className="text-base font-bold leading-tight text-muted-foreground line-through">{format(parseServiceDate(job.serviceDate), "d")}</p>
                           </div>
                           <div className="min-w-0">
                             <p className="font-medium text-sm text-muted-foreground">{titleCase(job.serviceType || "Cleaning")}</p>
@@ -1188,7 +1189,7 @@ export default function ContractorJobs() {
                     <div className="space-y-3 pt-1 text-left">
                       <p className="text-sm text-foreground">
                         {dropJob.customerName || "Customer"} · {titleCase(dropJob.serviceType)} ·{" "}
-                        {format(new Date(dropJob.serviceDate), "EEE, MMM d")}
+                        {format(parseServiceDate(dropJob.serviceDate), "EEE, MMM d")}
                         {dropJob.timeSlot ? ` · ${dropJob.timeSlot}` : ""}
                       </p>
 

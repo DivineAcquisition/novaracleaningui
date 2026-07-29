@@ -35,6 +35,7 @@ import {
   type CleanerPortalData,
   type PortalJob,
 } from "@/components/cleaner/portal-enrichment";
+import { parseServiceDate } from "@/lib/service-date";
 
 interface CleanerProfile {
   id: string;
@@ -141,7 +142,7 @@ function getGoogleCalendarUrl(
       if (timeMatch[3]?.toLowerCase() === "pm" && hours < 12) hours += 12;
       if (timeMatch[3]?.toLowerCase() === "am" && hours === 12) hours = 0;
     }
-    start = new Date(serviceDate);
+    start = parseServiceDate(serviceDate) || new Date();
     start.setHours(hours, minutes, 0, 0);
     end = new Date(start.getTime() + (durationHours || 2) * 60 * 60 * 1000);
   } else {
@@ -819,7 +820,7 @@ export default function CleanerDashboard() {
                   const dateTime = job.start_datetime
                     ? format(new Date(job.start_datetime), "EEEE, MMM d 'at' h:mm a")
                     : job.service_date && job.time_slot
-                      ? `${format(new Date(job.service_date), "EEEE, MMM d")} at ${job.time_slot}`
+                      ? `${format(parseServiceDate(job.service_date), "EEEE, MMM d")} at ${job.time_slot}`
                       : "—";
                   const sharePct = profile?.pay_percentage ?? 35;
                   const enriched = enrichJob(job);
@@ -970,7 +971,7 @@ export default function CleanerDashboard() {
                   const dateStr = job.start_datetime
                     ? format(new Date(job.start_datetime), "MMM d, yyyy")
                     : job.service_date
-                      ? format(new Date(job.service_date), "MMM d, yyyy")
+                      ? format(parseServiceDate(job.service_date), "MMM d, yyyy")
                       : "—";
                   const zip = zipForJob(job);
                   const enriched = enrichJob(job);

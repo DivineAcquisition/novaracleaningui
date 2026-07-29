@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { parseServiceDate } from "@/lib/service-date";
 
 interface CompletedJobsProps {
   jobs: any[];
@@ -51,7 +52,7 @@ export function CompletedJobs({ jobs }: CompletedJobsProps) {
             <div className="flex items-center gap-2 text-xs">
               <RiCalendarLine className="w-3.5 h-3.5 text-muted-foreground" />
               <span>
-                {format(new Date(booking.service_date), "MMMM d, yyyy")}
+                {format(parseServiceDate(booking.service_date), "MMMM d, yyyy")}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">

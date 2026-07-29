@@ -28,6 +28,7 @@ import { RatingDialog } from "@/components/booking/RatingDialog";
 import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
+import { parseServiceDate } from "@/lib/service-date";
 
 // Signed-in customers book in-app at /portal/book (credits, saved addresses,
 // preferred cleaner, or pay for an extra clean). The public funnel on the
@@ -261,12 +262,12 @@ export default function Account() {
   };
 
   const upcomingBookings = bookings.filter(b =>
-    isFuture(new Date(b.service_date)) && b.status === 'confirmed'
+    isFuture(parseServiceDate(b.service_date)) && b.status === 'confirmed'
   );
   const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[upcomingBookings.length - 1] : null;
   const otherUpcoming = upcomingBookings.filter(b => b.id !== nextBooking?.id);
   const pastBookings = bookings.filter(b =>
-    (isPast(new Date(b.service_date)) || b.status === 'completed' || b.status === 'cancelled') && b.status !== 'pending_payment'
+    (isPast(parseServiceDate(b.service_date)) || b.status === 'completed' || b.status === 'cancelled') && b.status !== 'pending_payment'
   );
   // Surface bookings that paid but never finished the home-detail step
   // (pending_details) as well as bookings that never finished payment
@@ -354,7 +355,7 @@ export default function Account() {
                 : 'Complete Your Booking';
               const subLine = isDetailsStep
                 ? 'Payment received — share your home details so we can confirm and dispatch your cleaner.'
-                : `${format(new Date(booking.service_date), 'MMMM d')} · ${booking.service_type} · $${(booking.total_estimate_cents / 100).toFixed(2)}`;
+                : `${format(parseServiceDate(booking.service_date), 'MMMM d')} · ${booking.service_type} · $${(booking.total_estimate_cents / 100).toFixed(2)}`;
               return (
                 <Card key={booking.id} className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20 shadow-md">
                   <CardContent className="p-4">
@@ -399,7 +400,7 @@ export default function Account() {
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   </div>
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                    {format(new Date(nextBooking.service_date), "EEEE, MMMM d")}
+                    {format(parseServiceDate(nextBooking.service_date), "EEEE, MMMM d")}
                   </h2>
                   <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5">
                     <RiTimeLine className="w-3.5 h-3.5" />
@@ -603,8 +604,8 @@ export default function Account() {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-4">
                           <div className="text-center min-w-[48px] py-2 px-3 rounded-xl bg-primary/5">
-                            <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">{format(new Date(booking.service_date), 'MMM')}</p>
-                            <p className="text-xl font-bold leading-tight">{format(new Date(booking.service_date), 'd')}</p>
+                            <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">{format(parseServiceDate(booking.service_date), 'MMM')}</p>
+                            <p className="text-xl font-bold leading-tight">{format(parseServiceDate(booking.service_date), 'd')}</p>
                           </div>
                           <div>
                             <p className="font-medium text-sm">{booking.time_slot} &middot; {booking.service_type}</p>
@@ -645,8 +646,8 @@ export default function Account() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="text-center min-w-[40px]">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{format(new Date(booking.service_date), 'MMM')}</p>
-                            <p className="text-base font-bold leading-tight">{format(new Date(booking.service_date), 'd')}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{format(parseServiceDate(booking.service_date), 'MMM')}</p>
+                            <p className="text-base font-bold leading-tight">{format(parseServiceDate(booking.service_date), 'd')}</p>
                           </div>
                           <div className="min-w-0">
                             <p className="font-medium text-sm truncate">{booking.service_type} &middot; {booking.home_size_id}</p>

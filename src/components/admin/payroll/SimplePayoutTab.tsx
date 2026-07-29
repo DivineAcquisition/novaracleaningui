@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { parseServiceDate } from "@/lib/service-date";
 
 const usd = (cents: number) =>
   ((Number(cents) || 0) / 100).toLocaleString("en-US", {
@@ -57,7 +58,13 @@ const usd = (cents: number) =>
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    // Called with bare service dates, which parse to UTC midnight and would
+    // show the previous day.
+    return (parseServiceDate(iso) as Date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   } catch {
     return iso;
   }

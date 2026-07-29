@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { format, parse, addHours } from "date-fns";
 import { toast } from "sonner";
 import { downloadICalFile, addToGoogleCalendar, addToOutlookCalendar } from "@/lib/calendar";
+import { formatServiceDate, parseServiceDate } from "@/lib/service-date";
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, calculatePrice } from "@/lib/pricing-system";
 import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
@@ -534,7 +535,7 @@ export default function BookingSuccess() {
   const handleShare = async () => {
     const shareData = {
       title: 'Novara Cleaning Booking',
-      text: `My cleaning is scheduled for ${format(new Date(bookingData.serviceDate), "EEEE, MMMM d, yyyy")} at ${getTimeSlotLabel(bookingData.timeSlot)}`,
+      text: `My cleaning is scheduled for ${formatServiceDate(bookingData.serviceDate)} at ${getTimeSlotLabel(bookingData.timeSlot)}`,
       url: window.location.origin,
     };
 
@@ -592,10 +593,16 @@ export default function BookingSuccess() {
       return;
     }
 
-    const serviceDate = new Date(bookingData.serviceDate);
+    // Anchored at local noon, so the calendar event lands on the booked day
+    // rather than the evening before it.
+    const serviceDate = parseServiceDate(bookingData.serviceDate);
+    if (!serviceDate) {
+      toast.error('Missing booking date or time');
+      return;
+    }
     const startDate = new Date(serviceDate);
     startDate.setHours(timeSlot.start, 0, 0, 0);
-    
+
     const endDate = new Date(serviceDate);
     endDate.setHours(timeSlot.end, 0, 0, 0);
 
@@ -767,7 +774,7 @@ export default function BookingSuccess() {
                     <div className="flex-1">
                       <p className="text-xs md:text-sm text-muted-foreground">Date</p>
                       <p className="font-semibold text-sm md:text-base">
-                        {bookingData.serviceDate && format(new Date(bookingData.serviceDate), "EEEE, MMMM d, yyyy")}
+                        {formatServiceDate(bookingData.serviceDate)}
                       </p>
                     </div>
                   </div>

@@ -76,8 +76,15 @@ const formatAddOns = (addOns: string[]) => {
 };
 
 export const BookingConfirmation = (props: BookingConfirmationProps) => {
+  // serviceDate is a calendar day ("2026-08-05"). Parsed bare it becomes UTC
+  // midnight, which renders as the previous day everywhere we operate — so the
+  // confirmation email would name the wrong date. Anchor it at local noon.
   const formattedDate = props.serviceDate
-    ? new Date(props.serviceDate).toLocaleDateString('en-US', {
+    ? new Date(
+        /^\d{4}-\d{2}-\d{2}$/.test(props.serviceDate)
+          ? `${props.serviceDate}T12:00:00`
+          : props.serviceDate,
+      ).toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
