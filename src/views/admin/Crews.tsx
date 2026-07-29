@@ -1,10 +1,15 @@
 "use client";
 
-// ─── /admin/crews — Cleaner crews / groups ──────────────────────────────────
+// ─── Cleaner crews / groups ─────────────────────────────────────────────────
 //
 // Organise cleaners into named crews with a lead. A crew powers the contractor
 // portal "hand the clean to someone in my crew" action: a cleaner can only
 // re-assign their job to another active member of the SAME crew.
+//
+// Lives inside the cleaner directory (Cleaners → Crews) rather than as its own
+// sidebar entry — a crew is a property of the people in the directory, and
+// splitting them meant two places to answer one question. `embedded` drops the
+// standalone page chrome so it sits under the directory's own heading.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -28,7 +33,7 @@ interface Cleaner {
 
 const name = (c?: Cleaner | null) => (c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "—");
 
-export default function AdminCrews() {
+export default function AdminCrews({ embedded = false }: { embedded?: boolean } = {}) {
   const [loading, setLoading] = useState(true);
   const [crews, setCrews] = useState<Crew[]>([]);
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
@@ -102,15 +107,22 @@ export default function AdminCrews() {
   if (loading) return <div className="flex justify-center py-20"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <RiGroup2Line className="w-6 h-6 text-violet-700" /> Crews
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Group cleaners into crews with a lead. A lead can hand any of their cleans to another active member of the same crew from the contractor portal.
+    <div className={embedded ? "space-y-5" : "max-w-5xl mx-auto px-4 py-8 space-y-6"}>
+      {embedded ? (
+        <p className="text-sm text-muted-foreground">
+          A lead can hand any of their cleans to another active member of the same crew from the
+          contractor portal.
         </p>
-      </div>
+      ) : (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <RiGroup2Line className="w-6 h-6 text-violet-700" /> Crews
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Group cleaners into crews with a lead. A lead can hand any of their cleans to another active member of the same crew from the contractor portal.
+          </p>
+        </div>
+      )}
 
       <Card className="border-violet-200">
         <CardHeader className="pb-2"><CardTitle className="text-base">New crew</CardTitle></CardHeader>

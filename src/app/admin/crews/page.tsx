@@ -1,18 +1,9 @@
-import { Suspense } from "react";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import AdminCrews from "@/views/admin/Crews";
+import { redirect } from "next/navigation";
 
+// Crews moved into the cleaner directory (Cleaners → Crews). A crew is a
+// property of the people in that directory, so it belongs beside them.
 export default function Page() {
-  return (
-    <ProtectedRoute requiredRole="admin">
-      <AdminLayout>
-        <Suspense>
-          <AdminCrews />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+  redirect("/admin/cleaners");
 }
 
 export const dynamic = "force-dynamic";

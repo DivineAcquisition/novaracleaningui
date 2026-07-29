@@ -83,22 +83,20 @@ const NAV_ITEMS: NavItem[] = [
     description: "Cancel · reschedule · refund",
   },
   {
-    title: "Needs Attention",
-    url: "/admin/attention",
+    // One place for running today: at-risk bookings and coverage, staffing,
+    // the coverage map, and the sync health that explains a missing booking.
+    // These were four sidebar entries, which meant working a single late job
+    // took you across three of them.
+    title: "Operations",
+    url: "/admin/operations",
     icon: RiAlarmWarningLine,
-    description: "At-risk bookings · delays · backup cover",
+    description: "Needs attention · dispatch · map · sync health",
   },
   {
     title: "Cleaners",
     url: "/admin/cleaners",
     icon: RiToolsLine,
-    description: "Directory + onboarding",
-  },
-  {
-    title: "Dispatch",
-    url: "/admin/dispatch",
-    icon: RiRocket2Line,
-    description: "Staff jobs · offers · re-dispatch",
+    description: "Directory · applicants · crews",
   },
   {
     title: "Internal Booking",
@@ -133,16 +131,10 @@ const NAV_ITEMS: NavItem[] = [
     description: "Memberships hub · recurring cleans · cadence",
   },
   {
-    title: "Crews",
-    url: "/admin/crews",
-    icon: RiGroup2Line,
-    description: "Cleaner groups · leads · hand-offs",
-  },
-  {
     title: "Payroll",
     url: "/admin/payroll",
     icon: RiMoneyDollarCircleLine,
-    description: "Stripe Connect cleaner payouts",
+    description: "Payouts · extra pay · expenses & reimbursements",
     adminOnly: true,
   },
   {
@@ -150,26 +142,6 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/qc",
     icon: RiShieldCheckLine,
     description: "Job documentation · issues · dispute packets",
-  },
-  {
-    title: "P&L Data",
-    url: "/admin/pnl",
-    icon: RiFileChartLine,
-    description: "Expenses · ad spend · EOD — daily sheet mirror",
-    adminOnly: true,
-  },
-  {
-    title: "Map",
-    url: "/admin/map",
-    icon: RiMapPin2Line,
-    description: "Coverage × booking heatmap",
-  },
-  {
-    title: "Sync Health",
-    url: "/admin/sync",
-    icon: RiRefreshLine,
-    description: "Airtable live sync · per-flow status · review queue",
-    adminOnly: true,
   },
   {
     title: "VA Performance",
