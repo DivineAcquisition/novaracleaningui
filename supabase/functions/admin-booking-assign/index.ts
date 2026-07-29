@@ -77,7 +77,20 @@ function json(payload: unknown, status = 200) {
   });
 }
 
-async function ensureAdminOrVa(admin: ReturnType<typeof createClient>, jwt: string) {
+// Returns the acting user's id, or null for a trusted server-to-server call.
+//
+// The service-role branch exists so a cleaner ACCEPTING a coverage offer from a
+// tokenized SMS link lands on this same canonical assign path (complete job
+// transfer, prior crew withdrawn, checklist tokens issued) instead of a second
+// implementation of assignment that would inevitably drift from this one. Only
+// the service-role key itself opens it, and the caller must name who acted.
+async function ensureAdminOrVa(
+  admin: ReturnType<typeof createClient>,
+  jwt: string,
+): Promise<string | null> {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (serviceKey && jwt === serviceKey) return null;
+
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -238,6 +251,9 @@ serve(async (req) => {
     const callerId = await ensureAdminOrVa(admin, jwt);
 
     const body = await req.json().catch(() => ({}));
+    // Server-to-server callers say who they are acting for, so the audit trail
+    // never reads as "the system did it" when a person or a cleaner did.
+    const actorLabel = String(body?.actorName || "").trim() || (callerId ? "Admin" : "System");
     const action = String(body?.action || "assign").toLowerCase();
     const bookingId = String(body?.bookingId || "").trim();
 
@@ -323,17 +339,19 @@ serve(async (req) => {
       if (!bufferOverrideReason) {
         return json(bufferConflictBody(bufferCheck), 409);
       }
-      let actorName = "Admin";
-      try {
-        const { data: u } = await admin.auth.admin.getUserById(callerId);
-        actorName = u?.user?.email || actorName;
-      } catch { /* name is nice to have, not required */ }
+      let actorName = actorLabel;
+      if (callerId) {
+        try {
+          const { data: u } = await admin.auth.admin.getUserById(callerId);
+          actorName = u?.user?.email || actorName;
+        } catch { /* name is nice to have, not required */ }
+      }
       const logged = await recordBufferOverride(admin, {
         bookingId,
         cleanerIds,
         check: bufferCheck,
         reason: bufferOverrideReason,
-        actorId: callerId,
+        actorId: callerId ?? undefined,
         actorName,
       });
       if (!logged.ok) return json({ error: logged.error }, 400);
@@ -447,8 +465,10 @@ serve(async (req) => {
       booking_id: bookingId,
       job_id: jobId,
       source: "admin-booking-assign",
-      summary: `Manual assign: ${cleaners.map((c: { first_name: string; last_name: string }) => `${c.first_name} ${c.last_name}`).join(", ")}`,
-      data: { cleanerIds, mode, by: callerId },
+      summary:
+        `Manual assign: ${cleaners.map((c: { first_name: string; last_name: string }) => `${c.first_name} ${c.last_name}`).join(", ")}` +
+        ` — by ${actorLabel}`,
+      data: { cleanerIds, mode, by: callerId, actor: actorLabel },
     });
 
     // Non-critical sync — must NEVER fail the assignment (cleaners are already
