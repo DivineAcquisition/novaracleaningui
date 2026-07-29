@@ -73,6 +73,15 @@ BEGIN
 END;
 $$;
 
+-- Only the service role mints tokens (the admin edge function runs as it).
+-- Supabase's default privileges grant EXECUTE on new public-schema functions to
+-- anon and authenticated, and REVOKE ... FROM PUBLIC does NOT remove those, so
+-- they have to be revoked by name. Without this, anyone holding the publicly
+-- embedded anon key could mint a signing token for any unsigned contractor and
+-- execute their agreement.
+REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) TO service_role;
 
 -- Who still owes us a signature, and whether a link is out. The admin

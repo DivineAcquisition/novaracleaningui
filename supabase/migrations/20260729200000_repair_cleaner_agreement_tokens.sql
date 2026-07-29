@@ -61,7 +61,12 @@ BEGIN
 END;
 $$;
 
+-- Revoked by name as well as from PUBLIC: Supabase's default privileges grant
+-- EXECUTE on new public-schema functions directly to anon and authenticated, and
+-- revoking PUBLIC leaves those untouched.
 REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.mint_cleaner_agreement_token(uuid, integer) TO service_role;
 
 -- Who still owes us a signature, and whether a link is out. The admin
