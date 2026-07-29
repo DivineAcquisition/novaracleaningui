@@ -1,18 +1,16 @@
-import { Suspense } from "react";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import AdminDispatch from "@/views/admin/Dispatch";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return (
-    <ProtectedRoute requiredRole="admin">
-      <AdminLayout>
-        <Suspense>
-          <AdminDispatch />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+// Dispatch is now a tab of the Operations hub. The ?job= parameter is carried
+// through because dispatch alert emails and Discord messages already in the
+// wild deep-link to a specific job card.
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const job = Array.isArray(params.job) ? params.job[0] : params.job;
+  redirect(`/admin/operations?tab=dispatch${job ? `&job=${encodeURIComponent(job)}` : ""}`);
 }
 
 export const dynamic = "force-dynamic";

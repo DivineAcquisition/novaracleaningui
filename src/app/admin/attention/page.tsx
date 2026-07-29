@@ -1,18 +1,9 @@
-import { Suspense } from "react";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import NeedsAttention from "@/views/admin/NeedsAttention";
+import { redirect } from "next/navigation";
 
+// Needs Attention is now a tab of the Operations hub. Old bookmarks and the
+// links inside already-sent Discord alerts land in the right place.
 export default function Page() {
-  return (
-    <ProtectedRoute requiredRole="admin">
-      <AdminLayout>
-        <Suspense>
-          <NeedsAttention />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+  redirect("/admin/operations?tab=attention");
 }
 
 export const dynamic = "force-dynamic";

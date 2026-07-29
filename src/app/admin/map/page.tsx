@@ -1,18 +1,8 @@
-import { Suspense } from "react";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import AdminMap from "@/views/admin/Map";
+import { redirect } from "next/navigation";
 
+// The operational map is now a tab of the Operations hub.
 export default function Page() {
-  return (
-    <ProtectedRoute requiredRole="admin">
-      <AdminLayout>
-        <Suspense>
-          <AdminMap />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+  redirect("/admin/operations?tab=map");
 }
 
 export const dynamic = "force-dynamic";
