@@ -1,18 +1,25 @@
 // ─── admin-grant-credit ──────────────────────────────────────────────────
 //
-// Admin / VA endpoint to grant (or revoke) a dollar credit on a
-// customer's customer_credits ledger. Always writes via the
-// grant_customer_credit RPC.
+// Admin / VA endpoint to grant or remove dollar credit on a customer's
+// customer_credits ledger. Grants go through the grant_customer_credit RPC;
+// removals go through revoke_customer_credit_by_email, which marks the
+// existing available rows revoked instead of stacking a negative offset row.
+//
+// Removals never email or text the customer. Grants notify by default; pass
+// notify: false to grant quietly.
 //
 // POST body:
 //   {
 //     action: 'grant' | 'revoke',
-//     customerId: uuid,
-//     amountCents: integer,           // positive cents (revoke flips sign)
+//     customerId: uuid,                // customerId or email required
+//     email?: string,
+//     amountCents: integer,            // positive cents; ignored when all=true
+//     all?: boolean,                   // revoke only — remove the whole balance
 //     source?: 'referral'|'admin_grant'|'promo'|'refund_credit'|'perk'|'adjustment'
 //                                       default: 'admin_grant' for grant,
 //                                                'adjustment' for revoke
 //     reason?: string,                 // mandatory for revoke
+//     notify?: boolean,                // grant only, default true
 //     expiresAt?: ISO timestamp,       // grant only
 //     bookingId?: uuid                 // optional link
 //   }
@@ -72,16 +79,17 @@ serve(async (req) => {
   let customerId = body?.customerId as string | undefined;
   const customerEmail = body?.email ? String(body.email).trim() : "";
   const amountCentsRaw = Number(body?.amountCents);
+  const revokeAll = action === "revoke" && body?.all === true;
   if (!["grant", "revoke"].includes(action)) return json({ error: "action must be grant|revoke" }, 400);
   // Accept a customerId OR an email (booking-tab grants pass the booking email,
   // which we resolve — or create — into a customers row below).
   if (!customerId && !customerEmail) return json({ error: "customerId or email required" }, 400);
-  if (!Number.isFinite(amountCentsRaw) || amountCentsRaw <= 0) {
+  if (!revokeAll && (!Number.isFinite(amountCentsRaw) || amountCentsRaw <= 0)) {
     return json({ error: "amountCents must be a positive integer" }, 400);
   }
   if (action === "revoke" && !body?.reason) return json({ error: "reason required for revoke" }, 400);
 
-  const amountCents = action === "grant" ? Math.round(amountCentsRaw) : -Math.round(amountCentsRaw);
+  const amountCents = revokeAll ? 0 : Math.round(amountCentsRaw);
 
   // Normalize source to the set the grant_customer_credit RPC accepts. The admin
   // UI historically offered friendlier labels (service_recovery / goodwill /
@@ -131,6 +139,64 @@ serve(async (req) => {
     }
     if (!cust) return json({ error: "customer not found" }, 404);
     customerId = cust.id;
+    const custName = `${cust.first_name || "customer"} ${cust.last_name || ""}`.trim();
+
+    // Credits are email-keyed everywhere (balance, checkout spend), so the
+    // wallet balance an admin sees is always the by-email one.
+    const readBalance = async () => {
+      if (cust!.email) {
+        const { data } = await adminClient.rpc("get_customer_credit_balance_by_email", { _email: cust!.email });
+        return data;
+      }
+      const { data } = await adminClient.rpc("get_customer_credit_balance", { _customer_id: customerId });
+      return data;
+    };
+
+    // ─── Remove credit ─────────────────────────────────────────────────────
+    // Marks the customer's available credit rows revoked (oldest expiry first,
+    // splitting a row on a partial removal) rather than stacking a negative
+    // offset row, which used to leave the balance negative once the credit it
+    // offset expired. Silent by design: no email, no SMS.
+    if (action === "revoke") {
+      if (!cust.email) return json({ error: "customer has no email on file" }, 400);
+
+      const { data: result, error: revokeErr } = await adminClient.rpc("revoke_customer_credit_by_email", {
+        _email: cust.email,
+        _amount_cents: revokeAll ? null : amountCents,
+        _reason: String(body.reason),
+        _revoked_by: uid,
+      });
+      if (revokeErr) throw revokeErr;
+
+      const removedCents = Number((result as { revoked_cents?: number })?.revoked_cents || 0);
+      const availableCents = Number((result as { balance_cents_before?: number })?.balance_cents_before || 0);
+      if (removedCents === 0) {
+        return json({
+          error: availableCents <= 0
+            ? "This customer has no credit left to remove."
+            : `Could not remove credit — only $${(availableCents / 100).toFixed(2)} is available.`,
+        }, 400);
+      }
+
+      const balance = await readBalance();
+      await adminClient.from("events").insert({
+        event_type: "credit.revoked",
+        customer_id: customerId,
+        source: "admin-grant-credit",
+        summary: `Removed $${(removedCents / 100).toFixed(2)} credit — ${custName}`,
+        data: { amount_cents: -removedCents, reason: body.reason, by: uid, balance, result },
+      });
+
+      return json({
+        ok: true,
+        removedCents,
+        // Requesting more than the wallet holds removes what's there; say so.
+        partial: !revokeAll && removedCents < amountCents,
+        balance,
+        emailSent: false,
+        smsSent: false,
+      });
+    }
 
     const { data: inserted, error } = await adminClient.rpc("grant_customer_credit", {
       _customer_id: customerId,
@@ -144,22 +210,22 @@ serve(async (req) => {
     });
     if (error) throw error;
 
-    const { data: balance } = await adminClient.rpc("get_customer_credit_balance", { _customer_id: customerId });
+    const balance = await readBalance();
 
     await adminClient.from("events").insert({
-      event_type: action === "grant" ? "credit.granted" : "credit.revoked",
+      event_type: "credit.granted",
       customer_id: customerId,
       source: "admin-grant-credit",
-      summary: `${action === "grant" ? "Granted" : "Revoked"} $${(Math.abs(amountCents) / 100).toFixed(2)} ${source} credit — ${cust.first_name || "customer"} ${cust.last_name || ""}`.trim(),
+      summary: `Granted $${(amountCents / 100).toFixed(2)} ${source} credit — ${custName}`,
       data: { amount_cents: amountCents, source, reason: body?.reason, by: uid, balance },
     });
 
-    // ─── Notify the customer that credit was applied (grant only) ──────────
+    // ─── Notify the customer that credit was applied ───────────────────────
     // Best-effort email + SMS so the customer knows the credit is on their
-    // account and will auto-apply at checkout. Skipped for revokes.
+    // account and will auto-apply at checkout. Removals never reach here.
     let emailSent = false;
     let smsSent = false;
-    if (action === "grant" && body?.notify !== false) {
+    if (body?.notify !== false) {
       const first = cust.first_name || "there";
       const amountStr = `$${(amountCents / 100).toFixed(2)}`;
       const balanceCents = Number((balance as { balance_cents?: number })?.balance_cents || 0);

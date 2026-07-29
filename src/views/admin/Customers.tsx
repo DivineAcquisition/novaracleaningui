@@ -39,6 +39,7 @@ import {
   RiEditLine,
   RiBankCardLine,
   RiLoginBoxLine,
+  RiSubtractLine,
 } from "@remixicon/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -55,7 +56,9 @@ import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { edgeResult } from "@/lib/edge-invoke";
 import { useAdminRole } from "@/hooks/use-admin-role";
 
 interface Customer {
@@ -305,7 +308,7 @@ function CustomerSheet({
   const [balance, setBalance] = useState<CreditBalance | null>(null);
   const [loading, setLoading] = useState(false);
   const [actioning, setActioning] = useState<string | null>(null);
-  const [grantOpen, setGrantOpen] = useState(false);
+  const [creditMode, setCreditMode] = useState<"grant" | "remove" | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmDeleteName, setConfirmDeleteName] = useState("");
@@ -805,13 +808,24 @@ function CustomerSheet({
                           applied {dollars(balance?.lifetime_applied_cents || 0)}
                         </p>
                       </div>
-                      <Button
-                        onClick={() => setGrantOpen(true)}
-                        className="bg-violet-600 hover:bg-violet-700 text-white"
-                      >
-                        <RiGift2Line className="w-4 h-4 mr-1.5" />
-                        Grant credit
-                      </Button>
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <Button
+                          onClick={() => setCreditMode("grant")}
+                          className="bg-violet-600 hover:bg-violet-700 text-white"
+                        >
+                          <RiGift2Line className="w-4 h-4 mr-1.5" />
+                          Grant credit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setCreditMode("remove")}
+                          disabled={(balance?.balance_cents || 0) <= 0}
+                          className="border-rose-200 text-rose-700 bg-white hover:bg-rose-50"
+                        >
+                          <RiSubtractLine className="w-4 h-4 mr-1.5" />
+                          Remove credit
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
 
@@ -830,7 +844,9 @@ function CustomerSheet({
                             <span
                               className={cn(
                                 "font-medium",
-                                w.amount_cents > 0 ? "text-violet-700" : "text-rose-700",
+                                w.status === "revoked" && "line-through text-rose-700",
+                                w.status !== "revoked" &&
+                                  (w.amount_cents > 0 ? "text-violet-700" : "text-rose-700"),
                               )}
                             >
                               {w.amount_cents > 0 ? "+" : ""}
@@ -839,8 +855,14 @@ function CustomerSheet({
                             <span className="text-slate-500">{w.source}</span>
                             {w.reason ? <span className="text-slate-500"> · {w.reason}</span> : null}
                           </div>
-                          <Badge variant="outline" className="text-[10px] border-slate-200">
-                            {w.status}
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] border-slate-200",
+                              w.status === "revoked" && "border-rose-200 bg-rose-50 text-rose-700",
+                            )}
+                          >
+                            {w.status === "revoked" ? "removed" : w.status}
                           </Badge>
                         </li>
                       ))}
@@ -850,11 +872,12 @@ function CustomerSheet({
               </Tabs>
             </div>
 
-            <GrantCreditDialog
-              open={grantOpen}
-              onOpenChange={setGrantOpen}
+            <CreditAdjustDialog
+              mode={creditMode}
+              onOpenChange={(v) => !v && setCreditMode(null)}
               customer={customer}
-              onGranted={() => {
+              balanceCents={balance?.balance_cents || 0}
+              onDone={() => {
                 onChange();
                 if (customer) void loadDetail(customer);
               }}
@@ -1065,65 +1088,117 @@ function EditCustomerDialog({
   );
 }
 
-// ─── Grant credit dialog ─────────────────────────────────────────────────
+// ─── Grant / remove credit dialog ────────────────────────────────────────
 
-function GrantCreditDialog({
-  open,
+function CreditAdjustDialog({
+  mode,
   onOpenChange,
   customer,
-  onGranted,
+  balanceCents,
+  onDone,
 }: {
-  open: boolean;
+  mode: "grant" | "remove" | null;
   onOpenChange: (v: boolean) => void;
   customer: Customer;
-  onGranted: () => void;
+  balanceCents: number;
+  onDone: () => void;
 }) {
+  const removing = mode === "remove";
   const [amount, setAmount] = useState("50");
   const [source, setSource] = useState("admin_grant");
   const [reason, setReason] = useState("");
+  const [notify, setNotify] = useState(true);
+  const [removeAll, setRemoveAll] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!mode) return;
+    setAmount(removing ? (balanceCents / 100).toFixed(2) : "50");
+    setSource("admin_grant");
+    setReason("");
+    setNotify(true);
+    setRemoveAll(false);
+  }, [mode, removing, balanceCents]);
+
+  const cents = Math.round(parseFloat(amount) * 100);
+  const removingCents = removeAll ? balanceCents : cents;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cents = Math.round(parseFloat(amount) * 100);
-    if (!Number.isFinite(cents) || cents <= 0) {
+    if (!removeAll && (!Number.isFinite(cents) || cents <= 0)) {
       toast.error("Enter a positive dollar amount");
+      return;
+    }
+    if (removing && !reason.trim()) {
+      toast.error("Add a reason so the ledger says why the credit came off");
+      return;
+    }
+    if (removing && !removeAll && cents > balanceCents) {
+      toast.error(`Only ${dollars(balanceCents)} available to remove`);
       return;
     }
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-grant-credit", {
-        body: {
-          action: "grant",
-          customerId: customer.id,
-          amountCents: cents,
-          source,
-          reason: reason || `Manual grant by admin`,
-        },
+        body: removing
+          ? {
+              action: "revoke",
+              customerId: customer.id,
+              amountCents: removeAll ? undefined : cents,
+              all: removeAll || undefined,
+              reason: reason.trim(),
+            }
+          : {
+              action: "grant",
+              customerId: customer.id,
+              amountCents: cents,
+              source,
+              reason: reason || `Manual grant by admin`,
+              notify,
+            },
       });
-      if (error) throw error;
-      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-      const notified = [(data as { emailSent?: boolean })?.emailSent && "email", (data as { smsSent?: boolean })?.smsSent && "SMS"].filter(Boolean).join(" + ");
-      toast.success(`Credited $${(cents / 100).toFixed(2)}${notified ? ` · ${notified} sent` : ""}`);
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error);
+      if (removing) {
+        const removed = Number((data as { removedCents?: number })?.removedCents || 0);
+        toast.success(`Removed ${dollars(removed)} — customer not notified`);
+      } else {
+        const notified = [(data as { emailSent?: boolean })?.emailSent && "email", (data as { smsSent?: boolean })?.smsSent && "SMS"].filter(Boolean).join(" + ");
+        toast.success(`Credited ${dollars(cents)}${notified ? ` · ${notified} sent` : " · no notification sent"}`);
+      }
       onOpenChange(false);
-      onGranted();
+      onDone();
     } catch (err: any) {
-      toast.error(err?.message || "Grant failed");
+      toast.error(err?.message || (removing ? "Remove failed" : "Grant failed"));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={mode !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Grant credit</DialogTitle>
+          <DialogTitle className={cn(removing && "text-rose-900")}>
+            {removing ? "Remove credit" : "Grant credit"}
+          </DialogTitle>
           <DialogDescription>
-            Credits land in the customer's wallet immediately, auto-apply to their next booking, and the customer is emailed + texted that the credit was applied.
+            {removing ? (
+              <>
+                Takes credit back off {fullName(customer)}'s wallet, soonest-expiring first.
+                They are never emailed or texted about a removal.
+              </>
+            ) : (
+              <>Credits land in the customer's wallet immediately and auto-apply to their next booking.</>
+            )}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
+          {removing ? (
+            <p className="text-sm text-slate-600">
+              Available balance <strong className="text-slate-900">{dollars(balanceCents)}</strong>
+            </p>
+          ) : null}
           <div>
             <Label className="text-sm">Amount (USD)</Label>
             <Input
@@ -1132,39 +1207,69 @@ function GrantCreditDialog({
               step="1"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              required
+              disabled={removeAll}
+              required={!removeAll}
             />
           </div>
+          {removing ? (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <Switch checked={removeAll} onCheckedChange={setRemoveAll} />
+              Remove the entire {dollars(balanceCents)} balance
+            </label>
+          ) : (
+            <div>
+              <Label className="text-sm">Source</Label>
+              <Select value={source} onValueChange={setSource}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin_grant">Admin grant</SelectItem>
+                  <SelectItem value="refund_credit">Refund as credit</SelectItem>
+                  <SelectItem value="promo">Promo</SelectItem>
+                  <SelectItem value="perk">Loyalty perk / goodwill</SelectItem>
+                  <SelectItem value="adjustment">Service recovery / adjustment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
-            <Label className="text-sm">Source</Label>
-            <Select value={source} onValueChange={setSource}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin_grant">Admin grant</SelectItem>
-                <SelectItem value="refund_credit">Refund as credit</SelectItem>
-                <SelectItem value="promo">Promo</SelectItem>
-                <SelectItem value="perk">Loyalty perk / goodwill</SelectItem>
-                <SelectItem value="adjustment">Service recovery / adjustment</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-sm">Reason (visible to customer)</Label>
+            <Label className="text-sm">
+              {removing ? "Reason (internal only)" : "Reason (visible to customer)"}
+            </Label>
             <Input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g., Sorry about the late arrival on 6/12"
+              placeholder={
+                removing
+                  ? "e.g., Duplicate goodwill credit issued on 7/2"
+                  : "e.g., Sorry about the late arrival on 6/12"
+              }
+              required={removing}
             />
           </div>
+          {removing ? null : (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <Switch checked={notify} onCheckedChange={setNotify} />
+              Email + text the customer about this credit
+            </label>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 text-white">
+            <Button
+              type="submit"
+              disabled={busy || (removing && balanceCents <= 0)}
+              className={cn(
+                "text-white",
+                removing ? "bg-rose-600 hover:bg-rose-700" : "bg-violet-600 hover:bg-violet-700",
+              )}
+            >
               {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
-              Grant ${amount || "0"}
+              {removing
+                ? `Remove ${dollars(Number.isFinite(removingCents) ? removingCents : 0)}`
+                : `Grant $${amount || "0"}`}
             </Button>
           </DialogFooter>
         </form>
