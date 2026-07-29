@@ -34,7 +34,7 @@ serve(async (req) => {
     const { data: assignment, error: aErr } = await supabase
       .from("job_assignments")
       .select(
-        "id, job_id, cleaner_id, status, role, distance_miles, pay_rate_hr, pay_percentage_snapshot, estimated_pay_cents, expires_at, accepted_at, declined_at, response_token",
+        "id, job_id, cleaner_id, status, role, distance_miles, pay_rate_hr, pay_percentage_snapshot, estimated_pay_cents, crew_size_snapshot, expires_at, accepted_at, declined_at, response_token",
       )
       .eq("response_token", token)
       .maybeSingle();
@@ -56,7 +56,7 @@ serve(async (req) => {
         .maybeSingle(),
       supabase
         .from("cleaners")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, pay_tier")
         .eq("id", assignment.cleaner_id)
         .maybeSingle(),
     ]);
@@ -108,7 +108,12 @@ serve(async (req) => {
         job: job || null,
         booking,
         customer,
-        cleaner: { first_name: cleaner?.first_name || null },
+        cleaner: {
+          first_name: cleaner?.first_name || null,
+          // Tier name so the portal can say "Proven rate 45%" rather than a bare
+          // percentage the cleaner has to interpret.
+          pay_tier: cleaner?.pay_tier || null,
+        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );

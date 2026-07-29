@@ -132,8 +132,20 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
           <li>• Payouts are processed automatically when jobs are marked complete</li>
           <li>• Money is transferred to your linked bank account via Stripe</li>
           <li>• Transfers typically arrive in 1-2 business days</li>
-          <li>• You earn a flat percentage of every job's revenue (35% Foundation, 40% Proven, 45% Elite)</li>
-          <li>• Multi-cleaner jobs split the pool evenly across the team</li>
+          <li>• You earn a percentage of every job&apos;s value, set by your tier</li>
+          <li>
+            • Working with a crew earns a <strong>higher</strong> rate than working solo — two
+            cleaners don&apos;t halve the work, so the crew rate rises to keep your hourly fair
+          </li>
+          <li>
+            • On a crew job the percentage is the share paid to the <strong>whole crew</strong> and
+            divided between you — it isn&apos;t paid to each person
+          </li>
+          <li>
+            • Your pay is based on the final value of the job and the size of the crew assigned. If
+            the job&apos;s value changes or the crew changes, your pay is recalculated to match
+          </li>
+          <li>• Every job in your history shows the crew size and the rate applied</li>
         </ul>
       </Card>
     </div>

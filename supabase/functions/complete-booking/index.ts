@@ -4,6 +4,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,78 +92,87 @@ serve(async (req) => {
 
     logStep("Booking validated");
 
-    // ─── Recompute cleaner payout using actual assigned cleaner ────
+    // ─── Final pay, computed from the crew that actually performed ────
     //
-    // create-payment-intent writes cleaner_payout_cents at booking
-    // time using the DEFAULT 40% (Foundation) because no cleaner is
-    // assigned yet. By the time complete-booking runs, the actual
-    // assigned cleaner's tier may be Proven (45%) or Elite (50%) — and
-    // for multi-cleaner jobs we have to use the highest tier on the
-    // team. Recompute now so the payouts ledger and process-payout see
-    // the correct number.
+    // Booking-time code stamps cleaner_payout_cents at the default rate because
+    // nobody is assigned yet. This is the moment the real answer is knowable:
+    // the performing crew is settled, so both the tier rate AND the crew-size
+    // bracket are final.
+    //
+    // Crew size matters to the rate now, not just the split — a crew of 2+ earns
+    // a higher pool rate (40/45/50) than a solo cleaner (35/40/45), because two
+    // cleaners take ~60% of solo time each rather than half, so labour hours rise.
+    // Pay locks here.
     let recomputedPayoutCents = booking.cleaner_payout_cents || 0;
-    let recomputedPayPct = 40;
+    let recomputedPayPct = 0;
     try {
       const { data: assigns } = await supabase
         .from("job_assignments")
-        .select(
-          "id, cleaner_id, role, pay_percentage_snapshot, cleaners(pay_percentage)",
-        )
+        .select("id, cleaner_id, role, pay_percentage_snapshot")
         .eq("job_id", booking.job_id || "")
         .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "completed"]);
 
-      const team: Array<{ id: string; pct: number }> = [];
-      if (assigns?.length) {
-        for (const a of assigns) {
-          const pct = Number(
-            (a as any).pay_percentage_snapshot
-              || ((a as any).cleaners?.pay_percentage)
-              || 0,
-          ) || 35;
-          team.push({ id: a.cleaner_id, pct });
-        }
-      }
-      // Always include the booking's primary cleaner_id even if no
-      // job_assignment row exists (admin-assigned booking).
-      if (booking.cleaner_id && !team.find((t) => t.id === booking.cleaner_id)) {
-        const { data: c } = await supabase
-          .from("cleaners")
-          .select("pay_percentage")
-          .eq("id", booking.cleaner_id)
-          .maybeSingle();
-        team.push({ id: booking.cleaner_id, pct: Number(c?.pay_percentage) || 35 });
+      // The crew that PERFORMED the job, which is not necessarily the crew that
+      // was booked. If a job was booked for two and one no-showed, only the
+      // cleaner who turned up is here — and they are paid the SOLO rate, because
+      // they did solo work.
+      const performingCrew: string[] = (assigns || [])
+        .map((a: { cleaner_id: string }) => a.cleaner_id)
+        .filter(Boolean);
+      // Admin-assigned bookings can have no assignment row at all.
+      if (booking.cleaner_id && !performingCrew.includes(booking.cleaner_id)) {
+        performingCrew.push(booking.cleaner_id);
       }
 
-      if (team.length > 0) {
+      if (performingCrew.length > 0) {
+        // Pay follows the FINAL approved job value, so add-ons and approved
+        // scope adjustments are already reflected here. Discounts, credits and
+        // referral rewards are margin-funded and never reduce this figure.
         const revenue = booking.final_charge_cents
           || booking.total_estimate_cents
           || 0;
-        recomputedPayPct = team.reduce((m, t) => Math.max(m, t.pct), 35);
-        const pool = Math.floor((revenue * recomputedPayPct) / 100);
-        const perCleaner = Math.floor(pool / team.length);
-        recomputedPayoutCents = perCleaner;
 
-        // Update each assignment's estimated_pay_cents to the final
-        // per-cleaner number, and stamp the booking with the pool/lead
-        // share so process-payout transfers the right amount.
-        if (assigns?.length) {
-          await Promise.all(
-            assigns.map((a) =>
-              supabase
-                .from("job_assignments")
-                .update({
-                  estimated_pay_cents: perCleaner,
-                  pay_percentage_snapshot: recomputedPayPct,
-                })
-                .eq("id", a.id),
-            ),
-          );
+        // One authoritative calculation. Each cleaner earns their OWN tier's
+        // rate for this crew size, divided by the crew size — so a mixed crew is
+        // paid correctly instead of everyone riding the highest tier.
+        const shares = await computeCrewPay(supabase, revenue, performingCrew);
+
+        const now = new Date().toISOString();
+        for (const a of (assigns || []) as { id: string; cleaner_id: string }[]) {
+          const share = shareFor(shares, a.cleaner_id);
+          if (!share) continue;
+          await supabase
+            .from("job_assignments")
+            .update({
+              estimated_pay_cents: share.shareCents,
+              pay_percentage_snapshot: share.ratePercent,
+              crew_size_snapshot: share.crewSize,
+              // The performing crew is final, so the figure is now locked.
+              // Changing it afterwards is an admin action that has to be logged.
+              pay_locked_at: now,
+            })
+            .eq("id", a.id);
         }
-        logStep("Recomputed payout (revenue share)", {
+
+        // process-payout transfers to the booking's lead cleaner, so stamp that
+        // cleaner's own share rather than an average.
+        const leadShare = shareFor(shares, booking.cleaner_id)
+          || shares[0]
+          || null;
+        if (leadShare) {
+          recomputedPayoutCents = leadShare.shareCents;
+          recomputedPayPct = leadShare.ratePercent;
+        }
+
+        logStep("Recomputed payout (crew-size rate)", {
           revenue,
-          payPct: recomputedPayPct,
-          cleanerCount: team.length,
-          perCleaner,
+          crewSize: shares[0]?.crewSize ?? performingCrew.length,
+          poolCents: shares.reduce((s, x) => s + x.shareCents, 0),
+          shares: shares.map((s) => ({
+            tier: s.payTier,
+            rate: s.ratePercent,
+            cents: s.shareCents,
+          })),
         });
       }
     } catch (recalcErr) {

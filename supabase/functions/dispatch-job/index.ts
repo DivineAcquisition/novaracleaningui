@@ -9,6 +9,7 @@ import { scoreCleanerForJob } from "../_shared/dispatch-scoring.ts";
 import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-approval.ts";
 import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
+import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 
 // Pull the human-readable date + arrival window for a job from its linked
 // booking. We display the booking's stored time_slot (e.g. "8-12" →
@@ -573,13 +574,17 @@ serve(async (req) => {
     const revenueCents = Number(
       linkedBooking?.final_charge_cents || linkedBooking?.total_estimate_cents || 0,
     );
-    const cleanerCount = Math.max(1, selectedCleaners.length);
-    const teamMaxPct = selectedCleaners.reduce((m: number, c: any) => {
-      const p = Number(c.pay_percentage) || 35;
-      return p > m ? p : m;
-    }, 35);
-    const poolCents = Math.floor((revenueCents * teamMaxPct) / 100);
-    const perCleanerPayCents = Math.floor(poolCents / cleanerCount);
+    // Offer-time estimate at the crew size being dispatched. Each cleaner sees
+    // their OWN tier's rate for that crew size, so the number in the offer is the
+    // number they'd actually be paid — rather than a team average they then have
+    // to reconcile. It is still an estimate: if the crew that performs the job
+    // differs (a no-show, a backup added), complete-booking recomputes at the
+    // real crew size and the cleaner is notified.
+    const offerShares = await computeCrewPay(
+      supabase,
+      revenueCents,
+      selectedCleaners.map((c: { id: string }) => c.id),
+    );
 
     const expiresAtIso = offerExpiresAtFromNow();
 
@@ -587,6 +592,7 @@ serve(async (req) => {
       const tokenBytes = new Uint8Array(16);
       crypto.getRandomValues(tokenBytes);
       const responseToken = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const share = shareFor(offerShares, cleaner.id);
       return {
         job_id: jobId,
         cleaner_id: cleaner.id,
@@ -594,8 +600,9 @@ serve(async (req) => {
         role: index === 0 && (alreadyConfirmed ?? 0) === 0 ? "Lead" : "Support",
         status: "Offered",
         pay_rate_hr: cleaner.pay_rate_hr || 18,
-        pay_percentage_snapshot: teamMaxPct,
-        estimated_pay_cents: perCleanerPayCents,
+        pay_percentage_snapshot: share?.ratePercent ?? null,
+        estimated_pay_cents: share?.shareCents ?? 0,
+        crew_size_snapshot: share?.crewSize ?? selectedCleaners.length,
         expires_at: expiresAtIso,
         response_token: responseToken,
       };
@@ -612,7 +619,11 @@ serve(async (req) => {
 
     // STAGE 5: SMS proximity-selected cleaners (10 min window, dedicated from #)
     logStep("Sending job-offer SMS to auto-selected cleaners");
-    const teamSize = cleanerCount;
+    const teamSize = Math.max(1, selectedCleaners.length);
+    // The pool is the sum of the crew's individual shares, which varies with crew
+    // composition — an all-Foundation crew costs less than an all-Elite one. It is
+    // not one rate times the job value any more.
+    const offerPoolCents = offerShares.reduce((sum, s) => sum + s.shareCents, 0);
     const expiresAtDate = new Date(expiresAtIso);
     const { dateLabel: jobDateFormatted, arrivalWindow } = await getJobWhenLabels(
       supabase,
@@ -640,10 +651,10 @@ serve(async (req) => {
         distanceMiles: Number(assignment.distance_miles) || 0,
         role: assignment.role || "Support",
         teamSize,
-        perCleanerPayCents: assignment.estimated_pay_cents || perCleanerPayCents,
+        perCleanerPayCents: assignment.estimated_pay_cents || 0,
         sharePct,
         revenueCents,
-        teamPoolCents: poolCents,
+        teamPoolCents: offerPoolCents,
         offerUrl,
         expiresAt: expiresAtDate,
       });

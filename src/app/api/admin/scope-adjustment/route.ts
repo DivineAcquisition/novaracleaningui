@@ -23,6 +23,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { computeCrewPay, shareFor } from "@/lib/crew-pay";
 import { syncJobByBookingId, DEFAULT_LIVE_ENTRY_SOURCE } from "@/lib/airtable/sync";
 import {
   draftJustificationMessage,
@@ -530,56 +531,60 @@ async function protectCleanerPay(
   try {
     const { data: assigns } = await supabase
       .from("job_assignments")
-      .select("id, cleaner_id, pay_percentage_snapshot, cleaners(pay_percentage)")
+      .select("id, cleaner_id, estimated_pay_cents")
       .eq("job_id", booking.job_id || "")
       .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "completed"]);
 
-    const team: Array<{ id: string; pct: number }> = [];
-    for (const a of assigns || []) {
-      // The embedded cleaner comes back as an object or a single-element
-      // array depending on how PostgREST infers the relationship.
-      const joined = Array.isArray(a.cleaners) ? a.cleaners[0] : a.cleaners;
-      const pct = Number(a.pay_percentage_snapshot || joined?.pay_percentage || 0) || 35;
-      team.push({ id: a.cleaner_id, pct });
-    }
+    // The crew that performed the work. Crew size drives the RATE now, not just
+    // the split, so it has to come from the real crew rather than the booking's
+    // planned headcount.
+    const crew: string[] = (assigns || [])
+      .map((a: { cleaner_id: string }) => a.cleaner_id)
+      .filter(Boolean);
     // An admin-assigned booking may have no assignment row.
-    if (booking.cleaner_id && !team.some((t) => t.id === booking.cleaner_id)) {
-      const { data: c } = await supabase
-        .from("cleaners")
-        .select("pay_percentage")
-        .eq("id", booking.cleaner_id)
-        .maybeSingle();
-      team.push({ id: booking.cleaner_id, pct: Number(c?.pay_percentage) || 35 });
+    if (booking.cleaner_id && !crew.includes(booking.cleaner_id)) {
+      crew.push(booking.cleaner_id);
     }
-    if (team.length === 0) return result;
+    if (crew.length === 0) return result;
 
-    const payPercentage = team.reduce((m, t) => Math.max(m, t.pct), 35);
-    const pool = Math.floor((adjustedRevenueCents * payPercentage) / 100);
-    const perCleaner = Math.floor(pool / team.length);
+    // The adjusted value is the final approved value, so pay rises with it —
+    // each cleaner at their own tier's rate for this crew size.
+    const shares = await computeCrewPay(supabase, adjustedRevenueCents, crew);
+    if (shares.length === 0) return result;
 
-    result.payPercentage = payPercentage;
-    result.cleanerCount = team.length;
-    result.perCleanerCents = perCleaner;
+    result.payPercentage = shares[0].ratePercent;
+    result.cleanerCount = shares[0].crewSize;
+
+    const leadShare = shareFor(shares, booking.cleaner_id) || shares[0];
+    result.perCleanerCents = leadShare.shareCents;
 
     if (alreadyReleased) {
       // Do not rewrite what was already paid — record the gap instead.
-      result.supplementCents = Math.max(0, perCleaner - before);
+      result.supplementCents = Math.max(0, leadShare.shareCents - before);
       return result;
     }
 
-    // Never move pay down.
-    const after = Math.max(before, perCleaner);
+    // Never move pay down: the crew did the work at the higher scope.
+    const after = Math.max(before, leadShare.shareCents);
     result.after = after;
     if (after !== before) {
       await supabase.from("bookings").update({ cleaner_payout_cents: after }).eq("id", booking.id);
     }
     await Promise.all(
-      (assigns || []).map((a: { id: string; estimated_pay_cents?: number | null }) =>
-        supabase
+      (assigns || []).map((a: { id: string; cleaner_id: string; estimated_pay_cents?: number | null }) => {
+        const share = shareFor(shares, a.cleaner_id);
+        if (!share) return Promise.resolve();
+        // Per-cleaner, so a mixed crew isn't flattened onto one number.
+        const next = Math.max(Number(a.estimated_pay_cents || 0), share.shareCents);
+        return supabase
           .from("job_assignments")
-          .update({ estimated_pay_cents: after, pay_percentage_snapshot: payPercentage })
-          .eq("id", a.id),
-      ),
+          .update({
+            estimated_pay_cents: next,
+            pay_percentage_snapshot: share.ratePercent,
+            crew_size_snapshot: share.crewSize,
+          })
+          .eq("id", a.id);
+      }),
     );
   } catch (e) {
     // eslint-disable-next-line no-console
