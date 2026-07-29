@@ -119,6 +119,46 @@ async function ghlFetch(path: string, init: RequestInit, token: string) {
   return res;
 }
 
+// GHL enforces two separate rate limits, and they fail identically (HTTP 429):
+//   • a BURST limit  (x-ratelimit-remaining, resets every ~10s) — transient,
+//     worth one retry.
+//   • a DAILY limit  (x-ratelimit-daily-remaining, resets at the daily window)
+//     — once it hits 0 every call 429s for hours, and retrying is pointless.
+// Distinguishing them is the difference between "try again in a second" and
+// "GHL is down for us until the quota resets", which callers need to know so a
+// spent daily quota isn't mistaken for a bad phone number.
+interface RateInfo {
+  limited: boolean;
+  dailyExhausted: boolean;
+  dailyRemaining: string | null;
+  intervalMs: number;
+}
+function readRateInfo(res: Response): RateInfo {
+  const dailyRemaining = res.headers.get("x-ratelimit-daily-remaining");
+  return {
+    limited: res.status === 429,
+    dailyExhausted: res.status === 429 && dailyRemaining === "0",
+    dailyRemaining,
+    intervalMs: Number(res.headers.get("x-ratelimit-interval-milliseconds") || "0"),
+  };
+}
+
+// Retry a GHL call ONCE on a burst-limit 429. A daily-exhausted 429 is returned
+// as-is — waiting 10s wouldn't help when the window resets in hours.
+async function ghlFetchRetry(path: string, init: RequestInit, token: string) {
+  let res = await ghlFetch(path, init, token);
+  if (res.status === 429) {
+    const info = readRateInfo(res);
+    if (!info.dailyExhausted) {
+      const wait = Math.min(Math.max(info.intervalMs, 1000), 3000);
+      logStep("burst rate-limited — retrying once", { path, waitMs: wait });
+      await new Promise((r) => setTimeout(r, wait));
+      res = await ghlFetch(path, init, token);
+    }
+  }
+  return res;
+}
+
 // Look up a phoneNumberId by its E.164 'phoneNumber' so operators can
 // configure GHL_DEFAULT_SMS_FROM_NUMBER (the friendly +1… string) and we
 // resolve the id at first use, cached per cold start.
@@ -156,14 +196,18 @@ async function resolvePhoneNumberId(
   }
 }
 
+interface ContactResolution {
+  contactId: string | null;
+  rate: RateInfo | null;
+}
 async function resolveContactId(
   body: Body,
   token: string,
   locationId: string,
   normalizedPhone: string | null,
-): Promise<string | null> {
-  if (body.contactId) return body.contactId;
-  if (!body.email && !normalizedPhone) return null;
+): Promise<ContactResolution> {
+  if (body.contactId) return { contactId: body.contactId, rate: null };
+  if (!body.email && !normalizedPhone) return { contactId: null, rate: null };
   const upsertBody: Record<string, unknown> = {
     locationId,
     email: body.email || undefined,
@@ -172,19 +216,27 @@ async function resolveContactId(
     lastName: body.lastName || undefined,
     country: "US",
   };
-  const res = await ghlFetch(
+  const res = await ghlFetchRetry(
     "/contacts/upsert",
     { method: "POST", body: JSON.stringify(upsertBody) },
     token,
   );
+  if (res.status === 429) {
+    const rate = readRateInfo(res);
+    logStep("upsert rate-limited", rate);
+    return { contactId: null, rate };
+  }
   if (!res.ok) {
     const text = await res.text();
     logStep("upsert failed", { status: res.status, body: text.slice(0, 300) });
-    return null;
+    return { contactId: null, rate: null };
   }
   const json = await res.json();
-  return (json?.contact?.id as string | undefined) ||
-    (json?.id as string | undefined) || null;
+  return {
+    contactId: (json?.contact?.id as string | undefined) ||
+      (json?.id as string | undefined) || null,
+    rate: null,
+  };
 }
 
 serve(async (req) => {
@@ -258,13 +310,34 @@ serve(async (req) => {
     }
 
     // 3. Resolve / upsert the contact.
-    const contactId = await resolveContactId(
+    const resolution = await resolveContactId(
       body,
       token,
       locationId,
       normalizedPhone,
     );
+    const contactId = resolution.contactId;
     if (!contactId) {
+      // A 429 here is NOT "no such contact" — it's GHL refusing the call. Say
+      // so distinctly (429 + rateLimited) so callers don't fall through to a
+      // Telnyx/other transport on what is really a temporary GHL throttle, and
+      // so logs stop blaming the phone number.
+      if (resolution.rate?.limited) {
+        return new Response(
+          JSON.stringify({
+            error: resolution.rate.dailyExhausted
+              ? "GHL daily API quota exhausted — cannot send until it resets."
+              : "GHL is rate-limiting requests right now.",
+            rateLimited: true,
+            dailyExhausted: resolution.rate.dailyExhausted,
+            dailyRemaining: resolution.rate.dailyRemaining,
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 429,
+          },
+        );
+      }
       return new Response(
         JSON.stringify({ error: "unable to resolve contactId" }),
         {
@@ -296,12 +369,31 @@ serve(async (req) => {
     };
     if (phoneNumberId) messagePayload.phoneNumberId = phoneNumberId;
 
-    const res = await ghlFetch(
+    const res = await ghlFetchRetry(
       "/conversations/messages",
       { method: "POST", body: JSON.stringify(messagePayload) },
       token,
     );
     const text = await res.text();
+    if (res.status === 429) {
+      const rate = readRateInfo(res);
+      logStep("send rate-limited", rate);
+      return new Response(
+        JSON.stringify({
+          error: rate.dailyExhausted
+            ? "GHL daily API quota exhausted — cannot send until it resets."
+            : "GHL is rate-limiting requests right now.",
+          rateLimited: true,
+          dailyExhausted: rate.dailyExhausted,
+          dailyRemaining: rate.dailyRemaining,
+          contactId,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429,
+        },
+      );
+    }
     if (!res.ok) {
       // The recipient texted STOP. This is a PERMANENT condition, not an
       // error: report success + suppressed so cron callers stamp their
