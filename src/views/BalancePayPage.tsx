@@ -9,7 +9,7 @@
 // the figure disputes it.
 
 import { Elements } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
+import type { Stripe } from "@stripe/stripe-js";
 import {
   RiCheckboxCircleFill,
   RiCheckLine,
@@ -23,9 +23,8 @@ import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
+import { getStripePromise } from "@/lib/stripe-client";
 import { cn } from "@/lib/utils";
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
 const money = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
@@ -81,6 +80,7 @@ export default function BalancePayPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [justPaid, setJustPaid] = useState(false);
@@ -119,6 +119,9 @@ export default function BalancePayPage() {
         setJustPaid(true);
         return;
       }
+      // Same key resolution as /pay — env when present, edge fallback otherwise.
+      // loadStripe("") silently fails and leaves the Payment Element blank.
+      setStripePromise(getStripePromise());
       setClientSecret(data.clientSecret as string);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : String(e));
@@ -325,14 +328,14 @@ export default function BalancePayPage() {
             </div>
           ) : null}
 
-          {!clientSecret && starting ? (
+          {!payError && (starting || !clientSecret || !stripePromise) ? (
             <p className="flex items-center gap-1.5 text-xs text-slate-500">
               <RiLoader4Line className="h-3.5 w-3.5 animate-spin" />
               Preparing secure payment…
             </p>
           ) : null}
 
-          {clientSecret ? (
+          {clientSecret && stripePromise ? (
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <StripePaymentForm
                 amount={summary.balanceDueCents}
