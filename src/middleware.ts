@@ -107,6 +107,12 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // shareable URL works for everyone without a portal login.
   ["/photos", "try"],
 
+  // Final-balance page (tokenized link sent after the clean). Shows what was
+  // actually done — add-ons performed, any scope adjustment — then collects the
+  // remaining balance. Sits next to /pay on try.* for the same reason: the link
+  // has to work with no login.
+  ["/pay-balance", "try"],
+
   // Custom deposit checkout for internal bookings (tokenized link sent to
   // the customer). Sign the service agreement → pay the deposit + save the
   // card. Lives on try.* so the link works without any login.

@@ -30,6 +30,7 @@ import {
 } from "@remixicon/react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripePromise } from "@/lib/stripe-client";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
@@ -64,6 +65,15 @@ interface PaySummary {
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
+interface PayPageAddOn {
+  id: string;
+  label: string;
+  note: string;
+  priceCents: number;
+  includedFree: boolean;
+  selected: boolean;
+}
+
 const SERVICE_LABELS: Record<string, string> = {
   standard: "Standard Clean",
   deep: "Deep Clean",
@@ -94,6 +104,15 @@ export default function PayPage() {
   const [intentLoading, setIntentLoading] = useState(false);
   const [paidNow, setPaidNow] = useState(false);
 
+  // Add-on step state. Customers routinely realise they want the fridge or the
+  // oven doing once they're looking at the booking, and the alternative is a
+  // phone call to an admin who then has to reprice by hand.
+  const [addOns, setAddOns] = useState<PayPageAddOn[] | null>(null);
+  const [addOnsLocked, setAddOnsLocked] = useState(false);
+  const [addOnsOpen, setAddOnsOpen] = useState(false);
+  const [savingAddOns, setSavingAddOns] = useState(false);
+  const [addOnError, setAddOnError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadErr(null);
@@ -119,6 +138,73 @@ export default function PayPage() {
   useEffect(() => {
     if (token) void load();
   }, [token, load]);
+
+  const loadAddOns = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/bookings/pay-page-addons?token=${encodeURIComponent(token)}`,
+        { cache: "no-store" },
+      );
+      const d = await res.json();
+      if (!res.ok) return;
+      setAddOns(d.addOns as PayPageAddOn[]);
+      setAddOnsLocked(!!d.locked);
+    } catch {
+      // Non-fatal: the deposit is still payable without the add-on picker.
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token) void loadAddOns();
+  }, [token, loadAddOns]);
+
+  /**
+   * Toggle one add-on and re-price.
+   *
+   * The server owns the arithmetic — it returns the new totals and we adopt
+   * them, rather than each side computing a price that could disagree. Any open
+   * PaymentIntent is dropped so the next one is created for the new amount.
+   */
+  const toggleAddOn = useCallback(
+    async (id: string, next: boolean) => {
+      if (!addOns || savingAddOns || addOnsLocked) return;
+      const selected = addOns.filter((a) => a.selected).map((a) => a.id);
+      const nextSelected = next
+        ? [...new Set([...selected, id])]
+        : selected.filter((x) => x !== id);
+
+      setSavingAddOns(true);
+      setAddOnError(null);
+      try {
+        const res = await fetch("/api/bookings/pay-page-addons", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, addOns: nextSelected }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d?.error || "Could not update your add-ons.");
+        setAddOns(d.addOns as PayPageAddOn[]);
+        setSummary((prev) =>
+          prev
+            ? {
+              ...prev,
+              totalCents: d.totalCents,
+              depositCents: d.depositCents,
+              remainingCents: d.remainingCents,
+            }
+            : prev,
+        );
+        // The open intent is for the OLD amount — discard it and let the
+        // payment step mint a fresh one.
+        setClientSecret(null);
+      } catch (e) {
+        setAddOnError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSavingAddOns(false);
+      }
+    },
+    [addOns, savingAddOns, addOnsLocked, token],
+  );
 
   // Fallback for a 3DS redirect that lands back here instead of the
   // confirmation page (older links): show the paid state — and surface a
@@ -329,7 +415,83 @@ export default function PayPage() {
               View your booking confirmation
             </Button>
           </div>
-        ) : !summary.agreementSigned ? (
+        ) : (
+          <>
+          {/* ── Adjust the service before paying ──────────────────────────
+              Offered up front because this is the moment the customer is
+              actually thinking about their home. Locked once the deposit is
+              paid, since the deposit and the pre-auth hold both derive from
+              the total. */}
+          {addOns && !addOnsLocked ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <button
+                type="button"
+                onClick={() => setAddOnsOpen((v) => !v)}
+                className="flex w-full items-center justify-between gap-3 text-left"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">
+                    Want anything else done?
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    {addOns.filter((a) => a.selected).length > 0
+                      ? `${addOns.filter((a) => a.selected).length} add-on${
+                        addOns.filter((a) => a.selected).length === 1 ? "" : "s"
+                      } selected · tap to change`
+                      : "Add fridge, oven, windows and more — your total updates instantly"}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-medium text-violet-700">
+                  {addOnsOpen ? "Close" : "Edit"}
+                </span>
+              </button>
+
+              {addOnsOpen ? (
+                <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+                  {addOnError ? (
+                    <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                      {addOnError}
+                    </p>
+                  ) : null}
+                  {addOns.map((a) => (
+                    <label
+                      key={a.id}
+                      className={cn(
+                        "flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors",
+                        a.selected
+                          ? "border-violet-300 bg-violet-50"
+                          : "border-slate-200 hover:bg-slate-50",
+                        savingAddOns && "opacity-60",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-violet-600"
+                          checked={a.selected}
+                          disabled={savingAddOns}
+                          onChange={(e) => void toggleAddOn(a.id, e.target.checked)}
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm text-slate-900">{a.label}</span>
+                          <span className="block truncate text-[11px] text-slate-500">{a.note}</span>
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-sm font-medium tabular-nums text-slate-900">
+                        {a.includedFree ? "Included" : `+${money(a.priceCents)}`}
+                      </span>
+                    </label>
+                  ))}
+                  <p className="pt-1 text-[11px] text-slate-500">
+                    Changes are applied to your total straight away. Anything added here is
+                    charged the same way as the rest of your booking.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!summary.agreementSigned ? (
           /* ── STEP 1: LEGAL (required before payment unlocks) ── */
           <>
           <IncludedValueStack serviceType={summary.serviceType} compact />
@@ -453,6 +615,8 @@ export default function PayPage() {
               {money(summary.remainingCents)} before service and charge it only after your clean is done.
             </p>
           </div>
+          )}
+          </>
         )}
 
         <p className="text-center text-[11px] text-slate-400">

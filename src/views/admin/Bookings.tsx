@@ -1491,6 +1491,10 @@ function BookingSheet({
             {/* The scope of work, and how much of it is done */}
             <BookingChecklist booking={booking} />
 
+            {/* Final balance link — issued after the clean, when the number is
+                actually known */}
+            <BalanceLinkCard booking={booking} />
+
             {/* Per-booking review / feedback request opt-out */}
             <Card className="border-slate-200">
               <CardContent className="py-4 flex items-start justify-between gap-4">
@@ -2590,6 +2594,95 @@ function BookingChecklist({ booking }: { booking: BookingRow }) {
               </>
             ) : null}
           </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Final-balance link ──────────────────────────────────────────────────────
+//
+// The deposit page is sent before the clean against an estimate. This is its
+// counterpart for after: the customer sees what was actually done — add-ons
+// performed on site, any scope adjustment — and pays the rest from the same
+// page. It lives here rather than being a payment option chosen at booking time
+// because the final figure isn't knowable until the job is finished.
+//
+// Re-issuing returns the SAME link, so sending it twice never invalidates the
+// copy the customer already has.
+
+function BalanceLinkCard({ booking }: { booking: BookingRow }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setUrl(null);
+  }, [booking.id]);
+
+  const issue = async (sendSms: boolean) => {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/bookings/balance-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ bookingId: booking.id, sendSms }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Could not create the link.");
+      setUrl(d.url as string);
+      if (sendSms) {
+        if (d.smsSent) toast.success("Balance link texted to the customer");
+        else {
+          toast.error("Couldn't text the link", {
+            description: `${d.smsError || "Unknown error"} — the link below still works.`,
+            duration: 15_000,
+          });
+        }
+      } else {
+        try {
+          await navigator.clipboard.writeText(d.url as string);
+          toast.success("Balance link copied");
+        } catch {
+          toast.success("Balance link ready");
+        }
+      }
+    } catch (e) {
+      toast.error("Couldn't create the balance link", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="border-slate-200">
+      <CardContent className="py-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium text-slate-900">Final balance link</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Shows the customer what was completed, how the total was reached, and collects the
+            remaining balance. Safe to send more than once — the link stays the same.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={busy} onClick={() => void issue(true)}>
+            {busy ? <RiLoader4Line className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+            Text it to the customer
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void issue(false)}>
+            Copy link
+          </Button>
+        </div>
+        {url ? (
+          <p className="break-all rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+            {url}
+          </p>
         ) : null}
       </CardContent>
     </Card>
