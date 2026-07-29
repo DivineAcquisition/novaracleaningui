@@ -59,7 +59,9 @@ import RunPayrollTab from "@/components/admin/payroll/RunPayrollTab";
 import AutoPayrollTab from "@/components/admin/payroll/AutoPayrollTab";
 import RunsTab from "@/components/admin/payroll/RunsTab";
 import ExtraPayTab from "@/components/admin/payroll/ExtraPayTab";
+import ExpensesTab from "@/components/admin/payroll/ExpensesTab";
 import { loadActiveCleaners, type PayrollCleaner } from "@/components/admin/payroll/shared";
+import { parseServiceDate } from "@/lib/service-date";
 
 interface PayrollRow {
   cleaner_id: string;
@@ -94,7 +96,9 @@ const usd = (cents: number) =>
 const formatDate = (iso: string | null | undefined) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("en-US", {
+    // Handles both timestamps and bare service dates; the latter would
+    // otherwise render as the previous day.
+    return (parseServiceDate(iso) as Date).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -132,6 +136,7 @@ export default function AdminPayroll() {
           <TabsTrigger value="run">Run Payroll</TabsTrigger>
           <TabsTrigger value="runs">Payroll Runs</TabsTrigger>
           <TabsTrigger value="cleaner">Extra Pay</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses &amp; Reimb</TabsTrigger>
           <TabsTrigger value="overview">Connect Overview</TabsTrigger>
         </TabsList>
         <TabsContent value="payout"><SimplePayoutTab /></TabsContent>
@@ -140,6 +145,7 @@ export default function AdminPayroll() {
         <TabsContent value="run"><RunPayrollTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="runs"><RunsTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="cleaner"><ExtraPayTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="expenses"><ExpensesTab /></TabsContent>
         <TabsContent value="overview"><PayrollOverview /></TabsContent>
       </Tabs>
     </div>
