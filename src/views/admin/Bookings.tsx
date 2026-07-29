@@ -2279,13 +2279,15 @@ function BookingChecklist({ booking }: { booking: BookingRow }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Re-collapse when the sheet moves to another booking, so an open panel never
-  // shows the previous booking's checklist.
+  // Re-collapse and drop everything when the sheet moves to another booking, so
+  // an open panel never shows the previous booking's checklist.
   useEffect(() => {
     setOpen(false);
     setDetail(null);
     setError(null);
-  }, [booking.id]);
+    setContractorUrl(null);
+    setHasJob(Boolean(booking.job_id));
+  }, [booking.id, booking.job_id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2381,9 +2383,11 @@ function BookingChecklist({ booking }: { booking: BookingRow }) {
             </div>
           ) : null}
           <p className="mt-1.5 text-xs text-slate-500">
-            {open
-              ? "What the crew works through on site."
-              : "Tap to see what's in scope and what's been done."}
+            {!booking.job_id
+              ? "Not dispatched yet — a checklist starts once a contractor is assigned."
+              : open
+                ? "What the crew works through on site."
+                : "Tap to see what's in scope and what's been done."}
           </p>
         </button>
 
