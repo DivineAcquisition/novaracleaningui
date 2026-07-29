@@ -34,6 +34,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import GhlTagHygiene from "@/components/admin/GhlTagHygiene";
 
 // ─── API types (mirrors /api/admin/airtable-health) ──────────────────────
 
@@ -311,6 +312,9 @@ export default function SyncHealth() {
           auto-refreshes every 30s · updated {timeAgo(snapshot.now)}
         </span>
       </div>
+
+      {/* ── GHL tag hygiene ────────────────────────────────────────── */}
+      <GhlTagHygiene />
 
       {/* ── Per-flow cards ─────────────────────────────────────────── */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

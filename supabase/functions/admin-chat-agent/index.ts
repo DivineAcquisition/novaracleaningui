@@ -5,10 +5,16 @@
 // Reads a GHL conversation, fetches the location's GHL custom-field
 // schema, hands the transcript + the field schema to an LLM (Claude or
 // OpenAI), and returns structured insights. When body.autoApply=true,
-// it also pushes the extracted custom fields + tag recommendations
-// onto the contact via admin-ghl-update-contact. When body.persist
-// !== false, it upserts the analysis into public.chat_insights so the
-// autonomous pulse function can see what's been analyzed already.
+// it also pushes the extracted custom fields onto the contact via
+// admin-ghl-update-contact. When body.persist !== false, it upserts the
+// analysis into public.chat_insights so the autonomous pulse function can
+// see what's been analyzed already.
+//
+// The agent does NOT invent tags. It used to be asked for free-text
+// "tag_recommendations" and whatever it returned was applied, which is how the
+// GHL account filled with one-off tags like "military-gift". It may now propose
+// exactly one LEAD STAGE from the closed vocabulary in _shared/ghl-tags.ts;
+// everything else it observes belongs in a custom field, which is filterable.
 //
 // Provider selection (in app_secrets first, env fallback):
 //   - LLM_PROVIDER  : "anthropic" (default) | "openai"
@@ -18,6 +24,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { enforceTagPolicy, LEAD_STAGES, leadStageTag } from "../_shared/ghl-tags.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -221,13 +228,16 @@ OUTPUT SCHEMA (single JSON object, no markdown)
     // fields where the customer EXPLICITLY mentioned the data point
     // (e.g. "650 sq ft" -> estimated_sqft: "650"). Do NOT invent.
   },
-  "tag_recommendations": ["warm-lead", "military-gift", "navy-family", "biweekly-interest", ...]
+  "suggested_lead_stage": "one of: ${LEAD_STAGES.join(" | ")}"
 }
 
 HARD RULES
 - Output MUST be valid JSON parseable with JSON.parse. No backticks, no comments.
 - If a field has no data, return an empty string or empty array — never null.
 - Never invent customer details. extracted_fields keys must come from explicit chat content.
+- Do NOT invent tags. suggested_lead_stage must be EXACTLY one of the listed
+  stages or an empty string. Anything descriptive about this customer belongs in
+  extracted_fields, which is filterable and reportable — free-text tags are not.
 - For SINGLE_OPTIONS fields, pick the option label that EXACTLY matches one in the schema or omit the key entirely.
 - For MONETORY fields, use raw numeric strings ("82" not "$82.00").
 - suggested_reply.draft must be the next message Malik should send.
@@ -427,9 +437,21 @@ serve(async (req) => {
 
     const analysis = llm.analysis;
     const cleanFields = filterExtractedFields(analysis?.extracted_fields, schema.fields);
-    const tagRecs = Array.isArray(analysis?.tag_recommendations)
-      ? (analysis.tag_recommendations as any[]).map((t) => String(t).trim()).filter(Boolean)
-      : [];
+
+    // The agent no longer invents tags. It may propose ONE lead stage from the
+    // closed vocabulary; anything else it suggests is dropped here, before it
+    // can reach GHL. Free-text tags from a model are unbounded by construction,
+    // and an unbounded tag list is a filter nobody can rely on.
+    const suggestedStage = String(analysis?.suggested_lead_stage || "").trim().toLowerCase();
+    const stageTag = (LEAD_STAGES as readonly string[]).includes(suggestedStage)
+      ? leadStageTag(suggestedStage)
+      : null;
+    const tagRecs = enforceTagPolicy([
+      stageTag,
+      // Tolerate an older model response still returning the retired key so a
+      // cached prompt can't crash the run — the policy discards it anyway.
+      ...(Array.isArray(analysis?.tag_recommendations) ? analysis.tag_recommendations : []),
+    ]).tags;
 
     let applyReport: any = null;
     if (body.autoApply && contact && (Object.keys(cleanFields).length > 0 || tagRecs.length > 0)) {

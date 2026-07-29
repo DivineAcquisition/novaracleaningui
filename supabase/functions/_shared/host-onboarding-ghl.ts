@@ -60,7 +60,6 @@ export async function upsertHostOnboardingContact(
     return null;
   }
   const { firstName, lastName } = splitName(input.fullName);
-  const isEntity = input.entityType === "entity";
   return upsertContact({
     email: input.email || undefined,
     phone: input.phone || undefined,
@@ -68,12 +67,11 @@ export async function upsertHostOnboardingContact(
     lastName,
     name: input.fullName || undefined,
     source: "Novara Host Onboarding",
-    tags: [
-      "partner - host",
-      "str host",
-      "host onboarding",
-      isEntity ? "host-entity" : "host-individual",
-    ],
+    // Entity vs individual is a custom field (and drives which agreement
+    // template is sent); "str host" / "host onboarding" said the same thing as
+    // the status tag three different ways.
+    tags: ["partner", "partner - host"],
+    mergeTags: true,
     customFieldsByKey: hostIdentityFields({
       entityType: input.entityType,
       entityName: input.entityName,

@@ -291,7 +291,11 @@ export default function CommercialBooking() {
               quotedPriceCents: quoteCents, totalCents: quoteCents, depositPaid: false,
               customerSource: "Internal — Commercial", market: stateVal.trim().toUpperCase(),
               businessName: businessName.trim(),
-              tags: ["commercial-booking", `account-${accountType}`, isRecurring ? "recurring" : "one-time"],
+              // Account type and cadence are both custom fields; the tags say
+              // who this contact is and which partner account type they hold.
+              // Anything outside the vocabulary in _shared/ghl-tags.ts is
+              // dropped server-side, so inventing one here does nothing.
+              tags: ["customer", `account-${accountType}`],
             },
           },
         });

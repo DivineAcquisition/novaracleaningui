@@ -21,6 +21,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { provisionGhlUserFromTemplate } from "../_shared/ghl-users.ts";
+import { enforceTagPolicy } from "../_shared/ghl-tags.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -134,48 +135,31 @@ function buildContractorCustomFields(cleaner: any): Record<string, unknown> {
   return out;
 }
 
+/**
+ * A contractor's tags: their role, and where they are in it. That's it.
+ *
+ * This used to emit up to twenty tags per contractor — pay tier, three service
+ * zones, five skills, background-check state, insurance state, and eight
+ * onboarding checkboxes. Every one of those is written to a `contractor_*`
+ * CUSTOM FIELD in the same request (see buildContractorFields above), so the
+ * tags were duplicate data competing with the fields for the truth, and they
+ * were the bulk of the tag sprawl in the account. Filter on the fields.
+ */
 function buildContractorTags(cleaner: any): string[] {
-  const tags = new Set<string>(["contractor"]);
   const status = String(cleaner.status || "").toLowerCase();
-  if (status === "active") tags.add("contractor-active");
-  if (status === "inactive") tags.add("contractor-inactive");
-  if (status === "terminated") tags.add("contractor-terminated");
-  if (cleaner.approved === false) tags.add("contractor-pending-approval");
-  if (cleaner.approved === true) tags.add("contractor-approved");
-  if (cleaner.onboarding_complete === true) tags.add("onboarding-complete");
-  else tags.add("onboarding-in-progress");
-  tags.add(`tier-${String(cleaner.pay_tier || "foundation").toLowerCase()}`);
-  if (cleaner.phone_verified === true) tags.add("phone-verified");
-  if (cleaner.stripe_account_id) tags.add("stripe-connected");
-  if (cleaner.payouts_enabled === true) tags.add("payouts-enabled");
-  const bg = String(cleaner.background_check_status || "").toLowerCase();
-  if (["verified", "passed", "clear"].includes(bg)) tags.add("bg-check-passed");
-  else if (bg === "pending") tags.add("bg-check-pending");
-  else if (["failed", "expired"].includes(bg)) tags.add("bg-check-failed");
-  if (cleaner.background_check_expires_at) {
-    const exp = new Date(cleaner.background_check_expires_at);
-    if (exp < new Date()) tags.add("bg-check-expired");
-    else if (exp < new Date(Date.now() + 30 * 86400000)) tags.add("bg-check-expiring");
-  }
-  if (cleaner.insurance_verified === true) tags.add("insurance-on-file");
-  else tags.add("insurance-unverified");
-  if (cleaner.insurance_expires_at) {
-    const exp = new Date(cleaner.insurance_expires_at);
-    if (exp < new Date()) tags.add("insurance-expired");
-    else if (exp < new Date(Date.now() + 30 * 86400000)) tags.add("insurance-expiring");
-  }
-  if (cleaner.ob_agreement_signed === true) tags.add("agreement-signed");
-  if (cleaner.ob_google_chat_joined === true) tags.add("discord-joined");
-  if (cleaner.ob_supplies_checklist_viewed === true) tags.add("supplies-reviewed");
-  if (cleaner.ob_payouts_setup === true) tags.add("payouts-setup-started");
-  if (cleaner.ob_training_accessed === true) tags.add("training-accessed");
-  for (const z of (Array.isArray(cleaner.service_zip_codes) ? cleaner.service_zip_codes : []).slice(0, 3)) {
-    if (z) tags.add(`zone-${z}`);
-  }
-  for (const s of (Array.isArray(cleaner.skillset) ? cleaner.skillset : []).slice(0, 5)) {
-    if (s) tags.add(`skill-${String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`);
-  }
-  return Array.from(tags);
+
+  // Most specific true statement about where they stand, in escalating order
+  // of "can they be dispatched".
+  let stage = "applicant";
+  if (status === "terminated") stage = "terminated";
+  else if (status === "suspended") stage = "suspended";
+  else if (status === "inactive") stage = "inactive";
+  else if (cleaner.approved !== true) stage = "pending approval";
+  else if (cleaner.onboarding_complete !== true) stage = "onboarding";
+  else if (status === "active") stage = "active";
+  else stage = "approved";
+
+  return enforceTagPolicy(["contractor", `contractor - ${stage}`]).tags;
 }
 
 async function upsertContact(token: string, locationId: string, payload: any): Promise<string | null> {

@@ -905,8 +905,12 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         state: ghlState,
         postalCode: ghlZip,
         source: "Novara Booking",
+        // This fires on nearly every booking change, and it knows nothing
+        // about how the customer originally found us — so it merges rather
+        // than replaces. Replacing is what used to strip `source - facebook`
+        // off a contact the first time they rescheduled.
         tags: [
-          "booking",
+          "customer",
           serviceTag(booking.service_type),
           memberTag(
             booking.membership_plan && booking.membership_plan !== 'none'
@@ -915,6 +919,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
           ),
           zipTag(booking.zip_code),
         ].filter(Boolean) as string[],
+        mergeTags: true,
         customFieldsByKey: ghlCustomFields,
       },
       opportunity: {

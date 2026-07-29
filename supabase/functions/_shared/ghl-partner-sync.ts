@@ -102,7 +102,8 @@ function hostContactInput(
     lastName,
     name: host.name || undefined,
     source: "Novara Partner Portal",
-    tags: ["partner - host", "source - turnover portal", "str host", ...extraTags],
+    tags: ["partner", "partner - host", "source - turnover portal", ...extraTags],
+    mergeTags: true,
     customFieldsByKey: mergedFields,
   };
 }

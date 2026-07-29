@@ -6,6 +6,7 @@ import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { WaitlistConfirmation } from "../_shared/email-templates/WaitlistConfirmation.tsx";
 import { upsertContact as ghlUpsertContact } from "../_shared/ghl-client.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { campaignTag, sourceTag, zipTag } from "../_shared/ghl-tags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -162,12 +163,12 @@ const handler = async (req: Request): Promise<Response> => {
         state,
         postalCode: zipCode,
         source: utmSource || "Waitlist",
-        tags: [
-          "waitlist",
-          zipCode ? `zip-${zipCode}` : "",
-          utmSource ? `src-${utmSource}` : "",
-          utmCampaign ? `cmp-${utmCampaign}` : "",
-        ].filter(Boolean) as string[],
+        // UTM detail lands in the custom fields below; the tags only carry
+        // what we filter on. Merged so a returning customer joining a waitlist
+        // doesn't lose their existing role.
+        tags: ["waitlist", zipTag(zipCode), sourceTag(utmSource), campaignTag(utmCampaign)]
+          .filter(Boolean) as string[],
+        mergeTags: true,
         customFieldsByKey: {
           customer_source: utmSource || "Waitlist",
           market: city || zipCode,

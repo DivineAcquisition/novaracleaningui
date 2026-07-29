@@ -11,8 +11,13 @@
 // Custom field key lookup accepts either bare key ("bedrooms") or the
 // fully-qualified GHL key ("contact.bedrooms") and the field's display
 // name ("Bedrooms").
+//
+// Tags are held to the closed vocabulary in _shared/ghl-tags.ts. This endpoint
+// is reachable by the chat agent, which is how the GHL account accumulated
+// LLM-invented one-off tags in the first place.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { enforceTagPolicy } from "../_shared/ghl-tags.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -88,9 +93,22 @@ serve(async (req) => {
     const phone = String(body.phone || "").trim();
     const firstName = (body.firstName || "").toString().trim();
     const lastName = (body.lastName || "").toString().trim();
-    const tagsToAdd: string[] = Array.isArray(body.tags)
+    // Tags coming in here used to be whatever an LLM felt like inventing
+    // ("military-gift", "navy-family"), pushed straight through. They now have
+    // to be in the closed vocabulary, and anything outside it is refused and
+    // reported rather than silently created in the GHL account.
+    const requestedTags: string[] = Array.isArray(body.tags)
       ? body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
       : [];
+    const tagPolicy = enforceTagPolicy(requestedTags);
+    const tagsToAdd = tagPolicy.tags;
+    const tagsRejected = tagPolicy.dropped;
+    if (tagsRejected.length > 0) {
+      console.warn(
+        "[admin-ghl-update-contact] rejected non-vocabulary tags",
+        tagsRejected.map((d) => `${d.tag} (${d.reason})`),
+      );
+    }
     const customFieldsByKey = body.customFieldsByKey || {};
     const source = (body.source || "admin chat mapping").toString();
 
@@ -132,6 +150,7 @@ serve(async (req) => {
       contactId: contact.id || null,
       isNew: (upsert.body as any)?.new ?? null,
       tags_applied: tagsToAdd,
+      tags_rejected: tagsRejected,
       custom_fields_applied: cf.matched.map((m) => ({ key: m.fieldKey, value: m.field_value })),
       custom_fields_skipped: cf.skipped,
       ghl_field_map_size: Object.keys(fieldKeyMap).length,

@@ -222,6 +222,7 @@ async function notifyCustomer(
       lastName: booking.last_name || null,
       source: "Novara Completion Hold",
       tags: [tag],
+      mergeTags: true,
       customFieldsByKey: {
         completion_hold_status: kind === "auth_failed" ? "pending_retry" : "failed_cancelled",
         completion_hold_last_error: errorMessage.slice(0, 250),

@@ -23,6 +23,7 @@ import {
   ynBool,
   type GhlContactInput,
 } from "../_shared/ghl-client.ts";
+import { memberTag, serviceTag, zipTag } from "../_shared/ghl-tags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,8 +119,9 @@ function leadToContact(p: LeadPayload, extraTags: string[] = []): GhlContactInpu
     state: p.state,
     postalCode: p.zipCode,
     source: p.source || "Novara Website",
-    tags: [...(p.tags ?? []), ...extraTags, p.zipCode ? `zip-${p.zipCode}` : null]
-      .filter(Boolean) as string[],
+    tags: [...(p.tags ?? []), ...extraTags, zipTag(p.zipCode)].filter(Boolean) as string[],
+    // A lead form doesn't know whether this person is already a customer.
+    mergeTags: true,
     customFieldsByKey: {
       utm_content: p.utmContent,
       utm_medium: p.utmMedium,
@@ -150,12 +152,13 @@ function bookingToContact(p: BookingPayload, extraTags: string[] = []): GhlConta
     postalCode: p.zipCode,
     source: "Novara Booking",
     tags: [
-      "booking",
-      p.serviceType ? `service-${p.serviceType}` : null,
-      p.membershipPlan && p.membershipPlan !== "none" ? `member-${p.membershipPlan}` : null,
-      p.zipCode ? `zip-${p.zipCode}` : null,
+      "customer",
+      serviceTag(p.serviceType),
+      memberTag(p.membershipPlan),
+      zipTag(p.zipCode),
       ...extraTags,
     ].filter(Boolean) as string[],
+    mergeTags: true,
     customFieldsByKey: {
       // Tracking attribution
       utm_content: p.utmContent,
@@ -251,8 +254,8 @@ serve(async (req) => {
         // existing cleaning_type field is not appropriate — instead we just
         // re-upsert the contact (which keeps tags fresh) and add a marker tag.
         contactId = await upsertContact(
-          bookingToContact(p, ["rescheduled", p.serviceDate ? `svc-${p.serviceDate}` : ""]
-            .filter(Boolean) as string[]),
+          // The new service date is a custom field; the tag records the event.
+          bookingToContact(p, ["booking - rescheduled"]),
         );
         break;
       }

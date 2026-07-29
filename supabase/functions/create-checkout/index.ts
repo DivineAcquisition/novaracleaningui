@@ -358,7 +358,9 @@ serve(async (req) => {
             state: bodyState || undefined,
             postalCode: bodyZip || undefined,
             source: "Novara Membership Signup",
-            tags: ["membership", "lead - new", `member-${membershipPlan}`],
+            // They are a member from here; the prior lead stage is superseded.
+            tags: ["member", `member-${membershipPlan}`],
+            mergeTags: true,
             customFieldsByKey: membershipCustomFields,
           })) || "";
           if (ghlContactId) {

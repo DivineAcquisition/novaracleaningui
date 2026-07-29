@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { upsertContact as ghlUpsertContact } from "../_shared/ghl-client.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
+import { campaignTag, sourceTag, zipTag } from "../_shared/ghl-tags.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -155,12 +156,11 @@ serve(async (req) => {
       state: leadData.state,
       postalCode: leadData.zipCode,
       source: leadData.utmSource || leadData.source || "Novara Website",
-      tags: [
-        "lead",
-        leadData.zipCode ? `zip-${leadData.zipCode}` : "",
-        leadData.utmSource ? `src-${leadData.utmSource}` : "",
-        leadData.utmCampaign ? `cmp-${leadData.utmCampaign}` : "",
-      ].filter(Boolean) as string[],
+      // Full UTM attribution goes to the custom fields below. Merged because
+      // a known customer filling in a capture form is still that customer.
+      tags: ["lead", zipTag(leadData.zipCode), sourceTag(leadData.utmSource), campaignTag(leadData.utmCampaign)]
+        .filter(Boolean) as string[],
+      mergeTags: true,
       customFieldsByKey: {
         // AGP Tracking Attribution
         utm_content: leadData.utmContent,

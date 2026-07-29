@@ -24,7 +24,12 @@ import {
   stageIdForKey,
   type DispatchStageContext,
 } from "./ghl-dispatch-pipeline.ts";
-import { normalizeTag, normalizeTags, LEAD_STAGE_TAG_SET } from "./ghl-tags.ts";
+import {
+  enforceTagPolicy,
+  LEAD_STAGE_TAG_SET,
+  MAX_TAGS_PER_CONTACT,
+  normalizeTag,
+} from "./ghl-tags.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -44,6 +49,16 @@ export interface GhlContactInput {
   country?: string | null;
   source?: string | null;
   tags?: string[];
+  /**
+   * Assert `tags` WITHOUT replacing the contact's other tags.
+   *
+   * /contacts/upsert replaces the whole tag array, so a caller asserting one
+   * lifecycle tag ("member - paused") was wiping the contact's role, service,
+   * ZIP and source. With this set, the upsert sends fields only and the tags are
+   * then merged in through the append/remove endpoints. Use it whenever the
+   * caller only knows PART of the picture — which is most lifecycle events.
+   */
+  mergeTags?: boolean;
   // Custom fields, keyed by GHL `fieldKey` (e.g. "utm_content", "cleaning_type").
   customFieldsByKey?: Record<string, string | number | boolean | null | undefined>;
 }
@@ -209,14 +224,95 @@ export async function addOpportunityFollowers(
   }
 }
 
-/** Add canonical-normalized tags to a contact. Never throws. */
+/** Read a contact's current tags. Returns null when the read fails. */
+export async function getContactTags(contactId: string): Promise<string[] | null> {
+  const cfg = readConfig();
+  if (!cfg || !contactId) return null;
+  try {
+    const res = await ghlFetch(cfg, `/contacts/${encodeURIComponent(contactId)}`, {});
+    if (!res.ok) {
+      log("getContactTags failed", { status: res.status });
+      return null;
+    }
+    const parsed = (await res.json()) as Json;
+    const contact = (parsed.contact as Json | undefined) ?? parsed;
+    const tags = contact?.tags;
+    return Array.isArray(tags) ? tags.map((t) => String(t)) : [];
+  } catch (err) {
+    log("getContactTags error", { message: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+export interface TagReconcileResult {
+  ok: boolean;
+  final: string[];
+  added: string[];
+  removed: string[];
+  reason?: string;
+}
+
+/**
+ * Assert some tags on a contact WITHOUT destroying the rest.
+ *
+ * This is the fix for the narrow callers — "membership-paused", "cancelled",
+ * "payment-method-updated" — that used to upsert a one-element tag array and,
+ * because upsert replaces, wiped every other tag the contact had. Read, merge,
+ * run the policy, then move only the difference using the append/delete
+ * endpoints.
+ *
+ * `replaceSlots` lets a caller say "this supersedes whatever was in the status
+ * slot" — a paused membership should not sit next to an active one.
+ */
+export async function reconcileContactTags(
+  contactId: string,
+  asserting: (string | null | undefined)[],
+): Promise<TagReconcileResult> {
+  const cfg = readConfig();
+  if (!cfg || !contactId) return { ok: false, final: [], added: [], removed: [], reason: "no config" };
+
+  const current = await getContactTags(contactId);
+  if (current === null) {
+    // Couldn't read, so we can't merge safely. Appending is the conservative
+    // move: it may leave the contact briefly over the cap, and the next sweep
+    // or upsert will settle it — better than deleting tags on a guess.
+    const appended = await addContactTags(contactId, asserting as string[]);
+    return {
+      ok: appended,
+      final: [],
+      added: enforceTagPolicy(asserting).tags,
+      removed: [],
+      reason: "could not read current tags — appended without merging",
+    };
+  }
+
+  // Asserted tags go LAST so they win their slot against the contact's history.
+  const policy = enforceTagPolicy([...current, ...asserting]);
+  const final = policy.tags;
+  const finalSet = new Set(final);
+  const currentSet = new Set(current);
+
+  const toAdd = final.filter((t) => !currentSet.has(t));
+  const toRemove = current.filter((t) => !finalSet.has(t));
+
+  let ok = true;
+  if (toRemove.length > 0) ok = (await removeContactTags(contactId, toRemove)) && ok;
+  if (toAdd.length > 0) ok = (await addContactTags(contactId, toAdd)) && ok;
+
+  if (toAdd.length > 0 || toRemove.length > 0) {
+    log("tags reconciled", { contactId, added: toAdd, removed: toRemove, final });
+  }
+  return { ok, final, added: toAdd, removed: toRemove };
+}
+
+/** Add canonical tags to a contact, policy-capped. Never throws. */
 export async function addContactTags(
   contactId: string,
   tags: string[],
 ): Promise<boolean> {
   const cfg = readConfig();
   if (!cfg || !contactId) return false;
-  const clean = normalizeTags(tags);
+  const clean = enforceTagPolicy(tags, { max: MAX_TAGS_PER_CONTACT }).tags;
   if (clean.length === 0) return false;
   try {
     const res = await ghlFetch(
@@ -565,6 +661,18 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
 
     const phoneE164 = toE164US(input.phone) || undefined;
 
+    let tagsForUpsert: string[] | undefined;
+    if (input.tags && input.tags.length > 0 && !input.mergeTags) {
+      const policy = enforceTagPolicy(input.tags);
+      if (policy.dropped.length > 0) {
+        log("tags dropped by policy", {
+          kept: policy.tags,
+          dropped: policy.dropped.map((d) => `${d.tag} (${d.reason})`),
+        });
+      }
+      tagsForUpsert = policy.tags.length > 0 ? policy.tags : undefined;
+    }
+
     const body: Json = {
       locationId: cfg.locationId,
       email: input.email || undefined,
@@ -578,7 +686,12 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
       postalCode: finalZip,
       country: input.country || "US",
       source: input.source || "Novara Booking",
-      tags: input.tags && input.tags.length > 0 ? normalizeTags(input.tags) : undefined,
+      // The tag policy is enforced HERE, at the one place nearly every write
+      // passes through, rather than trusted to twenty call sites. /contacts/
+      // upsert REPLACES the tag array, so whatever survives the policy is the
+      // contact's complete tag set — which is exactly why the policy has to
+      // produce a coherent set rather than a fragment.
+      tags: tagsForUpsert,
       customFields: customFields.length > 0 ? customFields : undefined,
     };
 
@@ -608,6 +721,13 @@ export async function upsertContact(input: GhlContactInput): Promise<string | nu
       sent: customFields.length,
       returned: returnedFields,
     });
+
+    // Merge mode: the upsert deliberately carried no tags (so nothing was
+    // replaced); assert them against what the contact already has.
+    if (input.mergeTags && id && input.tags && input.tags.length > 0) {
+      await reconcileContactTags(id, input.tags);
+    }
+
     return id;
   } catch (err) {
     log("upsertContact error", { message: err instanceof Error ? err.message : String(err) });

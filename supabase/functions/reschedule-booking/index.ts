@@ -529,13 +529,10 @@ serve(async (req) => {
           state: booking.state,
           postalCode: booking.zip_code,
           source: isAdmin ? "Novara Admin Reschedule" : "Novara Reschedule",
-          tags: [
-            "rescheduled",
-            newDate ? `svc-${newDate}` : "",
-            booking.zip_code ? `zip-${booking.zip_code}` : "",
-            feeDecision.feeCents > 0 ? "short-notice-reschedule" : "",
-            isAdmin ? "admin-rescheduled" : "",
-          ].filter(Boolean) as string[],
+          // The new date, the fee and who moved it are all custom fields
+          // written alongside this; the tag only records the event.
+          tags: ["booking - rescheduled"],
+          mergeTags: true,
           customFieldsByKey: ghlCustomFields,
         },
         opportunity: {

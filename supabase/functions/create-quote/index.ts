@@ -77,7 +77,8 @@ serve(async (req) => {
             state: addr.state || undefined,
             postalCode: addr.zipCode || undefined,
             source: "Novara Custom Quote",
-            tags: ["lead - new", "source - custom quote", "service - custom quote"],
+            tags: ["lead", "lead - new", "source - custom quote", "service - custom quote"],
+            mergeTags: true,
             customFieldsByKey: {
               estimated_sqft: sqft ?? "",
               job_notes_internal: notes || "",

@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { smsActionTail } from "../_shared/booking-policy.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { memberTag } from "../_shared/ghl-tags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -923,12 +924,9 @@ serve(async (req) => {
               state: subMeta.state || null,
               postalCode: subMeta.zip_code || null,
               source: "Novara Membership Signup",
-              tags: [
-                "membership",
-                `member-${plan}`,
-                subMeta.home_size_id ? `home-${subMeta.home_size_id}` : null,
-                subMeta.preferred_day_of_week ? `pref-day-${subMeta.preferred_day_of_week}` : null,
-              ].filter(Boolean) as string[],
+              // Home size and preferred day are custom fields, not tags.
+              tags: ["member", memberTag(plan)].filter(Boolean) as string[],
+              mergeTags: true,
               customFieldsByKey: {
                 membership_status: "Active",
                 membership_plan: plan,
@@ -1306,7 +1304,8 @@ serve(async (req) => {
                 contact: {
                   email: creditsData.email,
                   source: "Novara Membership Cancelled",
-                  tags: ["membership-cancelled", `was-${creditsData.membership_plan}`],
+                  tags: ["member - cancelled"],
+                  mergeTags: true,
                   customFieldsByKey: {
                     membership_status: "cancelled",
                     membership_plan: "",
@@ -1399,7 +1398,6 @@ serve(async (req) => {
             firstName: (cus.name || "").split(" ")[0] || null,
             lastName: (cus.name || "").split(" ").slice(1).join(" ") || null,
             source: "Novara Billing Update",
-            tags: ["payment-method-updated"],
             customFieldsByKey: {
               default_payment_method: defaultPaymentMethod,
               stripe_customer_id: customerId,

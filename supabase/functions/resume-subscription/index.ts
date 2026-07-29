@@ -83,7 +83,8 @@ serve(async (req) => {
     try {
       await upsertContact({
         email: user.email,
-        tags: ["membership-resumed"],
+        tags: ["member - resumed"],
+        mergeTags: true,
         source: "Novara Portal",
         customFieldsByKey: {
           membership_status: "active",

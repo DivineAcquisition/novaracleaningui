@@ -95,7 +95,8 @@ serve(async (req) => {
     try {
       await upsertContact({
         email: user.email,
-        tags: ["membership-paused"],
+        tags: ["member - paused"],
+        mergeTags: true,
         source: "Novara Portal",
         customFieldsByKey: {
           membership_status: "paused",

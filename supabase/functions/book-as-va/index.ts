@@ -52,6 +52,7 @@ import {
   checklistLinkForServiceType,
 } from "../_shared/post-confirm-booking.ts";
 import { getEstimatedHours } from "../_shared/payout-utils.ts";
+import { enforceTagPolicy, serviceTag, sourceTag, zipTag } from "../_shared/ghl-tags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -229,14 +230,14 @@ async function ghlPushBooking(
     postalCode: bookingRow.zip_code,
     country: "US",
     source: "Novara Admin Booking",
-    tags: [
-      "booking",
-      "source - admin",
-      bookingRow.service_type
-        ? `service - ${String(bookingRow.service_type).replace(/[-_]+/g, " ").toLowerCase()}`
-        : null,
-      bookingRow.zip_code ? `zip - ${bookingRow.zip_code}` : null,
-    ].filter(Boolean),
+    // Direct fetch, so the policy is applied here rather than relying on the
+    // shared client's chokepoint.
+    tags: enforceTagPolicy([
+      "customer",
+      sourceTag("admin"),
+      serviceTag(bookingRow.service_type),
+      zipTag(bookingRow.zip_code),
+    ]).tags,
   };
   let contactId: string | null = null;
   try {

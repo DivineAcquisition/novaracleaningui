@@ -312,11 +312,11 @@ Deno.serve(async (req) => {
           state: booking.state,
           postalCode: booking.zip_code,
           source: "Novara Cancellation",
-          tags: [
-            "cancelled",
-            `cancel-${feeDecision.basis}`,
-            booking.zip_code ? `zip-${booking.zip_code}` : "",
-          ].filter(Boolean) as string[],
+          // The cancellation BASIS is a custom field; the tag only needs to
+          // say where the booking landed. Merged so cancelling doesn't strip
+          // the contact's role, service and source.
+          tags: ["booking - cancelled"],
+          mergeTags: true,
           customFieldsByKey: {
             // Cancellation-specific only — these reflect the *event*,
             // not the booking financials.

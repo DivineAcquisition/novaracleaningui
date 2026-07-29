@@ -34,7 +34,13 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { leadStageTag, leadStageFromScore, normalizeTags } from "../_shared/ghl-tags.ts";
+import {
+  enforceTagPolicy,
+  leadStageFromScore,
+  leadStageTag,
+  sourceTag,
+  zipTag,
+} from "../_shared/ghl-tags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -132,13 +138,17 @@ async function ghlUpsertContactAndOpportunity(
   supabase: any,
 ): Promise<{ contactId: string | null; opportunityId: string | null }> {
   if (!token || !locationId) return { contactId: null, opportunityId: null };
-  const tags = normalizeTags([
+  // Direct fetch to /contacts/upsert, so the policy is applied here. sourceTag
+  // refuses anything outside the closed source list rather than minting a new
+  // tag per ad platform spelling.
+  const tags = enforceTagPolicy([
+    "lead",
     leadStageTag(
       leadStageFromScore(payload.leadScore || defaultLeadScore(payload.source || "")),
     ),
-    payload.source ? `source-${payload.source}` : null,
-    payload.zipCode ? `zip-${payload.zipCode}` : null,
-  ]);
+    sourceTag(payload.source),
+    zipTag(payload.zipCode),
+  ]).tags;
 
   // Normalize phone to E.164 — GHL otherwise silently drops the phone
   // field and the contact never gets SMS'd.
