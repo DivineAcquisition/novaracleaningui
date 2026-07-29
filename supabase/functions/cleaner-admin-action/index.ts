@@ -43,6 +43,35 @@ const FLAG_ISSUE_TYPES = new Set([
   "policy_violation", "no_show", "other",
 ]);
 
+// functions.invoke() flattens every non-2xx into "Edge Function returned a
+// non-2xx status code" and hides the real reason in error.context. Losing that
+// is how an admin ends up with "could not send" and no idea whether to fix a
+// phone number or an API token.
+// deno-lint-ignore no-explicit-any
+async function describeInvokeFailure(err: any, data: any): Promise<string> {
+  try {
+    const ctx = err?.context;
+    if (ctx && typeof ctx.text === "function" && !ctx.bodyUsed) {
+      const text = (await ctx.text()).trim();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text);
+          const inner = parsed?.error || parsed?.message;
+          if (inner) return String(inner).slice(0, 300);
+        } catch { /* raw text still beats the generic message */ }
+        return text.slice(0, 300);
+      }
+    }
+  } catch { /* fall through */ }
+  const bodyError = (data as { error?: string } | null)?.error;
+  if (bodyError) return String(bodyError).slice(0, 300);
+  if (typeof err === "string" && err) return err.slice(0, 300);
+  if (err?.message && err.message !== "Edge Function returned a non-2xx status code") {
+    return String(err.message).slice(0, 300);
+  }
+  return "no reason reported";
+}
+
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     headers: { ...corsHeaders, "Content-Type": "application/json" }, status,
@@ -723,8 +752,10 @@ serve(async (req) => {
 
       // ─── SEND AGREEMENT LINK ─────────────────────────────────────────
       // Email + SMS the contractor onboarding/agreement page when they
-      // haven't signed the ICA yet. Link goes straight to
-      // /cleaner/onboarding (auth-gated signing wizard).
+      // haven't signed the ICA yet. Sends a single-use TOKENIZED link that
+      // opens straight onto the agreement — no login, no onboarding wizard.
+      // That is the point: the contractors missing signatures are mostly people
+      // already working, and the auth-gated wizard is where they gave up.
       case "send_agreement": {
         if (cleaner.ob_agreement_signed === true) {
           return json({
@@ -738,8 +769,6 @@ serve(async (req) => {
           return json({ error: "Cannot send agreement to a terminated cleaner." }, 409);
         }
 
-        const AGREEMENT_URL = "https://contractor.novaracleaning.com/cleaner/onboarding";
-        const AUTH_URL = "https://contractor.novaracleaning.com/cleaner/auth";
         const firstName = String(cleaner.first_name || "").trim() || "there";
         const email = String(cleaner.email || "").trim();
         const phone = String(cleaner.phone || "").trim();
@@ -748,40 +777,68 @@ serve(async (req) => {
           return json({ error: "Cleaner has no email or phone on file." }, 400);
         }
 
+        // A dedicated, single-use signing link — NOT the onboarding wizard.
+        // Contractors who are already working won't re-run a five-step
+        // account setup to sign one document, and the login wall was where
+        // they abandoned. This link opens straight onto the agreement.
+        const { data: mintedToken, error: mintErr } = await adminClient.rpc(
+          "mint_cleaner_agreement_token",
+          { p_cleaner_id: cleanerId, p_ttl_days: 30 },
+        );
+        if (mintErr) {
+          return json({ error: `Could not create a signing link: ${mintErr.message}` }, 500);
+        }
+        if (!mintedToken) {
+          return json({
+            error: "Agreement already signed for this cleaner.",
+            code: "ALREADY_SIGNED",
+          }, 409);
+        }
+
+        const AGREEMENT_URL =
+          `https://contractor.novaracleaning.com/cleaner/agreement/${mintedToken}`;
+
         let emailed = false;
         let smsSent = false;
+        let emailError: string | null = null;
+        let smsError: string | null = null;
 
         if (email && !email.endsWith("@pending.novara")) {
           try {
-            const { error: mailErr } = await adminClient.functions.invoke("send-cleaner-email", {
-              body: {
-                type: "agreement_request",
-                email,
-                data: {
-                  firstName,
-                  lastName: cleaner.last_name || "",
+            const { data: mailRes, error: mailErr } = await adminClient.functions.invoke(
+              "send-cleaner-email",
+              {
+                body: {
+                  type: "agreement_request",
                   email,
-                  agreementUrl: AGREEMENT_URL,
-                  loginUrl: AUTH_URL,
+                  data: {
+                    firstName,
+                    lastName: cleaner.last_name || "",
+                    email,
+                    agreementUrl: AGREEMENT_URL,
+                    loginUrl: AGREEMENT_URL,
+                  },
                 },
               },
-            });
-            emailed = !mailErr;
-            if (mailErr) {
-              console.warn("[cleaner-admin-action] agreement email failed", mailErr);
+            );
+            const failed = mailErr || (mailRes as { error?: string } | null)?.error;
+            emailed = !failed;
+            if (failed) {
+              emailError = await describeInvokeFailure(mailErr, mailRes);
+              console.warn("[cleaner-admin-action] agreement email failed", emailError);
             }
           } catch (mailCatch) {
-            console.warn(
-              "[cleaner-admin-action] agreement email failed",
-              mailCatch instanceof Error ? mailCatch.message : String(mailCatch),
-            );
+            emailError = mailCatch instanceof Error ? mailCatch.message : String(mailCatch);
+            console.warn("[cleaner-admin-action] agreement email failed", emailError);
           }
+        } else {
+          emailError = email ? "Placeholder email address on file." : "No email on file.";
         }
 
         if (phone) {
           const message =
-            `Hi ${firstName}! Novara Cleaning — please sign your contractor agreement so we can finish activating you: ${AGREEMENT_URL} ` +
-            `(Log in at ${AUTH_URL} if needed.) Questions? Just reply.`;
+            `Hi ${firstName}! Novara Cleaning — please sign your contractor agreement here: ${AGREEMENT_URL} ` +
+            `It takes about a minute and there's no login. Questions? Just reply.`;
           try {
             const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
               body: {
@@ -792,39 +849,64 @@ serve(async (req) => {
                 type: "agreement_request",
               },
             });
-            smsSent = !smsErr && !(smsRes as { error?: string })?.error;
-            if (!smsSent) {
-              const { error: telnyxErr } = await adminClient.functions.invoke("send-sms-notification", {
-                body: { toPhone: phone, message, type: "confirmation" },
-              });
-              smsSent = !telnyxErr;
+            const ghlFailed = smsErr || (smsRes as { error?: string } | null)?.error;
+            smsSent = !ghlFailed;
+            if (ghlFailed) {
+              smsError = await describeInvokeFailure(smsErr, smsRes);
+              const { data: tRes, error: telnyxErr } = await adminClient.functions.invoke(
+                "send-sms-notification",
+                { body: { toPhone: phone, message, type: "confirmation" } },
+              );
+              const tFailed = telnyxErr || (tRes as { error?: string } | null)?.error;
+              smsSent = !tFailed;
+              if (tFailed) {
+                const fallback = await describeInvokeFailure(telnyxErr, tRes);
+                smsError = fallback === smsError ? smsError : `${smsError} (fallback: ${fallback})`;
+                console.warn("[cleaner-admin-action] agreement SMS failed", smsError);
+              } else {
+                smsError = null;
+              }
             }
           } catch (smsCatch) {
-            console.warn(
-              "[cleaner-admin-action] agreement SMS failed",
-              smsCatch instanceof Error ? smsCatch.message : String(smsCatch),
-            );
+            smsError = smsCatch instanceof Error ? smsCatch.message : String(smsCatch);
+            console.warn("[cleaner-admin-action] agreement SMS failed", smsError);
           }
-        }
-
-        if (!emailed && !smsSent) {
-          return json({ error: "Could not send email or SMS. Check contact info and try again." }, 502);
+        } else {
+          smsError = "No phone on file.";
         }
 
         await adminClient.from("events").insert({
           event_type: "cleaner.agreement_link_sent",
           cleaner_id: cleanerId,
           source: "cleaner-admin-action",
-          summary: `Agreement link sent to ${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
+          summary:
+            `Agreement signing link sent to ${`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()} ` +
+            `(email: ${emailed ? "sent" : `failed — ${emailError}`}, SMS: ${smsSent ? "sent" : `failed — ${smsError}`})`,
           data: {
             by: callerId,
             emailed,
             sms_sent: smsSent,
-            agreement_url: AGREEMENT_URL,
+            email_error: emailError,
+            sms_error: smsError,
+            tokenized: true,
           },
         }).then(() => undefined, () => undefined);
 
-        return json({ ok: true, emailed, smsSent, agreementUrl: AGREEMENT_URL });
+        if (!emailed && !smsSent) {
+          // The link is already minted and valid, so hand it back — an admin can
+          // paste it into their own message rather than being stuck behind a
+          // transport outage.
+          return json({
+            error:
+              `Couldn't reach them. Email: ${emailError || "not attempted"}. SMS: ${smsError || "not attempted"}. ` +
+              `The signing link below is valid for 30 days if you want to send it yourself.`,
+            emailError,
+            smsError,
+            agreementUrl: AGREEMENT_URL,
+          }, 502);
+        }
+
+        return json({ ok: true, emailed, smsSent, emailError, smsError, agreementUrl: AGREEMENT_URL });
       }
 
       default:

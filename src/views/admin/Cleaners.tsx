@@ -62,10 +62,13 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { describeEdgeError } from "@/lib/edge-invoke";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import AdminCrews from "@/views/admin/Crews";
 import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import CleanerAccountability from "@/components/admin/CleanerAccountability";
 import AccountabilityWatchlist from "@/components/admin/AccountabilityWatchlist";
+import UnsignedAgreements from "@/components/admin/UnsignedAgreements";
 import { useAdminRole } from "@/hooks/use-admin-role";
 
 const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
@@ -168,9 +171,11 @@ export default function AdminCleaners() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  // One hub, whole lifecycle: applicants (talent-acquisition queue) and
-  // contractors (directory) are sections of the same cleaner area.
-  const [section, setSection] = useState<"contractors" | "applicants">("contractors");
+  // One hub, whole lifecycle. Applicants (the talent queue), contractors (the
+  // directory) and crews (how those contractors are grouped) are three views of
+  // the same people, so they are sections here rather than three sidebar
+  // entries that each answer a third of the question "who works for us".
+  const [section, setSection] = useState<"contractors" | "applicants" | "crews">("contractors");
 
   const selected = useMemo(
     () => cleaners.find((c) => c.id === selectedId) || null,
@@ -293,7 +298,10 @@ export default function AdminCleaners() {
       const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
         body: { action, cleanerId: selected.id, ...extra },
       });
-      if (error) throw error;
+      // invoke() hides the function's own message behind a generic
+      // "non-2xx status code" string; read the body so the toast says what
+      // actually went wrong instead of "Action failed".
+      if (error) throw new Error(await describeEdgeError(error, data));
       if ((data as any)?.error) throw new Error((data as any).error);
       if (action === "advance_pay_tier") {
         const d = data as {
@@ -307,15 +315,31 @@ export default function AdminCleaners() {
             (d.emailSent ? " — email sent" : " — email not sent (no address)"),
         );
       } else if (action === "send_agreement") {
-        const d = data as { emailed?: boolean; smsSent?: boolean };
-        const parts = [
-          d.emailed ? "email" : null,
-          d.smsSent ? "SMS" : null,
-        ].filter(Boolean);
+        const d = data as {
+          emailed?: boolean;
+          smsSent?: boolean;
+          emailError?: string | null;
+          smsError?: string | null;
+          agreementUrl?: string;
+        };
+        const parts = [d.emailed ? "email" : null, d.smsSent ? "SMS" : null].filter(Boolean);
         toast.success(
           parts.length
-            ? `Agreement link sent via ${parts.join(" + ")}`
-            : "Agreement link send attempted",
+            ? `Signing link sent via ${parts.join(" + ")} — opens straight onto the agreement, no login`
+            : "Signing link created",
+          {
+            // A half-delivered link is worth saying out loud, and the URL is
+            // worth handing over: the fastest fix for a dead transport is an
+            // admin pasting the link into their own message.
+            description: [
+              !d.emailed && d.emailError ? `Email didn't go: ${d.emailError}` : null,
+              !d.smsSent && d.smsError ? `SMS didn't go: ${d.smsError}` : null,
+              d.agreementUrl,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            duration: parts.length === 2 ? 6000 : 20_000,
+          },
         );
       } else {
         toast.success(`${action} applied`);
@@ -351,11 +375,13 @@ export default function AdminCleaners() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">
-            {section === "applicants" ? "Applicants" : "Cleaner directory"}
+            {section === "applicants" ? "Applicants" : section === "crews" ? "Crews" : "Cleaner directory"}
           </h1>
           <p className="text-sm text-slate-500">
             {section === "applicants"
               ? "Talent-acquisition submissions — review, launch onboarding, activate."
+              : section === "crews"
+              ? "How contractors are grouped for multi-cleaner jobs — leads, members, hand-offs."
               : "Contractors, onboarding status, performance, and quick actions."}
           </p>
           <div className="mt-2 inline-flex gap-1 bg-slate-100 rounded-lg p-1">
@@ -363,6 +389,7 @@ export default function AdminCleaners() {
               [
                 { id: "contractors", label: "Contractors" },
                 { id: "applicants", label: "Applicants" },
+                { id: "crews", label: "Crews" },
               ] as const
             ).map((s) => (
               <button
@@ -411,6 +438,8 @@ export default function AdminCleaners() {
 
       {section === "applicants" && <ApplicantsPipeline />}
 
+      {section === "crews" && <AdminCrews embedded />}
+
       {section === "contractors" && (
         <>
       <AddCleanerDialog
@@ -423,6 +452,10 @@ export default function AdminCleaners() {
           void load({ silent: true });
         }}
       />
+
+      {/* Contractors taking work with no signed ICA — one tap sends them a
+          tokenized signing link. Hides itself once the backlog is clear. */}
+      <UnsignedAgreements onSelectCleaner={(id) => setSelectedId(id)} />
 
       {/* Accountability review queue: suspended / active strikes / repeat offenders. */}
       <AccountabilityWatchlist onSelectCleaner={(id) => setSelectedId(id)} />
