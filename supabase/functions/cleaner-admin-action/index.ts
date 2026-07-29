@@ -839,6 +839,11 @@ serve(async (req) => {
           const message =
             `Hi ${firstName}! Novara Cleaning — please sign your contractor agreement here: ${AGREEMENT_URL} ` +
             `It takes about a minute and there's no login. Questions? Just reply.`;
+          // GHL is Novara's only sanctioned SMS transport — the Telnyx sender
+          // was abandoned and its number no longer belongs to a valid messaging
+          // profile, so falling back to it just produced a second, misleading
+          // failure ("invalid from address") stacked on the real one. Send via
+          // GHL only; on failure the minted link is handed back for manual send.
           try {
             const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
               body: {
@@ -853,23 +858,11 @@ serve(async (req) => {
             smsSent = !ghlFailed;
             if (ghlFailed) {
               smsError = await describeInvokeFailure(smsErr, smsRes);
-              const { data: tRes, error: telnyxErr } = await adminClient.functions.invoke(
-                "send-sms-notification",
-                { body: { toPhone: phone, message, type: "confirmation" } },
-              );
-              const tFailed = telnyxErr || (tRes as { error?: string } | null)?.error;
-              smsSent = !tFailed;
-              if (tFailed) {
-                const fallback = await describeInvokeFailure(telnyxErr, tRes);
-                smsError = fallback === smsError ? smsError : `${smsError} (fallback: ${fallback})`;
-                console.warn("[cleaner-admin-action] agreement SMS failed", smsError);
-              } else {
-                smsError = null;
-              }
+              console.warn("[cleaner-admin-action] agreement SMS via GHL failed", smsError);
             }
           } catch (smsCatch) {
             smsError = smsCatch instanceof Error ? smsCatch.message : String(smsCatch);
-            console.warn("[cleaner-admin-action] agreement SMS failed", smsError);
+            console.warn("[cleaner-admin-action] agreement SMS via GHL failed", smsError);
           }
         } else {
           smsError = "No phone on file.";
