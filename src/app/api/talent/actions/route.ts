@@ -25,6 +25,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { edgeResult } from "@/lib/edge-invoke";
 import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-screening";
 
 export const runtime = "nodejs";
@@ -80,18 +81,42 @@ async function logEvent(
   });
 }
 
-/** Email + SMS through the existing notification infrastructure. */
+/** Digits-only sanity check before we ask a transport to send anywhere. */
+function usablePhone(input: string | null | undefined): string | null {
+  const digits = String(input || "").replace(/[^0-9]/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  // Anything else (7-digit local, a note someone typed in the phone field) can
+  // never be delivered, and saying so beats a downstream "unable to resolve
+  // contactId" the operator has to decode.
+  return null;
+}
+
+interface InviteOutcome {
+  emailed: boolean;
+  smsSent: boolean;
+  emailError: string | null;
+  smsError: string | null;
+}
+
+/**
+ * Email + SMS through the existing notification infrastructure.
+ *
+ * Both channels report WHY they failed rather than just that they did. The
+ * old version threw the reason away, so a missing GHL token, an unreachable
+ * phone number and a dead Resend key all surfaced to the admin as the same
+ * unactionable "Action failed".
+ */
 async function sendOnboardingInvite(
   supabase: ReturnType<typeof getAdminSupabase>,
   applicant: ApplicantRow,
   onboardingUrl: string,
-): Promise<{ emailed: boolean; smsSent: boolean }> {
+): Promise<InviteOutcome> {
   const firstName = applicant.first_name || applicant.full_name || "there";
-  let emailed = false;
-  let smsSent = false;
+  const out: InviteOutcome = { emailed: false, smsSent: false, emailError: null, smsError: null };
 
   if (applicant.email) {
-    const { error } = await supabase.functions.invoke("send-cleaner-email", {
+    const { data, error } = await supabase.functions.invoke("send-cleaner-email", {
       body: {
         type: "invitation",
         email: applicant.email,
@@ -103,33 +128,54 @@ async function sendOnboardingInvite(
         },
       },
     });
-    emailed = !error;
-    if (error) {
+    const res = await edgeResult(error, data);
+    out.emailed = res.ok;
+    if (!res.ok) {
+      out.emailError = res.error;
       // eslint-disable-next-line no-console
-      console.warn("[talent-actions] invite email failed:", error.message);
+      console.warn("[talent-actions] invite email failed:", res.error);
     }
+  } else {
+    out.emailError = "No email on the applicant record.";
   }
 
-  if (applicant.phone) {
+  const phone = usablePhone(applicant.phone);
+  if (!phone) {
+    out.smsError = applicant.phone
+      ? `"${applicant.phone}" isn't a sendable mobile number.`
+      : "No phone on the applicant record.";
+  } else {
     const message =
       `Hi ${firstName}! It's Novara Cleaning — you've been selected to join our contractor team. ` +
       `Start your onboarding here (agreement, payout setup & portal access): ${onboardingUrl} ` +
       `Questions? Just reply to this text.`;
-    // GHL is the canonical SMS channel; Telnyx is the fallback (mirrors
-    // supabase/functions/_shared/sms.ts).
+
+    // GHL is the canonical SMS channel. send-sms-notification is the fallback,
+    // but note it ALSO falls back to GHL internally — so when GHL itself is the
+    // thing that's broken (bad token, no verified number), both hops fail for
+    // the same reason and the operator needs to see that reason once, clearly,
+    // rather than twice as a generic failure.
     const { data, error } = await supabase.functions.invoke("send-ghl-sms", {
-      body: { phone: applicant.phone, message, type: "confirmation" },
+      body: { phone, message, type: "confirmation", firstName },
     });
-    smsSent = !error && !(data as { error?: string })?.error;
-    if (!smsSent) {
-      const { error: telnyxErr } = await supabase.functions.invoke("send-sms-notification", {
-        body: { toPhone: applicant.phone, message, type: "confirmation" },
+    const ghl = await edgeResult(error, data);
+    if (ghl.ok) {
+      out.smsSent = true;
+    } else {
+      const { data: tData, error: tErr } = await supabase.functions.invoke("send-sms-notification", {
+        body: { toPhone: phone, message, type: "confirmation" },
       });
-      smsSent = !telnyxErr;
+      const telnyx = await edgeResult(tErr, tData);
+      out.smsSent = telnyx.ok;
+      if (!telnyx.ok) {
+        out.smsError = `${ghl.error}${telnyx.error === ghl.error ? "" : ` (fallback: ${telnyx.error})`}`;
+        // eslint-disable-next-line no-console
+        console.warn("[talent-actions] invite SMS failed:", out.smsError);
+      }
     }
   }
 
-  return { emailed, smsSent };
+  return out;
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -342,16 +388,12 @@ export async function POST(req: Request): Promise<NextResponse> {
         const inviteToken = mintInviteToken();
         const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
         const inviteUrl = onboardingInviteUrl(inviteToken);
-
-        const { emailed, smsSent } = await sendOnboardingInvite(supabase, applicant, inviteUrl);
-        if (!emailed && !smsSent) {
-          return NextResponse.json(
-            { error: "Neither the onboarding email nor SMS could be sent." },
-            { status: 502 },
-          );
-        }
-
         const isResend = action === "resend_onboarding";
+
+        // Persist the token BEFORE anything is sent. It used to be written
+        // afterwards, so any failure on this update left a live text in
+        // somebody's hand pointing at a token the database had never heard of —
+        // an invite that looks fine and dies on tap.
         await setStage("onboarding", {
           cleaner_id: cleanerId,
           // Launching clears any hold — the pending item is resolved.
@@ -365,25 +407,57 @@ export async function POST(req: Request): Promise<NextResponse> {
             ? { onboarding_last_nudge_at: new Date().toISOString() }
             : { onboarding_launched_at: applicant.onboarding_launched_at || new Date().toISOString() }),
         });
+
+        const { emailed, smsSent, emailError, smsError } = await sendOnboardingInvite(
+          supabase,
+          applicant,
+          inviteUrl,
+        );
+
         await logEvent(supabase, {
           type: "applicant.onboarding_launched",
-          summary: `${isResend ? "Onboarding re-sent to" : "Onboarding launched for"} ${who} by ${principal.email} (email: ${emailed ? "sent" : "no"}, SMS: ${smsSent ? "sent" : "no"})`,
+          summary:
+            `${isResend ? "Onboarding re-sent to" : "Onboarding launched for"} ${who} by ${principal.email} ` +
+            `(email: ${emailed ? "sent" : `failed — ${emailError}`}, SMS: ${smsSent ? "sent" : `failed — ${smsError}`})`,
           cleanerId,
           data: {
             applicant_id: applicantId,
             resend: isResend,
             emailed,
             smsSent,
+            email_error: emailError,
+            sms_error: smsError,
             invite_expires_at: inviteExpiresAt,
             skip_role_video: true,
           },
         });
+
+        if (!emailed && !smsSent) {
+          // The token is already on the record, so the link in the copy below
+          // works — an admin can paste it into their own text rather than being
+          // blocked entirely by a transport outage.
+          return NextResponse.json(
+            {
+              error:
+                `Couldn't reach ${who}. Email: ${emailError || "not attempted"}. SMS: ${smsError || "not attempted"}. ` +
+                `The invite link is valid for 14 days if you want to send it yourself.`,
+              emailError,
+              smsError,
+              inviteUrl,
+            },
+            { status: 502 },
+          );
+        }
+
         return NextResponse.json({
           ok: true,
           stage: "onboarding",
           emailed,
           smsSent,
+          emailError,
+          smsError,
           cleanerId,
+          inviteUrl,
           inviteExpiresAt,
         });
       }

@@ -180,7 +180,18 @@ function isHoldDue(a: ApplicantRow): boolean {
 const fmtDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 
-async function callAction(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+interface ActionResult {
+  ok: boolean;
+  error?: string;
+  /** Per-channel outcome so a half-delivered invite is reported honestly. */
+  emailed?: boolean;
+  smsSent?: boolean;
+  emailError?: string | null;
+  smsError?: string | null;
+  inviteUrl?: string | null;
+}
+
+async function callAction(body: Record<string, unknown>): Promise<ActionResult> {
   const { data: sessionData } = await supabase.auth.getSession();
   const res = await fetch("/api/talent/actions", {
     method: "POST",
@@ -191,8 +202,23 @@ async function callAction(body: Record<string, unknown>): Promise<{ ok: boolean;
     body: JSON.stringify(body),
   });
   const j = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: j?.error || `Failed (${res.status})` };
-  return { ok: true };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: j?.error || `Failed (${res.status})`,
+      emailError: j?.emailError ?? null,
+      smsError: j?.smsError ?? null,
+      inviteUrl: j?.inviteUrl ?? null,
+    };
+  }
+  return {
+    ok: true,
+    emailed: j?.emailed,
+    smsSent: j?.smsSent,
+    emailError: j?.emailError ?? null,
+    smsError: j?.smsError ?? null,
+    inviteUrl: j?.inviteUrl ?? null,
+  };
 }
 
 export default function ApplicantsPipeline() {
@@ -322,10 +348,34 @@ export default function ApplicantsPipeline() {
     setActioning(true);
     const res = await callAction({ action, applicantId: selected.id, ...extra });
     setActioning(false);
+
     if (!res.ok) {
-      toast.error("Action failed", { description: res.error });
+      // The API now says which channel failed and why. Show that instead of a
+      // bare "Action failed" — the difference between a missing SMS token and
+      // an unsendable phone number is the difference between a five-minute fix
+      // and an hour of guessing. Keep it up long enough to read and copy.
+      toast.error(res.error || "Action failed", {
+        description: res.inviteUrl
+          ? `Invite link (valid 14 days): ${res.inviteUrl}`
+          : undefined,
+        duration: 20_000,
+      });
       return false;
     }
+
+    // Partial delivery is a success with a caveat, not a silent one.
+    const isInvite = action === "launch_onboarding" || action === "resend_onboarding";
+    if (isInvite && (res.emailed === false || res.smsSent === false)) {
+      const reached = [res.emailed ? "email" : null, res.smsSent ? "text" : null]
+        .filter(Boolean)
+        .join(" and ");
+      const missed = res.emailed === false ? res.emailError : res.smsError;
+      toast.warning(`Invite sent by ${reached} only`, {
+        description: `${res.emailed === false ? "Email" : "SMS"} didn't go out: ${missed || "no reason given"}.`,
+        duration: 15_000,
+      });
+    }
+
     await load({ silent: true });
     return true;
   };
