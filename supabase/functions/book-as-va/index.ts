@@ -53,6 +53,10 @@ import {
 } from "../_shared/post-confirm-booking.ts";
 import { getEstimatedHours } from "../_shared/payout-utils.ts";
 import { enforceTagPolicy, serviceTag, sourceTag, zipTag } from "../_shared/ghl-tags.ts";
+// Static, not the runtime `await import()` this used to do. A relative dynamic
+// import resolves inside the request, so a bundling miss becomes a 500 mid-
+// booking instead of a deploy-time error.
+import { invoicePaymentSettingsSaveCard } from "../_shared/stripe-invoice-save-card.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -174,34 +178,43 @@ async function createAndSendInvoice(
   daysUntilDue: number,
   metadata: Record<string, string>,
 ): Promise<{ invoiceId: string; hostedInvoiceUrl: string | null }> {
-  await stripe.invoiceItems.create({
+  // The invoice ITEM is created first and lives on the customer independently.
+  // If anything after this throws, that item stays behind and silently attaches
+  // itself to the customer's NEXT invoice — which is how one failed booking
+  // nearly over-billed a customer by $262.50. So it gets cleaned up on failure.
+  const item = await stripe.invoiceItems.create({
     customer: customerId,
     amount: amountCents,
     currency: "usd",
     description,
   });
-  const { invoicePaymentSettingsSaveCard } = await import(
-    "../_shared/stripe-invoice-save-card.ts"
-  );
-  const invoice = await stripe.invoices.create({
-    customer: customerId,
-    collection_method: "send_invoice",
-    days_until_due: daysUntilDue,
-    pending_invoice_items_behavior: "include",
-    description,
-    metadata,
-    auto_advance: true,
-    payment_settings: invoicePaymentSettingsSaveCard,
-  });
-  if (!invoice.id) throw new Error("Stripe did not return invoice id");
-  const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
-    auto_advance: true,
-  });
-  await stripe.invoices.sendInvoice(invoice.id);
-  return {
-    invoiceId: invoice.id,
-    hostedInvoiceUrl: finalized.hosted_invoice_url || null,
-  };
+  try {
+    const invoice = await stripe.invoices.create({
+      customer: customerId,
+      collection_method: "send_invoice",
+      days_until_due: daysUntilDue,
+      pending_invoice_items_behavior: "include",
+      description,
+      metadata,
+      auto_advance: true,
+      payment_settings: invoicePaymentSettingsSaveCard,
+    });
+    if (!invoice.id) throw new Error("Stripe did not return invoice id");
+    const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
+      auto_advance: true,
+    });
+    await stripe.invoices.sendInvoice(invoice.id);
+    return {
+      invoiceId: invoice.id,
+      hostedInvoiceUrl: finalized.hosted_invoice_url || null,
+    };
+  } catch (err) {
+    if (item.id) {
+      // Best effort — an orphaned item is worse than a failed invoice.
+      await stripe.invoiceItems.del(item.id).catch(() => undefined);
+    }
+    throw err;
+  }
 }
 
 // ─── GHL contact + opportunity push ─────────────────────────────────
@@ -602,23 +615,59 @@ serve(async (req) => {
       ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
       : `BK-${bookingId.slice(0, 8)}`;
 
+    // ─── PAST THIS LINE THE BOOKING ROW EXISTS ────────────────────────────
+    //
+    // CORE OPERATIONAL FEATURE — see ./CORE_OPERATIONAL_FEATURE.md.
+    // Once the row is committed this request MUST return 200. Everything below
+    // is a side effect (CRM, calendar, Stripe, email, SMS) and every one of them
+    // is allowed to fail; none of them may throw the request away.
+    //
+    // This is not hypothetical. The Stripe block below used to be unguarded, so
+    // when invoices.create started failing the whole function 500'd *after* the
+    // booking was written. The operator saw "failed", resubmitted twice, and got
+    // three duplicate confirmed jobs plus three orphaned Stripe invoice items on
+    // a real customer. A booking that exists must never be reported as failed.
+    const warnings: string[] = [];
+    const noteFailure = (step: string, err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`${step}: ${msg}`);
+      logStep(`${step} failed (non-blocking)`, msg);
+    };
+
     // 4. Advance the lead, if linked
     if (body.leadId) {
-      await supabase
-        .from("leads")
-        .update({
-          status: "booked",
-          last_call_outcome: "booked",
-          existing_customer_id: customerId,
-        })
-        .eq("id", body.leadId);
+      try {
+        await supabase
+          .from("leads")
+          .update({
+            status: "booked",
+            last_call_outcome: "booked",
+            existing_customer_id: customerId,
+          })
+          .eq("id", body.leadId);
+      } catch (leadErr) {
+        noteFailure("Lead update", leadErr);
+      }
     }
 
     // 5. GHL contact + opportunity (correct Sales Pipeline)
     const ghlToken = (Deno.env.get("GHL_PIT_TOKEN") || "").trim();
     const ghlLocation = (Deno.env.get("GHL_LOCATION_ID") || "").trim();
-    const { contactId: ghlContactId, opportunityId: ghlOpportunityId } =
-      await ghlPushBooking(supabase, booking, totalCents, ghlToken, ghlLocation);
+    let ghlContactId: string | null = null;
+    let ghlOpportunityId: string | null = null;
+    try {
+      const pushed = await ghlPushBooking(
+        supabase,
+        booking,
+        totalCents,
+        ghlToken,
+        ghlLocation,
+      );
+      ghlContactId = pushed.contactId;
+      ghlOpportunityId = pushed.opportunityId;
+    } catch (ghlErr) {
+      noteFailure("GHL contact/opportunity push", ghlErr);
+    }
 
     // 5b. Book the appointment in the GHL Calendar so the contact's
     // calendar block shows the visit. Idempotent — book-ghl-appointment
@@ -661,6 +710,11 @@ serve(async (req) => {
     let depositInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
     let fullInvoice: { invoiceId: string; hostedInvoiceUrl: string | null } | null = null;
     let preauthSession: { id: string; url: string | null } | null = null;
+    // Payment artifacts are the most failure-prone step here (Stripe outages,
+    // rejected parameters, a customer record Stripe won't accept) and were the
+    // one place still able to kill the whole request. A missing invoice is
+    // recoverable — an admin can resend it. A lost booking is not.
+    try {
     if (invoiceMode !== "none" && totalCents > 0) {
       const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
       if (stripeKey) {
@@ -746,6 +800,9 @@ serve(async (req) => {
         logStep("skipping invoice — STRIPE_SECRET_KEY not configured");
       }
     }
+    } catch (invoiceErr) {
+      noteFailure("Payment artifact (Stripe)", invoiceErr);
+    }
 
     // 7. Confirmation + receipt emails + downstream fan-out.
     //
@@ -770,10 +827,14 @@ serve(async (req) => {
     if (depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl) {
       const url = depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl;
       if (url) {
-        await supabase
-          .from("bookings")
-          .update({ hosted_invoice_url: url })
-          .eq("id", bookingId);
+        try {
+          await supabase
+            .from("bookings")
+            .update({ hosted_invoice_url: url })
+            .eq("id", bookingId);
+        } catch (urlStampErr) {
+          noteFailure("hosted_invoice_url stamp", urlStampErr);
+        }
       }
     }
 
@@ -808,10 +869,14 @@ serve(async (req) => {
     // leaves it null until the customer actually pays the invoice —
     // the stripe-webhook will stamp it when invoice.payment_succeeded.
     if (bookingStatus === "confirmed" && invoiceMode === "full_now") {
-      await supabase
-        .from("bookings")
-        .update({ payment_received_at: new Date().toISOString() })
-        .eq("id", bookingId);
+      try {
+        await supabase
+          .from("bookings")
+          .update({ payment_received_at: new Date().toISOString() })
+          .eq("id", bookingId);
+      } catch (payStampErr) {
+        noteFailure("payment_received_at stamp", payStampErr);
+      }
     }
 
     const emails: Record<string, unknown> = {};
@@ -939,6 +1004,9 @@ serve(async (req) => {
         fullInvoice,
         smsResult,
         emails,
+        // Steps that failed AFTER the booking was safely created. The booking is
+        // real either way; these say what still needs a human.
+        warnings,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
