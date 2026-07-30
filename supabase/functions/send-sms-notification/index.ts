@@ -8,11 +8,10 @@ const corsHeaders = {
 
 const telnyxApiKey = Deno.env.get("TELNYX_API_KEY");
 
-// Active Telnyx numbers on the Novara account (May 2026):
-//   • +18334432004 — toll-free (PRIMARY)
-//   • +14433838055 — local MD long-code (FALLBACK)
-// env override → toll-free → local. Update TELNYX_PHONE_NUMBER in Supabase
-// secrets to a different number if ops moves the primary sender.
+// Active Telnyx numbers on the Novara account:
+//   • +14433838055 — local MD long-code (PRIMARY — SMS-capable now)
+//   • +18334432004 — toll-free (needs Telnyx toll-free verification before SMS)
+// env override → local → toll-free. Prefer the verified/working sender.
 const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
 // Optional Telnyx messaging-profile id. When set (and no explicit `from`
 // number is available), Telnyx picks a sender from the profile's number
@@ -21,8 +20,8 @@ const ENV_TELNYX_FROM = Deno.env.get("TELNYX_PHONE_NUMBER");
 const TELNYX_MESSAGING_PROFILE_ID = Deno.env.get("TELNYX_MESSAGING_PROFILE_ID");
 const TELNYX_SENDERS: string[] = Array.from(new Set([
   ENV_TELNYX_FROM,
-  "+18334432004",
   "+14433838055",
+  "+18334432004",
 ].filter((v): v is string => Boolean(v && v.trim()))));
 
 interface SMSRequest {
@@ -137,7 +136,7 @@ serve(async (req) => {
         `HTTP ${telnyxResponse.status}`;
       console.warn(`[SMS] Sender ${candidate || "profile-pool"} rejected: ${lastErrorDetail}`);
 
-      const isSenderError = /invalid source number|from number|not valid|not authorized|messaging_profile|10dlc/i.test(
+      const isSenderError = /invalid source number|from number|not valid|not authorized|messaging_profile|10dlc|not verified|tollfree|toll-free/i.test(
         lastErrorDetail,
       );
       if (!isSenderError) break;
