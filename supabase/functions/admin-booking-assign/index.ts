@@ -32,6 +32,7 @@ import {
   checkScheduleBuffer,
   recordBufferOverride,
 } from "../_shared/schedule-buffer.ts";
+import { computeCrewPay, payExplanation, shareFor } from "../_shared/crew-pay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -388,6 +389,41 @@ serve(async (req) => {
       booking.job_id = jobId;
     }
 
+    // Snapshot the ACTIVE crew before any withdraw — needed for crew-size
+    // change notifications and for detecting locked (post-completion) pay.
+    const { data: priorAssigns } = await admin
+      .from("job_assignments")
+      .select("id, cleaner_id, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot, pay_locked_at, status")
+      .eq("job_id", jobId)
+      .in("status", [
+        "Offered", "Broadcast", "Accepted", "accepted",
+        "Confirmed", "Assigned", "assigned", "In Progress", "in_progress",
+        "completed", "Completed",
+      ]);
+    const priorCrewSize = Math.max(
+      0,
+      ...((priorAssigns || []).map((a: { crew_size_snapshot?: number | null }) =>
+        Number(a.crew_size_snapshot) || 0
+      )),
+      (priorAssigns || []).length,
+      Number(booking.num_cleaners_assigned) || 0,
+    );
+    const priorPayByCleaner = new Map<string, number>();
+    for (const a of priorAssigns || []) {
+      if (a.cleaner_id) {
+        priorPayByCleaner.set(String(a.cleaner_id), Number(a.estimated_pay_cents) || 0);
+      }
+    }
+    const lockedRows = (priorAssigns || []).filter((a: { pay_locked_at?: string | null }) => !!a.pay_locked_at);
+    const payRecalcReason = String(body?.payRecalcReason || body?.reason || "").trim();
+    if (lockedRows.length > 0 && !payRecalcReason) {
+      return json({
+        error:
+          "Pay is locked for this job (already completed). Provide payRecalcReason to recalculate and log the change.",
+        code: "pay_locked",
+      }, 409);
+    }
+
     if (mode === "replace") {
       // Withdraw EVERY prior active assignee (not just open offers). Leaving
       // Confirmed / In Progress rows in place made unassigned cleaners keep
@@ -410,10 +446,17 @@ serve(async (req) => {
         ]);
     }
 
+    const jobValueCents = Number(
+      booking.final_charge_cents || booking.total_estimate_cents || 0,
+    );
+    const shares = await computeCrewPay(admin, jobValueCents, cleanerIds);
+    const shareByCleaner = new Map(shares.map((s) => [s.cleanerId, s]));
+
     const now = new Date().toISOString();
     for (let i = 0; i < cleanerIds.length; i++) {
       const cid = cleanerIds[i];
       const role = i === 0 ? "Lead" : "Support";
+      const share = shareByCleaner.get(cid);
       const { error: upsertErr } = await admin.from("job_assignments").upsert(
         {
           job_id: jobId,
@@ -422,10 +465,33 @@ serve(async (req) => {
           status: "Confirmed",
           accepted_at: now,
           responded_at: now,
+          estimated_pay_cents: share?.shareCents ?? null,
+          pay_percentage_snapshot: share?.ratePercent ?? null,
+          crew_size_snapshot: share?.crewSize ?? cleanerIds.length,
         },
         { onConflict: "job_id,cleaner_id" },
       );
       if (upsertErr) throw upsertErr;
+
+      if (lockedRows.length > 0 && share) {
+        const prior = priorPayByCleaner.get(cid) ?? null;
+        const priorRate = (priorAssigns || []).find(
+          (a: { cleaner_id: string }) => a.cleaner_id === cid,
+        ) as { pay_percentage_snapshot?: number | null } | undefined;
+        await admin.from("cleaner_pay_recalcs").insert({
+          job_id: jobId,
+          booking_id: bookingId,
+          cleaner_id: cid,
+          reason: payRecalcReason,
+          performed_by: callerId,
+          crew_size_before: priorCrewSize || null,
+          crew_size_after: share.crewSize,
+          rate_before: priorRate?.pay_percentage_snapshot ?? null,
+          rate_after: share.ratePercent,
+          pay_before_cents: prior,
+          pay_after_cents: share.shareCents,
+        }).then(() => undefined, () => undefined);
+      }
     }
 
     // Guarantee each assignment has a response_token + the job has its
@@ -457,6 +523,35 @@ serve(async (req) => {
       .eq("id", bookingId);
 
     booking.num_cleaners_assigned = cleanerIds.length;
+
+    // Pre-completion crew-size change: remaining cleaners' displayed pay
+    // updates (already written above) and they are told why.
+    const crewSizeChanged =
+      priorCrewSize > 0 && priorCrewSize !== cleanerIds.length && lockedRows.length === 0;
+    if (crewSizeChanged) {
+      for (const c of cleaners) {
+        const share = shareByCleaner.get(c.id);
+        if (!share || !c.phone) continue;
+        const prev = priorPayByCleaner.get(c.id);
+        if (prev != null && prev === share.shareCents) continue;
+        try {
+          const why =
+            cleanerIds.length === 1
+              ? "Crew size is now 1 — solo rate applies."
+              : `Crew size is now ${cleanerIds.length} — crew pool rate applies.`;
+          await admin.functions.invoke("send-ghl-sms", {
+            body: {
+              phone: c.phone,
+              firstName: c.first_name || undefined,
+              message:
+                `Novara: your pay for this job was recalculated because the crew changed. ` +
+                `${why} ${payExplanation(share)}`,
+              type: "crew_pay_change",
+            },
+          });
+        } catch (_) { /* non-blocking */ }
+      }
+    }
 
     await admin.from("jobs").update({ status: "Assigned" }).eq("id", jobId);
 
@@ -491,7 +586,11 @@ serve(async (req) => {
         const c = cleaners[i];
         const role = i === 0 ? "Lead" : "Support";
         try {
-        const notifyResult = await notifyCleanerOfAssignment(admin, booking, c, { role });
+        const notifyResult = await notifyCleanerOfAssignment(admin, booking, c, {
+          role,
+          estimatedPayCents: shareByCleaner.get(c.id)?.shareCents,
+          crewCleanerIds: cleanerIds,
+        });
         let ghlTaskId: string | null = null;
 
         if (ghlContactId) {

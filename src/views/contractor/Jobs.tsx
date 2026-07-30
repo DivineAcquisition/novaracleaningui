@@ -73,6 +73,8 @@ interface JobPay {
   isActual: boolean;
   status: "paid" | "partial" | "pending" | null;
   pctPaid: number | null;
+  crewSize?: number | null;
+  ratePercent?: number | null;
 }
 interface CustomerDetails {
   bedrooms: number | null;
@@ -276,6 +278,16 @@ function JobDetails({ job }: { job: Job }) {
                   </span>
                 }
               />
+              {(job.pay.crewSize != null || job.pay.ratePercent != null) && (
+                <DetailRow
+                  label="Crew / rate"
+                  value={
+                    job.pay.crewSize != null && job.pay.crewSize > 1
+                      ? `Crew of ${job.pay.crewSize} · ${job.pay.ratePercent ?? "—"}% (crew pool)`
+                      : `Solo · ${job.pay.ratePercent ?? "—"}%`
+                  }
+                />
+              )}
               {!!job.pay.extrasCents && job.pay.extrasCents > 0 && (
                 <>
                   <DetailRow label="— Base cut" value={money(job.pay.baseCents ?? job.pay.estimateCents)} />

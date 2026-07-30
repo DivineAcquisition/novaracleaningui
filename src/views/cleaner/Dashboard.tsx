@@ -36,6 +36,7 @@ import {
   type PortalJob,
 } from "@/components/cleaner/portal-enrichment";
 import { parseServiceDate } from "@/lib/service-date";
+import { payExplanation, normalizePayTier } from "@/lib/crew-pay";
 
 interface CleanerProfile {
   id: string;
@@ -83,6 +84,8 @@ interface UpcomingJob {
   total_estimate_cents?: number;
   check_in_time?: string | null;
   status?: string;
+  crew_size_snapshot?: number | null;
+  pay_percentage_snapshot?: number | null;
 }
 
 interface CompletedJob {
@@ -101,6 +104,8 @@ interface CompletedJob {
   completed_at?: string | null;
   estimated_pay_cents?: number | null;
   cleaner_payout_cents?: number | null;
+  crew_size_snapshot?: number | null;
+  pay_percentage_snapshot?: number | null;
 }
 
 function formatCurrency(cents: number) {
@@ -210,6 +215,8 @@ export default function CleanerDashboard() {
             id,
             status,
             estimated_pay_cents,
+            pay_percentage_snapshot,
+            crew_size_snapshot,
             response_token,
             jobs (
               id,
@@ -278,6 +285,8 @@ export default function CleanerDashboard() {
                 start_datetime: job?.start_datetime,
                 duration_est_hours: job?.duration_est_hours,
                 estimated_pay_cents: a.estimated_pay_cents,
+                crew_size_snapshot: a.crew_size_snapshot,
+                pay_percentage_snapshot: a.pay_percentage_snapshot,
                 check_in_time: job?.check_in_time,
                 status: a.status,
               };
@@ -329,6 +338,8 @@ export default function CleanerDashboard() {
             id,
             status,
             estimated_pay_cents,
+            pay_percentage_snapshot,
+            crew_size_snapshot,
             jobs (
               id,
               address,
@@ -393,6 +404,8 @@ export default function CleanerDashboard() {
                 start_datetime: job?.start_datetime,
                 completed_at: completedAtByJob[job?.id] || job?.check_out_time,
                 estimated_pay_cents: a.estimated_pay_cents,
+                crew_size_snapshot: a.crew_size_snapshot,
+                pay_percentage_snapshot: a.pay_percentage_snapshot,
               };
             });
         }
@@ -871,6 +884,17 @@ export default function CleanerDashboard() {
                           </p>
                         ) : null}
                       </div>
+                      {(job.crew_size_snapshot != null && job.pay_percentage_snapshot != null && pay != null) && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {payExplanation({
+                            cleanerId: profile?.id || "",
+                            payTier: normalizePayTier(profile?.pay_tier),
+                            crewSize: job.crew_size_snapshot,
+                            ratePercent: Number(job.pay_percentage_snapshot),
+                            shareCents: pay,
+                          })}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <RiMapPinLine className="w-4 h-4 flex-shrink-0" />
                         <span>
@@ -998,6 +1022,23 @@ export default function CleanerDashboard() {
                           </p>
                         ) : null}
                       </div>
+                      {(job.crew_size_snapshot != null && job.pay_percentage_snapshot != null && pay != null) ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          {payExplanation({
+                            cleanerId: profile?.id || "",
+                            payTier: normalizePayTier(profile?.pay_tier),
+                            crewSize: job.crew_size_snapshot,
+                            ratePercent: Number(job.pay_percentage_snapshot),
+                            shareCents: pay,
+                          })}
+                        </p>
+                      ) : enriched?.pay?.crewSize != null && enriched?.pay?.ratePercent != null ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          {enriched.pay.crewSize > 1
+                            ? `Crew of ${enriched.pay.crewSize} · ${enriched.pay.ratePercent}% (crew pool)`
+                            : `Solo · ${enriched.pay.ratePercent}%`}
+                        </p>
+                      ) : null}
                       {enriched && <JobDetails job={enriched} />}
                     </div>
                   );

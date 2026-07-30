@@ -8,6 +8,7 @@
 
 import { formatServiceDate, formatTimeSlot } from "./sms.ts";
 import { ensureAssignmentChecklistAccess } from "./job-checklist.ts";
+import { computeCrewPay, shareFor } from "./crew-pay.ts";
 
 const CHECKLIST_BY_SERVICE: Record<string, string> = {
   standard: "https://try.novaracleaning.com/checklist/standard-clean",
@@ -32,14 +33,32 @@ export async function notifyCleanerOfAssignment(
     last_name?: string | null;
     pay_percentage?: number | null;
   },
-  opts?: { role?: string; estimatedPayCents?: number },
+  opts?: {
+    role?: string;
+    estimatedPayCents?: number;
+    /** Full performing/assigned crew — needed so the rate bracket is correct. */
+    crewCleanerIds?: string[];
+  },
 ): Promise<{ email?: boolean; sms?: boolean }> {
   const out: { email?: boolean; sms?: boolean } = {};
   const customerName = `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || "Customer";
   const revenue = Number(booking.final_charge_cents || booking.total_estimate_cents || 0);
-  const pct = Number(cleaner.pay_percentage) || 35;
-  const estimatedEarnings = opts?.estimatedPayCents ??
-    Math.floor((revenue * pct) / 100 / Math.max(1, Number(booking.num_cleaners_assigned) || 1));
+
+  let estimatedEarnings = opts?.estimatedPayCents;
+  if (estimatedEarnings == null && revenue > 0) {
+    try {
+      const crew = (opts?.crewCleanerIds?.length ? opts.crewCleanerIds : [cleaner.id])
+        .filter(Boolean);
+      const shares = await computeCrewPay(supabase, revenue, crew);
+      estimatedEarnings = shareFor(shares, cleaner.id)?.shareCents ?? 0;
+    } catch {
+      // Last-resort solo estimate from the cleaner's solo-tier percentage —
+      // never divide a flat % by crew size (that was the old underpay).
+      const pct = Number(cleaner.pay_percentage) || 35;
+      estimatedEarnings = Math.floor((revenue * pct) / 100);
+    }
+  }
+  if (estimatedEarnings == null) estimatedEarnings = 0;
 
   // Dedicated contractor checklist link (falls back to the public
   // checklist when the booking has no job/assignment for this cleaner).

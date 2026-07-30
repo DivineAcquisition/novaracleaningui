@@ -147,21 +147,32 @@ serve(async (req) => {
       }
     } catch { /* table may not exist yet */ }
 
-    // ── Per-job QC token: the cleaner's assignment response_token doubles as
-    //    the credential for field QC reports (same model as the job
-    //    checklist). Map job_id → this cleaner's token. ──
+    // ── Per-job QC token + crew-pay snapshots for portal transparency ──
     const qcTokenByJob = new Map<string, string>();
+    const paySnapByJob = new Map<string, {
+      estimatedPayCents: number | null;
+      ratePercent: number | null;
+      crewSize: number | null;
+      payTier: string | null;
+    }>();
     const jobIds = bookingRows.map((b) => b.job_id).filter(Boolean) as string[];
     if (jobIds.length > 0) {
       const { data: assigns } = await admin
         .from("job_assignments")
-        .select("job_id, response_token, status")
+        .select("job_id, response_token, status, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot")
         .eq("cleaner_id", cleanerId)
         .in("job_id", jobIds);
       for (const a of assigns || []) {
+        const jid = String(a.job_id);
         if (a.response_token && ["confirmed", "accepted", "assigned", "in progress", "completed"].includes(String(a.status || "").toLowerCase())) {
-          qcTokenByJob.set(String(a.job_id), String(a.response_token));
+          qcTokenByJob.set(jid, String(a.response_token));
         }
+        paySnapByJob.set(jid, {
+          estimatedPayCents: a.estimated_pay_cents != null ? Number(a.estimated_pay_cents) : null,
+          ratePercent: a.pay_percentage_snapshot != null ? Number(a.pay_percentage_snapshot) : null,
+          crewSize: a.crew_size_snapshot != null ? Number(a.crew_size_snapshot) : null,
+          payTier: null,
+        });
       }
     }
 
@@ -302,11 +313,17 @@ serve(async (req) => {
         const cancelled = b.status === "cancelled";
         const payout = payoutByBooking.get(b.id) || null;
         const baseCents = payout ? attributeCents(payout, cleanerId) : null;
-        const estimateCents = b.cleaner_payout_cents != null
-          ? Number(b.cleaner_payout_cents)
-          : b.total_estimate_cents != null
-            ? Math.floor(Number(b.total_estimate_cents) * payPct / 100)
-            : null;
+        const snap = b.job_id ? paySnapByJob.get(String(b.job_id)) : null;
+        // Prefer the assignment's crew-size share over the booking lead's
+        // cleaner_payout_cents (which is only the lead's cut) and over the
+        // legacy flat payPct × estimate (which ignored crew brackets).
+        const estimateCents = snap?.estimatedPayCents != null
+          ? snap.estimatedPayCents
+          : b.cleaner_payout_cents != null && String(b.cleaner_id || "") === cleanerId
+            ? Number(b.cleaner_payout_cents)
+            : b.total_estimate_cents != null
+              ? Math.floor(Number(b.total_estimate_cents) * payPct / 100)
+              : null;
         const extra = extrasByBooking.get(b.id) || null;
         const extrasCents = extra ? extra.total : 0;
         // Actual pay = base payout (when recorded) + any extras — all real money.
@@ -387,6 +404,9 @@ serve(async (req) => {
             isActual: actualCents != null,
             status: payStatus, // 'paid' | 'partial' | 'pending' | null
             pctPaid: payout && payout.pct_paid != null ? Number(payout.pct_paid) : null,
+            // Crew-size rate transparency — reconstructable from history.
+            crewSize: snap?.crewSize ?? null,
+            ratePercent: snap?.ratePercent ?? null,
           },
           customerDetails: cancelled ? null : {
             bedrooms: b.bedrooms ?? null,
@@ -410,6 +430,8 @@ serve(async (req) => {
             teamNotes: b.team_notes || null,
             issuesFlag: !!b.issues_flag,
             issuesNotes: b.issues_notes || null,
+            crewSize: snap?.crewSize ?? null,
+            ratePercent: snap?.ratePercent ?? null,
           },
         };
       });

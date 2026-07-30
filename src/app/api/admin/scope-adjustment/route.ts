@@ -531,7 +531,7 @@ async function protectCleanerPay(
   try {
     const { data: assigns } = await supabase
       .from("job_assignments")
-      .select("id, cleaner_id, estimated_pay_cents")
+      .select("id, cleaner_id, estimated_pay_cents, pay_locked_at, pay_percentage_snapshot, crew_size_snapshot")
       .eq("job_id", booking.job_id || "")
       .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "completed"]);
 
@@ -571,12 +571,20 @@ async function protectCleanerPay(
       await supabase.from("bookings").update({ cleaner_payout_cents: after }).eq("id", booking.id);
     }
     await Promise.all(
-      (assigns || []).map((a: { id: string; cleaner_id: string; estimated_pay_cents?: number | null }) => {
+      (assigns || []).map((a: {
+        id: string;
+        cleaner_id: string;
+        estimated_pay_cents?: number | null;
+        pay_locked_at?: string | null;
+        pay_percentage_snapshot?: number | null;
+        crew_size_snapshot?: number | null;
+      }) => {
         const share = shareFor(shares, a.cleaner_id);
         if (!share) return Promise.resolve();
         // Per-cleaner, so a mixed crew isn't flattened onto one number.
-        const next = Math.max(Number(a.estimated_pay_cents || 0), share.shareCents);
-        return supabase
+        const prev = Number(a.estimated_pay_cents || 0);
+        const next = Math.max(prev, share.shareCents);
+        const update = supabase
           .from("job_assignments")
           .update({
             estimated_pay_cents: next,
@@ -584,6 +592,25 @@ async function protectCleanerPay(
             crew_size_snapshot: share.crewSize,
           })
           .eq("id", a.id);
+        // Pay was locked at completion — any change after that leaves a trail.
+        if (a.pay_locked_at && next !== prev) {
+          return Promise.all([
+            update,
+            supabase.from("cleaner_pay_recalcs").insert({
+              job_id: booking.job_id,
+              booking_id: booking.id,
+              cleaner_id: a.cleaner_id,
+              reason: "Approved scope adjustment raised final job value",
+              crew_size_before: a.crew_size_snapshot ?? share.crewSize,
+              crew_size_after: share.crewSize,
+              rate_before: a.pay_percentage_snapshot ?? share.ratePercent,
+              rate_after: share.ratePercent,
+              pay_before_cents: prev,
+              pay_after_cents: next,
+            }),
+          ]).then(() => undefined);
+        }
+        return update;
       }),
     );
   } catch (e) {

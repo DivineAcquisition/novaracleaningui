@@ -22,6 +22,10 @@ export interface EnrichedPay {
   isActual: boolean;
   status: "paid" | "partial" | "pending" | null;
   pctPaid: number | null;
+  /** Performing crew size locked onto the assignment (null if unknown). */
+  crewSize?: number | null;
+  /** Rate % applied for this cleaner at that crew size (pool rate). */
+  ratePercent?: number | null;
 }
 export interface EnrichedCustomerDetails {
   bedrooms: number | null;
@@ -43,6 +47,8 @@ export interface EnrichedInternalDetails {
   teamNotes: string | null;
   issuesFlag: boolean;
   issuesNotes: string | null;
+  crewSize?: number | null;
+  ratePercent?: number | null;
 }
 export interface PortalJob {
   id: string;
@@ -306,6 +312,16 @@ export function JobDetails({ job }: { job: PortalJob }) {
                   </span>
                 }
               />
+              {(job.pay.crewSize != null || job.pay.ratePercent != null) && (
+                <DetailRow
+                  label="Crew / rate"
+                  value={
+                    job.pay.crewSize != null && job.pay.crewSize > 1
+                      ? `Crew of ${job.pay.crewSize} · ${job.pay.ratePercent ?? "—"}% (crew pool)`
+                      : `Solo · ${job.pay.ratePercent ?? "—"}%`
+                  }
+                />
+              )}
               {!!job.pay.extrasCents && job.pay.extrasCents > 0 && (
                 <>
                   <DetailRow label="— Base cut" value={money(job.pay.baseCents ?? job.pay.estimateCents)} />

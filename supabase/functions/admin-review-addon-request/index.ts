@@ -15,6 +15,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -167,30 +168,47 @@ serve(async (req) => {
       })
       .eq("id", requestId);
 
-    // Visible pay bump: the payout engine already keys off booking revenue
-    // (which just grew), so update the crew's estimated_pay_cents to match.
+    // Visible pay bump: recompute from the final approved job value at the
+    // crew-size rate (pool ÷ crew), not the old flat max-tier split.
     let perCleanerBumpCents = 0;
     if (request.job_id) {
+      const { data: refreshed } = await admin
+        .from("bookings")
+        .select("final_charge_cents, total_estimate_cents")
+        .eq("id", request.booking_id)
+        .maybeSingle();
+      const jobValueCents = Number(
+        refreshed?.final_charge_cents || refreshed?.total_estimate_cents || 0,
+      );
+
       const { data: confirmed } = await admin
         .from("job_assignments")
-        .select("id, estimated_pay_cents, pay_percentage_snapshot, cleaner_id, cleaners(pay_percentage)")
+        .select("id, estimated_pay_cents, cleaner_id")
         .eq("job_id", request.job_id)
         .or("status.ilike.confirmed,status.ilike.accepted");
       const team = confirmed || [];
-      if (team.length > 0) {
-        const teamPct = team.reduce((m: number, a: { pay_percentage_snapshot?: number | null; cleaners?: { pay_percentage?: number | null } | { pay_percentage?: number | null }[] }) => {
-          const c = Array.isArray(a.cleaners) ? a.cleaners[0] : a.cleaners;
-          const p = Number(a.pay_percentage_snapshot ?? c?.pay_percentage) || 35;
-          return p > m ? p : m;
-        }, 35);
-        perCleanerBumpCents = Math.floor((amountCents * teamPct) / 100 / team.length);
-        if (perCleanerBumpCents > 0) {
-          for (const a of team) {
-            await admin
-              .from("job_assignments")
-              .update({ estimated_pay_cents: Number(a.estimated_pay_cents || 0) + perCleanerBumpCents })
-              .eq("id", a.id);
+      const crewIds = team
+        .map((a: { cleaner_id: string }) => a.cleaner_id)
+        .filter(Boolean);
+
+      if (crewIds.length > 0 && jobValueCents > 0) {
+        const shares = await computeCrewPay(admin, jobValueCents, crewIds);
+        for (const a of team) {
+          const share = shareFor(shares, a.cleaner_id);
+          if (!share) continue;
+          const prev = Number(a.estimated_pay_cents || 0);
+          const next = Math.max(prev, share.shareCents);
+          if (a.cleaner_id === request.cleaner_id) {
+            perCleanerBumpCents = Math.max(0, next - prev);
           }
+          await admin
+            .from("job_assignments")
+            .update({
+              estimated_pay_cents: next,
+              pay_percentage_snapshot: share.ratePercent,
+              crew_size_snapshot: share.crewSize,
+            })
+            .eq("id", a.id);
         }
       }
     }
@@ -224,7 +242,7 @@ serve(async (req) => {
       booking_id: request.booking_id,
       cleaner_id: request.cleaner_id,
       source: "admin-review-addon-request",
-      summary: `${ref} — add-on APPROVED: ${request.addon_label || request.addon_id} ($${priceDollars.toFixed(2)}). Customer charge: ${chargeStatus}. Crew pay +$${(perCleanerBumpCents / 100).toFixed(2)} per cleaner.`,
+      summary: `${ref} — add-on APPROVED: ${request.addon_label || request.addon_id} ($${priceDollars.toFixed(2)}). Customer charge: ${chargeStatus}. Crew pay +$${(perCleanerBumpCents / 100).toFixed(2)} for requesting cleaner.`,
       data: { request_id: requestId, action: "approve", by: callerId, charge_status: chargeStatus, amount_cents: amountCents },
     }).then(() => undefined, () => undefined);
 

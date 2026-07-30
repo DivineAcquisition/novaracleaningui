@@ -83,6 +83,7 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
               <TableHead>Date</TableHead>
               <TableHead>Job Address</TableHead>
               <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Crew / rate</TableHead>
               <TableHead>Status</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -98,6 +99,21 @@ export function EarningsPayouts({ payouts }: EarningsPayoutsProps) {
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   ${(payout.cleaner_payout_cents / 100).toFixed(2)}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                  {payout.crew_size_snapshot != null || payout.crewSize != null ? (
+                    <>
+                      {(payout.crew_size_snapshot ?? payout.crewSize) > 1
+                        ? `Crew of ${payout.crew_size_snapshot ?? payout.crewSize}`
+                        : "Solo"}
+                      {(payout.pay_percentage_snapshot ?? payout.ratePercent) != null
+                        ? ` · ${payout.pay_percentage_snapshot ?? payout.ratePercent}%`
+                        : ""}
+                      {(payout.crew_size_snapshot ?? payout.crewSize) > 1 ? " pool" : ""}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant={getStatusColor(payout.status)}>
