@@ -6,6 +6,7 @@ export const JOB_OFFER_EXPIRY_MINUTES = 10;
 /** Exclusive outbound number for cleaner job offers (E.164). */
 export const JOB_OFFER_SMS_FROM_E164 = "+14432744402";
 
+
 export interface JobOfferSmsContext {
   jobDateFormatted: string;
   /** Human arrival window, e.g. "8:00 AM – 12:00 PM". Optional. */
@@ -93,8 +94,10 @@ export async function sendJobOfferSms(
     assignmentId?: string;
   },
 ): Promise<{ ok: boolean; error?: string }> {
+  // GHL first (preferred offer from-number). Telnyx is the pure backup when
+  // GHL is down — never drop a job offer because GHL quota is exhausted.
   try {
-    const { error } = await supabase.functions.invoke("send-ghl-sms", {
+    const { data, error } = await supabase.functions.invoke("send-ghl-sms", {
       body: {
         phone: args.phone,
         email: args.email,
@@ -105,7 +108,28 @@ export async function sendJobOfferSms(
         fromNumber: JOB_OFFER_SMS_FROM_E164,
       },
     });
-    if (error) return { ok: false, error: error.message || String(error) };
+    const ghlFail = error || (data && (data as { error?: string }).error);
+    if (!ghlFail) return { ok: true };
+  } catch (_) {
+    // fall through to Telnyx
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke("send-sms-notification", {
+      body: {
+        toPhone: args.phone,
+        message: args.message,
+        type: "job_offer",
+        jobAssignmentId: args.assignmentId,
+        skipGhlFallback: true,
+      },
+    });
+    if (error || (data && (data as { error?: string }).error)) {
+      return {
+        ok: false,
+        error: String(error?.message || (data as { error?: string })?.error || "telnyx failed"),
+      };
+    }
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

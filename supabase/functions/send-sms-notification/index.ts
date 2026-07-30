@@ -33,6 +33,8 @@ interface SMSRequest {
   // exactly this number. Used by admin diagnostics / health checks to
   // attribute failures to a specific sender. Not used by customer flows.
   fromOverride?: string;
+  /** When true, do not fall back to GHL (caller already tried GHL). */
+  skipGhlFallback?: boolean;
 }
 
 function normalizePhone(phone: string): string {
@@ -56,7 +58,7 @@ serve(async (req) => {
   let logEntryId: string | null = null;
 
   try {
-    const { toPhone, message, type, jobAssignmentId, fromOverride }: SMSRequest = await req.json();
+    const { toPhone, message, type, jobAssignmentId, fromOverride, skipGhlFallback }: SMSRequest = await req.json();
 
     console.log(`[SMS] Sending ${type} to ${toPhone}`);
 
@@ -142,14 +144,10 @@ serve(async (req) => {
       if (!isSenderError) break;
     }
 
-    // Telnyx failed (or no usable sender). Fall back to GoHighLevel's
-    // Conversations API so the message still goes out. GHL is Novara's
-    // primary verified SMS transport; the Telnyx toll-free / 10DLC
-    // senders are frequently not provisioned on the account, which makes
-    // every Telnyx attempt fail with an invalid-`from` error. Routing the
-    // fallback here means EVERY caller of send-sms-notification gets GHL
-    // delivery without each one needing to know about GHL.
-    if (!succeeded) {
+    // Telnyx failed (or no usable sender). Fall back to GoHighLevel unless
+    // the caller already tried GHL (skipGhlFallback) — otherwise a GHL
+    // outage (e.g. daily quota) just burns another failing round-trip.
+    if (!succeeded && !skipGhlFallback) {
       try {
         const { data: ghlData, error: ghlError } = await supabase.functions.invoke(
           "send-ghl-sms",

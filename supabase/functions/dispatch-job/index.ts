@@ -7,7 +7,7 @@ import {
 } from "../_shared/job-offer-sms.ts";
 import { scoreCleanerForJob } from "../_shared/dispatch-scoring.ts";
 import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-approval.ts";
-import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+import { formatServiceDate, formatTimeSlot, sendSms } from "../_shared/sms.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 
@@ -153,17 +153,14 @@ async function broadcastJob(
     if (!row || !c.sms_notifications_enabled) { skipped++; continue; }
     const url = `https://contractor.novaracleaning.com/cleaner/job-offer/${row.response_token}`;
     try {
-      await supabase.functions.invoke("send-ghl-sms", {
-        body: {
-          phone: c.phone,
-          email: c.email || undefined,
-          firstName: c.first_name || undefined,
-          lastName: c.last_name || undefined,
-          message: `${baseMsg}\n${url}\n\nReply STOP to opt out.`,
-          type: "job_broadcast",
-        },
+      // GHL first, Telnyx pure backup when GHL is down.
+      const ok = await sendSms(supabase, {
+        toPhone: c.phone,
+        message: `${baseMsg}\n${url}\n\nReply STOP to opt out.`,
+        type: "job_offer",
       });
-      sent++;
+      if (ok) sent++;
+      else skipped++;
     } catch (_) {
       skipped++;
     }
