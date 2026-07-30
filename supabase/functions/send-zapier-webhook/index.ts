@@ -935,6 +935,12 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
     });
 
     // Sales Pipeline — keep VA/lead card in sync (separate from Job Dispatch).
+    // Do NOT write ghl_sales_opportunity_id here in its own UPDATE. That
+    // separate write was the loop that exhausted GHL's daily API quota
+    // (and killed assignment SMS): it slipped past the old trigger guard,
+    // re-fired this function, and repeated forever. Fold it into the
+    // sync stamp below so there is one bookkeeping write, never a second.
+    let salesOpportunityId: string | null = null;
     try {
       const salesSync = await syncBookingSalesPipeline(supabase, {
         booking,
@@ -942,12 +948,8 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
         customFieldsByKey: ghlCustomFields,
         followers: vaFollowers,
       });
-      if (salesSync.salesOpportunityId) {
-        await supabase.from("bookings").update({
-          ghl_sales_opportunity_id: salesSync.salesOpportunityId,
-        }).eq("id", booking.id);
-        logStep("GHL sales pipeline sync", salesSync);
-      }
+      salesOpportunityId = salesSync.salesOpportunityId || null;
+      if (salesOpportunityId) logStep("GHL sales pipeline sync", salesSync);
     } catch (salesErr) {
       logStep("GHL sales pipeline sync failed (non-critical)", {
         error: salesErr instanceof Error ? salesErr.message : String(salesErr),
@@ -969,10 +971,9 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
 
     logStep("GHL PIT sync complete", ghlResult);
 
-    // Stamp the booking row as synced so the reconcile cron + the
-    // notify_ghl_sync trigger know not to refire. We use the special
-    // sync-only column set so the trigger's "only sync columns
-    // changed" guard short-circuits and does NOT recurse.
+    // One bookkeeping stamp only — ghl_* ids + sync counters together —
+    // so the notify_ghl_sync guard never sees a business-column-free
+    // write that still re-enters the webhook.
     try {
       const stamp: Record<string, unknown> = {
         ghl_synced_at: new Date().toISOString(),
@@ -981,6 +982,7 @@ async function handleBookingWebhook(supabase: any, bookingId: string) {
       };
       if (ghlResult.contactId) stamp.ghl_contact_id = ghlResult.contactId;
       if (ghlResult.opportunityId) stamp.ghl_opportunity_id = ghlResult.opportunityId;
+      if (salesOpportunityId) stamp.ghl_sales_opportunity_id = salesOpportunityId;
       await supabase.from("bookings").update(stamp).eq("id", booking.id);
     } catch (stampErr) {
       logStep("ghl_synced_at stamp failed (non-critical)", {
