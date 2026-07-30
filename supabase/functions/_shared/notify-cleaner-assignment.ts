@@ -6,7 +6,7 @@
 // the admin Dispatch console. The public URL remains the fallback for
 // legacy bookings that have no job/assignment row.
 
-import { formatServiceDate, formatTimeSlot } from "./sms.ts";
+import { formatServiceDate, formatTimeSlot, sendSms } from "./sms.ts";
 import { ensureAssignmentChecklistAccess } from "./job-checklist.ts";
 
 const CHECKLIST_BY_SERVICE: Record<string, string> = {
@@ -101,14 +101,13 @@ export async function notifyCleanerOfAssignment(
         `${booking.address || ""}, ${booking.city || ""}. ` +
         `Your job checklist: ${checklistLink} ` +
         `Portal: https://contractor.novaracleaning.com/cleaner/mobile-dashboard`;
-      const { error } = await supabase.functions.invoke("send-ghl-sms", {
-        body: {
-          phone: cleaner.phone,
-          firstName: cleaner.first_name,
-          message: msg.slice(0, 480),
-        },
+      // GHL first, Telnyx fallback (same helper used elsewhere). Assignment
+      // used to call send-ghl-sms only, so a GHL quota outage dropped the text.
+      out.sms = await sendSms(supabase, {
+        toPhone: cleaner.phone,
+        message: msg.slice(0, 480),
+        type: "confirmation",
       });
-      out.sms = !error;
     } catch {
       out.sms = false;
     }
