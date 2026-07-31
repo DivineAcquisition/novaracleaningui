@@ -209,6 +209,11 @@ async function upsertContractorOpportunity(
     console.warn("[sync-cleaner-to-ghl] opp search failed", e instanceof Error ? e.message : e);
   }
 
+  // Departed contractors: never open a brand-new opportunity for them.
+  if (status === "terminated" || status === "inactive" || status === "suspended") {
+    return null;
+  }
+
   try {
     const created = await ghlFetch(`/opportunities/`, {
       method: "POST", body: JSON.stringify({
@@ -254,6 +259,18 @@ serve(async (req) => {
   }
 
   try {
+    const status = String(cleaner.status || "").toLowerCase();
+    const departed = status === "terminated" || status === "inactive" || status === "suspended";
+    const alreadyInGhl = !!(cleaner.ghl_user_id || cleaner.ghl_synced_at);
+
+    // Termination / deactivation must NEVER create a new GHL contact or
+    // sub-account user. That was adding contractors to the sub-account
+    // the moment they were terminated. Only refresh an existing contact.
+    if (departed && !alreadyInGhl) {
+      console.log(`[sync-cleaner-to-ghl] skip — ${status} and never synced to GHL`, cleanerId);
+      return json({ ok: true, skipped: "departed_never_synced" });
+    }
+
     const phone = toE164(cleaner.phone);
     const fieldMap = await loadCustomFieldMap(token, locationId);
     const rawFields = buildContractorCustomFields(cleaner);
@@ -297,8 +314,10 @@ serve(async (req) => {
 
 
     // Provision GHL sub-account user (same permissions as template user).
+    // NEVER on terminate/deactivate — that was creating users for people
+    // we were removing.
     let ghlUserId: string | null = (cleaner as { ghl_user_id?: string | null }).ghl_user_id || null;
-    if (!ghlUserId && cleaner.email && cleaner.first_name && cleaner.last_name) {
+    if (!departed && !ghlUserId && cleaner.email && cleaner.first_name && cleaner.last_name) {
       const password = `${String(cleaner.first_name)[0].toLowerCase()}${String(cleaner.last_name).replace(/\s+/g, "")}nv2025!`;
       // ghl-users.ts types its supabase param with a deeply-nested
       // structural shape; cast the fn to loose params so TS doesn't try

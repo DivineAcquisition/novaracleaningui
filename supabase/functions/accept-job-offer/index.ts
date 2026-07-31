@@ -264,7 +264,9 @@ serve(async (req) => {
       await supabase.from("jobs").update({ status: "Offered" }).eq("id", job.id);
     }
 
-    // Bookkeeping on bookings table.
+    // Bookkeeping on bookings table — ONE update so notify_ghl_sync fires
+    // once (not once per field). The trigger handles GHL; do not also
+    // invoke send-zapier-webhook here.
     let bookingRow: {
       id: string;
       ghl_contact_id?: string | null;
@@ -273,7 +275,7 @@ serve(async (req) => {
     if (job.customer_id) {
       const { data: b } = await supabase
         .from("bookings")
-        .select("id, ghl_contact_id, num_cleaners_assigned")
+        .select("id, ghl_contact_id, num_cleaners_assigned, status")
         .eq("job_id", job.id)
         .limit(1)
         .maybeSingle();
@@ -284,35 +286,38 @@ serve(async (req) => {
       // broadcast winners never got bookings.cleaner_id set, so
       // complete-booking later failed with "No cleaner assigned".
       const effectiveRole = wasBroadcast ? "lead" : String(assignment.role || "lead").toLowerCase();
-      if (bookingRow && effectiveRole === "lead") {
-        await supabase
-          .from("bookings")
-          .update({
-            cleaner_id: assignment.cleaner_id,
-            assigned_at: new Date().toISOString(),
-            status: haveCleaners >= needCleaners ? "assigned" : "confirmed",
-          })
-          .eq("id", bookingRow.id)
-          .neq("status", "completed")
-          .neq("status", "cancelled");
-      } else if (bookingRow && haveCleaners >= needCleaners) {
-        await supabase
-          .from("bookings")
-          .update({ status: "assigned" })
-          .eq("id", bookingRow.id)
-          .neq("status", "completed")
-          .neq("status", "cancelled");
-      }
       if (bookingRow) {
         const { count } = await supabase
           .from("job_assignments")
           .select("id", { count: "exact", head: true })
           .eq("job_id", job.id)
           .or("status.ilike.confirmed,status.ilike.accepted");
-        await supabase
-          .from("bookings")
-          .update({ num_cleaners_assigned: count ?? 1 })
-          .eq("id", bookingRow.id);
+        const crewCount = count ?? 1;
+        const bookingPatch: Record<string, unknown> = {
+          num_cleaners_assigned: crewCount,
+        };
+        if (effectiveRole === "lead") {
+          bookingPatch.cleaner_id = assignment.cleaner_id;
+          bookingPatch.assigned_at = new Date().toISOString();
+          bookingPatch.status = haveCleaners >= needCleaners ? "assigned" : "confirmed";
+        } else if (haveCleaners >= needCleaners) {
+          bookingPatch.status = "assigned";
+        }
+        const st = String((bookingRow as { status?: string }).status || "").toLowerCase();
+        if (st !== "completed" && st !== "cancelled") {
+          await supabase
+            .from("bookings")
+            .update(bookingPatch)
+            .eq("id", bookingRow.id)
+            .neq("status", "completed")
+            .neq("status", "cancelled");
+        } else {
+          // Completed/cancelled: still stamp crew count without touching status.
+          await supabase
+            .from("bookings")
+            .update({ num_cleaners_assigned: crewCount })
+            .eq("id", bookingRow.id);
+        }
       }
     }
 
@@ -336,18 +341,6 @@ serve(async (req) => {
       }
     } catch (err) {
       log("acceptance metric update failed", err instanceof Error ? err.message : String(err));
-    }
-
-    // Refresh GHL contractor / team size / duration fields via full booking sync.
-    if (bookingRow?.id) {
-      try {
-        await supabase.functions.invoke("send-zapier-webhook", {
-          body: { bookingId: bookingRow.id },
-        });
-        log("GHL booking sync triggered after accept", { bookingId: bookingRow.id });
-      } catch (err) {
-        log("GHL sync invoke failed (non-fatal)", err instanceof Error ? err.message : String(err));
-      }
     }
 
     try {

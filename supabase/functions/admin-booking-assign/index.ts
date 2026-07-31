@@ -17,10 +17,6 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
-import {
-  invokeFullBookingGhlSync,
-  syncBookingOpsFieldsToGhl,
-} from "../_shared/ghl-booking-ops-sync.ts";
 import { scoreCleanerForJob, type RankedCleaner } from "../_shared/dispatch-scoring.ts";
 import { createContactTask } from "../_shared/ghl-tasks.ts";
 import { buildGhlTaskChecklistBody } from "../_shared/ghl-checklist-text.ts";
@@ -566,14 +562,11 @@ serve(async (req) => {
       data: { cleanerIds, mode, by: callerId, actor: actorLabel },
     });
 
-    // Non-critical sync — must NEVER fail the assignment (cleaners are already
-    // saved at this point). A GHL outage previously 500'd the whole request.
-    try {
-      await syncBookingOpsFieldsToGhl(admin, bookingId);
-      await invokeFullBookingGhlSync(admin, bookingId);
-    } catch (syncErr) {
-      console.error("[admin-booking-assign] GHL sync failed (non-blocking)", syncErr instanceof Error ? syncErr.message : String(syncErr));
-    }
+    // GHL: the bookings UPDATE above (cleaner_id / status /
+    // num_cleaners_assigned) already fires notify_ghl_sync → one
+    // send-zapier-webhook. Do NOT also call syncBookingOpsFieldsToGhl +
+    // invokeFullBookingGhlSync here — that was patching the same
+    // opportunities 2–3 times per assign.
 
     const notifications: Array<{ cleanerId: string; email?: boolean; sms?: boolean; ghlTaskId?: string | null }> = [];
 

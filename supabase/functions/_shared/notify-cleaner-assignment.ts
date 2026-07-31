@@ -113,10 +113,10 @@ export async function notifyCleanerOfAssignment(
       const dateLabel = formatServiceDate(booking.service_date) || "TBD";
       const windowLabel = formatTimeSlot(booking.time_slot || booking.arrival_window);
       const whenLabel = windowLabel ? `${dateLabel}, ${windowLabel}` : dateLabel;
-      const payLabel = estimatedEarnings > 0 ? ` Pay: $${(estimatedEarnings / 100).toFixed(2)}.` : "";
+      // Pay stays in the portal / offer email — never in the assignment SMS.
       const msg =
         `Novara job assigned${opts?.role === "Support" ? " (support)" : ""}: ` +
-        `${customerName} · ${whenLabel}.${payLabel} ` +
+        `${customerName} · ${whenLabel}. ` +
         `${booking.address || ""}, ${booking.city || ""}. ` +
         `Your job checklist: ${checklistLink} ` +
         `Portal: https://contractor.novaracleaning.com/cleaner/mobile-dashboard`;
