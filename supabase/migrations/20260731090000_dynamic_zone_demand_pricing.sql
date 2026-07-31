@@ -5,7 +5,7 @@
 --   BASE (band table, DB-config)  ×  CONDITION  ×  ZONE  ×  DEMAND
 --     +  SURCHARGES (same-day, add-ons)  →  clamped to floor/ceiling
 --
--- Design rules enforced by this schema (see docs/dynamic-pricing.md):
+-- Design rules enforced by this schema:
 --   • Every layer of every quote is stored separately (price_quote_audit
 --     .breakdown) together with the config version in effect, so any
 --     historical price is reconstructable exactly.
@@ -285,7 +285,7 @@ ON CONFLICT (zip) DO NOTHING;
 -- observe what reactive pricing would have done before it touches a price.
 
 INSERT INTO public.dynamic_pricing_config_versions (config, is_active, note, created_by)
-VALUES (
+SELECT
 $json$
 {
   "base_tables": {
@@ -395,4 +395,4 @@ $json$::jsonb,
   true,
   'Initial dynamic pricing config — Training Guide base (unreconciled), demand OFF + shadow ON',
   'migration'
-);
+WHERE NOT EXISTS (SELECT 1 FROM public.dynamic_pricing_config_versions);
