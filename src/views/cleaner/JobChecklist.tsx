@@ -18,12 +18,14 @@ import { useParams } from "next/navigation";
 import {
   RiAddLine,
   RiAlertLine,
+  RiCameraLine,
   RiCheckboxCircleFill,
   RiCheckLine,
   RiHourglassLine,
   RiLoader4Line,
   RiMapPinLine,
   RiMoneyDollarCircleLine,
+  RiProhibitedLine,
   RiSparklingLine,
   RiTimeLine,
 } from "@remixicon/react";
@@ -37,6 +39,21 @@ import { cn } from "@/lib/utils";
 interface ChecklistSection {
   title: string;
   items: string[];
+  areaId?: string;
+  instance?: number;
+}
+interface ItemState {
+  done?: boolean;
+  skipped?: boolean;
+  skipReason?: string;
+  at?: string;
+  by?: string;
+}
+interface SectionMeta {
+  before?: string[];
+  after?: string[];
+  conditions_note?: string | null;
+  conditions_photos?: string[];
 }
 interface AddonCatalogEntry {
   id: string;
@@ -77,16 +94,32 @@ interface ChecklistState {
     time_slot: string | null;
     access_notes: string | null;
     add_ons: string[];
+    focused_areas?: Array<{ areaId: string; quantity: number; label?: string }>;
   } | null;
   cleaner: { id: string; first_name: string | null } | null;
   checklist: {
     name: string;
     sections: ChecklistSection[];
-    items: Record<string, { done: boolean; at: string; by: string }>;
+    items: Record<string, ItemState>;
     total_items: number;
     completed_items: number;
     progress_pct: number;
     completed_at: string | null;
+    section_meta?: Record<string, SectionMeta>;
+  };
+  focused?: {
+    enabled: boolean;
+    areas_label?: string;
+    scope_boundary?: string;
+    areas_progress?: Array<{
+      title: string;
+      areaId: string | null;
+      tasksDone: boolean;
+      photosDone: boolean;
+      complete: boolean;
+    }>;
+    photos_complete?: boolean;
+    missing_photo_sections?: number[];
   };
   addons: {
     enabled: boolean;
@@ -96,6 +129,8 @@ interface ChecklistState {
     requests: AddonRequest[];
   };
 }
+
+const PHOTO_BUCKET = "cleaner-job-photos";
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const fmtDate = (d?: string | null) => {
@@ -129,6 +164,14 @@ export default function CleanerJobChecklistPage() {
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueText, setIssueText] = useState("");
   const [issueSending, setIssueSending] = useState(false);
+  const [skipKey, setSkipKey] = useState<string | null>(null);
+  const [skipReason, setSkipReason] = useState("");
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [scopeNote, setScopeNote] = useState("");
+  const [scopeSending, setScopeSending] = useState(false);
+  const [conditionsFor, setConditionsFor] = useState<number | null>(null);
+  const [conditionsNote, setConditionsNote] = useState("");
+  const [photoBusy, setPhotoBusy] = useState<string | null>(null);
 
   const call = useCallback(
     async (body: Record<string, unknown>) => {
@@ -163,25 +206,6 @@ export default function CleanerJobChecklistPage() {
   const toggleItem = async (itemKey: string, done: boolean) => {
     if (!state?.canWrite) return;
     setBusyKey(itemKey);
-    // Optimistic flip
-    setState((prev) => {
-      if (!prev) return prev;
-      const items = { ...prev.checklist.items };
-      if (done) items[itemKey] = { done: true, at: new Date().toISOString(), by: "You" };
-      else delete items[itemKey];
-      const completed = Object.keys(items).length;
-      return {
-        ...prev,
-        checklist: {
-          ...prev.checklist,
-          items,
-          completed_items: completed,
-          progress_pct: prev.checklist.total_items
-            ? Math.round((completed / prev.checklist.total_items) * 100)
-            : 0,
-        },
-      };
-    });
     try {
       setState(await call({ action: "toggle", itemKey, done }));
     } catch (err) {
@@ -192,15 +216,94 @@ export default function CleanerJobChecklistPage() {
     }
   };
 
+  const skipItem = async () => {
+    if (!skipKey || skipReason.trim().length < 3) return;
+    setBusyKey(skipKey);
+    try {
+      setState(await call({ action: "skip", itemKey: skipKey, reason: skipReason.trim() }));
+      toast.success("Skipped — reason saved for QC");
+      setSkipKey(null);
+      setSkipReason("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't skip item");
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const finish = async () => {
     setFinishing(true);
     try {
       setState(await call({ action: "complete" }));
-      toast.success("Checklist complete — the office has been notified. Don't forget your before/after photos!");
+      toast.success("Checklist complete — the office has been notified.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't finish checklist");
     } finally {
       setFinishing(false);
+    }
+  };
+
+  const uploadSectionPhoto = async (sectionIndex: number, kind: "before" | "after", files: FileList | null) => {
+    if (!files?.length || !state) return;
+    const busy = `${sectionIndex}:${kind}`;
+    setPhotoBusy(busy);
+    try {
+      const meta = state.checklist.section_meta || {};
+      const current = meta[String(sectionIndex)] || {};
+      const existing = [...(kind === "before" ? current.before || [] : current.after || [])];
+      for (const file of Array.from(files)) {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `focused/${state.job.id}/s${sectionIndex}-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+        const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, {
+          contentType: file.type || "image/jpeg",
+          upsert: false,
+        });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+        if (pub?.publicUrl) existing.push(pub.publicUrl);
+      }
+      const before = kind === "before" ? existing : (current.before || []);
+      const after = kind === "after" ? existing : (current.after || []);
+      setState(await call({ action: "save_section_photos", sectionIndex, before, after }));
+      toast.success(`${kind === "before" ? "Before" : "After"} photo saved for this area`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Photo upload failed");
+    } finally {
+      setPhotoBusy(null);
+    }
+  };
+
+  const submitConditions = async () => {
+    if (conditionsFor == null || conditionsNote.trim().length < 3) return;
+    setBusyKey(`cond-${conditionsFor}`);
+    try {
+      setState(await call({
+        action: "conditions_found",
+        sectionIndex: conditionsFor,
+        note: conditionsNote.trim(),
+      }));
+      toast.success("Conditions note sent to QC / dispatch");
+      setConditionsFor(null);
+      setConditionsNote("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't save conditions note");
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const requestScopeAddition = async () => {
+    if (scopeNote.trim().length < 3) return;
+    setScopeSending(true);
+    try {
+      setState(await call({ action: "request_scope_addition", note: scopeNote.trim() }));
+      toast.success("Office notified — they'll price the extra work. Don't start it yet.");
+      setScopeOpen(false);
+      setScopeNote("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't reach the office");
+    } finally {
+      setScopeSending(false);
     }
   };
 
@@ -243,8 +346,11 @@ export default function CleanerJobChecklistPage() {
   };
 
   const progress = state?.checklist.progress_pct ?? 0;
+  const isFocused = Boolean(state?.focused?.enabled);
   const allDone = state
-    ? state.checklist.completed_items >= state.checklist.total_items && state.checklist.total_items > 0
+    ? state.checklist.completed_items >= state.checklist.total_items
+      && state.checklist.total_items > 0
+      && (!isFocused || Boolean(state.focused?.photos_complete))
     : false;
 
   const requestedIds = useMemo(
@@ -360,16 +466,71 @@ export default function CleanerJobChecklistPage() {
         </div>
       )}
 
+      {/* ─── Focused scope boundary ──────────────────────────────────── */}
+      {isFocused && state.focused?.scope_boundary && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 space-y-3">
+          <p className="text-sm font-semibold text-amber-950">
+            Scope: <span className="font-bold">{state.focused.areas_label || "selected areas"}</span> only.
+            If the customer asks for work outside these areas, don&apos;t start it — contact the office so it can be added and priced.
+          </p>
+          {state.focused.areas_progress && state.focused.areas_progress.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {state.focused.areas_progress.map((a) => (
+                <span
+                  key={a.title}
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                    a.complete ? "bg-emerald-600 text-white" : "bg-white border border-amber-200 text-amber-900",
+                  )}
+                >
+                  {a.title}: {a.complete ? "complete" : a.tasksDone ? "photos needed" : "in progress"}
+                </span>
+              ))}
+            </div>
+          )}
+          {state.canWrite && (
+            !scopeOpen ? (
+              <Button variant="outline" className="w-full border-amber-400 text-amber-950 bg-white" onClick={() => setScopeOpen(true)}>
+                Request scope addition
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                <textarea
+                  value={scopeNote}
+                  onChange={(e) => setScopeNote(e.target.value)}
+                  rows={2}
+                  placeholder="What extra area/work did the customer ask for?"
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                />
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={scopeNote.trim().length < 3 || scopeSending} onClick={() => void requestScopeAddition()}>
+                    {scopeSending ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                    Notify office to price it
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setScopeOpen(false); setScopeNote(""); }}>Cancel</Button>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      )}
+
       {/* ─── Checklist sections ──────────────────────────────────────── */}
       {checklist.sections.map((section, sIdx) => {
-        const sectionDone = section.items.every((_, iIdx) => checklist.items[`${sIdx}:${iIdx}`]?.done);
+        const sectionDone = section.items.every((_, iIdx) => {
+          const e = checklist.items[`${sIdx}:${iIdx}`];
+          return Boolean(e?.done || (e?.skipped && e?.skipReason));
+        });
+        const meta = checklist.section_meta?.[String(sIdx)] || {};
+        const beforeCount = meta.before?.length || 0;
+        const afterCount = meta.after?.length || 0;
         return (
-          <div key={section.title} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div key={`${section.title}-${sIdx}`} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
               <h2 className="font-bold text-slate-900">{section.title}</h2>
               {sectionDone && (
                 <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                  <RiCheckboxCircleFill className="w-4 h-4" /> Done
+                  <RiCheckboxCircleFill className="w-4 h-4" /> Tasks done
                 </span>
               )}
             </div>
@@ -377,42 +538,144 @@ export default function CleanerJobChecklistPage() {
               {section.items.map((item, iIdx) => {
                 const key = `${sIdx}:${iIdx}`;
                 const entry = checklist.items[key];
-                const done = !!entry?.done;
+                const skipped = Boolean(entry?.skipped && entry?.skipReason);
+                const done = Boolean(entry?.done) || skipped;
                 return (
-                  <li key={key}>
-                    <button
-                      type="button"
-                      disabled={!state.canWrite || busyKey === key}
-                      onClick={() => void toggleItem(key, !done)}
-                      className={cn(
-                        "w-full flex items-start gap-3 px-5 py-3 text-left transition-colors",
-                        done ? "bg-emerald-50/50" : "hover:bg-slate-50",
-                        !state.canWrite && "cursor-default",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
-                          done ? "bg-emerald-500 border-emerald-500" : "border-slate-300 bg-white",
-                        )}
+                  <li key={key} className={cn(done ? "bg-emerald-50/50" : "")}>
+                    <div className="flex items-start gap-3 px-5 py-3">
+                      <button
+                        type="button"
+                        disabled={!state.canWrite || busyKey === key}
+                        onClick={() => void toggleItem(key, !done)}
+                        className="mt-0.5 shrink-0"
+                        aria-label={done ? "Uncheck" : "Check off"}
                       >
-                        {busyKey === key
-                          ? <RiLoader4Line className="w-3 h-3 animate-spin text-slate-400" />
-                          : done && <RiCheckLine className="w-3.5 h-3.5 text-white" />}
-                      </span>
-                      <span className="min-w-0">
-                        <span className={cn("text-sm", done ? "text-slate-400 line-through" : "text-slate-800")}>
-                          {item}
+                        <span
+                          className={cn(
+                            "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                            skipped ? "bg-amber-500 border-amber-500" : done ? "bg-emerald-500 border-emerald-500" : "border-slate-300 bg-white",
+                          )}
+                        >
+                          {busyKey === key
+                            ? <RiLoader4Line className="w-3 h-3 animate-spin text-slate-400" />
+                            : skipped
+                              ? <RiProhibitedLine className="w-3.5 h-3.5 text-white" />
+                              : done && <RiCheckLine className="w-3.5 h-3.5 text-white" />}
                         </span>
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className={cn("text-sm", done && !skipped ? "text-slate-400 line-through" : "text-slate-800")}>
+                          {item}
+                        </p>
+                        {skipped && (
+                          <p className="text-[11px] text-amber-800 mt-0.5">Skipped: {entry?.skipReason}</p>
+                        )}
                         {done && entry?.by && entry.by !== "You" && (
                           <span className="block text-[11px] text-slate-400">by {entry.by}</span>
                         )}
-                      </span>
-                    </button>
+                        {state.canWrite && !done && (
+                          <button
+                            type="button"
+                            className="mt-1 text-[11px] font-semibold text-slate-500 underline"
+                            onClick={() => { setSkipKey(key); setSkipReason(""); }}
+                          >
+                            Skip with reason
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {skipKey === key && (
+                      <div className="px-5 pb-3 space-y-2">
+                        <textarea
+                          value={skipReason}
+                          onChange={(e) => setSkipReason(e.target.value)}
+                          rows={2}
+                          placeholder='Why? e.g. "shower door removed" or "customer asked us not to touch"'
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" disabled={skipReason.trim().length < 3 || busyKey === key} onClick={() => void skipItem()}>
+                            Save skip
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setSkipKey(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
                   </li>
                 );
               })}
             </ul>
+
+            {isFocused && (
+              <div className="px-5 py-4 border-t border-slate-100 space-y-3 bg-slate-50/60">
+                <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <RiCameraLine className="w-4 h-4 text-violet-600" />
+                  Before &amp; after photos required for this area
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-center text-xs cursor-pointer hover:border-violet-400">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={!state.canWrite || photoBusy === `${sIdx}:before`}
+                      onChange={(e) => void uploadSectionPhoto(sIdx, "before", e.target.files)}
+                    />
+                    {photoBusy === `${sIdx}:before`
+                      ? <RiLoader4Line className="w-4 h-4 animate-spin mx-auto mb-1" />
+                      : <RiCameraLine className="w-4 h-4 mx-auto mb-1 text-violet-600" />}
+                    Before ({beforeCount})
+                  </label>
+                  <label className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-center text-xs cursor-pointer hover:border-violet-400">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={!state.canWrite || photoBusy === `${sIdx}:after`}
+                      onChange={(e) => void uploadSectionPhoto(sIdx, "after", e.target.files)}
+                    />
+                    {photoBusy === `${sIdx}:after`
+                      ? <RiLoader4Line className="w-4 h-4 animate-spin mx-auto mb-1" />
+                      : <RiCameraLine className="w-4 h-4 mx-auto mb-1 text-violet-600" />}
+                    After ({afterCount})
+                  </label>
+                </div>
+                {state.canWrite && (
+                  conditionsFor === sIdx ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={conditionsNote}
+                        onChange={(e) => setConditionsNote(e.target.value)}
+                        rows={2}
+                        placeholder="Heavy buildup, mold, damage, out of scope — describe it. Stop and report biohazard/mold — do not attempt that work."
+                        className="w-full rounded-lg border border-rose-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" className="bg-rose-600 hover:bg-rose-700" disabled={conditionsNote.trim().length < 3 || busyKey === `cond-${sIdx}`} onClick={() => void submitConditions()}>
+                          Send conditions to QC
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setConditionsFor(null); setConditionsNote(""); }}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-[11px] font-semibold text-rose-700 underline"
+                      onClick={() => { setConditionsFor(sIdx); setConditionsNote(meta.conditions_note || ""); }}
+                    >
+                      {meta.conditions_note ? "Update conditions-found note" : "Add conditions-found note"}
+                    </button>
+                  )
+                )}
+                {meta.conditions_note && conditionsFor !== sIdx && (
+                  <p className="text-[11px] text-rose-800 rounded-lg bg-rose-50 border border-rose-100 px-3 py-2">
+                    Conditions noted: {meta.conditions_note}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
@@ -595,7 +858,11 @@ export default function CleanerJobChecklistPage() {
           {finishing
             ? <RiLoader4Line className="w-5 h-5 animate-spin mr-2" />
             : <RiCheckboxCircleFill className="w-5 h-5 mr-2" />}
-          {allDone ? "Finish checklist — notify the office" : `Complete all ${checklist.total_items} tasks to finish`}
+          {allDone
+            ? "Finish checklist — notify the office"
+            : isFocused
+              ? "Finish every task (or skip with reason) + area photos"
+              : `Complete all ${checklist.total_items} tasks to finish`}
         </Button>
       )}
       {checklist.completed_at && (
@@ -603,13 +870,15 @@ export default function CleanerJobChecklistPage() {
           <RiCheckboxCircleFill className="w-8 h-8 text-emerald-500 mx-auto mb-1" />
           <p className="font-bold text-emerald-800">Checklist complete</p>
           <p className="text-xs text-emerald-700 mt-0.5">
-            The office has been notified. Remember to upload your before &amp; after photos and mark the job complete in your dashboard.
+            The office has been notified. Mark the job complete in your dashboard when you&apos;re done on site.
           </p>
         </div>
       )}
 
       <p className="text-xs text-center text-slate-400 pb-8">
-        Questions on-site? Text dispatch — do not leave until every line is checked.
+        {isFocused
+          ? "Focused clean — only the areas above. Extra work goes through the office."
+          : "Questions on-site? Text dispatch — do not leave until every line is checked."}
       </p>
     </Shell>
   );

@@ -62,13 +62,19 @@ ON CONFLICT (key) DO NOTHING;
 -- Duration assumptions so schedule buffers have something to multiply for
 -- focused cleans across every sqft band (actual hours still scale by area
 -- count at booking time via estimated_duration_hours).
-INSERT INTO public.service_duration_assumptions (service_type, home_size_id, base_hours)
-SELECT 'focused', band.id, 1.5
-FROM (VALUES
-  ('0_999'), ('1000_1500'), ('1501_2000'), ('2001_2500'), ('2501_3000'),
-  ('3001_3500'), ('3501_4000'), ('4001_4500'), ('4501_5000'), ('5000_plus')
-) AS band(id)
-ON CONFLICT (service_type, home_size_id) DO NOTHING;
+-- Table may not exist yet on every environment — seed only when present.
+DO $$
+BEGIN
+  IF to_regclass('public.service_duration_assumptions') IS NOT NULL THEN
+    INSERT INTO public.service_duration_assumptions (service_type, home_size_id, base_hours)
+    SELECT 'focused', band.id, 1.5
+    FROM (VALUES
+      ('0_999'), ('1000_1500'), ('1501_2000'), ('2001_2500'), ('2501_3000'),
+      ('3001_3500'), ('3501_4000'), ('4001_4500'), ('4501_5000'), ('5000_plus')
+    ) AS band(id)
+    ON CONFLICT (service_type, home_size_id) DO NOTHING;
+  END IF;
+END $$;
 
 -- Sweep every 5 minutes: auto-cancel + refund unfulfilled same-day bookings.
 DO $$

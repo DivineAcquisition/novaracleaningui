@@ -10,11 +10,19 @@
 // src/lib/checklists.ts so the customer promise and the crew execution
 // list stay in lock-step.
 
-import { focusedChecklistSections, type FocusedAreaSelection } from "./focused-same-day.ts";
+import {
+  focusedChecklistSections,
+  FOCUSED_SAME_DAY_DEFAULTS,
+  type FocusedAreaSelection,
+  type FocusedSameDaySettings,
+} from "./focused-same-day.ts";
 
 export interface ContractorChecklistSection {
   title: string;
   items: string[];
+  /** Focused cleans only — area type id for photo / conditions tying. */
+  areaId?: string;
+  instance?: number;
 }
 
 export interface ContractorChecklist {
@@ -313,10 +321,11 @@ export function normalizeServiceType(serviceType: string | null | undefined): st
 export function getContractorChecklist(
   serviceType: string | null | undefined,
   focusedAreas?: FocusedAreaSelection[] | null,
+  focusedSettings: FocusedSameDaySettings = FOCUSED_SAME_DAY_DEFAULTS,
 ): ContractorChecklist {
   const key = normalizeServiceType(serviceType);
   if (key === "focused") {
-    const sections = focusedChecklistSections(focusedAreas || []);
+    const sections = focusedChecklistSections(focusedAreas || [], focusedSettings);
     return { key: "focused", name: "Focused / Single-Area Clean", sections };
   }
   return CHECKLISTS[key] || CHECKLISTS.standard;

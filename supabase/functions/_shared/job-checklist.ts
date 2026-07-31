@@ -11,6 +11,11 @@
 // whole team and the admin Dispatch console see live).
 
 import { countChecklistItems, getContractorChecklist, normalizeServiceType } from "./contractor-checklists.ts";
+import {
+  FOCUSED_SAME_DAY_DEFAULTS,
+  FOCUSED_SAME_DAY_SETTINGS_KEY,
+  mergeFocusedSameDaySettings,
+} from "./focused-same-day.ts";
 
 export const CONTRACTOR_PORTAL_BASE = "https://contractor.novaracleaning.com";
 
@@ -68,7 +73,18 @@ export async function ensureJobChecklist(
   }
 
   const normalized = normalizeServiceType(serviceType);
-  const totalItems = countChecklistItems(getContractorChecklist(normalized, focusedAreas));
+  let focusedSettings = FOCUSED_SAME_DAY_DEFAULTS;
+  if (normalized === "focused") {
+    try {
+      const { data: settingsRow } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", FOCUSED_SAME_DAY_SETTINGS_KEY)
+        .maybeSingle();
+      if (settingsRow?.value) focusedSettings = mergeFocusedSameDaySettings(settingsRow.value);
+    } catch (_) { /* defaults */ }
+  }
+  const totalItems = countChecklistItems(getContractorChecklist(normalized, focusedAreas, focusedSettings));
 
   const { data: created, error } = await supabase
     .from("job_checklists")
@@ -78,6 +94,7 @@ export async function ensureJobChecklist(
       service_type: normalized,
       token: randomToken(),
       total_items: totalItems,
+      section_meta: {},
     })
     .select("id, token")
     .maybeSingle();

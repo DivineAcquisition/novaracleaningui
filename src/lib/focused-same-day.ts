@@ -7,11 +7,12 @@
 
 export const FOCUSED_SAME_DAY_SETTINGS_KEY = "focused_same_day_settings";
 
-export type FocusedAreaId = "bathroom" | "kitchen" | "living" | "other" | "bedroom";
+/** Built-in ids plus any admin-added area types (string). */
+export type FocusedAreaId = "bathroom" | "kitchen" | "living" | "other" | "bedroom" | (string & {});
 export type FocusedCondition = "light" | "normal" | "heavy" | "severe";
 
 export interface FocusedAreaDef {
-  id: FocusedAreaId;
+  id: string;
   label: string;
   /** Whole-dollar flat rate. Bedroom stacks per quantity. */
   price: number;
@@ -22,6 +23,16 @@ export interface FocusedAreaDef {
 export interface FocusedAreaSelection {
   areaId: FocusedAreaId | string;
   quantity: number;
+  /** Optional intake label (e.g. "primary bath") — carried into checklist section titles. */
+  label?: string;
+}
+
+export interface FocusedChecklistSection {
+  title: string;
+  items: string[];
+  areaId: string;
+  /** 1-based instance when quantity > 1 (Bedroom 1 / Bedroom 2). */
+  instance: number;
 }
 
 export interface FocusedSameDaySettings {
@@ -42,7 +53,69 @@ export interface FocusedSameDaySettings {
   same_day_upcharge_in_pay_basis: boolean;
   disclosure_title: string;
   disclosure_body: string;
+  /**
+   * Per-area checklist task lists (admin-editable via app_settings).
+   * Full standard for each space — not an abbreviated "light" list.
+   */
+  checklists: Record<string, string[]>;
 }
+
+/** Full per-area standards — identical rigor to whole-home room work. */
+export const DEFAULT_FOCUSED_AREA_CHECKLISTS: Record<string, string[]> = {
+  bathroom: [
+    "Toilet — bowl, seat (both sides), tank, base, behind",
+    "Shower/tub — walls, door or curtain rod, fixtures, drain, soap scum removed",
+    "Sink, faucet, countertop, backsplash",
+    "Mirror and glass",
+    "Vanity exterior, cabinet fronts, handles",
+    "Towel bars, paper holder, light switches, door handles",
+    "Trash emptied, liner replaced",
+    "Baseboards",
+    "Floor vacuumed and mopped — corners and behind the toilet included",
+  ],
+  kitchen: [
+    "Countertops cleared, wiped, items returned",
+    "Backsplash",
+    "Sink, faucet, drain, disposal splash guard",
+    "Stovetop, grates, control knobs, hood/vent exterior",
+    "Appliance exteriors — fridge, oven, dishwasher, microwave",
+    "Microwave interior",
+    "Cabinet fronts and handles",
+    "Small appliance exteriors",
+    "Table and chairs (if present)",
+    "Trash emptied, liner replaced, can wiped",
+    "Baseboards",
+    "Floor vacuumed and mopped — including the toe-kick edge",
+  ],
+  bedroom: [
+    "Bed made, or linens changed if provided",
+    "Surfaces dusted — nightstands, dresser, headboard, shelves, lamps",
+    "Mirrors and glass",
+    "Under-bed floor cleaned where accessible",
+    "Window sills, ledges, blinds dusted",
+    "Light switches, door handles, baseboards",
+    "Trash emptied",
+    "Floor vacuumed; mopped if hard surface",
+  ],
+  living: [
+    "Surfaces dusted — tables, shelves, entertainment center, decor",
+    "Electronics dusted (screens with appropriate cloth)",
+    "Upholstered furniture vacuumed, cushions straightened and lifted",
+    "Mirrors and glass",
+    "Window sills, ledges, blinds",
+    "Light switches, door handles, baseboards",
+    "Trash emptied",
+    "Floor vacuumed and mopped, including under reachable furniture",
+  ],
+  other: [
+    "Surfaces dusted",
+    "Glass / mirrors cleaned",
+    "Fixtures and light switches wiped",
+    "Baseboards",
+    "Trash emptied",
+    "Floor vacuumed and mopped",
+  ],
+};
 
 export const FOCUSED_SAME_DAY_DEFAULTS: FocusedSameDaySettings = {
   areas: [
@@ -63,6 +136,7 @@ export const FOCUSED_SAME_DAY_DEFAULTS: FocusedSameDaySettings = {
   disclosure_title: "Same-Day Service — Please Read",
   disclosure_body:
     "Same-day cleans depend on cleaner availability and are **not guaranteed**. We'll do everything we can to staff your clean today. If we're unable to assign a cleaner, your booking will be canceled and you'll receive a **full refund — including the same-day fee — automatically**. Nothing is required from you.",
+  checklists: { ...DEFAULT_FOCUSED_AREA_CHECKLISTS },
 };
 
 export function mergeFocusedSameDaySettings(
@@ -77,10 +151,23 @@ export function mergeFocusedSameDaySettings(
         quantity: Boolean(a.quantity),
       }))
     : FOCUSED_SAME_DAY_DEFAULTS.areas;
+  const checklists = {
+    ...DEFAULT_FOCUSED_AREA_CHECKLISTS,
+    ...(raw.checklists && typeof raw.checklists === "object" ? raw.checklists : {}),
+  };
+  // Drop empty / non-array checklist values so bad admin edits can't wipe a section.
+  for (const [k, v] of Object.entries(checklists)) {
+    if (!Array.isArray(v) || v.length === 0) {
+      checklists[k] = DEFAULT_FOCUSED_AREA_CHECKLISTS[k] || DEFAULT_FOCUSED_AREA_CHECKLISTS.other;
+    } else {
+      checklists[k] = v.map((line) => String(line)).filter(Boolean);
+    }
+  }
   return {
     ...FOCUSED_SAME_DAY_DEFAULTS,
     ...raw,
     areas,
+    checklists,
     condition_multipliers: {
       ...FOCUSED_SAME_DAY_DEFAULTS.condition_multipliers,
       ...(raw.condition_multipliers || {}),
@@ -231,82 +318,58 @@ export function formatFocusedAreasLabel(
   return selections
     .map((s) => {
       const def = areaDef(settings, s.areaId);
-      if (!def) return null;
-      const qty = def.quantity ? Math.max(1, Math.floor(Number(s.quantity) || 1)) : 1;
-      return qty > 1 ? `${qty}× ${def.label}` : def.label;
+      const label = (s.label && String(s.label).trim()) || def?.label || String(s.areaId);
+      if (!def && !settings.checklists[s.areaId]) return label || null;
+      const qty = Math.max(1, Math.floor(Number(s.quantity) || 1));
+      return qty > 1 ? `${qty}× ${label}` : label;
     })
     .filter(Boolean)
     .join(", ");
 }
 
-/** Build contractor checklist sections from the selected areas only. */
+/**
+ * Build contractor checklist sections from the selected areas only.
+ * Quantities repeat as distinctly labeled sections (Bedroom 1, Bedroom 2).
+ * Never includes whole-home sections.
+ */
 export function focusedChecklistSections(
   selections: FocusedAreaSelection[],
   settings: FocusedSameDaySettings = FOCUSED_SAME_DAY_DEFAULTS,
-): Array<{ title: string; items: string[] }> {
-  const AREA_ITEMS: Record<string, string[]> = {
-    bathroom: [
-      "Clean and disinfect toilet (inside, outside, base)",
-      "Scrub shower / tub and rinse soap scum",
-      "Clean sink, faucet, and counter",
-      "Wipe mirrors and chrome fixtures",
-      "Sweep / mop floor; empty trash",
-      "Take BEFORE and AFTER photos of the bathroom",
-    ],
-    kitchen: [
-      "Clean countertops and backsplash",
-      "Wipe exterior of appliances",
-      "Clean sink and faucet",
-      "Wipe cabinet fronts and handles",
-      "Sweep / mop floor; empty trash",
-      "Take BEFORE and AFTER photos of the kitchen",
-    ],
-    living: [
-      "Dust surfaces, shelves, and electronics",
-      "Vacuum / mop floors and rugs",
-      "Wipe light switches and door handles",
-      "Tidy and straighten common-area furniture",
-      "Take BEFORE and AFTER photos of the living / common area",
-    ],
-    other: [
-      "Dust and wipe all surfaces in the selected area",
-      "Vacuum / mop the floor",
-      "Empty trash if present",
-      "Take BEFORE and AFTER photos of the area",
-    ],
-    bedroom: [
-      "Dust surfaces and nightstands",
-      "Vacuum / mop floor",
-      "Make bed if linens are ready (or tidy bedding)",
-      "Wipe light switches and door handles",
-      "Take BEFORE and AFTER photos of the bedroom",
-    ],
-  };
-
-  const sections: Array<{ title: string; items: string[] }> = [];
+): FocusedChecklistSection[] {
+  const sections: FocusedChecklistSection[] = [];
   for (const sel of selections) {
     const def = areaDef(settings, sel.areaId);
-    if (!def) continue;
-    const qty = def.quantity ? Math.max(1, Math.floor(Number(sel.quantity) || 1)) : 1;
-    const items = AREA_ITEMS[sel.areaId] || AREA_ITEMS.other;
-    for (let i = 1; i <= qty; i++) {
-      const title = qty > 1 ? `${def.label} ${i}` : def.label;
-      sections.push({ title, items: [...items] });
+    if (!def && !settings.checklists[sel.areaId]) continue;
+    const baseLabel = (sel.label && String(sel.label).trim()) || def?.label || String(sel.areaId);
+    const qty = def?.quantity
+      ? Math.max(1, Math.floor(Number(sel.quantity) || 1))
+      : Math.max(1, Math.floor(Number(sel.quantity) || 1));
+    // Non-quantity area types still allow qty>1 when intake listed multiples
+    // with the same id (e.g. two bathrooms booked as quantity).
+    const repeat = def?.quantity === false && qty === 1 ? 1 : qty;
+    const items = settings.checklists[sel.areaId]
+      || settings.checklists.other
+      || DEFAULT_FOCUSED_AREA_CHECKLISTS.other;
+    for (let i = 1; i <= repeat; i++) {
+      const title = repeat > 1 ? `${baseLabel} ${i}` : baseLabel;
+      sections.push({
+        title,
+        items: [...items],
+        areaId: String(sel.areaId),
+        instance: i,
+      });
     }
   }
-  if (sections.length === 0) {
-    sections.push({
-      title: "Focused clean",
-      items: ["Clean the selected areas only", "Take BEFORE and AFTER photos"],
-    });
-  }
-  sections.push({
-    title: "Close-out",
-    items: [
-      "Confirm only the selected areas were cleaned (do not expand scope)",
-      "Report any damage or blocked access before leaving",
-      "Lock up / leave as instructed",
-    ],
-  });
   return sections;
+}
+
+export const FOCUSED_SCOPE_BOUNDARY =
+  "Scope: {areas} only. If the customer asks for work outside these areas, don't start it — contact the office so it can be added and priced.";
+
+export function focusedScopeBoundaryText(
+  selections: FocusedAreaSelection[],
+  settings: FocusedSameDaySettings = FOCUSED_SAME_DAY_DEFAULTS,
+): string {
+  const areas = formatFocusedAreasLabel(selections, settings) || "selected areas";
+  return FOCUSED_SCOPE_BOUNDARY.replace("{areas}", areas);
 }
