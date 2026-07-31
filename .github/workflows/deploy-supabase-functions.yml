@@ -43,6 +43,20 @@ jobs:
         with:
           version: latest
 
+      # Names only — Actions masks every secret value, so this cannot leak one.
+      # It exists to answer "which scope did the token actually land in?" without
+      # another guess-and-push cycle.
+      - name: Diagnose token scope (only when the token is missing)
+        if: ${{ env.SUPABASE_ACCESS_TOKEN == '' }}
+        env:
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
+        run: |
+          echo "Secret names visible to this job (repository + Production environment):"
+          printf '%s' "$ALL_SECRETS" | grep -o '"[^"]*"[[:space:]]*:' | tr -d '":' | tr -d ' ' | sort | sed 's/^/  - /' || echo "  (none)"
+          echo "Actions variable names visible to this job:"
+          printf '%s' "$ALL_VARS" | grep -o '"[^"]*"[[:space:]]*:' | tr -d '":' | tr -d ' ' | sort | sed 's/^/  - /' || echo "  (none)"
+
       - name: Guard — require access token
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
