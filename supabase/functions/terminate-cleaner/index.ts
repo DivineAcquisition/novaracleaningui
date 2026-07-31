@@ -139,6 +139,42 @@ function letterHtml(opts: {
   </div>`;
 }
 
+async function sendTerminationLetter(opts: {
+  toEmail: string;
+  name: string;
+  reasonLabel: string;
+  effectiveDate: string;
+  blacklisted: boolean;
+  notes?: string | null;
+}): Promise<{ letterSent: boolean; letterError: string | null }> {
+  try {
+    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const { error: sendErr } = await resend.emails.send({
+      from: "Novara Cleaning HR <hr@novaracleaning.com>",
+      to: [opts.toEmail],
+      cc: LETTER_CC,
+      reply_to: HR_EMAIL,
+      subject: "Notice of Termination — Novara Cleaning",
+      html: letterHtml({
+        name: opts.name,
+        reasonLabel: opts.reasonLabel,
+        effectiveDate: opts.effectiveDate,
+        blacklisted: opts.blacklisted,
+        notes: opts.notes,
+      }),
+    });
+    if (sendErr) {
+      return {
+        letterSent: false,
+        letterError: (sendErr as { message?: string }).message || String(sendErr),
+      };
+    }
+    return { letterSent: true, letterError: null };
+  } catch (e) {
+    return { letterSent: false, letterError: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
@@ -148,15 +184,83 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  let callerId: string;
-  try {
-    callerId = await ensureAdminOrVa(admin, req);
-  } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 403);
-  }
-
   try {
     const body = await req.json().catch(() => ({}));
+    const action = String(body?.action || "terminate").toLowerCase();
+
+    // Service-role may resend letters (ops); terminate still requires admin/VA.
+    const authHeader = req.headers.get("Authorization") || "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const serviceKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+    let isService = !!serviceKey && (bearer === serviceKey || authHeader === serviceKey);
+    if (!isService && bearer.split(".").length === 3) {
+      try {
+        const payload = JSON.parse(atob(bearer.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        isService = payload?.role === "service_role";
+      } catch { /* ignore */ }
+    }
+
+    let callerId: string;
+    if (action === "resend_letter" && isService) {
+      callerId = "service";
+    } else {
+      try {
+        callerId = await ensureAdminOrVa(admin, req);
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 403);
+      }
+    }
+
+    // Resend an existing termination letter (HR + contact cc'd, reply-to HR).
+    if (action === "resend_letter") {
+      const cleanerId = String(body?.cleanerId || "");
+      if (!cleanerId) return json({ error: "cleanerId required" }, 400);
+      const { data: cleaner } = await admin.from("cleaners").select("*").eq("id", cleanerId).maybeSingle();
+      if (!cleaner) return json({ error: "Cleaner not found" }, 404);
+      const { data: term } = await admin
+        .from("cleaner_terminations")
+        .select("*")
+        .eq("cleaner_id", cleanerId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!term) return json({ error: "No termination record found for this cleaner." }, 404);
+
+      const toEmail = (cleaner.email || term.letter_to || "").trim();
+      if (!toEmail || toEmail.endsWith("@pending.novara")) {
+        return json({ error: "No valid contractor email on file — letter not sent." }, 400);
+      }
+      const name = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Contractor";
+      const reasonLabel = String(term.reason_label || REASON_LABELS[String(term.reason)] || term.reason);
+      const effectiveDate = String(term.effective_date || new Date().toISOString().slice(0, 10));
+      const blacklisted = String(term.rehire_status || "") === "blacklist";
+      const notes = term.notes ? String(term.notes) : null;
+
+      const { letterSent, letterError } = await sendTerminationLetter({
+        toEmail, name, reasonLabel, effectiveDate, blacklisted, notes,
+      });
+
+      if (letterSent) {
+        await admin.from("cleaners").update({ termination_letter_sent_at: new Date().toISOString() }).eq("id", cleanerId)
+          .then(() => undefined, () => undefined);
+        await admin.from("cleaner_terminations").update({
+          letter_to: toEmail,
+          letter_cc: LETTER_CC.join(", "),
+          letter_sent: true,
+          letter_error: null,
+        }).eq("id", term.id).then(() => undefined, () => undefined);
+        await admin.from("events").insert({
+          event_type: "cleaner.termination_letter_resent",
+          cleaner_id: cleanerId,
+          source: "terminate-cleaner",
+          summary: `Termination letter resent to ${name} (cc ${LETTER_CC.join(", ")})`,
+          data: { by: callerId, letter_to: toEmail, letter_cc: LETTER_CC, termination_id: term.id },
+        }).then(() => undefined, () => undefined);
+      }
+
+      return json({ ok: letterSent, letterSent, letterError, letterCc: LETTER_CC, to: toEmail });
+    }
+
     const cleanerId = String(body?.cleanerId || "");
     const reason = String(body?.reason || "");
     const rehireStatus = String(body?.rehireStatus || "no_rehire");
@@ -206,21 +310,11 @@ serve(async (req) => {
     let letterError: string | null = null;
     const toEmail = (cleaner.email || "").trim();
     if (sendLetter && toEmail && !toEmail.endsWith("@pending.novara")) {
-      try {
-        const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-        const { error: sendErr } = await resend.emails.send({
-          from: "Novara Cleaning HR <hr@novaracleaning.com>",
-          to: [toEmail],
-          cc: LETTER_CC,
-          reply_to: HR_EMAIL,
-          subject: "Notice of Termination — Novara Cleaning",
-          html: letterHtml({ name, reasonLabel, effectiveDate, blacklisted, notes }),
-        });
-        if (sendErr) { letterError = (sendErr as { message?: string }).message || String(sendErr); }
-        else letterSent = true;
-      } catch (e) {
-        letterError = e instanceof Error ? e.message : String(e);
-      }
+      const sent = await sendTerminationLetter({
+        toEmail, name, reasonLabel, effectiveDate, blacklisted, notes,
+      });
+      letterSent = sent.letterSent;
+      letterError = sent.letterError;
     } else if (sendLetter) {
       letterError = "No valid contractor email on file — letter not sent.";
     }
