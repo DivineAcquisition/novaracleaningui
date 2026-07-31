@@ -45,16 +45,18 @@ export async function ensureJobChecklist(
 
   let bookingId = args.bookingId ?? null;
   let serviceType = args.serviceType ?? null;
-  if (!bookingId || !serviceType) {
+  let focusedAreas: Array<{ areaId: string; quantity: number }> | null = null;
+  {
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, service_type")
+      .select("id, service_type, focused_areas")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     bookingId = bookingId || booking?.id || null;
     serviceType = serviceType || booking?.service_type || null;
+    if (Array.isArray(booking?.focused_areas)) focusedAreas = booking.focused_areas;
   }
   if (!serviceType) {
     const { data: job } = await supabase
@@ -66,7 +68,7 @@ export async function ensureJobChecklist(
   }
 
   const normalized = normalizeServiceType(serviceType);
-  const totalItems = countChecklistItems(getContractorChecklist(normalized));
+  const totalItems = countChecklistItems(getContractorChecklist(normalized, focusedAreas));
 
   const { data: created, error } = await supabase
     .from("job_checklists")

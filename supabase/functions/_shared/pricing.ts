@@ -9,7 +9,7 @@
 // vice-versa. Drift between the two is what produced the v3.x "the offer
 // said $216 but the server charged $432" bug.
 
-export type ServiceType = "standard" | "deep" | "combo" | "moveInOut";
+export type ServiceType = "standard" | "deep" | "combo" | "moveInOut" | "focused";
 export type ZoneId = "A" | "B" | "C";
 export type MembershipPlan = "none" | "monthly" | "biweekly" | "weekly";
 
@@ -43,6 +43,7 @@ export const SERVICE_TIER_PRICING: Record<ServiceType, { label: string; multipli
   deep:      { label: "Deep Clean",              multiplier: 1.5 },
   combo:     { label: "Deep + Standard Combo",   multiplier: 2.5 },
   moveInOut: { label: "Move-In / Move-Out",      multiplier: 2.0 },
+  focused:   { label: "Focused / Single-Area Clean", multiplier: 0 },
 };
 
 export const SERVICE_ZONES: Record<ZoneId, { id: ZoneId; modifier: number }> = {
@@ -92,6 +93,7 @@ export const SERVICE_DISCOUNT_RATES: Record<ServiceType, number> = {
   deep:      0.25,
   combo:     0,
   moveInOut: 0,
+  focused:   0,
 };
 
 export const DEPOSIT_PERCENT = 0.5;
@@ -111,6 +113,7 @@ export function getServiceListPrice(
   serviceType: ServiceType | string,
   zone: ZoneId = "B",
 ): number {
+  if (serviceType === "focused") return 0; // per-area flat rates — see focused-same-day.ts
   const home = getHomeSize(homeSizeId);
   if (!home || home.standardPrice === 0) return 0;
   const tier = SERVICE_TIER_PRICING[serviceType as ServiceType];

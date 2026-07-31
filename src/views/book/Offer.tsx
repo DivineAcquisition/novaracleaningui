@@ -32,6 +32,15 @@ import {
   calculatePrice,
   getServicePrice,
 } from "@/lib/pricing-system";
+import { FocusedCleanPicker } from "@/components/booking/FocusedCleanPicker";
+import {
+  FOCUSED_SAME_DAY_DEFAULTS,
+  calculateFocusedPrice,
+  isSameDayAvailableNow,
+  isServiceDateToday,
+  type FocusedCondition,
+} from "@/lib/focused-same-day";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -61,9 +70,22 @@ export default function BookingOffer() {
   const { bookingData, updateBookingData, setCurrentStep } = useBooking();
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'combo' | 'membership' | null>(null);
+  const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'combo' | 'membership' | 'focused' | null>(
+    bookingData.serviceType === 'focused' ? 'focused' : null,
+  );
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
+  );
+  const sameDaySettings = FOCUSED_SAME_DAY_DEFAULTS;
+  const sameDayOfferable = isSameDayAvailableNow(sameDaySettings);
+  const focusedPrice = useMemo(
+    () => calculateFocusedPrice(
+      bookingData.focusedAreas || [],
+      (bookingData.conditionLevel as FocusedCondition) || "normal",
+      false,
+      sameDaySettings,
+    ),
+    [bookingData.focusedAreas, bookingData.conditionLevel],
   );
 
   // Get home size data
@@ -131,6 +153,8 @@ export default function BookingOffer() {
     updateBookingData({
       serviceType: 'standard',
       membershipPlan: 'none',
+      focusedAreas: [],
+      paymentOption: 'deposit',
     });
     trackViewContent(prices.standard, 'Standard Cleaning — 25% Off First Clean');
     setTimeout(() => {
@@ -143,6 +167,8 @@ export default function BookingOffer() {
     updateBookingData({
       serviceType: 'deep',
       membershipPlan: 'none',
+      focusedAreas: [],
+      paymentOption: 'deposit',
     });
     trackViewContent(prices.deepClean, 'Deep Cleaning — 25% Off First Clean');
     setTimeout(() => {
@@ -155,6 +181,8 @@ export default function BookingOffer() {
     updateBookingData({
       serviceType: 'combo',
       membershipPlan: 'none',
+      focusedAreas: [],
+      paymentOption: 'deposit',
     });
     trackViewContent(prices.combo, 'Deep + Standard Combo — 25% Off First Clean');
     setTimeout(() => {
@@ -167,6 +195,10 @@ export default function BookingOffer() {
     updateBookingData({
       serviceType: 'standard',
       membershipPlan: 'biweekly',
+      focusedAreas: [],
+      isSameDay: false,
+      sameDayAcknowledgedAt: null,
+      paymentOption: 'deposit',
     });
     trackViewContent(prices.membership.biweekly, 'Novara Glow Membership — Bi-Weekly');
     setTimeout(() => {
@@ -174,10 +206,42 @@ export default function BookingOffer() {
     }, 100);
   };
 
+  const handleSelectFocused = () => {
+    setSelectedService('focused');
+    updateBookingData({
+      serviceType: 'focused',
+      membershipPlan: 'none',
+      focusedAreas: bookingData.focusedAreas?.length ? bookingData.focusedAreas : [],
+      conditionLevel: bookingData.conditionLevel || 'normal',
+      paymentOption: 'full',
+    });
+    trackViewContent(65, 'Focused / Single-Area Clean');
+    setTimeout(() => {
+      document.getElementById('focused-areas-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
   const handleContinueToCheckout = () => {
     if (!bookingData.serviceDate || !bookingData.timeSlot) {
       toast.error("Please select a date and time");
       return;
+    }
+    if (selectedService === 'focused') {
+      if (!bookingData.focusedAreas?.length || focusedPrice.total <= 0) {
+        toast.error("Select at least one area for your focused clean");
+        return;
+      }
+    }
+    const wantsSameDay = Boolean(bookingData.isSameDay) && isServiceDateToday(bookingData.serviceDate, sameDaySettings);
+    if (wantsSameDay) {
+      if (!sameDayOfferable) {
+        toast.error(`Same-day is only available before ${sameDaySettings.same_day_cutoff}`);
+        return;
+      }
+      if (!bookingData.sameDayAcknowledgedAt) {
+        toast.error("Please acknowledge the same-day disclosure before continuing");
+        return;
+      }
     }
     preloadStripe();
     setCurrentStep(4);
@@ -287,11 +351,104 @@ export default function BookingOffer() {
             </button>
           </div>
 
-          {/* Three offer cards: Standard Clean, Deep Clean (Most
-              Popular), and Glow Membership. Standard + Deep both
-              qualify for the 50% promo; Membership has its own
-              per-clean discount (14–42%) and doesn't stack the 50%. */}
+          {/* Offer cards: Standard, Deep, Combo, Focused, Membership.
+              Focused is its own service type with per-area flat rates. */}
           <div className="grid gap-5 md:gap-6 max-w-xl mx-auto">
+            {/* Focused / Single-Area Clean — own service type, paid in full */}
+            {(() => {
+              const isSelected = selectedService === "focused";
+              return (
+                <Card
+                  className={cn(
+                    "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
+                    isSelected
+                      ? "border-primary shadow-lg ring-2 ring-primary/20"
+                      : "border-primary/20 hover:border-primary/50",
+                  )}
+                  onClick={handleSelectFocused}
+                >
+                  <CardContent className="pt-6 pb-6 px-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-50 text-emerald-700 border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                      >
+                        Paid in full · from $65
+                      </Badge>
+                    </div>
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-bold font-jakarta">
+                        Focused / Single-Area Clean
+                      </h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        Only the rooms you need — bathrooms, kitchen, bedrooms, and more. Flat per-area rates, not a discounted whole-home clean.
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                          {isSelected && focusedPrice.total > 0
+                            ? `$${focusedPrice.total.toFixed(2)}`
+                            : "from $65"}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {isSelected && focusedPrice.total > 0 ? "total · pay in full" : "per area"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Bathroom / kitchen / living $65 · bedrooms $50 each · $65 minimum
+                      </p>
+                    </div>
+                    <ul className="space-y-2">
+                      {[
+                        "Pick exactly which areas to clean",
+                        "Condition multipliers apply (Light → Heavy)",
+                        "Paid in full before we schedule or dispatch",
+                        "Cleaner checklist scoped to your selected areas only",
+                      ].map((line) => (
+                        <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
+                          <RiCheckLine className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-foreground">{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      size="lg"
+                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectFocused();
+                      }}
+                    >
+                      Select Focused Clean
+                      <RiArrowRightSLine className="w-4 h-4 ml-1" />
+                    </Button>
+                    {isSelected ? (
+                      <div
+                        id="focused-areas-section"
+                        className="pt-2 border-t"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <FocusedCleanPicker
+                          selections={bookingData.focusedAreas || []}
+                          condition={(bookingData.conditionLevel as FocusedCondition) || "normal"}
+                          settings={sameDaySettings}
+                          onChange={({ selections, condition }) => {
+                            updateBookingData({
+                              focusedAreas: selections,
+                              conditionLevel: condition,
+                              serviceType: "focused",
+                              paymentOption: "full",
+                            });
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {/* Standard Clean — 50% off */}
             {selectedHomeSize && prices.standard > 0 && (() => {
               const standardDiscounted = prices.standardPromoTotal;
@@ -702,34 +859,113 @@ export default function BookingOffer() {
           </div>
 
           {/* Schedule Picker - Shows after service selection with animation */}
-          {selectedService && (
+          {selectedService && (selectedService !== "focused" || (bookingData.focusedAreas?.length || 0) > 0) && (
             <div
               id="schedule-section"
               className="scroll-mt-4 animate-fade-in"
               style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
             >
+              {sameDayOfferable ? (
+                <Card className="mb-4 border-amber-200 bg-amber-50/60">
+                  <CardContent className="pt-4 pb-4 space-y-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <Checkbox
+                        checked={Boolean(bookingData.isSameDay)}
+                        onCheckedChange={(checked) => {
+                          const on = checked === true;
+                          if (on) {
+                            const today = new Date();
+                            setSelectedDate(today);
+                            updateBookingData({
+                              isSameDay: true,
+                              serviceDate: format(today, "yyyy-MM-dd"),
+                              timeSlot: "",
+                              sameDayAcknowledgedAt: null,
+                            });
+                          } else {
+                            updateBookingData({
+                              isSameDay: false,
+                              sameDayAcknowledgedAt: null,
+                            });
+                          }
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm">
+                        <span className="font-semibold text-foreground">
+                          Need it today? Add Same-Day Service (+${sameDaySettings.same_day_upcharge_dollars})
+                        </span>
+                        <span className="block text-xs text-muted-foreground mt-0.5">
+                          Available until {sameDaySettings.same_day_cutoff} local time. Not guaranteed — depends on finding a cleaner.
+                          {selectedService === "focused"
+                            ? " Paid with your focused clean total."
+                            : " Charged with your normal 50% deposit."}
+                        </span>
+                      </span>
+                    </label>
+                    {bookingData.isSameDay ? (
+                      <div className="rounded-lg border border-amber-300 bg-white p-3 space-y-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {sameDaySettings.disclosure_title}
+                        </p>
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                          {sameDaySettings.disclosure_body.replace(/\*\*/g, "")}
+                        </p>
+                        <label className="flex items-start gap-2 cursor-pointer pt-1">
+                          <Checkbox
+                            checked={Boolean(bookingData.sameDayAcknowledgedAt)}
+                            onCheckedChange={(checked) => {
+                              updateBookingData({
+                                sameDayAcknowledgedAt: checked === true ? new Date().toISOString() : null,
+                              });
+                            }}
+                            className="mt-0.5"
+                          />
+                          <span className="text-xs font-medium">
+                            I understand same-day is not guaranteed and I&apos;ll get a full refund of what I paid (including the same-day fee) if no cleaner is assigned.
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : null}
+
               <SchedulePicker
                 selectedDate={selectedDate}
                 selectedTime={bookingData.timeSlot}
+                allowSameDay={Boolean(bookingData.isSameDay) && sameDayOfferable}
                 onDateSelect={(date) => {
                   setSelectedDate(date);
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const isToday = isServiceDateToday(dateStr, sameDaySettings);
                   updateBookingData({
-                    serviceDate: format(date, 'yyyy-MM-dd'),
-                    timeSlot: ''
+                    serviceDate: dateStr,
+                    timeSlot: '',
+                    isSameDay: Boolean(bookingData.isSameDay) && isToday,
+                    sameDayAcknowledgedAt: Boolean(bookingData.isSameDay) && isToday
+                      ? bookingData.sameDayAcknowledgedAt
+                      : null,
                   });
                 }}
                 onTimeSelect={(date, timeSlot, startTime, endTime) => {
+                  const dateStr = format(date, 'yyyy-MM-dd');
                   updateBookingData({
-                    serviceDate: format(date, 'yyyy-MM-dd'),
+                    serviceDate: dateStr,
                     timeSlot,
                     startTime,
-                    endTime
+                    endTime,
+                    isSameDay: Boolean(bookingData.isSameDay) && isServiceDateToday(dateStr, sameDaySettings),
                   });
                   toast.success(`Scheduled for ${format(date, 'MMM d')} at ${timeSlot}`);
                 }}
                 onContinue={handleContinueToCheckout}
                 showContinue={true}
-                continueDisabled={!bookingData.serviceDate || !bookingData.timeSlot}
+                continueDisabled={
+                  !bookingData.serviceDate
+                  || !bookingData.timeSlot
+                  || (Boolean(bookingData.isSameDay) && !bookingData.sameDayAcknowledgedAt)
+                }
               />
             </div>
           )}

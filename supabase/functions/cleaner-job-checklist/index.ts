@@ -119,7 +119,7 @@ serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, service_type, status")
+      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, service_type, status, focused_areas")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -139,7 +139,8 @@ serve(async (req) => {
       .maybeSingle();
     if (!checklistRow) return json({ ok: false, error: "Could not load checklist." }, 500);
 
-    const spec = getContractorChecklist(checklistRow.service_type);
+    const focusedAreas = Array.isArray(booking?.focused_areas) ? booking.focused_areas : [];
+    const spec = getContractorChecklist(checklistRow.service_type, focusedAreas);
     const totalItems = countChecklistItems(spec);
     const nowIso = new Date().toISOString();
     const cleanerName = cleaner

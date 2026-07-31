@@ -2,6 +2,11 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+export interface FocusedAreaSelection {
+  areaId: string;
+  quantity: number;
+}
+
 export interface BookingData {
   zipCode: string;
   homeSizeId: string;
@@ -30,6 +35,14 @@ export interface BookingData {
   bookingId?: string;
   referralCode?: string;
   promoCode?: string;
+  /** Focused / single-area selections (empty for whole-home services). */
+  focusedAreas?: FocusedAreaSelection[];
+  /** Condition for focused price + duration multipliers. */
+  conditionLevel?: 'light' | 'normal' | 'heavy' | 'severe';
+  /** Same-day upcharge requested for today's date. */
+  isSameDay?: boolean;
+  /** ISO timestamp when the customer acknowledged the same-day disclosure. */
+  sameDayAcknowledgedAt?: string | null;
 }
 
 interface BookingContextType {
@@ -56,6 +69,10 @@ const initialBookingData: BookingData = {
   phone: '',
   serviceDuration: 0,
   paymentOption: 'deposit',
+  focusedAreas: [],
+  conditionLevel: 'normal',
+  isSameDay: false,
+  sameDayAcknowledgedAt: null,
 };
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);

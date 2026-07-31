@@ -62,6 +62,8 @@ const formatServiceType = (type: string) => {
     standard: 'Standard Cleaning',
     deep: 'Deep Cleaning',
     moveInOut: 'Move In/Out Cleaning',
+    combo: 'Deep + Standard Combo',
+    focused: 'Focused / Single-Area Clean',
   };
   return types[type] || type;
 };

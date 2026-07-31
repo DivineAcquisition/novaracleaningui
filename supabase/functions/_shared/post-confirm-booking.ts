@@ -398,8 +398,37 @@ async function fanoutDownstream(
   // 6 edge functions running one after another (previously 12-30s of
   // serial latency). Each is wrapped so one failure can't reject the
   // batch.
+  // Same-day bookings need urgent sourcing + an admin heads-up immediately.
+  let isSameDay = false;
+  try {
+    const { data: b } = await supabase
+      .from("bookings")
+      .select("is_same_day, same_day_sourcing_deadline_at, booking_number, first_name, email")
+      .eq("id", bookingId)
+      .maybeSingle();
+    isSameDay = Boolean(b?.is_same_day);
+    if (isSameDay) {
+      await supabase.from("events").insert({
+        event_type: "same_day.sourcing_active",
+        booking_id: bookingId,
+        source: "post-confirm-booking",
+        summary: `URGENT same-day sourcing — booking ${b?.booking_number || bookingId}`,
+        data: {
+          booking_id: bookingId,
+          deadline: b?.same_day_sourcing_deadline_at,
+          customer: b?.first_name,
+          email: b?.email,
+        },
+      });
+    }
+  } catch (err) {
+    log("same-day flag lookup failed (non-blocking)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const fns: Array<[string, Record<string, unknown>]> = [
-    ["auto-dispatch-booking", { bookingId }],
+    ["auto-dispatch-booking", { bookingId, urgent: isSameDay }],
     ["create-google-calendar-event", { bookingId }],
     ["send-zapier-webhook", { bookingId }],
     ["sync-to-anything", { bookingId }],

@@ -20,9 +20,18 @@ const logStep = (step: string, details?: any) => {
 // Pricing math lives in `_shared/pricing.ts` (mirrored in `src/lib/
 // pricing.ts`). DO NOT redefine bases or discounts here — drift between
 // the two is exactly what caused the v3 "$216 quote → $432 charge" bug.
-import { calculatePriceCents, HOME_SIZE_RANGES } from "../_shared/pricing.ts";
-
-const DEPOSIT_PERCENT = 0.5;
+import { calculatePriceCents, HOME_SIZE_RANGES, DEPOSIT_PERCENT } from "../_shared/pricing.ts";
+import {
+  FOCUSED_SAME_DAY_DEFAULTS,
+  FOCUSED_SAME_DAY_SETTINGS_KEY,
+  calculateFocusedPrice,
+  isSameDayAvailableNow,
+  isServiceDateToday,
+  mergeFocusedSameDaySettings,
+  withSameDayUpcharge,
+  type FocusedAreaSelection,
+  type FocusedCondition,
+} from "../_shared/focused-same-day.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -106,18 +115,107 @@ serve(async (req) => {
 
     const membershipPlan: string = bookingData.membershipPlan || "none";
     const incomingAddOns: string[] = Array.isArray(bookingData.addOns) ? bookingData.addOns : [];
-    const calc = calculatePriceCents(
+    const isFocused = bookingData.serviceType === "focused";
+
+    // Load admin-tunable focused/same-day rates (fallback to code defaults).
+    let focusedSettings = FOCUSED_SAME_DAY_DEFAULTS;
+    try {
+      const { data: settingsRow } = await supabaseClient
+        .from("app_settings")
+        .select("value")
+        .eq("key", FOCUSED_SAME_DAY_SETTINGS_KEY)
+        .maybeSingle();
+      if (settingsRow?.value) focusedSettings = mergeFocusedSameDaySettings(settingsRow.value);
+    } catch (_) { /* defaults */ }
+
+    const focusedAreas: FocusedAreaSelection[] = Array.isArray(bookingData.focusedAreas)
+      ? bookingData.focusedAreas.map((a: any) => ({
+          areaId: String(a.areaId || a.area_id || ""),
+          quantity: Math.max(1, Math.floor(Number(a.quantity) || 1)),
+        })).filter((a: FocusedAreaSelection) => a.areaId)
+      : [];
+    const conditionLevel = (["light", "normal", "heavy", "severe"].includes(bookingData.conditionLevel)
+      ? bookingData.conditionLevel
+      : "normal") as FocusedCondition;
+
+    let isSameDay = Boolean(bookingData.isSameDay);
+    if (isSameDay) {
+      if (!isServiceDateToday(String(bookingData.serviceDate || ""), focusedSettings)) {
+        return new Response(
+          JSON.stringify({ error: "Same-day is only available for today's date.", code: "SAME_DAY_DATE" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (!isSameDayAvailableNow(focusedSettings)) {
+        return new Response(
+          JSON.stringify({
+            error: `Same-day is only available before ${focusedSettings.same_day_cutoff}.`,
+            code: "SAME_DAY_CUTOFF",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (!bookingData.sameDayAcknowledgedAt) {
+        return new Response(
+          JSON.stringify({
+            error: "Same-day disclosure must be acknowledged before payment.",
+            code: "SAME_DAY_ACK_REQUIRED",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    if (isFocused && focusedAreas.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Select at least one area for a focused clean.", code: "FOCUSED_AREAS_REQUIRED" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let calc = calculatePriceCents(
       bookingData.homeSizeId as string,
-      bookingData.serviceType as string,
-      incomingAddOns,
+      isFocused ? "standard" : bookingData.serviceType as string,
+      isFocused ? [] : incomingAddOns,
       membershipPlan,
       !!bookingData.useCredit,
       "B",
     );
+    let sameDayUpchargeCents = 0;
+    let estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
+
+    if (isFocused) {
+      const focused = calculateFocusedPrice(focusedAreas, conditionLevel, isSameDay, focusedSettings);
+      const toC = (n: number) => Math.round(n * 100);
+      calc = {
+        basePriceCents: toC(focused.areasSubtotal),
+        serviceListCents: toC(focused.serviceTotal),
+        serviceFinalCents: toC(focused.serviceTotal),
+        discountCents: 0,
+        addOnsCents: 0,
+        subtotalCents: toC(focused.serviceTotal),
+        totalCents: toC(focused.total),
+        depositCents: toC(focused.deposit),
+        remainingCents: 0,
+        hours: focused.hours,
+      };
+      sameDayUpchargeCents = toC(focused.sameDayUpcharge);
+      estimatedHours = focused.hours;
+    } else if (isSameDay) {
+      const withSd = withSameDayUpcharge(calc.totalCents / 100, true, focusedSettings);
+      sameDayUpchargeCents = Math.round(withSd.sameDayUpcharge * 100);
+      calc = {
+        ...calc,
+        totalCents: Math.round(withSd.total * 100),
+        depositCents: Math.round(withSd.deposit * 100),
+        remainingCents: Math.round(withSd.balanceDue * 100),
+      };
+    }
+
     const basePrice = calc.serviceListCents; // pre-discount list (kept on booking.base_price_cents)
     const subtotal = calc.subtotalCents;
     const addOnsTotal = calc.addOnsCents;
-    const serviceTierDiscount = calc.discountCents;
+    const serviceTierDiscount = isFocused ? 0 : calc.discountCents;
     // `newCustomerDiscount` / `membershipDiscount` are kept as variable names
     // because downstream code (logging, metadata) references them. All flat
     // legacy discounts (promo codes, 50% acquisition, 50% referral) are now
@@ -166,7 +264,6 @@ serve(async (req) => {
     // when useCredit was passed to calculatePriceCents, but we keep the
     // local variable for logging consistency.
     const creditCoverage = bookingData.useCredit ? Math.min(basePrice, 15000) : 0;
-    const estimatedHours = getEstimatedHours(bookingData.homeSizeId as string);
 
     // Promo codes are no longer honored — the only discounts in v4 are
     // the per-service-tier rules in _shared/pricing.ts. A code on the
@@ -257,32 +354,27 @@ serve(async (req) => {
       platformFeeCents,
     });
 
-    // Determine amount to charge.
-    //
-    // Customer-facing UX has retired the "Pay in Full" option entirely;
-    // every customer pays a 50% deposit at booking and the remaining 50%
-    // is auto-charged after the cleaner marks complete (see complete-
-    // booking). To stop a stale `bookingData.paymentOption === 'full'`
-    // (e.g. persisted from before the toggle was removed, or set by
-    // a future admin tool) from accidentally charging the full amount,
-    // we IGNORE 'full' here and force deposit unless the request comes
-    // in for a member booking using their cleaning credit.
-    //
-    // `useCredit: true` still charges the $1 card-verification minimum
-    // so the saved card can be auto-charged later if the credit is
-    // already exhausted.
+    // Amount to charge:
+    //   • Focused cleans → paid in full (only pay-in-full customer path)
+    //   • Same-day on whole-home → normal 50% deposit (includes same-day fee)
+    //   • Member credit → $1 card authorization
     let amountToCharge = 0;
     let fullPaymentDiscount = 0;
+    let paymentOptionStored: "deposit" | "full" = "deposit";
 
     if (bookingData.useCredit) {
       amountToCharge = 100; // $1 minimum authorization to capture card
       logStep("Member using credit - $1 card authorization required", { depositAmount: amountToCharge });
+    } else if (isFocused) {
+      amountToCharge = Math.max(100, totalAmount);
+      paymentOptionStored = "full";
+      logStep("Focused clean — charge in full", { amountToCharge, totalAmount, sameDayUpchargeCents });
     } else {
       amountToCharge = Math.max(100, Math.round(totalAmount * DEPOSIT_PERCENT));
-      logStep("50% deposit payment (paymentOption='full' ignored if sent)", {
+      logStep("50% deposit payment", {
         depositAmount: amountToCharge,
         totalAmount,
-        clientSentPaymentOption: bookingData.paymentOption,
+        sameDayUpchargeCents,
       });
     }
 
@@ -325,11 +417,13 @@ serve(async (req) => {
         homeSizeId: bookingData.homeSizeId,
         serviceDate: bookingData.serviceDate,
         timeSlot: bookingData.timeSlot,
-        paymentOption: bookingData.paymentOption,
+        paymentOption: paymentOptionStored,
         bookingNumber: String(bookingNumber),
         isNewCustomer: String(isNewCustomer),
         referralCode: referralCode || '',
         promoCode: promoCode || '',
+        isSameDay: String(isSameDay),
+        sameDayUpchargeCents: String(sameDayUpchargeCents),
       },
     });
 
@@ -384,24 +478,30 @@ serve(async (req) => {
         membership_plan: membershipPlan,
         uses_credit: bookingData.useCredit || false,
         base_price_cents: basePrice,
-        deposit_cents: bookingData.paymentOption === 'deposit'
-          ? (bookingData.useCredit ? 100 : amountToCharge)
-          : 0,
+        // Amount collected at booking (full total for focused; 50% otherwise).
+        deposit_cents: bookingData.useCredit ? 100 : amountToCharge,
         total_estimate_cents: totalAmount,
         payment_intent_id: paymentIntentId,
         customer_id: customerId,
         status: 'pending_payment', // CRITICAL: Always pending until payment verified
-        // Always 'deposit' for customer-facing bookings — see comment
-        // on amountToCharge above. Members using credit are also
-        // recorded as 'deposit' since the $1 authorization is
-        // functionally a deposit hold.
-        payment_option: 'deposit',
+        payment_option: paymentOptionStored,
         full_payment_discount: fullPaymentDiscount,
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: 'pending',
         booking_number: bookingNumber,
         estimated_duration_hours: estimatedHours,
+        focused_areas: isFocused ? focusedAreas : [],
+        condition_level: isFocused || bookingData.conditionLevel ? conditionLevel : null,
+        is_same_day: isSameDay,
+        same_day_upcharge_cents: sameDayUpchargeCents,
+        same_day_acknowledged_at: isSameDay ? bookingData.sameDayAcknowledgedAt : null,
+        same_day_sourcing_deadline_at: isSameDay
+          ? new Date(Date.now() + focusedSettings.sourcing_deadline_minutes * 60_000).toISOString()
+          : null,
+        hard_deadline_at: isSameDay
+          ? new Date(Date.now() + focusedSettings.sourcing_deadline_minutes * 60_000).toISOString()
+          : null,
         team_notes: referralCode 
           ? `Referral code used: ${referralCode}${promoCode ? ` | Promo code: PROMO:${promoCode}` : ''}${walletCreditCents > 0 ? ` | Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : ''}`
           : (promoCode ? `Promo code: PROMO:${promoCode}${walletCreditCents > 0 ? ` | Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : ''}` : (walletCreditCents > 0 ? `Wallet credit: $${(walletCreditCents / 100).toFixed(2)}` : null)),
