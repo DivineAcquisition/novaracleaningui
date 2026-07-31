@@ -464,3 +464,241 @@ verify_jwt = false
 
 [functions.quote-dynamic-price]
 verify_jwt = true
+
+# ─── Auth posture pinned to what is live ──────────────────────────────────
+#
+# `supabase functions deploy` applies verify_jwt from THIS file, defaulting to
+# true for anything undeclared. These functions are live with verify_jwt=false,
+# so leaving them out would have flipped them to JWT-required on the first
+# successful deploy — silently breaking the callers that legitimately arrive
+# without a JWT (external webhooks, SMS/email link targets, cron invocations).
+# Declaring them here keeps deploys faithful to the running configuration.
+#
+# NOTE for review: several admin-* functions below are publicly reachable and
+# rely on their own in-handler authorization. That posture predates this file;
+# it is recorded here as-is rather than changed as a side effect of a deploy.
+
+[functions.adjust-booking-invoice]
+verify_jwt = false
+
+[functions.admin-add-booking-addons]
+verify_jwt = false
+
+[functions.admin-booking-checklist]
+verify_jwt = false
+
+[functions.admin-chat-agent]
+verify_jwt = false
+
+[functions.admin-cleaner-sms]
+verify_jwt = false
+
+[functions.admin-create-deposit-invoice]
+verify_jwt = false
+
+[functions.admin-extra-pay]
+verify_jwt = false
+
+[functions.admin-ghl-conversation-probe]
+verify_jwt = false
+
+[functions.admin-ghl-list-fields]
+verify_jwt = false
+
+[functions.admin-ghl-update-contact]
+verify_jwt = false
+
+[functions.admin-grant-credit]
+verify_jwt = false
+
+[functions.admin-impersonate-cleaner]
+verify_jwt = false
+
+[functions.admin-list-jobs]
+verify_jwt = false
+
+[functions.admin-refund-booking]
+verify_jwt = false
+
+[functions.admin-review-completion]
+verify_jwt = false
+
+[functions.admin-send-email]
+verify_jwt = false
+
+[functions.admin-submit-photos]
+verify_jwt = false
+
+[functions.airtable-sync]
+verify_jwt = false
+
+[functions.apploye-invite-cleaner]
+verify_jwt = false
+
+[functions.apploye-live-tracking]
+verify_jwt = false
+
+[functions.book-as-va]
+verify_jwt = false
+
+[functions.book-ghl-appointment]
+verify_jwt = false
+
+[functions.booking-confirm-comms]
+verify_jwt = false
+
+[functions.chat-agent-pulse]
+verify_jwt = false
+
+[functions.cleaner-admin-action]
+verify_jwt = false
+
+[functions.cleaner-schedule-exception]
+verify_jwt = false
+
+[functions.cleaner-scores-admin]
+verify_jwt = false
+
+[functions.compute-cleaner-scores]
+verify_jwt = false
+
+[functions.contractor-signup]
+verify_jwt = false
+
+[functions.coverage-respond]
+verify_jwt = false
+
+[functions.coverage-runner]
+verify_jwt = false
+
+[functions.escalate-overdue-bookings]
+verify_jwt = false
+
+[functions.escalate-stale-leads]
+verify_jwt = false
+
+[functions.finalize-booking]
+verify_jwt = false
+
+[functions.get-testimonial-form]
+verify_jwt = false
+
+[functions.ghl-inbound-webhook]
+verify_jwt = false
+
+[functions.ghl-tag-cleanup]
+verify_jwt = false
+
+[functions.lead-intake]
+verify_jwt = false
+
+[functions.notify-completion-approved]
+verify_jwt = false
+
+[functions.notify-crew-change]
+verify_jwt = false
+
+[functions.notify-discord]
+verify_jwt = false
+
+[functions.ops-sync-env-secrets]
+verify_jwt = false
+
+[functions.partner-calendar]
+verify_jwt = false
+
+[functions.partner-host-onboarding]
+verify_jwt = false
+
+[functions.partner-recurring-generate]
+verify_jwt = false
+
+[functions.partner-turnover]
+verify_jwt = false
+
+[functions.payroll-admin]
+verify_jwt = false
+
+[functions.payroll-operations]
+verify_jwt = false
+
+[functions.portal-book-checkout]
+verify_jwt = false
+
+[functions.prepare-completion-hold]
+verify_jwt = false
+
+[functions.reconcile-ghl-appointments]
+verify_jwt = false
+
+[functions.report-export]
+verify_jwt = false
+
+[functions.same-day-sourcing-deadline]
+verify_jwt = false
+
+[functions.save-property-details]
+verify_jwt = false
+
+[functions.send-addon-email]
+verify_jwt = false
+
+[functions.send-auth-email]
+verify_jwt = false
+
+[functions.send-cleaning-checklist]
+verify_jwt = false
+
+[functions.send-details-reminder]
+verify_jwt = false
+
+[functions.send-ghl-sms]
+verify_jwt = false
+
+[functions.send-partner-auth-email]
+verify_jwt = false
+
+[functions.send-partner-email]
+verify_jwt = false
+
+[functions.send-photo-cadence]
+verify_jwt = false
+
+[functions.send-post-booking-sms]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
+
+[functions.send-remaining-balance-invoice]
+verify_jwt = false
+
+[functions.send-remaining-day-of]
+verify_jwt = false
+
+[functions.send-testimonial-offer]
+verify_jwt = false
+
+[functions.store-service-agreement]
+verify_jwt = false
+
+[functions.submit-testimonial]
+verify_jwt = false
+
+[functions.sync-cleaner-to-ghl]
+verify_jwt = false
+
+[functions.sync-to-ghl]
+verify_jwt = false
+
+[functions.sync-turnover-calendar]
+verify_jwt = false
+
+[functions.update-job-status]
+verify_jwt = false
+
+[functions.update-payment-verification]
+verify_jwt = false
+
+[functions.va-eod-drive-mirror]
+verify_jwt = false
