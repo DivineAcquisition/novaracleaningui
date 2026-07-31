@@ -14,7 +14,8 @@
     "airtable:links": "tsx scripts/add-airtable-links.ts",
     "airtable:backfill": "tsx scripts/backfill-airtable.ts",
     "airtable:verify": "tsx scripts/verify-airtable-mapping.ts",
-    "va:verify": "tsx scripts/verify-va-performance.ts"
+    "va:verify": "tsx scripts/verify-va-performance.ts",
+    "pricing:verify": "tsx scripts/verify-dynamic-pricing.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",

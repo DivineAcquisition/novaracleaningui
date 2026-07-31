@@ -461,3 +461,6 @@ verify_jwt = false
 # Post-completion feedback-link sweep (invoked by pg_cron with no JWT).
 [functions.send-rating-reminders]
 verify_jwt = false
+
+[functions.quote-dynamic-price]
+verify_jwt = true

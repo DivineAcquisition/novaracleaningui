@@ -31,7 +31,14 @@
 //   serviceDate *required (YYYY-MM-DD)
 //   timeSlot *required (e.g. '10:00 AM - 11:00 AM')
 //   bedrooms?, bathrooms?, dwellingType?, pets?, sqft?
+//   condition? 'light' | 'standard' | 'heavy'  — pricing condition layer
+//   focused?: { areas, bedrooms }              — serviceType 'focused' only
+//   quoteId?  — locked va_quotes.id; inside its window the quoted price is
+//               charged verbatim (the quote-lock integrity rule)
+//   vaOverride?: { totalCents, reasonCode, note? } — bounded VA adjustment,
+//               floor-protected, logged to price_overrides
 //   priceOverride?: { total: cents, deposit?: cents }  — admin override
+//               (floor still applies)
 //   invoiceMode? 'deposit_plus_remaining' | 'full_now' | 'none'
 //      defaults to 'deposit_plus_remaining'
 //   depositPercent? 0..1 (defaults 0.5)
@@ -74,12 +81,24 @@ const logStep = (step: string, details?: unknown) => {
 
 // ─── Pricing ────────────────────────────────────────────────────────
 //
-// SOURCE OF TRUTH: `_shared/pricing.ts`. The v4 module is mirrored 1:1
-// with `src/lib/pricing.ts` so the React quote, the Stripe charge, and
-// this VA flow all produce identical numbers. Discount rules
-// (15% standard / 25% deep / 50% off standard portion of combo) live
-// in that module — DO NOT reapply them here.
+// PRIMARY: the dynamic layered engine (base × condition × zone × demand
+// + surcharges, floor/ceiling clamped) via `_shared/dynamic-quote.ts` —
+// the SAME code path `quote-dynamic-price` used to show the VA the
+// number, so what was quoted is what is charged. A quote locked inside
+// its window is honored verbatim.
+//
+// FALLBACK: `_shared/pricing.ts` (v4) when no dynamic pricing config
+// version is active — base + zone pricing must keep working even if
+// dynamic pricing is unconfigured or disabled.
 import { calculatePriceCents } from "../_shared/pricing.ts";
+import {
+  checkOverride,
+  computeServerQuote,
+  loadDynamicPricingContext,
+  type ConditionLevel,
+  type DynamicServiceType,
+  type QuoteBreakdown,
+} from "../_shared/dynamic-quote.ts";
 
 function computePrice(opts: {
   homeSizeId: string;
@@ -376,6 +395,17 @@ interface VaBookingBody {
   pets?: string;
   flooringType?: string;
   sqft?: number;
+  /** Home condition for the pricing layer (light | standard | heavy). */
+  condition?: string;
+  /** Focused-clean composition — serviceType === 'focused' only. */
+  focused?: { areas: number; bedrooms: number };
+  /** Locked va_quotes.id — inside its window the recorded price is charged. */
+  quoteId?: string;
+  /**
+   * VA price adjustment: bounded by the configured band, requires a reason,
+   * can never breach the floor, and is logged to price_overrides.
+   */
+  vaOverride?: { totalCents: number; reasonCode: string; note?: string };
   priceOverride?: { total: number; deposit?: number };
   invoiceMode?:
     | "deposit_plus_remaining"
@@ -453,12 +483,166 @@ serve(async (req) => {
       /[^0-9]/g,
       "",
     );
-    const calc = computePrice({
-      homeSizeId: body.homeSizeId,
-      serviceType: body.serviceType,
-      addOns: body.addOns || [],
-    });
-    const totalCents = body.priceOverride?.total ?? calc.total;
+
+    // ── Dynamic layered pricing (base × condition × zone × demand + flat
+    // surcharges, floor/ceiling clamped). Same code path as the quote the VA
+    // saw on screen. Falls back to the legacy v4 calculator only when no
+    // dynamic config version is active.
+    const dynCtx = await loadDynamicPricingContext(supabase);
+    let breakdown: QuoteBreakdown | null = null;
+    let honoredQuoteId: string | null = null;
+    let dynConfigVersion: number | null = null;
+    let dynAuditId: string | null = null;
+    let computedCents: number;
+    let basePriceCents: number;
+
+    if (dynCtx) {
+      const condition = (
+        ["light", "standard", "heavy"].includes(String(body.condition || ""))
+          ? body.condition
+          : "standard"
+      ) as ConditionLevel;
+
+      // 1a. Quote lock — the integrity rule. If the VA recorded this quote
+      // and it is still inside its window (and describes the same deal),
+      // the customer pays the quoted price regardless of how zone or demand
+      // conditions have shifted since the call.
+      if (body.quoteId) {
+        const { data: q } = await supabase
+          .from("va_quotes")
+          .select("*")
+          .eq("id", body.quoteId)
+          .maybeSingle();
+        const lockLive = q?.locked_until &&
+          new Date(q.locked_until).getTime() > Date.now() &&
+          q.status !== "converted";
+        const sameDeal = q &&
+          q.service_type === body.serviceType &&
+          String(q.zip_code || "") === String(body.zipCode || "") &&
+          (q.home_size_id === body.homeSizeId || body.serviceType === "focused");
+        if (lockLive && sameDeal && q.price_breakdown) {
+          breakdown = q.price_breakdown as QuoteBreakdown;
+          honoredQuoteId = String(q.id);
+          dynConfigVersion = q.pricing_config_version ?? null;
+          // quoted_price_cents may include an applied within-band override.
+          breakdown = {
+            ...breakdown,
+            totalCents: Number(q.quoted_price_cents ?? breakdown.totalCents),
+          };
+        } else if (q) {
+          logStep("quoteId provided but lock expired or deal changed — repricing", {
+            quoteId: body.quoteId,
+            lockLive,
+            sameDeal,
+          });
+        }
+      }
+
+      // 1b. Fresh server-side quote otherwise.
+      if (!breakdown) {
+        const result = await computeServerQuote(supabase, dynCtx, {
+          zip: body.zipCode,
+          serviceType: body.serviceType as DynamicServiceType,
+          homeSizeId: body.homeSizeId || null,
+          focused: body.focused || null,
+          condition,
+          addOns: body.addOns || [],
+          serviceDate: body.serviceDate,
+          membershipPlan: "none",
+          quotedBy: body.csrName || "va_admin",
+        });
+        if (!result.served) {
+          // Unserved area → clear message + waitlist, never a wrong price.
+          return new Response(
+            JSON.stringify({ error: result.message, waitlist: true }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
+          );
+        }
+        if (!result.ok || !result.breakdown) {
+          return new Response(
+            JSON.stringify({ error: result.message || "Could not price this booking." }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
+          );
+        }
+        breakdown = result.breakdown;
+        dynConfigVersion = result.configVersion;
+        dynAuditId = result.auditId;
+      }
+
+      computedCents = breakdown.totalCents;
+      basePriceCents = breakdown.baseCents;
+    } else {
+      const calc = computePrice({
+        homeSizeId: body.homeSizeId,
+        serviceType: body.serviceType,
+        addOns: body.addOns || [],
+      });
+      computedCents = calc.total;
+      basePriceCents = calc.serviceList;
+    }
+
+    // ── Overrides: bounded, reasoned, floor-protected, always logged. ──────
+    // The floor covers the whole job value (service floor + flat charges) so
+    // a discount can never be funded out of cleaner pay.
+    const jobFloorCents = breakdown && breakdown.floorCents > 0
+      ? breakdown.floorCents + breakdown.addOnsCents + breakdown.surchargesCents
+      : 0;
+    let pendingOverride:
+      | { original: number; override: number; deltaPct: number; reason: string; note: string | null; vaName: string }
+      | null = null;
+
+    if (dynCtx && body.vaOverride) {
+      if (!body.vaOverride.reasonCode) {
+        return new Response(
+          JSON.stringify({ error: "A reason is required for any price adjustment." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+        );
+      }
+      const check = checkOverride(dynCtx.config, computedCents, body.vaOverride.totalCents, jobFloorCents);
+      if (!check.allowed) {
+        // Below-floor: never, at any level. Beyond-band: the quote holds for
+        // admin approval (quote-dynamic-price action=request_override) —
+        // the VA does not discount freely on a call.
+        return new Response(
+          JSON.stringify({ error: check.reason, requiresApproval: check.requiresApproval }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
+        );
+      }
+      pendingOverride = {
+        original: computedCents,
+        override: body.vaOverride.totalCents,
+        deltaPct: Math.round(check.deltaPercent * 100) / 100,
+        reason: body.vaOverride.reasonCode,
+        note: body.vaOverride.note || null,
+        vaName: body.csrName || "va_admin",
+      };
+      computedCents = body.vaOverride.totalCents;
+    } else if (body.priceOverride?.total != null) {
+      // Legacy admin override path. The floor is still absolute.
+      if (jobFloorCents > 0 && body.priceOverride.total < jobFloorCents) {
+        return new Response(
+          JSON.stringify({
+            error: `Override is below the $${(jobFloorCents / 100).toFixed(2)} floor for this service — the floor protects cleaner pay and cannot be overridden.`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
+        );
+      }
+      if (dynCtx) {
+        pendingOverride = {
+          original: computedCents,
+          override: body.priceOverride.total,
+          deltaPct: computedCents > 0
+            ? Math.round(((body.priceOverride.total - computedCents) / computedCents) * 10000) / 100
+            : 0,
+          reason: "manual_admin",
+          note: null,
+          vaName: body.csrName || "admin",
+        };
+      }
+      computedCents = body.priceOverride.total;
+    }
+
+    const totalCents = computedCents;
     const depositPercent = typeof body.depositPercent === "number"
       ? Math.max(0, Math.min(1, body.depositPercent))
       : 0.5;
@@ -584,9 +768,17 @@ serve(async (req) => {
         flooring_type: flooringType,
         sqft,
         second_visit_date: secondVisitDate,
-        base_price_cents: calc.serviceList,
+        base_price_cents: basePriceCents,
         deposit_cents: depositCents,
         total_estimate_cents: totalCents,
+        // Dynamic pricing audit trail: the full layered breakdown, the zone,
+        // the condition and the config version — the price stays
+        // reconstructable exactly, forever.
+        zone_code: breakdown?.zoneCode ?? null,
+        price_condition: breakdown?.condition ?? null,
+        price_breakdown: breakdown,
+        pricing_config_version: dynConfigVersion,
+        va_quote_id: honoredQuoteId,
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: "pending",
@@ -633,6 +825,54 @@ serve(async (req) => {
       warnings.push(`${step}: ${msg}`);
       logStep(`${step} failed (non-blocking)`, msg);
     };
+
+    // 3b. Dynamic-pricing bookkeeping: convert the locked quote, log the
+    // applied override, and stamp what was actually charged onto the audit
+    // trail. All best-effort — the booking row is already committed.
+    if (honoredQuoteId) {
+      try {
+        await supabase
+          .from("va_quotes")
+          .update({ status: "converted", converted_booking_id: bookingId })
+          .eq("id", honoredQuoteId);
+      } catch (qErr) {
+        noteFailure("Quote conversion stamp", qErr);
+      }
+    }
+    if (pendingOverride) {
+      try {
+        await supabase.from("price_overrides").insert({
+          booking_id: bookingId,
+          quote_id: honoredQuoteId,
+          va_name: pendingOverride.vaName,
+          original_cents: pendingOverride.original,
+          override_cents: pendingOverride.override,
+          delta_percent: pendingOverride.deltaPct,
+          direction: pendingOverride.override >= pendingOverride.original ? "up" : "down",
+          reason_code: pendingOverride.reason,
+          note: pendingOverride.note,
+          status: "applied",
+        });
+      } catch (ovErr) {
+        noteFailure("Override log", ovErr);
+      }
+    }
+    try {
+      if (dynAuditId) {
+        await supabase
+          .from("price_quote_audit")
+          .update({ booking_id: bookingId, charged_cents: totalCents })
+          .eq("id", dynAuditId);
+      } else if (honoredQuoteId) {
+        await supabase
+          .from("price_quote_audit")
+          .update({ booking_id: bookingId, charged_cents: totalCents })
+          .eq("quote_id", honoredQuoteId)
+          .is("booking_id", null);
+      }
+    } catch (auditErr) {
+      noteFailure("Price audit stamp", auditErr);
+    }
 
     // 4. Advance the lead, if linked
     if (body.leadId) {
