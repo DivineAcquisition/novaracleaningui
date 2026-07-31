@@ -4,8 +4,9 @@
 //
 // Off-boards a contractor: pick one of the 7 core reasons, set an internal
 // rehire label (rehireable / no-hire / under review / blacklist), optionally
-// add notes, and send a termination letter to the contractor (HR is CC'd at
-// hr@novaracleaning.com). If "Blacklist" is chosen, the letter says so.
+// add notes, and send a termination letter to the contractor (HR + contact
+// are CC'd; reply-to is hr@novaracleaning.com). If "Blacklist" is chosen,
+// the letter says so.
 
 import { useState } from "react";
 import { RiLoader4Line, RiCloseCircleLine, RiMailSendLine } from "@remixicon/react";
@@ -77,7 +78,9 @@ export default function TerminateCleanerDialog({
       `• Loses portal, job offers & payout access\n` +
       `• Open future jobs are released for reassignment\n` +
       (blacklisted ? `• Added to the do-not-hire / blacklist (stated in the letter)\n` : "") +
-      (sendLetter && validEmail ? `• Termination letter emailed to ${cleanerEmail}, CC hr@novaracleaning.com` : "• No letter will be sent");
+      (sendLetter && validEmail
+        ? `• Termination letter emailed to ${cleanerEmail}, CC hr@novaracleaning.com + contact@novaracleaning.com`
+        : "• No letter will be sent");
     if (!confirm(confirmMsg)) return;
 
     setBusy(true);
@@ -90,7 +93,7 @@ export default function TerminateCleanerDialog({
       const d = data as { letterSent?: boolean; letterError?: string; reassignedJobs?: number };
       toast.success(
         `${cleanerName} terminated.` +
-        (d.letterSent ? " Letter sent (HR cc'd)." : d.letterError ? ` Letter not sent: ${d.letterError}` : "") +
+        (d.letterSent ? " Letter sent (HR + contact cc'd)." : d.letterError ? ` Letter not sent: ${d.letterError}` : "") +
         (d.reassignedJobs ? ` ${d.reassignedJobs} job(s) released.` : ""),
       );
       reset();
@@ -111,7 +114,7 @@ export default function TerminateCleanerDialog({
             <RiCloseCircleLine className="w-5 h-5" /> Terminate {cleanerName}
           </DialogTitle>
           <DialogDescription>
-            This off-boards the contractor and records an internal rehire label. A termination letter is emailed to them with HR cc&apos;d.
+            This off-boards the contractor and records an internal rehire label. A termination letter is emailed to them with HR and contact@ cc&apos;d.
           </DialogDescription>
         </DialogHeader>
 

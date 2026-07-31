@@ -6,8 +6,9 @@
 //   2. stamps an internal rehire label (rehireable / no_rehire / under_review /
 //      blacklist) so the directory knows if they're hireable again
 //   3. releases their open future jobs for reassignment
-//   4. emails a termination letter to the contractor, CC'ing HR
-//      (hr@novaracleaning.com). If they were blacklisted, the letter says so.
+//   4. emails a termination letter to the contractor, CC'ing HR and
+//      contact@novaracleaning.com (reply-to HR). If they were blacklisted,
+//      the letter says so.
 //   5. writes a cleaner_terminations audit row + an events row
 //
 // Admin/VA gated.
@@ -26,6 +27,8 @@ function json(p: unknown, status = 200) {
 }
 
 const HR_EMAIL = "hr@novaracleaning.com";
+const CONTACT_EMAIL = "contact@novaracleaning.com";
+const LETTER_CC = [HR_EMAIL, CONTACT_EMAIL];
 
 // The 7 core reasons a contractor leaves the role (+ "other").
 const REASON_LABELS: Record<string, string> = {
@@ -198,7 +201,7 @@ serve(async (req) => {
     // 2. Release open future jobs.
     const reassigned = await releaseFutureAssignments(admin, cleanerId, callerId, `cleaner_terminated:${reason}`);
 
-    // 3. Termination letter — to the contractor, HR cc'd.
+    // 3. Termination letter — to the contractor; HR + contact cc'd; reply-to HR.
     let letterSent = false;
     let letterError: string | null = null;
     const toEmail = (cleaner.email || "").trim();
@@ -208,7 +211,7 @@ serve(async (req) => {
         const { error: sendErr } = await resend.emails.send({
           from: "Novara Cleaning HR <hr@novaracleaning.com>",
           to: [toEmail],
-          cc: [HR_EMAIL],
+          cc: LETTER_CC,
           reply_to: HR_EMAIL,
           subject: "Notice of Termination — Novara Cleaning",
           html: letterHtml({ name, reasonLabel, effectiveDate, blacklisted, notes }),
@@ -230,14 +233,18 @@ serve(async (req) => {
     // 4. Audit row + event.
     await admin.from("cleaner_terminations").insert({
       cleaner_id: cleanerId, reason, reason_label: reasonLabel, rehire_status: rehireStatus,
-      notes, effective_date: effectiveDate, letter_to: toEmail || null, letter_cc: HR_EMAIL,
+      notes, effective_date: effectiveDate, letter_to: toEmail || null,
+      letter_cc: LETTER_CC.join(", "),
       letter_sent: letterSent, letter_error: letterError, terminated_by: callerId,
     }).then(() => undefined, () => undefined);
 
     await admin.from("events").insert({
       event_type: "cleaner.terminated", cleaner_id: cleanerId, source: "terminate-cleaner",
       summary: `Cleaner ${name} terminated — ${reasonLabel} · ${REHIRE_LABELS[rehireStatus]}`,
-      data: { reason, reasonLabel, rehireStatus, blacklisted, by: callerId, reassigned_jobs: reassigned, letter_sent: letterSent, letter_cc: HR_EMAIL },
+      data: {
+        reason, reasonLabel, rehireStatus, blacklisted, by: callerId,
+        reassigned_jobs: reassigned, letter_sent: letterSent, letter_cc: LETTER_CC,
+      },
     }).then(() => undefined, () => undefined);
 
     // 5. Mirror the off-boarding into GHL (tags), best-effort.
