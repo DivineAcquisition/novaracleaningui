@@ -65,12 +65,14 @@ import {
   startOfDay,
   startOfMonth,
 } from "date-fns";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAvailability } from "@/hooks/use-availability";
+import { useDynamicQuote } from "@/hooks/use-dynamic-quote";
+import { PriceBreakdownCard } from "@/components/admin/PriceBreakdownCard";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,6 +116,16 @@ import {
 // ─── Types & constants ─────────────────────────────────────────────────
 
 type ServiceType = "standard" | "deep" | "moveInOut" | "combo" | "focused";
+type ConditionLevel = "light" | "standard" | "heavy";
+
+// Home condition drives the pricing layer (light ×1.0 · standard ×1.25 ·
+// heavy ×1.6 — actual multipliers come from the server config, these are
+// display sublines only).
+const CONDITION_OPTIONS: { id: ConditionLevel; label: string; subline: string }[] = [
+  { id: "light", label: "Light", subline: "Well-kept, regular upkeep" },
+  { id: "standard", label: "Standard", subline: "Typical lived-in home" },
+  { id: "heavy", label: "Heavy", subline: "Buildup, extra effort" },
+];
 type InvoiceMode =
   | "deposit_plus_remaining"
   | "deposit_plus_preauth"
@@ -491,6 +503,10 @@ export default function VaBooking() {
     if (serviceType === "focused") setInvoiceMode("full_now");
   }, [serviceType]);
   const [addOns, setAddOns] = useState<string[]>([]);
+  // Pricing layers: home condition + focused-clean composition.
+  const [condition, setCondition] = useState<ConditionLevel>("standard");
+  const [focusedAreas, setFocusedAreas] = useState("1");
+  const [focusedBedrooms, setFocusedBedrooms] = useState("0");
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
@@ -534,6 +550,12 @@ export default function VaBooking() {
   );
   const [depositPercent, setDepositPercent] = useState("50");
   const [overrideTotal, setOverrideTotal] = useState("");
+  // Any price adjustment requires a reason (standard list + optional note);
+  // it is validated against the configured band + floor server-side and
+  // logged to price_overrides.
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
+  const [requestingApproval, setRequestingApproval] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [sendConfirmationSms, setSendConfirmationSms] = useState(true);
   const [sendChecklistEmail, setSendChecklistEmail] = useState(true);
@@ -590,10 +612,26 @@ export default function VaBooking() {
         if (data.dwelling_type) setDwellingType(data.dwelling_type);
         if (data.pets) setPets(data.pets);
         if (data.csr_name) setCsrName(data.csr_name);
-        if (data.total_estimate_cents != null) {
-          setOverrideTotal((data.total_estimate_cents / 100).toFixed(2));
+        if (data.condition) setCondition(data.condition as ConditionLevel);
+        if (data.focused_areas) {
+          setFocusedAreas(String(data.focused_areas.areas ?? 1));
+          setFocusedBedrooms(String(data.focused_areas.bedrooms ?? 0));
         }
-        toast.success("Quote loaded into the booking form");
+        if (data.price_breakdown) {
+          // Dynamic quote: the locked price is honored via quoteId — never
+          // smuggled in as a manual override.
+          const lockLive = data.locked_until && new Date(data.locked_until).getTime() > Date.now();
+          toast.success(
+            lockLive
+              ? `Quote loaded — price locked at $${((data.quoted_price_cents ?? data.total_estimate_cents) / 100).toFixed(2)} until ${format(new Date(data.locked_until), "MMM d, h:mm a")}`
+              : "Quote loaded — its lock has expired, so the price will re-compute (the delta is shown in the rail).",
+          );
+        } else {
+          if (data.total_estimate_cents != null) {
+            setOverrideTotal((data.total_estimate_cents / 100).toFixed(2));
+          }
+          toast.success("Quote loaded into the booking form");
+        }
       } catch (err: unknown) {
         if (!cancelled) {
           toast.error(err instanceof Error ? err.message : "Could not load quote");
@@ -765,12 +803,14 @@ export default function VaBooking() {
   // size) — NOT the one-time clean total. An override total replaces that
   // monthly rate, and the deposit (when a deposit invoice mode is selected)
   // is a one-time first-clean charge collected on the same Stripe signup.
-  const pricing = useMemo(() => {
+  const basePricing = useMemo(() => {
     // One-time clean math (list price for the rail line item + final discounted
     // total). `membershipPlan: "none"` keeps the acquisition discount in play.
+    // NOTE: this legacy calculator is only the FALLBACK when the dynamic
+    // zone/demand quote (server-side) is unavailable — see `pricing` below.
     const calc = calculatePrice(
       homeSizeId,
-      serviceType,
+      serviceType === "focused" ? "standard" : serviceType,
       addOns,
       "none",
       false,
@@ -863,6 +903,89 @@ export default function VaBooking() {
     monthlyGlowOverride,
   ]);
 
+  // ── Dynamic zone + demand quote (server-side; the authoritative price) ──
+  //
+  // Computed by the same edge code path book-as-va charges, keyed on
+  // property / service / timing / location only. The quote re-fetches when
+  // those inputs change and NEVER on a timer — the number on screen holds
+  // until the VA changes the deal or submits.
+  const serviceDateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
+  const focusedComposition = useMemo(
+    () =>
+      serviceType === "focused"
+        ? {
+            areas: Math.max(0, parseInt(focusedAreas) || 0),
+            bedrooms: Math.max(0, parseInt(focusedBedrooms) || 0),
+          }
+        : null,
+    [serviceType, focusedAreas, focusedBedrooms],
+  );
+  const dynQuote = useDynamicQuote({
+    zip: zipCode,
+    serviceType,
+    homeSizeId: serviceType === "focused" ? null : homeSizeId,
+    focused: focusedComposition,
+    condition,
+    addOns,
+    serviceDate: serviceDateStr,
+    membershipPlan: isRecurring ? cadence : "none",
+    firstMonth: isRecurring,
+    csrName: csrName || undefined,
+    quoteId: savedQuoteId,
+  });
+
+  // Drop a locked quote the moment the deal changes — the lock covers the
+  // quoted property/service/date, not whatever the form morphs into.
+  const dealSignature = JSON.stringify([
+    zipCode, serviceType, homeSizeId, condition, [...addOns].sort(),
+    serviceDateStr, focusedComposition, isRecurring ? cadence : "none",
+  ]);
+  const lockSignatureRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (dynQuote.lock && lockSignatureRef.current === null) {
+      lockSignatureRef.current = dealSignature;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dynQuote.lock]);
+  useEffect(() => {
+    if (savedQuoteId && lockSignatureRef.current && lockSignatureRef.current !== dealSignature) {
+      setSavedQuoteId(null);
+      lockSignatureRef.current = null;
+      toast.info("Booking details changed — the locked quote no longer applies; the price re-computed.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealSignature]);
+
+  // The effective totals the rail + submit use: dynamic server quote when
+  // available (honoring a live lock), legacy calculator as fallback.
+  const dynTotalCents = !isRecurring && dynQuote.breakdown?.ok
+    ? (dynQuote.lock?.quotedPriceCents ?? dynQuote.breakdown.totalCents)
+    : null;
+  const pricing = useMemo(() => {
+    if (isRecurring) {
+      const dynMonthly = dynQuote.breakdown?.membership?.monthlyCents;
+      if (dynMonthly && !monthlyGlowOverride.trim()) {
+        return { ...basePricing, monthlyGlowCatalogCents: dynMonthly, monthlyGlowCents: dynMonthly };
+      }
+      return basePricing;
+    }
+    if (dynTotalCents == null) return basePricing;
+    const overrideCents = overrideTotal.trim() ? Math.round(parseFloat(overrideTotal) * 100) : null;
+    const totalCents = overrideCents !== null && overrideCents >= 0 ? overrideCents : dynTotalCents;
+    const pct = Math.max(0, Math.min(100, parseFloat(depositPercent) || 50)) / 100;
+    const depositCents =
+      invoiceMode === "full_now" ? totalCents : invoiceMode === "none" ? 0 : Math.round(totalCents * pct);
+    return {
+      ...basePricing,
+      serviceCents: dynQuote.breakdown!.serviceTotalCents,
+      addOnsCents: dynQuote.breakdown!.addOnsCents + dynQuote.breakdown!.surchargesCents,
+      computedCents: dynTotalCents,
+      totalCents,
+      depositCents,
+      remainingCents: totalCents - depositCents,
+    };
+  }, [basePricing, isRecurring, dynTotalCents, dynQuote.breakdown, overrideTotal, depositPercent, invoiceMode, monthlyGlowOverride]);
+
   // Submit
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -881,8 +1004,15 @@ export default function VaBooking() {
     // The verbal-agreement attestation is a one-time compliance artifact.
     // Recurring plans send the membership agreement for e-sign instead.
     if (!isRecurring && !vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
+    // Unserved address → no quote, no booking; offer the waitlist instead.
+    if (zipDigits.length === 5 && !dynQuote.served) list.push("Serviceable ZIP (area not served — offer waitlist)");
+    if (serviceType === "focused" && (!focusedComposition || focusedComposition.areas + focusedComposition.bedrooms === 0)) {
+      list.push("At least one focused-clean area");
+    }
+    // Any price adjustment needs a reason from the standard list.
+    if (!isRecurring && overrideTotal.trim() && !overrideReason) list.push("Adjustment reason");
     return list;
-  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring]);
+  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedComposition, overrideTotal, overrideReason]);
 
   const canSubmit = requirements.length === 0;
 
@@ -1181,6 +1311,11 @@ export default function VaBooking() {
         homeSizeId,
         serviceType,
         addOns,
+        condition,
+        focused: focusedComposition || undefined,
+        // Locked quote → book-as-va charges the recorded price verbatim
+        // while the lock window is live.
+        quoteId: savedQuoteId || undefined,
         frequency,
         serviceDate,
         timeSlot: selectedTime,
@@ -1207,14 +1342,42 @@ export default function VaBooking() {
         sendChecklistEmail,
       };
       if (overrideTotal.trim()) {
-        payload.priceOverride = {
-          total: Math.round(parseFloat(overrideTotal) * 100),
-        };
+        const overrideCents = Math.round(parseFloat(overrideTotal) * 100);
+        if (dynQuote.breakdown?.ok) {
+          // Dynamic pricing path: bounded VA adjustment with a required
+          // reason. Server enforces the band and the absolute floor.
+          payload.vaOverride = {
+            totalCents: overrideCents,
+            reasonCode: overrideReason,
+            note: overrideNote.trim() || undefined,
+          };
+        } else {
+          payload.priceOverride = { total: overrideCents };
+        }
       }
       const { data, error } = await supabase.functions.invoke("book-as-va", {
         body: payload,
       });
-      if (error) throw error;
+      if (error) {
+        // supabase-js wraps non-2xx into a FunctionsHttpError — surface the
+        // server's message (floor / band violations return 422 with detail).
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const detail = await ctx.json();
+            if (detail?.error) {
+              throw new Error(
+                detail.requiresApproval
+                  ? `${detail.error} Use "Hold for admin approval" in the Payment section.`
+                  : detail.error,
+              );
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message && !/JSON/i.test(parseErr.message)) throw parseErr;
+          }
+        }
+        throw error;
+      }
       if (data?.error) throw new Error(data.error);
       setResult(data);
       toast.success(
@@ -1275,6 +1438,32 @@ export default function VaBooking() {
     setSavingQuote(true);
     setSavedQuoteId(null);
     try {
+      // Dynamic pricing path: recording the quote LOCKS the price for the
+      // configured window — what the VA just told the customer is what the
+      // customer pays if they book within it.
+      if (!isRecurring && dynQuote.breakdown?.ok) {
+        const lock = await dynQuote.lockQuote({
+          firstName: firstName.trim(),
+          lastName: lastName.trim() || undefined,
+          email: email.trim().toLowerCase(),
+          phone: phone || undefined,
+          address: address || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          bedrooms: bedrooms ? parseInt(bedrooms) : null,
+          bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+          notes: teamNotes || null,
+        });
+        if (lock) {
+          setSavedQuoteId(lock.quoteId);
+          lockSignatureRef.current = dealSignature;
+          toast.success(
+            `Quote saved — ${fmtMoney(lock.quotedPriceCents)} locked until ${format(new Date(lock.lockedUntil), "MMM d, h:mm a")}.`,
+          );
+        }
+        return;
+      }
+
       const serviceDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
       const { data, error } = await (supabase as any)
         .from("va_quotes")
@@ -1316,6 +1505,54 @@ export default function VaBooking() {
       toast.error(`Failed to save quote: ${m}`);
     } finally {
       setSavingQuote(false);
+    }
+  };
+
+  // Beyond-band adjustment: lock the quote (if not already) and file a
+  // pending override for admin decision. The quote — and its price — holds
+  // while the admin decides; the VA never discounts freely on a call.
+  const handleRequestApproval = async () => {
+    if (!overrideTotal.trim() || !overrideReason) {
+      toast.error("Enter the adjusted total and pick a reason first.");
+      return;
+    }
+    setRequestingApproval(true);
+    try {
+      let quoteId = savedQuoteId;
+      if (!quoteId) {
+        const lock = await dynQuote.lockQuote({
+          firstName: firstName.trim() || "—",
+          lastName: lastName.trim() || undefined,
+          email: email.trim().toLowerCase() || undefined,
+          phone: phone || undefined,
+          address: address || undefined,
+          city: city || undefined,
+          state: state || undefined,
+        });
+        if (!lock) throw new Error("Could not lock the quote.");
+        quoteId = lock.quoteId;
+        setSavedQuoteId(lock.quoteId);
+        lockSignatureRef.current = dealSignature;
+      }
+      const { data, error } = await supabase.functions.invoke("quote-dynamic-price", {
+        body: {
+          action: "request_override",
+          quoteId,
+          csrName: csrName.trim() || "va_admin",
+          override: {
+            totalCents: Math.round(parseFloat(overrideTotal) * 100),
+            reasonCode: overrideReason,
+            note: overrideNote.trim() || undefined,
+          },
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(data?.message || "Override submitted for admin approval.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not submit the override.");
+    } finally {
+      setRequestingApproval(false);
     }
   };
 
@@ -1908,11 +2145,86 @@ export default function VaBooking() {
                             active ? "text-violet-700" : "text-slate-700",
                           )}
                         >
-                          {fmtMoney(previewCents)}
+                          {opt.id === "focused" ? "Per area" : fmtMoney(previewCents)}
                         </p>
                       </button>
                     );
                   })}
+                </div>
+
+                {/* Focused / single-area composition — priced per area from
+                    the server config; condition + zone still apply. */}
+                {serviceType === "focused" && (
+                  <div className="grid grid-cols-2 gap-4 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+                    <Field
+                      label="Areas (bath, kitchen, living…)"
+                      hint={
+                        dynQuote.meta
+                          ? `${fmtMoney(dynQuote.meta.focusedClean.area_cents)} per area · ${fmtMoney(dynQuote.meta.focusedClean.minimum_cents)} minimum`
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={focusedAreas}
+                        onChange={(e) => setFocusedAreas(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="1"
+                        className="bg-white"
+                      />
+                    </Field>
+                    <Field
+                      label="Bedrooms"
+                      hint={dynQuote.meta ? `${fmtMoney(dynQuote.meta.focusedClean.bedroom_cents)} per bedroom` : undefined}
+                    >
+                      <Input
+                        value={focusedBedrooms}
+                        onChange={(e) => setFocusedBedrooms(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="0"
+                        className="bg-white"
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                {/* Home condition — its multiplier is a separate, visible
+                    pricing layer (values come from the server config). */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Home condition
+                  </Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {CONDITION_OPTIONS.map((opt) => {
+                      const active = condition === opt.id;
+                      const mult = dynQuote.meta?.conditionMultipliers?.[opt.id];
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setCondition(opt.id)}
+                          className={cn(
+                            "relative text-left rounded-xl border p-3 transition-all",
+                            active
+                              ? "border-violet-500 bg-violet-50"
+                              : "border-slate-200 bg-white hover:border-violet-300",
+                          )}
+                        >
+                          {active && (
+                            <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-violet-600 text-white inline-flex items-center justify-center">
+                              <RiCheckLine className="w-2.5 h-2.5" />
+                            </span>
+                          )}
+                          <p className={cn("text-sm font-semibold", active ? "text-violet-900" : "text-slate-900")}>
+                            {opt.label}
+                            {mult != null && (
+                              <span className="ml-1.5 text-[10px] font-mono text-slate-400">×{mult}</span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{opt.subline}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -2284,16 +2596,6 @@ export default function VaBooking() {
                         onChange={(e) => setDepositPercent(e.target.value)}
                       />
                     </Field>
-                    <Field label="Override total ($)">
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={overrideTotal}
-                        onChange={(e) => setOverrideTotal(e.target.value)}
-                        placeholder={(pricing.computedCents / 100).toFixed(2)}
-                      />
-                    </Field>
                     {invoiceMode === "deposit_plus_preauth" && (
                       <div className="col-span-2 rounded-xl bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-900 leading-relaxed">
                         A hosted Stripe Checkout link will be sent to the customer
@@ -2306,6 +2608,102 @@ export default function VaBooking() {
                     )}
                   </div>
                 )}
+
+                {/* Price adjustment — bounded by the configured band, reason
+                    required, floor-protected, logged to price_overrides. */}
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Price adjustment (optional)
+                  </Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Field label="Adjusted total ($)">
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={overrideTotal}
+                        onChange={(e) => setOverrideTotal(e.target.value)}
+                        placeholder={(pricing.computedCents / 100).toFixed(2)}
+                        className="bg-white"
+                      />
+                    </Field>
+                    <Field label="Reason (required)">
+                      <Select value={overrideReason} onValueChange={setOverrideReason}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Pick a reason…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(dynQuote.meta?.overrideReasons || [{ code: "other", label: "Other" }]).map((r) => (
+                            <SelectItem key={r.code} value={r.code}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Note (optional)">
+                      <Input
+                        value={overrideNote}
+                        onChange={(e) => setOverrideNote(e.target.value)}
+                        placeholder="Context for the log"
+                        className="bg-white"
+                      />
+                    </Field>
+                  </div>
+                  {(() => {
+                    if (!overrideTotal.trim() || !dynQuote.breakdown?.ok || !dynQuote.meta) return null;
+                    const overrideCents = Math.round(parseFloat(overrideTotal) * 100);
+                    if (!Number.isFinite(overrideCents)) return null;
+                    const computed = pricing.computedCents;
+                    const b = dynQuote.breakdown;
+                    const floor = b.floorCents > 0 ? b.floorCents + b.addOnsCents + b.surchargesCents : 0;
+                    const deltaPct = computed > 0 ? ((overrideCents - computed) / computed) * 100 : 0;
+                    const band = dynQuote.meta.overrideBandPercent;
+                    if (floor > 0 && overrideCents < floor) {
+                      return (
+                        <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
+                          <strong>Below the floor.</strong> The minimum for this service and size is{" "}
+                          {fmtMoney(floor)} — it protects cleaner pay and cannot be overridden at any level.
+                        </div>
+                      );
+                    }
+                    if (Math.abs(deltaPct) > band) {
+                      return (
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 space-y-2">
+                          <p className="text-[11px] text-amber-900">
+                            <strong>{deltaPct > 0 ? "+" : ""}{deltaPct.toFixed(1)}%</strong> is outside your ±{band}%
+                            adjustment band. Hold it for admin approval — the quote stays locked while they decide.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={requestingApproval || !overrideReason}
+                            onClick={handleRequestApproval}
+                            className="bg-white"
+                          >
+                            {requestingApproval ? (
+                              <>
+                                <RiLoader4Line className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Submitting…
+                              </>
+                            ) : (
+                              "Save quote & hold for admin approval"
+                            )}
+                          </Button>
+                          {!overrideReason && (
+                            <p className="text-[10.5px] text-amber-800">Pick a reason first.</p>
+                          )}
+                        </div>
+                      );
+                    }
+                    return (
+                      <p className="text-[11px] text-slate-500">
+                        {deltaPct > 0 ? "+" : ""}{deltaPct.toFixed(1)}% — within your ±{band}% band. Applied at
+                        booking and logged with your name, the amount, and the reason.
+                      </p>
+                    );
+                  })()}
+                </div>
               </>
             )}
 
@@ -2491,6 +2889,21 @@ export default function VaBooking() {
                 </p>
               </div>
               <CardContent className="space-y-2.5 pt-5 pb-5">
+                {/* Full layered breakdown — base · condition · zone · demand ·
+                    surcharges · clamps, each with a plain-language reason. The
+                    VA sees the layers; the customer hears one price. */}
+                <PriceBreakdownCard
+                  quote={dynQuote}
+                  onPickDate={(d) => {
+                    setSelectedDate(new Date(`${d}T12:00:00`));
+                    toast.info("Date moved to the cheaper option — re-quote shown in the rail.");
+                  }}
+                />
+                {dynQuote.loading && (
+                  <p className="text-[10.5px] text-slate-400 flex items-center gap-1">
+                    <RiLoader4Line className="w-3 h-3 animate-spin" /> Updating quote…
+                  </p>
+                )}
                 {pricing.isRecurring ? (
                   <SummaryRow
                     label={`${CADENCE_PLAN_LABEL[cadence]} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}

@@ -42,6 +42,7 @@ import {
   RiShieldCheckLine,
   RiFileChartLine,
   RiFileList3Line,
+  RiPriceTag3Line,
   RiRefreshLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
@@ -109,6 +110,13 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/quotes",
     icon: RiFileList3Line,
     description: "Saved quotes · send checklists",
+    adminOnly: true,
+  },
+  {
+    title: "Pricing",
+    url: "/admin/pricing",
+    icon: RiPriceTag3Line,
+    description: "Zones · demand-reactive · guardrails · audit",
     adminOnly: true,
   },
   {
